@@ -24,7 +24,7 @@
 ## 2. 目标平台与官方技术基线
 
 - 开发工具固定为 DevEco Studio 6.1.1 Release。
-- HarmonyOS 开发与验证主基线固定为 6.1.1（API 24），新建工程的 `compileSdkVersion` 和 `targetSdkVersion` 使用 API 24。
+- HarmonyOS 开发与验证主基线固定为 6.1.1（API 24）。工程的 `targetSdkVersion` 使用 API 24，编译环境使用 DevEco Studio 6.1.1 自带的 API 24 SDK。
 - 最低兼容版本固定为 HarmonyOS 6.0.0（API 20），`compatibleSdkVersion` 使用 API 20。
 - 使用 Stage 模型。
 - 第一阶段支持 Phone，随后适配 Tablet、折叠屏和自由窗口。
@@ -44,7 +44,7 @@
 - [HarmonyOS 6.0.0（API 20）版本说明](https://developer.huawei.com/consumer/cn/doc/harmonyos-releases/overview-600)
 - [HarmonyOS SDK 文档中心](https://developer.huawei.com/consumer/cn/doc/)
 
-版本矩阵固定为：API 24 是开发、编译、目标行为和主测试基线，API 20 是最低兼容基线。使用 API 21–24 才提供的能力时，必须做运行时版本判断，并为 API 20 提供降级实现或明确关闭该非核心功能；不得让高版本可选能力抬高整个应用的最低兼容版本。
+版本矩阵固定为：API 24 是开发、编译、目标行为和主测试基线，API 20 是最低兼容基线。DevEco Studio 6.1.1 官方模板不单独写 `compileSdkVersion`；实际编译 SDK 由构建环境中的 API 24 SDK 决定。使用 API 21–24 才提供的能力时，必须做运行时版本判断，并为 API 20 提供降级实现或明确关闭该非核心功能；不得让高版本可选能力抬高整个应用的最低兼容版本。
 
 ## 3. AI 能力边界
 
@@ -304,7 +304,7 @@ ZSE 签名优先迁移为纯 ArkTS，并用 Android 当前测试向量逐字节�
 
 交付：
 
-- 使用 DevEco Studio 6.1.1 Release 和 HarmonyOS 6.1.1（API 24）建立工程，验证 `compileSdkVersion`、`targetSdkVersion` 配置。
+- 使用 DevEco Studio 6.1.1 Release 和 HarmonyOS 6.1.1（API 24）建立工程，验证 API 24 编译环境和 `targetSdkVersion` 配置。
 - 将 `compatibleSdkVersion` 配置为 API 20，建立 API 20 最低兼容设备与 API 24 主版本设备的双基线测试矩阵。
 - 盘点所有 API 21–24 能力，记录版本判断、API 20 降级路径和不可降级功能。
 - 创建最小 Stage 应用并完成签名。

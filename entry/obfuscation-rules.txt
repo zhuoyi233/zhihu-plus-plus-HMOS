@@ -1,0 +1,1 @@
+# P0 does not enable release obfuscation. Production rules will be added before release hardening.

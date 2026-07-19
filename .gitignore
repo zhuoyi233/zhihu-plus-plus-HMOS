@@ -58,3 +58,13 @@ __pycache__/
 # IntelliJ generated apks
 app/lite
 app/full
+
+# HarmonyOS / DevEco Studio generated files
+.hvigor/
+**/.test/
+oh_modules/
+**/build/
+*.hap
+*.hsp
+*.har
+.preview/

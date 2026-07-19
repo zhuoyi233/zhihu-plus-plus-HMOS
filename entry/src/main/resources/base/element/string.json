@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "Zhihu++ HarmonyOS P0 validation module"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "Zhihu++ HarmonyOS P0 validation ability"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "Zhihu++ P0"
+    }
+  ]
+}
