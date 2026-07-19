@@ -39,4 +39,10 @@ class ZseSignerTest {
             ZseSigner.encryptZseV4("world"),
         )
     }
+
+    @Test
+    fun encryptZseV4MatchesGoldenVectors() {
+        assertEquals("+6xPvLM9SJjT+GToL9YAivj/", ZseSigner.encryptZseV4("hello"))
+        assertEquals("+65CcmGtmyq0DMsf4jUsBidi", ZseSigner.encryptZseV4("world"))
+    }
 }

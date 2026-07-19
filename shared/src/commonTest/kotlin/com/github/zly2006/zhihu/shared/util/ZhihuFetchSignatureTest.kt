@@ -30,6 +30,8 @@ class ZhihuFetchSignatureTest {
         assertEquals("d41d8cd98f00b204e9800998ecf8427e", ZhihuFetchSignature.md5Hex(""))
         assertEquals("900150983cd24fb0d6963f7d28e17f72", ZhihuFetchSignature.md5Hex("abc"))
         assertEquals("5d41402abc4b2a76b9719d911017c592", ZhihuFetchSignature.md5Hex("hello"))
+        assertEquals("7eca689f0d3389d9dea66ae112e5cfd7", ZhihuFetchSignature.md5Hex("你好"))
+        assertEquals("2a02eac39d716a70ecf37579185927b6", ZhihuFetchSignature.md5Hex("😀"))
     }
 
     @Test
@@ -41,6 +43,21 @@ class ZhihuFetchSignatureTest {
         )
 
         assertTrue(header.startsWith("2.0_"))
+    }
+
+    @Test
+    fun createZse96HeaderMatchesGoldenVector() {
+        val header = ZhihuFetchSignature.createZse96Header(
+            zse93 = "101_3_3.0",
+            url = "https://www.zhihu.com/api/v4/me?include=account_status",
+            dc0 = "fixed-d_c0-token",
+            body = """{"hello":"world"}""",
+        )
+
+        assertEquals(
+            "2.0_XAY8F0Fc/7DSnpGxJblUS2S4BuUCOnxIL4t+Dzd/+=mp3=CL74Cwu=t0WDQ/iOYG",
+            header,
+        )
     }
 
     @Test

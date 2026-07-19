@@ -13,7 +13,7 @@
 | P0-DEV-01 | API 20/24 设备矩阵 | 设备记录 | 两个 API 基线都能安装、启动 | 通过 |
 | P0-NET-01 | 基础 HTTP | 请求原型与测试 | HTTPS 请求、取消、超时、错误映射通过 | 进行中：API 20/24 HTTPS 可达，知乎返回 403，待 Cookie/ZSE |
 | P0-SES-01 | Cookie 会话 | 加密存储原型 | 重启恢复、过期清理、日志脱敏通过 | 待开始 |
-| P0-ZSE-01 | ZSE96 v2 | ArkTS 实现与黄金向量 | 与 Android 向量逐字节一致 | 待开始 |
+| P0-ZSE-01 | ZSE96 v2 | ArkTS 实现与黄金向量 | 与 Android 向量逐字节一致 | 通过 |
 | P0-LOGIN-01 | 登录路径 | 游客/Cookie/二维码报告 | 至少游客和 Cookie 登录闭环 | 待开始 |
 | P0-READ-01 | 长正文 | 原生 AST 渲染原型 | 长文可滚动且无整页 ArkWeb | 待开始 |
 | P0-MATH-01 | 公式 | 公式渲染比较 | 明确 SVG、库或公式节点 ArkWeb 路线 | 待开始 |
