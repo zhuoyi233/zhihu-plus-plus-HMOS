@@ -1,0 +1,64 @@
+import { describe, expect, it } from '@ohos/hypium';
+import {
+  decodeCookieSession,
+  encodeCookieSession,
+  parseCookieAssignments,
+  redactSensitiveText,
+  removeExpiredCookies,
+  safeSessionSummary,
+  SessionCookie,
+  toCookieHeader,
+  upsertCookie
+} from '../main/ets/session/CookieSession';
+
+export default function cookieSessionTest(): void {
+  describe('cookieSessionTest', () => {
+    it('parsesAssignmentsAndSkipsAttributes', 0, () => {
+      const cookies = parseCookieAssignments('z_c0=abc==; Path=/; Domain=.zhihu.com; _xsrf=def; HttpOnly');
+      expect(cookies.length).assertEqual(2);
+      expect(cookies[0].name).assertEqual('z_c0');
+      expect(cookies[0].value).assertEqual('abc==');
+      expect(cookies[1].name).assertEqual('_xsrf');
+    });
+
+    it('removesExpiredCookiesAndBuildsHeader', 0, () => {
+      const cookies: Array<SessionCookie> = [
+        { name: 'alive', value: '1', expiresAt: 2000 },
+        { name: 'expired', value: '2', expiresAt: 999 },
+        { name: 'session', value: '3' }
+      ];
+      expect(removeExpiredCookies(cookies, 1000).length).assertEqual(2);
+      expect(toCookieHeader(cookies, 1000)).assertEqual('alive=1; session=3');
+    });
+
+    it('preservesExistingZC0OnBlankUpdate', 0, () => {
+      const original: Array<SessionCookie> = [{ name: 'z_c0', value: 'existing' }];
+      const updated = upsertCookie(original, { name: 'z_c0', value: '' });
+      expect(updated.length).assertEqual(1);
+      expect(updated[0].value).assertEqual('existing');
+    });
+
+    it('rejectsHeaderInjectionCharacters', 0, () => {
+      expect(parseCookieAssignments('safe=value\r\nInjected: yes').length).assertEqual(0);
+      const original: Array<SessionCookie> = [{ name: 'safe', value: 'value' }];
+      expect(upsertCookie(original, { name: 'bad name', value: 'other' }).length).assertEqual(1);
+      expect(toCookieHeader([{ name: 'safe', value: 'value\r\nInjected: yes' }], 0)).assertEqual('');
+    });
+
+    it('roundTripsSessionPayload', 0, () => {
+      const original: Array<SessionCookie> = [{ name: 'd_c0', value: 'token' }];
+      const decoded = decodeCookieSession(encodeCookieSession(original, 1234));
+      expect(decoded.savedAt).assertEqual(1234);
+      expect(decoded.cookies[0].value).assertEqual('token');
+    });
+
+    it('redactsSecretsFromLogs', 0, () => {
+      const redacted = redactSensitiveText('Cookie: z_c0=secret; d_c0=hidden');
+      expect(redacted.includes('secret')).assertFalse();
+      expect(redacted.includes('hidden')).assertFalse();
+      const summary = safeSessionSummary('restored', [{ name: 'd_c0', value: 'hidden' }]);
+      expect(summary).assertEqual('restored: count=1, names=[d_c0]');
+      expect(summary.includes('hidden')).assertFalse();
+    });
+  });
+}

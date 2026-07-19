@@ -1,9 +1,13 @@
+import { common } from '@kit.AbilityKit';
 import { HttpProbeClient } from '../network/HttpProbeClient';
+import { safeSessionSummary, SessionCookie } from '../session/CookieSession';
+import { CookieSessionStore } from '../session/CookieSessionStore';
 
 @Entry
 @Component
 struct Index {
   @State private networkStatus: string = 'HTTP 探针尚未运行';
+  @State private sessionStatus: string = '会话探针尚未运行';
   private readonly httpProbeClient: HttpProbeClient = new HttpProbeClient();
 
   build() {
@@ -34,6 +38,11 @@ struct Index {
         .fontSize(15)
         .fontColor($r('app.color.secondary_text'))
 
+      Text(this.sessionStatus)
+        .id('p0_session_status')
+        .fontSize(15)
+        .fontColor($r('app.color.secondary_text'))
+
       Row({ space: 12 }) {
         Button('运行 HTTP 探针')
           .id('p0_run_http_probe')
@@ -46,6 +55,20 @@ struct Index {
           .onClick(() => {
             this.httpProbeClient.cancel();
             this.networkStatus = 'HTTP 探针已取消';
+          })
+      }
+
+      Row({ space: 12 }) {
+        Button('写入测试会话')
+          .id('p0_save_session_probe')
+          .onClick(() => {
+            this.saveSessionProbe();
+          })
+
+        Button('恢复并清理')
+          .id('p0_restore_session_probe')
+          .onClick(() => {
+            this.restoreSessionProbe();
           })
       }
     }
@@ -64,6 +87,43 @@ struct Index {
     } catch (error) {
       const message = error instanceof Error ? error.message : '未知错误';
       this.networkStatus = `HTTP 探针失败：${message}`;
+    }
+  }
+
+  private sessionStore(): CookieSessionStore {
+    return new CookieSessionStore(this.getUIContext().getHostContext() as common.UIAbilityContext);
+  }
+
+  private async saveSessionProbe(): Promise<void> {
+    this.sessionStatus = '正在加密测试会话…';
+    const now = Date.now();
+    const cookies: Array<SessionCookie> = [
+      { name: 'd_c0', value: 'p0-session-probe' },
+      { name: 'expired_probe', value: 'remove-me', expiresAt: now - 1 }
+    ];
+    try {
+      await this.sessionStore().save(cookies, now);
+      this.sessionStatus = '测试会话已加密保存；可重启应用后恢复';
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '未知错误';
+      this.sessionStatus = `会话保存失败：${message}`;
+    }
+  }
+
+  private async restoreSessionProbe(): Promise<void> {
+    this.sessionStatus = '正在恢复测试会话…';
+    const store = this.sessionStore();
+    try {
+      const cookies = await store.load();
+      const restored = cookies.some((cookie: SessionCookie) => cookie.name === 'd_c0');
+      const expiredRemoved = !cookies.some((cookie: SessionCookie) => cookie.name === 'expired_probe');
+      await store.clear();
+      this.sessionStatus = restored && expiredRemoved
+        ? safeSessionSummary('恢复成功并已清理', cookies)
+        : '未找到测试会话，或过期清理失败';
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '未知错误';
+      this.sessionStatus = `会话恢复失败：${message}`;
     }
   }
 }

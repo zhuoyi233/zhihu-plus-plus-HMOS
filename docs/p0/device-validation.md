@@ -20,8 +20,15 @@
 3. 启动 `com.github.zhuoyi233.zhplus/EntryAbility`。
 4. 正确显示 P0 页面以及“目标 API 24 · 最低兼容 API 20”。
 5. 发起 HTTPS 请求后收到知乎 `HTTP 403 (client)`。
+6. 使用 AES-256-GCM 加密测试 Cookie，并将数据密钥保存到 Asset Store。
+7. 将仅含 IV、密文和认证标签的信封写入 Preferences。
+8. 强制停止并重新启动应用进程。
+9. 成功恢复 Cookie，同时清除已过期的测试 Cookie。
+10. 清除会话密文和 Asset Store 数据密钥。
 
 第 5 项证明 INTERNET 权限、DNS、TLS 和 HTTP 请求路径在两个 API 基线上可用，但公开请求尚未满足知乎接口的鉴权/反爬要求。P0-NET-01 需在 Cookie 会话和 ZSE96 签名接入后复测，不能因获得 403 标记为通过。
+
+第 6–10 项在 API 20 和 API 24 上均通过，证明 P0 会话方案可以跨应用进程重启恢复，且最低兼容版本具备所需 Asset Store、Crypto Architecture Kit 和 Preferences 能力。
 
 ## 复测命令
 
