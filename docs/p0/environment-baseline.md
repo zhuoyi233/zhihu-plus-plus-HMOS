@@ -16,7 +16,7 @@
 | Hvigor | 6.24.2 | 通过 |
 | HDC | 3.2.0d | 通过 |
 | 命令行 Debug HAP 构建 | `BUILD SUCCESSFUL` | 通过 |
-| ArkTS 单元测试 | 21 个用例，失败 0 | 通过 |
+| ArkTS 单元测试 | 25 个用例，失败 0 | 通过 |
 
 ## 构建环境要求
 

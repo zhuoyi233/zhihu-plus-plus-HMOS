@@ -27,12 +27,17 @@
 10. 清除会话密文和 Asset Store 数据密钥。
 11. 显示游客模式、密码型 Cookie 输入、验证保存和退出清理入口。
 12. Cookie 输入只显示掩码，提交后立即清空；缺少 `z_c0` 或 `d_c0` 时在本地拒绝。
+13. 打开真实长回答样本，解析为 112 个原生块并通过 `LazyForEach` 滚动。
+14. 对块公式节点实验性使用受限 `RichText` 加载知乎 SVG，整篇正文不使用 ArkWeb。
+15. API 20 滚动到公式区域，API 24 连续滚动到文章结尾；列表无空白或崩溃，但真实长文公式尚未完整渲染。
 
 第 5 项证明 INTERNET 权限、DNS、TLS 和 HTTP 请求路径在两个 API 基线上可用，但公开请求尚未满足知乎接口的鉴权/反爬要求。P0-NET-01 需在 Cookie 会话和 ZSE96 签名接入后复测，不能因获得 403 标记为通过。
 
 第 6–10 项在 API 20 和 API 24 上均通过，证明 P0 会话方案可以跨应用进程重启恢复，且最低兼容版本具备所需 Asset Store、Crypto Architecture Kit 和 Preferences 能力。
 
 第 11–12 项在 API 20 和 API 24 上均通过。登录原型的完整结果和真实 Cookie 尚未完成的边界见 `login-validation.md`。
+
+第 13–15 项证明原生长正文路径在 API 20 和 API 24 上可滚动。原生 `Image` 在 API 20 无法加载知乎返回的远程 SVG；受限 `RichText` 仅验证了块公式候选路线，真实长文公式仍未完整渲染，因此 `P0-MATH-01` 不标记通过。详细实验边界见 `reader-validation.md`。
 
 ## 复测命令
 

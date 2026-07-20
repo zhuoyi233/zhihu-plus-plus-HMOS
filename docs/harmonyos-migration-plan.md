@@ -253,6 +253,8 @@ ZSE 签名优先迁移为纯 ArkTS，并用 Android 当前测试向量逐字节�
 3. 仅公式节点使用受限 ArkWeb。
 4. 不接受整篇正文退回 Web。
 
+P0 阶段结论（2026-07-20）：知乎公式端点返回 SVG，API 20 的原生 `Image` 路线失败；受 CSP 限制的块公式 `RichText` 仅作为候选实验，真实长文公式尚未完整渲染。正文其余部分保持 ArkUI 原生渲染并保留 TeX 文本，后续继续完成 `P0-MATH-01`。详见 `docs/p0/reader-validation.md`。
+
 ### 6.5 本地存储
 
 分成三类：

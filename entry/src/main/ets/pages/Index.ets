@@ -10,6 +10,7 @@ import {
   SessionCookie
 } from '../session/CookieSession';
 import { CookieSessionStore } from '../session/CookieSessionStore';
+import { ReaderProbe } from './ReaderProbe';
 
 @Entry
 @Component
@@ -19,6 +20,7 @@ struct Index {
   @State private loginStatus: string = '当前为游客模式';
   @State private cookieInput: string = '';
   @State private loginBusy: boolean = false;
+  @State private showReaderProbe: boolean = false;
   private readonly httpProbeClient: HttpProbeClient = new HttpProbeClient();
   private readonly loginClient: ZhihuLoginClient = new ZhihuLoginClient();
 
@@ -27,7 +29,14 @@ struct Index {
   }
 
   build() {
-    Column({ space: 16 }) {
+    if (this.showReaderProbe) {
+      ReaderProbe({
+        onBack: () => {
+          this.showReaderProbe = false;
+        }
+      })
+    } else {
+      Column({ space: 16 }) {
       Text('Zhihu++ HarmonyOS')
         .id('p0_title')
         .fontSize(30)
@@ -63,6 +72,12 @@ struct Index {
         .id('p0_login_status')
         .fontSize(15)
         .fontColor($r('app.color.secondary_text'))
+
+      Button('打开原生长正文原型')
+        .id('p0_open_reader_probe')
+        .onClick(() => {
+          this.showReaderProbe = true;
+        })
 
       TextInput({ text: this.cookieInput, placeholder: '粘贴 z_c0=…; d_c0=…' })
         .id('p0_cookie_input')
@@ -123,12 +138,13 @@ struct Index {
             this.restoreSessionProbe();
           })
       }
+      }
+      .width('100%')
+      .height('100%')
+      .justifyContent(FlexAlign.Center)
+      .padding(24)
+      .backgroundColor($r('app.color.page_background'))
     }
-    .width('100%')
-    .height('100%')
-    .justifyContent(FlexAlign.Center)
-    .padding(24)
-    .backgroundColor($r('app.color.page_background'))
   }
 
   private async runHttpProbe(): Promise<void> {
