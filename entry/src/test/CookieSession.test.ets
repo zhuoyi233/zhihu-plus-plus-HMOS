@@ -21,6 +21,12 @@ export default function cookieSessionTest(): void {
       expect(cookies[1].name).assertEqual('_xsrf');
     });
 
+    it('usesLastValueForDuplicateCookieNames', 0, () => {
+      const cookies = parseCookieAssignments('z_c0=old; d_c0=device; z_c0=new');
+      expect(cookies.length).assertEqual(2);
+      expect(toCookieHeader(cookies, 0)).assertEqual('z_c0=new; d_c0=device');
+    });
+
     it('removesExpiredCookiesAndBuildsHeader', 0, () => {
       const cookies: Array<SessionCookie> = [
         { name: 'alive', value: '1', expiresAt: 2000 },

@@ -52,7 +52,12 @@ export function parseCookieAssignments(rawCookie: string): Array<SessionCookie> 
       COOKIE_ATTRIBUTES.has(name.toLowerCase())) {
       continue;
     }
-    cookies.push({ name: name, value: value });
+    const existingIndex = cookies.findIndex((cookie: SessionCookie) => cookie.name === name);
+    if (existingIndex >= 0) {
+      cookies[existingIndex] = { name: name, value: value };
+    } else {
+      cookies.push({ name: name, value: value });
+    }
   }
   return cookies;
 }

@@ -1,6 +1,14 @@
 import { common } from '@kit.AbilityKit';
 import { HttpProbeClient } from '../network/HttpProbeClient';
-import { safeSessionSummary, SessionCookie } from '../session/CookieSession';
+import {
+  LoginVerificationStatus,
+  ZhihuLoginClient
+} from '../network/ZhihuLoginClient';
+import {
+  parseCookieAssignments,
+  safeSessionSummary,
+  SessionCookie
+} from '../session/CookieSession';
 import { CookieSessionStore } from '../session/CookieSessionStore';
 
 @Entry
@@ -8,7 +16,15 @@ import { CookieSessionStore } from '../session/CookieSessionStore';
 struct Index {
   @State private networkStatus: string = 'HTTP 探针尚未运行';
   @State private sessionStatus: string = '会话探针尚未运行';
+  @State private loginStatus: string = '当前为游客模式';
+  @State private cookieInput: string = '';
+  @State private loginBusy: boolean = false;
   private readonly httpProbeClient: HttpProbeClient = new HttpProbeClient();
+  private readonly loginClient: ZhihuLoginClient = new ZhihuLoginClient();
+
+  aboutToAppear(): void {
+    this.restoreLogin();
+  }
 
   build() {
     Column({ space: 16 }) {
@@ -43,6 +59,19 @@ struct Index {
         .fontSize(15)
         .fontColor($r('app.color.secondary_text'))
 
+      Text(this.loginStatus)
+        .id('p0_login_status')
+        .fontSize(15)
+        .fontColor($r('app.color.secondary_text'))
+
+      TextInput({ text: this.cookieInput, placeholder: '粘贴 z_c0=…; d_c0=…' })
+        .id('p0_cookie_input')
+        .type(InputType.Password)
+        .enabled(!this.loginBusy)
+        .onChange((value: string) => {
+          this.cookieInput = value;
+        })
+
       Row({ space: 12 }) {
         Button('运行 HTTP 探针')
           .id('p0_run_http_probe')
@@ -57,6 +86,29 @@ struct Index {
             this.networkStatus = 'HTTP 探针已取消';
           })
       }
+
+      Row({ space: 12 }) {
+        Button('验证并保存 Cookie')
+          .id('p0_import_cookie')
+          .enabled(!this.loginBusy && this.cookieInput.trim().length > 0)
+          .onClick(() => {
+            this.importCookie();
+          })
+
+        Button('游客模式')
+          .id('p0_guest_mode')
+          .enabled(!this.loginBusy)
+          .onClick(() => {
+            this.loginStatus = '当前为游客模式；已保存的登录不会被删除';
+          })
+      }
+
+      Button('退出并清理本地会话')
+        .id('p0_logout')
+        .enabled(!this.loginBusy)
+        .onClick(() => {
+          this.logout();
+        })
 
       Row({ space: 12 }) {
         Button('写入测试会话')
@@ -124,6 +176,67 @@ struct Index {
     } catch (error) {
       const message = error instanceof Error ? error.message : '未知错误';
       this.sessionStatus = `会话恢复失败：${message}`;
+    }
+  }
+
+  private async importCookie(): Promise<void> {
+    const rawCookie = this.cookieInput;
+    this.cookieInput = '';
+    const cookies = parseCookieAssignments(rawCookie);
+    this.loginBusy = true;
+    this.loginStatus = '正在验证 Cookie…';
+    try {
+      const result = await this.loginClient.verify(cookies);
+      if (result.status === LoginVerificationStatus.AUTHENTICATED && result.profile !== undefined) {
+        await this.sessionStore().save(cookies);
+        this.loginStatus = `已登录：${result.profile.name}`;
+      } else {
+        this.loginStatus = result.message;
+      }
+    } catch (_error) {
+      this.loginStatus = 'Cookie 已验证，但加密保存失败';
+    } finally {
+      this.loginBusy = false;
+    }
+  }
+
+  private async restoreLogin(): Promise<void> {
+    this.loginBusy = true;
+    try {
+      const store = this.sessionStore();
+      const cookies = await store.load();
+      if (cookies.length === 0) {
+        this.loginStatus = '当前为游客模式';
+        return;
+      }
+      this.loginStatus = '正在验证已保存的登录…';
+      const result = await this.loginClient.verify(cookies);
+      if (result.status === LoginVerificationStatus.AUTHENTICATED && result.profile !== undefined) {
+        this.loginStatus = `已登录：${result.profile.name}`;
+      } else if (result.status === LoginVerificationStatus.REJECTED ||
+        result.status === LoginVerificationStatus.INVALID_INPUT) {
+        await store.clear();
+        this.loginStatus = `${result.message}，已清理本地会话`;
+      } else {
+        this.loginStatus = `${result.message}；本地会话已保留`;
+      }
+    } catch (_error) {
+      this.loginStatus = '登录恢复失败；本地会话未改动';
+    } finally {
+      this.loginBusy = false;
+    }
+  }
+
+  private async logout(): Promise<void> {
+    this.loginBusy = true;
+    this.cookieInput = '';
+    try {
+      await this.sessionStore().clear();
+      this.loginStatus = '已退出登录并清理本地会话';
+    } catch (_error) {
+      this.loginStatus = '退出清理失败，请重试';
+    } finally {
+      this.loginBusy = false;
     }
   }
 }
