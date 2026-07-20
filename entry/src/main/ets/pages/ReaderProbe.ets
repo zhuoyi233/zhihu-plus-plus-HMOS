@@ -1,6 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { util } from '@kit.ArkTS';
 import { ReaderBlockDataSource } from '../reader/ReaderBlockDataSource';
+import { ReaderImageBlock } from '../reader/ReaderImageBlock';
 import {
   parseZhihuHtml,
   ReaderBlock,
@@ -26,6 +27,7 @@ export struct ReaderProbe {
   onBack: () => void = () => {};
   @State private status: string = '正在载入真实长正文…';
   @State private formulaStatus: string = '公式节点等待进入可见区域';
+  @State private previewUrl: string = '';
   private readonly dataSource: ReaderBlockDataSource = new ReaderBlockDataSource();
 
   aboutToAppear(): void {
@@ -33,46 +35,69 @@ export struct ReaderProbe {
   }
 
   build() {
-    Column() {
-      Row({ space: 12 }) {
-        Button('返回')
-          .id('p0_reader_back')
-          .onClick(() => this.onBack())
+    Stack({ alignContent: Alignment.Center }) {
+      Column() {
+        Row({ space: 12 }) {
+          Button('返回')
+            .id('p0_reader_back')
+            .onClick(() => this.onBack())
 
-        Column({ space: 4 }) {
-          Text('原生长正文验证')
-            .fontSize(22)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.primary_text'))
-          Text(this.status)
-            .id('p0_reader_status')
-            .fontSize(13)
-            .fontColor($r('app.color.secondary_text'))
-          Text(this.formulaStatus)
-            .id('p0_formula_status')
-            .fontSize(13)
-            .fontColor($r('app.color.secondary_text'))
-        }
-        .alignItems(HorizontalAlign.Start)
-        .layoutWeight(1)
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-
-      Divider()
-
-      List({ space: 12 }) {
-        LazyForEach(this.dataSource, (item: ReaderBlock) => {
-          ListItem() {
-            this.readerBlock(item)
+          Column({ space: 4 }) {
+            Text('原生长正文验证')
+              .fontSize(22)
+              .fontWeight(FontWeight.Bold)
+              .fontColor($r('app.color.primary_text'))
+            Text(this.status)
+              .id('p0_reader_status')
+              .fontSize(13)
+              .fontColor($r('app.color.secondary_text'))
+            Text(this.formulaStatus)
+              .id('p0_formula_status')
+              .fontSize(13)
+              .fontColor($r('app.color.secondary_text'))
           }
-        }, (item: ReaderBlock) => item.id)
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+
+        Divider()
+
+        List({ space: 12 }) {
+          LazyForEach(this.dataSource, (item: ReaderBlock) => {
+            ListItem() {
+              this.readerBlock(item)
+            }
+          }, (item: ReaderBlock) => item.id)
+        }
+        .id('p0_reader_list')
+        .width('100%')
+        .layoutWeight(1)
+        .padding({ left: 20, right: 20, top: 16, bottom: 24 })
+        .cachedCount(6)
       }
-      .id('p0_reader_list')
       .width('100%')
-      .layoutWeight(1)
-      .padding({ left: 20, right: 20, top: 16, bottom: 24 })
-      .cachedCount(6)
+      .height('100%')
+
+      if (this.previewUrl.length > 0) {
+        Stack({ alignContent: Alignment.TopEnd }) {
+          Image(this.previewUrl)
+            .id('p0_reader_image_preview')
+            .width('100%')
+            .height('100%')
+            .objectFit(ImageFit.Contain)
+          Button('关闭预览')
+            .id('p0_reader_image_preview_close')
+            .margin(20)
+            .onClick(() => {
+              this.previewUrl = '';
+            })
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor('#EE000000')
+      }
     }
     .width('100%')
     .height('100%')
@@ -93,7 +118,7 @@ export struct ReaderProbe {
     } else if (item.kind === ReaderBlockKind.FORMULA) {
       Column({ space: 6 }) {
         // 知乎公式端点返回 SVG；API 20 的 Image 无法稳定加载，故只在公式节点使用受限 RichText。
-        RichText(formulaMarkup(item.formulaUrl))
+        RichText(formulaMarkup(item.sourceUrl))
           .id(`p0_formula_${item.id}`)
           .width('100%')
           .height(80)
@@ -113,6 +138,13 @@ export struct ReaderProbe {
       .padding(8)
       .backgroundColor('#F5F5F5')
       .borderRadius(8)
+    } else if (item.kind === ReaderBlockKind.IMAGE) {
+      ReaderImageBlock({
+        item: item,
+        onPreview: (url: string) => {
+          this.previewUrl = url;
+        }
+      })
     } else {
       Text(item.kind === ReaderBlockKind.LIST_ITEM ? `• ${item.text}` : item.text)
         .fontSize(18)
@@ -130,7 +162,8 @@ export struct ReaderProbe {
       const blocks = parseZhihuHtml(html);
       const stats = readerDocumentStats(blocks);
       this.dataSource.replace(blocks);
-      this.status = `${stats.blockCount} 个原生块 · ${stats.textLength} 字符 · ${stats.formulaCount} 个块公式`;
+      this.status = `${stats.blockCount} 个原生块 · ${stats.textLength} 字符 · ` +
+        `${stats.formulaCount} 个公式 · ${stats.imageCount} 张图片`;
     } catch (error) {
       const message = error instanceof Error ? error.message : '未知错误';
       this.status = `长正文载入失败：${message}`;

@@ -11,6 +11,7 @@ import {
 } from '../session/CookieSession';
 import { CookieSessionStore } from '../session/CookieSessionStore';
 import { ReaderProbe } from './ReaderProbe';
+import { ImageProbe } from './ImageProbe';
 
 @Entry
 @Component
@@ -21,6 +22,7 @@ struct Index {
   @State private cookieInput: string = '';
   @State private loginBusy: boolean = false;
   @State private showReaderProbe: boolean = false;
+  @State private showImageProbe: boolean = false;
   private readonly httpProbeClient: HttpProbeClient = new HttpProbeClient();
   private readonly loginClient: ZhihuLoginClient = new ZhihuLoginClient();
 
@@ -29,7 +31,13 @@ struct Index {
   }
 
   build() {
-    if (this.showReaderProbe) {
+    if (this.showImageProbe) {
+      ImageProbe({
+        onBack: () => {
+          this.showImageProbe = false;
+        }
+      })
+    } else if (this.showReaderProbe) {
       ReaderProbe({
         onBack: () => {
           this.showReaderProbe = false;
@@ -77,6 +85,12 @@ struct Index {
         .id('p0_open_reader_probe')
         .onClick(() => {
           this.showReaderProbe = true;
+        })
+
+      Button('打开图片与 GIF 原型')
+        .id('p0_open_image_probe')
+        .onClick(() => {
+          this.showImageProbe = true;
         })
 
       TextInput({ text: this.cookieInput, placeholder: '粘贴 z_c0=…; d_c0=…' })

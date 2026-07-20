@@ -255,6 +255,8 @@ ZSE 签名优先迁移为纯 ArkTS，并用 Android 当前测试向量逐字节�
 
 P0 阶段结论（2026-07-20）：知乎公式端点返回 SVG，API 20 的原生 `Image` 路线失败；受 CSP 限制的块公式 `RichText` 仅作为候选实验，真实长文公式尚未完整渲染。正文其余部分保持 ArkUI 原生渲染并保留 TeX 文本，后续继续完成 `P0-MATH-01`。详见 `docs/p0/reader-validation.md`。
 
+普通网络图片与 GIF 已在 API 20/24 虚拟机通过：正文 AST 选择知乎懒加载真实地址，ArkUI `Image` 负责加载和 GIF 逐帧解码，并提供失败重试与原生全屏预览。P0 像素差验证确认 GIF 不只是静态首帧；缩放、保存、分享和统一缓存留到 P1/P2。详见 `docs/p0/image-validation.md`。
+
 ### 6.5 本地存储
 
 分成三类：

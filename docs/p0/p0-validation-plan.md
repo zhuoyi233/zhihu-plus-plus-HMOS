@@ -17,7 +17,7 @@
 | P0-LOGIN-01 | 登录路径 | 游客/Cookie/二维码报告 | 至少游客和 Cookie 登录闭环 | 进行中：游客与手动 Cookie 原型完成，待合法 Cookie 验证真实账号成功分支 |
 | P0-READ-01 | 长正文 | 原生 AST 渲染原型 | 长文可滚动且无整页 ArkWeb | 通过 |
 | P0-MATH-01 | 公式 | 公式渲染比较 | 明确 SVG、库或公式节点 ArkWeb 路线 | 进行中：块公式 RichText 实验完成，真实长文公式尚未完整渲染 |
-| P0-IMG-01 | 图片/GIF | 图片加载原型 | 网络图、失败重试、GIF 与预览策略明确 | 待开始 |
+| P0-IMG-01 | 图片/GIF | 图片加载原型 | 网络图、失败重试、GIF 与预览策略明确 | 通过 |
 | P0-DB-01 | Preferences/RDB | Schema 与 migration 测试 | 建库、升级、回滚失败处理通过 | 待开始 |
 | P0-LINK-01 | 深链 | URL 解析测试 | 知乎主要 URL 和 `zhihu://` 映射通过 | 待开始 |
 | P0-SCAN-01 | 二维码 | Scan Kit 原型 | 扫码或二维码登录辅助路径明确 | 待开始 |
