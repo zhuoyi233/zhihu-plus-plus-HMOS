@@ -10,6 +10,7 @@ import {
   SessionCookie
 } from '../session/CookieSession';
 import { CookieSessionStore } from '../session/CookieSessionStore';
+import { DatabaseProbePage } from './DatabaseProbe';
 import { ReaderProbe } from './ReaderProbe';
 import { ImageProbe } from './ImageProbe';
 
@@ -23,6 +24,7 @@ struct Index {
   @State private loginBusy: boolean = false;
   @State private showReaderProbe: boolean = false;
   @State private showImageProbe: boolean = false;
+  @State private showDatabaseProbe: boolean = false;
   private readonly httpProbeClient: HttpProbeClient = new HttpProbeClient();
   private readonly loginClient: ZhihuLoginClient = new ZhihuLoginClient();
 
@@ -31,7 +33,13 @@ struct Index {
   }
 
   build() {
-    if (this.showImageProbe) {
+    if (this.showDatabaseProbe) {
+      DatabaseProbePage({
+        onBack: () => {
+          this.showDatabaseProbe = false;
+        }
+      })
+    } else if (this.showImageProbe) {
       ImageProbe({
         onBack: () => {
           this.showImageProbe = false;
@@ -91,6 +99,12 @@ struct Index {
         .id('p0_open_image_probe')
         .onClick(() => {
           this.showImageProbe = true;
+        })
+
+      Button('打开数据库迁移原型')
+        .id('p0_open_database_probe')
+        .onClick(() => {
+          this.showDatabaseProbe = true;
         })
 
       TextInput({ text: this.cookieInput, placeholder: '粘贴 z_c0=…; d_c0=…' })
