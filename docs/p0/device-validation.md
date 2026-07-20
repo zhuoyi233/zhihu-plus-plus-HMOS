@@ -37,6 +37,9 @@
 20. 创建 v1 RDB，写入一条回答打开记录并注入一次 v2 迁移失败。
 21. 失败事务完整回滚 schema、版本和数据，随后正确升级到 v2。
 22. 关闭并重开数据库后仍为 v2，原记录和新增字段默认值保持正确。
+23. 运行 19 条知乎网页、跳转链接和 `zhihu://` 完整映射矩阵，保留 19 位内容 ID 精度。
+24. 使用 `ohos.want.action.viewData` 隐式 Want 冷启动应用，并解析 `Want.uri`。
+25. 在应用已运行时再次发送深链，由 `UIAbility.onNewWant()` 完成热启动分发。
 
 第 5 项证明 INTERNET 权限、DNS、TLS 和 HTTP 请求路径在两个 API 基线上可用，但公开请求尚未满足知乎接口的鉴权/反爬要求。P0-NET-01 需在 Cookie 会话和 ZSE96 签名接入后复测，不能因获得 403 标记为通过。
 
@@ -49,6 +52,8 @@
 第 16–19 项证明普通 JPEG、GIF 动画、失败恢复和原生预览在 API 20 与 API 24 上可用，`P0-IMG-01` 标记通过。公式 SVG 不计入普通图片结论，详细记录见 `image-validation.md`。
 
 第 20–22 项证明 API 20 与 API 24 的 RDB 建库、连续版本升级、故障事务回滚和关闭重开路径可用，`P0-DB-01` 标记通过。详细 schema 和边界见 `database-validation.md`。
+
+第 23–25 项证明 API 20 与 API 24 的纯 ArkTS URL 解析、19 位 ID 保真、`zhihu://` 系统冷启动和 `onNewWant()` 热启动路径可用，`P0-LINK-01` 标记通过。知乎 HTTPS 域名无法由本项目完成所有权校验，不计入已验证 App Linking；详细边界见 `deep-link-validation.md`。
 
 ## 复测命令
 

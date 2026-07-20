@@ -33,6 +33,46 @@
             "actions": [
               "ohos.want.action.home"
             ]
+          },
+          {
+            "entities": [
+              "entity.system.browsable"
+            ],
+            "actions": [
+              "ohos.want.action.viewData"
+            ],
+            "uris": [
+              {
+                "scheme": "zhihu"
+              }
+            ]
+          },
+          {
+            "entities": [
+              "entity.system.browsable"
+            ],
+            "actions": [
+              "ohos.want.action.viewData"
+            ],
+            "uris": [
+              {
+                "scheme": "https",
+                "host": "zhihu.com"
+              },
+              {
+                "scheme": "https",
+                "host": "www.zhihu.com"
+              },
+              {
+                "scheme": "https",
+                "host": "zhuanlan.zhihu.com"
+              },
+              {
+                "scheme": "https",
+                "host": "link.zhihu.com"
+              }
+            ],
+            "domainVerify": false
           }
         ]
       }

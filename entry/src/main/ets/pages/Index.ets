@@ -11,6 +11,7 @@ import {
 } from '../session/CookieSession';
 import { CookieSessionStore } from '../session/CookieSessionStore';
 import { DatabaseProbePage } from './DatabaseProbe';
+import { DeepLinkProbePage } from './DeepLinkProbe';
 import { ReaderProbe } from './ReaderProbe';
 import { ImageProbe } from './ImageProbe';
 
@@ -25,6 +26,7 @@ struct Index {
   @State private showReaderProbe: boolean = false;
   @State private showImageProbe: boolean = false;
   @State private showDatabaseProbe: boolean = false;
+  @State private showDeepLinkProbe: boolean = false;
   private readonly httpProbeClient: HttpProbeClient = new HttpProbeClient();
   private readonly loginClient: ZhihuLoginClient = new ZhihuLoginClient();
 
@@ -33,7 +35,13 @@ struct Index {
   }
 
   build() {
-    if (this.showDatabaseProbe) {
+    if (this.showDeepLinkProbe) {
+      DeepLinkProbePage({
+        onBack: () => {
+          this.showDeepLinkProbe = false;
+        }
+      })
+    } else if (this.showDatabaseProbe) {
       DatabaseProbePage({
         onBack: () => {
           this.showDatabaseProbe = false;
@@ -52,125 +60,133 @@ struct Index {
         }
       })
     } else {
-      Column({ space: 16 }) {
-      Text('Zhihu++ HarmonyOS')
-        .id('p0_title')
-        .fontSize(30)
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.primary_text'))
+      Scroll() {
+        Column({ space: 16 }) {
+          Text('Zhihu++ HarmonyOS')
+            .id('p0_title')
+            .fontSize(30)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.primary_text'))
 
-      Text('P0 技术验证工程')
-        .id('p0_subtitle')
-        .fontSize(20)
-        .fontColor($r('app.color.primary_text'))
+          Text('P0 技术验证工程')
+            .id('p0_subtitle')
+            .fontSize(20)
+            .fontColor($r('app.color.primary_text'))
 
-      Text('目标 API 24 · 最低兼容 API 20')
-        .id('p0_sdk_baseline')
-        .fontSize(16)
-        .fontColor($r('app.color.secondary_text'))
+          Text('目标 API 24 · 最低兼容 API 20')
+            .id('p0_sdk_baseline')
+            .fontSize(16)
+            .fontColor($r('app.color.secondary_text'))
 
-      Text('下一步：网络、会话、签名、正文与存储验证')
-        .id('p0_next_step')
-        .fontSize(15)
-        .fontColor($r('app.color.secondary_text'))
+          Text('下一步：网络、会话、签名、正文与存储验证')
+            .id('p0_next_step')
+            .fontSize(15)
+            .fontColor($r('app.color.secondary_text'))
 
-      Text(this.networkStatus)
-        .id('p0_http_status')
-        .fontSize(15)
-        .fontColor($r('app.color.secondary_text'))
+          Text(this.networkStatus)
+            .id('p0_http_status')
+            .fontSize(15)
+            .fontColor($r('app.color.secondary_text'))
 
-      Text(this.sessionStatus)
-        .id('p0_session_status')
-        .fontSize(15)
-        .fontColor($r('app.color.secondary_text'))
+          Text(this.sessionStatus)
+            .id('p0_session_status')
+            .fontSize(15)
+            .fontColor($r('app.color.secondary_text'))
 
-      Text(this.loginStatus)
-        .id('p0_login_status')
-        .fontSize(15)
-        .fontColor($r('app.color.secondary_text'))
+          Text(this.loginStatus)
+            .id('p0_login_status')
+            .fontSize(15)
+            .fontColor($r('app.color.secondary_text'))
 
-      Button('打开原生长正文原型')
-        .id('p0_open_reader_probe')
-        .onClick(() => {
-          this.showReaderProbe = true;
-        })
+          Button('打开原生长正文原型')
+            .id('p0_open_reader_probe')
+            .onClick(() => {
+              this.showReaderProbe = true;
+            })
 
-      Button('打开图片与 GIF 原型')
-        .id('p0_open_image_probe')
-        .onClick(() => {
-          this.showImageProbe = true;
-        })
+          Button('打开图片与 GIF 原型')
+            .id('p0_open_image_probe')
+            .onClick(() => {
+              this.showImageProbe = true;
+            })
 
-      Button('打开数据库迁移原型')
-        .id('p0_open_database_probe')
-        .onClick(() => {
-          this.showDatabaseProbe = true;
-        })
+          Button('打开数据库迁移原型')
+            .id('p0_open_database_probe')
+            .onClick(() => {
+              this.showDatabaseProbe = true;
+            })
 
-      TextInput({ text: this.cookieInput, placeholder: '粘贴 z_c0=…; d_c0=…' })
-        .id('p0_cookie_input')
-        .type(InputType.Password)
-        .enabled(!this.loginBusy)
-        .onChange((value: string) => {
-          this.cookieInput = value;
-        })
+          Button('打开深链解析原型')
+            .id('p0_open_deep_link_probe')
+            .onClick(() => {
+              this.showDeepLinkProbe = true;
+            })
 
-      Row({ space: 12 }) {
-        Button('运行 HTTP 探针')
-          .id('p0_run_http_probe')
-          .onClick(() => {
-            this.runHttpProbe();
-          })
+          TextInput({ text: this.cookieInput, placeholder: '粘贴 z_c0=…; d_c0=…' })
+            .id('p0_cookie_input')
+            .type(InputType.Password)
+            .enabled(!this.loginBusy)
+            .onChange((value: string) => {
+              this.cookieInput = value;
+            })
 
-        Button('取消')
-          .id('p0_cancel_http_probe')
-          .onClick(() => {
-            this.httpProbeClient.cancel();
-            this.networkStatus = 'HTTP 探针已取消';
-          })
-      }
+          Row({ space: 12 }) {
+            Button('运行 HTTP 探针')
+              .id('p0_run_http_probe')
+              .onClick(() => {
+                this.runHttpProbe();
+              })
 
-      Row({ space: 12 }) {
-        Button('验证并保存 Cookie')
-          .id('p0_import_cookie')
-          .enabled(!this.loginBusy && this.cookieInput.trim().length > 0)
-          .onClick(() => {
-            this.importCookie();
-          })
+            Button('取消')
+              .id('p0_cancel_http_probe')
+              .onClick(() => {
+                this.httpProbeClient.cancel();
+                this.networkStatus = 'HTTP 探针已取消';
+              })
+          }
 
-        Button('游客模式')
-          .id('p0_guest_mode')
-          .enabled(!this.loginBusy)
-          .onClick(() => {
-            this.loginStatus = '当前为游客模式；已保存的登录不会被删除';
-          })
-      }
+          Row({ space: 12 }) {
+            Button('验证并保存 Cookie')
+              .id('p0_import_cookie')
+              .enabled(!this.loginBusy && this.cookieInput.trim().length > 0)
+              .onClick(() => {
+                this.importCookie();
+              })
 
-      Button('退出并清理本地会话')
-        .id('p0_logout')
-        .enabled(!this.loginBusy)
-        .onClick(() => {
-          this.logout();
-        })
+            Button('游客模式')
+              .id('p0_guest_mode')
+              .enabled(!this.loginBusy)
+              .onClick(() => {
+                this.loginStatus = '当前为游客模式；已保存的登录不会被删除';
+              })
+          }
 
-      Row({ space: 12 }) {
-        Button('写入测试会话')
-          .id('p0_save_session_probe')
-          .onClick(() => {
-            this.saveSessionProbe();
-          })
+          Button('退出并清理本地会话')
+            .id('p0_logout')
+            .enabled(!this.loginBusy)
+            .onClick(() => {
+              this.logout();
+            })
 
-        Button('恢复并清理')
-          .id('p0_restore_session_probe')
-          .onClick(() => {
-            this.restoreSessionProbe();
-          })
-      }
+          Row({ space: 12 }) {
+            Button('写入测试会话')
+              .id('p0_save_session_probe')
+              .onClick(() => {
+                this.saveSessionProbe();
+              })
+
+            Button('恢复并清理')
+              .id('p0_restore_session_probe')
+              .onClick(() => {
+                this.restoreSessionProbe();
+              })
+          }
+        }
+        .width('100%')
+        .padding(24)
       }
       .width('100%')
       .height('100%')
-      .justifyContent(FlexAlign.Center)
-      .padding(24)
       .backgroundColor($r('app.color.page_background'))
     }
   }

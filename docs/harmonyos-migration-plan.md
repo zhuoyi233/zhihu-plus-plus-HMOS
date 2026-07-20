@@ -225,6 +225,8 @@ ZSE 签名优先迁移为纯 ArkTS，并用 Android 当前测试向量逐字节�
 - `https://www.zhihu.com/...` 和 `zhihu://...` 深链统一解析。
 - 进程重建后恢复必要路径，但不恢复已失效的瞬时弹层。
 
+P0 阶段结论（2026-07-20）：API 20/24 均通过主要知乎 URL、`link.zhihu.com` 和 `zhihu://` 的纯 ArkTS 映射，以及隐式 Want 冷启动和 `onNewWant()` 热启动验证。19 位内容 ID 必须保持字符串。由于项目不控制知乎域名，HTTPS skill 不启用域名验证，不能宣称为无选择器的 App Linking；正式无选择器入口应使用项目自有域名。详见 `docs/p0/deep-link-validation.md`。
+
 ### 6.4 正文渲染
 
 正文不能把 ArkWeb 当成永久主方案。

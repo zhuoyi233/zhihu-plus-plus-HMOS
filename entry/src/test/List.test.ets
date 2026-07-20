@@ -1,5 +1,6 @@
 import apiLevelTest from './ApiLevel.test';
 import cookieSessionTest from './CookieSession.test';
+import deepLinkResolverTest from './DeepLinkResolver.test';
 import httpProbeClientTest from './HttpProbeClient.test';
 import readerDocumentTest from './ReaderDocument.test';
 import rdbSchemaTest from './RdbSchema.test';
@@ -9,6 +10,7 @@ import zseSignerTest from './ZseSigner.test';
 export default function testsuite(): void {
   apiLevelTest();
   cookieSessionTest();
+  deepLinkResolverTest();
   httpProbeClientTest();
   readerDocumentTest();
   rdbSchemaTest();
