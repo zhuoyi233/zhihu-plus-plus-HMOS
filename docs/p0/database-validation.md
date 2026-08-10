@@ -1,6 +1,6 @@
 # P0 Preferences 与 RDB 验证记录
 
-> 验证日期：2026-07-20
+> 首次验证：2026-07-20；API 24 最终复测：2026-08-10
 
 ## 数据边界
 
@@ -31,27 +31,27 @@ Preferences 的跨进程恢复、过期清理和清除已在 `session-validation
 6. 关闭数据库后重新打开，验证版本为 v2、原记录仍在且默认类型为 `unknown`。
 7. 关闭并删除 P0 临时数据库。
 
-迁移通过 `RdbStore.beginTransaction()`、`executeSql()`、`commit()` 和 `rollBack()` 完成，最低 API 20 已覆盖这些接口。参考：[关系型数据库持久化指南](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/data-persistence-by-rdb-store)、[`relationalStore` API](https://developer.huawei.com/consumer/cn/doc/harmonyos-references/js-apis-data-relationalstore)。
+迁移通过 `RdbStore.beginTransaction()`、`executeSql()`、`commit()` 和 `rollBack()` 完成，并在 API 24 SDK 与虚拟机验证。参考：[关系型数据库持久化指南](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/data-persistence-by-rdb-store)、[`relationalStore` API](https://developer.huawei.com/consumer/cn/doc/harmonyos-references/js-apis-data-relationalstore)。
 
-## 双版本虚拟机结果
+## API 24 虚拟机结果
 
-| 验证项 | API 20 / HarmonyOS 6.0.0 | API 24 / HarmonyOS 6.1.1 |
-| --- | --- | --- |
-| 新建 v1 数据库 | 通过 | 通过 |
-| 写入测试记录 | 通过 | 通过 |
-| 故障迁移触发 | 通过 | 通过 |
-| schema/version/data 原子回滚 | 通过 | 通过 |
-| 正确升级到 v2 | 通过 | 通过 |
-| 关闭重开后版本和数据保留 | 通过 | 通过 |
-| 临时数据库清理 | 通过 | 通过 |
+| 验证项 | 结果 |
+| --- | --- |
+| 新建 v1 数据库 | 通过 |
+| 写入测试记录 | 通过 |
+| 故障迁移触发 | 通过 |
+| schema/version/data 原子回滚 | 通过 |
+| 正确升级到 v2 | 通过 |
+| 关闭重开后版本和数据保留 | 通过 |
+| 临时数据库清理 | 通过 |
 
-两台设备最终均显示：`失败迁移回滚到 v1；升级并重开为 v2；保留 1 条记录，默认类型 unknown`。
+API 24 设备最终显示：`失败迁移回滚到 v1；升级并重开为 v2；保留 1 条记录，默认类型 unknown`。
 
 ## 构建与测试
 
 - API 24 SDK 下 Debug HAP：`BUILD SUCCESSFUL`。
 - 新增 3 个 schema 契约测试，覆盖版本连续性、v2 非破坏性字段/索引迁移和未知版本拒绝。
-- 当前 ArkTS 测试定义总数为 30；DevEco CLI 暂未暴露 `src/test` 本地单元测试任务，CI 后续必须补可重复执行入口。
+- 3 个 schema 契约测试已纳入最终 46 个 Hypium 用例并全部通过。
 
 ## 后续约束
 
@@ -60,4 +60,4 @@ Preferences 的跨进程恢复、过期清理和清除已在 `session-validation
 - `opened_content` 只是 P0 最小 schema。完整表结构在 P1 按领域拆分，并补唯一约束、外键取舍和查询索引基线。
 - S1 适用于当前非敏感阅读记录原型；Cookie、令牌等秘密仍由 Asset Store 与加密信封管理，不写入普通 RDB。
 
-建库、升级、失败回滚和重开验证均在 API 20/24 通过，因此 `P0-DB-01` 标记为通过。
+建库、升级、失败回滚和重开验证均在 API 24 通过，因此 `P0-DB-01` 标记为通过。

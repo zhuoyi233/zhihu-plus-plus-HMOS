@@ -226,7 +226,7 @@ ZSE 签名优先迁移为纯 ArkTS，并用 Android 当前测试向量逐字节�
 - `https://www.zhihu.com/...` 和 `zhihu://...` 深链统一解析。
 - 进程重建后恢复必要路径，但不恢复已失效的瞬时弹层。
 
-P0 阶段结论（2026-07-20）：API 20/24 均通过主要知乎 URL、`link.zhihu.com` 和 `zhihu://` 的纯 ArkTS 映射，以及隐式 Want 冷启动和 `onNewWant()` 热启动验证。19 位内容 ID 必须保持字符串。由于项目不控制知乎域名，HTTPS skill 不启用域名验证，不能宣称为无选择器的 App Linking；正式无选择器入口应使用项目自有域名。详见 `docs/p0/deep-link-validation.md`。
+P0 最终结论：API 24 已通过主要知乎 URL、`link.zhihu.com` 和 `zhihu://` 的纯 ArkTS 映射，以及隐式 Want 冷启动和 `onNewWant()` 热启动验证。19 位内容 ID 必须保持字符串。由于项目不控制知乎域名，HTTPS skill 不启用域名验证，不能宣称为无选择器的 App Linking；正式无选择器入口应使用项目自有域名。详见 `docs/p0/deep-link-validation.md`。
 
 ### 6.4 正文渲染
 
@@ -258,7 +258,7 @@ P0 阶段结论（2026-07-20）：API 20/24 均通过主要知乎 URL、`link.zh
 
 P0 阶段结论（2026-08-10）：API 24 虚拟机证明远程 SVG URL 直接交给 `Image`/`ImageSpan` 会失败；最终路线由 `NetworkKit` 下载严格白名单内的公式 SVG，校验状态码、类型、大小与 SVG 根节点，禁止重定向，再把知乎 SVG 的 `ex` 尺寸和 `currentColor` 规范化为 ImageKit 可解码形式。`ImageSource` 解码后的 PixelMap 分别交给原生 `Image` 和 `ImageSpan`，网络或解码失败时仅对应节点降级为 TeX。真实长文的 11 个块公式和 63 个行内公式已在 API 24 虚拟机全部解码并连续滚动到文末，无降级、无崩溃。`RichText` 因底层复用 Web、列表内存与维护状态限制退出主路线，整篇正文保持 ArkUI 原生渲染；`P0-MATH-01` 已关闭。API 20 失败结果只作为历史证据。详见 `docs/p0/reader-validation.md`。
 
-普通网络图片与 GIF 已在 API 20/24 虚拟机通过：正文 AST 选择知乎懒加载真实地址，ArkUI `Image` 负责加载和 GIF 逐帧解码，并提供失败重试与原生全屏预览。P0 像素差验证确认 GIF 不只是静态首帧；缩放、保存、分享和统一缓存留到 P1/P2。详见 `docs/p0/image-validation.md`。
+普通网络图片与 GIF 已在 API 24 虚拟机通过：正文 AST 选择知乎懒加载真实地址，ArkUI `Image` 负责加载和 GIF 逐帧解码，并提供失败重试与原生全屏预览。P0 像素差验证确认 GIF 不只是静态首帧；缩放、保存、分享和统一缓存留到 P1/P2。详见 `docs/p0/image-validation.md`。
 
 ### 6.5 本地存储
 
@@ -280,7 +280,7 @@ P0 阶段结论（2026-08-10）：API 24 虚拟机证明远程 SVG URL 直接交
 
 新平台首版不兼容 Android Room 数据库文件。跨平台迁移先支持稳定的 JSON 导入导出格式；以后确有需求再做 Android 数据包导入工具。
 
-P0 阶段结论（2026-07-20）：API 20/24 均通过 RDB v1 建库、v1 → v2 升级、故障迁移原子回滚和关闭重开验证。生产 schema 必须使用连续、显式且事务化的 migration，未知版本直接拒绝，禁止以删除重建掩盖升级失败。详见 `docs/p0/database-validation.md`。
+P0 最终结论：API 24 已通过 RDB v1 建库、v1 → v2 升级、故障迁移原子回滚和关闭重开验证。生产 schema 必须使用连续、显式且事务化的 migration，未知版本直接拒绝，禁止以删除重建掩盖升级失败。详见 `docs/p0/database-validation.md`。
 
 ### 6.6 本地推荐
 
@@ -330,6 +330,8 @@ P0 阶段结论（2026-08-10）：TaskPool 只解决并发计算，不提供后�
 - 整理 Lite 功能矩阵和禁止迁移的 AI 文件清单。
 
 退出条件：签名、登录、长正文、公式四个高风险点都有可运行原型。任何一个失败都先调整架构，不进入全面页面开发。
+
+状态（2026-08-11）：P0 的 14 个门禁全部通过，签名、真实 Cookie 登录、原生长正文和原生公式路线均已在 API 24 DevEco 虚拟机闭环；可以进入 P1。详细证据与性能烟测见 [`docs/p0/p0-summary.md`](p0/p0-summary.md)。
 
 ### P1：基础设施，2–4 周
 

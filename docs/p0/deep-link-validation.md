@@ -1,6 +1,6 @@
 # P0 URL 与深链验证记录
 
-> 验证日期：2026-07-20
+> 首次验证：2026-07-20；API 24 最终复测：2026-08-10
 
 ## 解析边界
 
@@ -37,21 +37,21 @@ HarmonyOS 版本以 Android/Lite 的 `resolveContent()` 为兼容基线，使用
 
 HTTPS skill 显式设置 `domainVerify: false`。项目不控制 `zhihu.com`，无法在该域名部署关联文件，因此不能把知乎网页链接宣称为已验证 App Linking；系统可能显示应用选择器。`zhihu://` 自定义 scheme 和应用内 URL 解析不受此限制。正式版本若需要无选择器跳转，应使用项目自有域名建立已验证 App Linking，再重定向到同一解析契约。
 
-参考：[隐式 Want 启动 UIAbility](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/ability-startup-with-implicit-want)、[UIAbility 生命周期](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/uiability-lifecycle)、[App Linking](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/app-linking-startup)。API 24 SDK 声明同时确认 `Want.uri` 自 API 9 可用、`UIAbility.onNewWant()` 自 API 10 可用，覆盖最低 API 20。
+参考：[隐式 Want 启动 UIAbility](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/ability-startup-with-implicit-want)、[UIAbility 生命周期](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/uiability-lifecycle)、[App Linking](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/app-linking-startup)。API 24 SDK 声明确认 `Want.uri` 与 `UIAbility.onNewWant()` 可用于当前单一设备基线。
 
-## 双版本虚拟机结果
+## API 24 虚拟机结果
 
-| 验证项 | API 20 / HarmonyOS 6.0.0 | API 24 / HarmonyOS 6.1.1 |
-| --- | --- | --- |
-| 19 条完整 URL 映射矩阵 | 19/19 通过 | 19/19 通过 |
-| 19 位 ID 保持原字符串 | 通过 | 通过 |
-| URL 编码搜索词解码 | 通过 | 通过 |
-| `link.zhihu.com` 目标解包 | 通过 | 通过 |
-| `zhihu://` 隐式 Want 冷启动 | 通过 | 通过 |
-| 已运行实例 `onNewWant` 热启动 | 通过 | 通过 |
-| 首页新增入口与页面滚动 | 通过 | 通过 |
+| 验证项 | 结果 |
+| --- | --- |
+| 19 条完整 URL 映射矩阵 | 19/19 通过 |
+| 19 位 ID 保持原字符串 | 通过 |
+| URL 编码搜索词解码 | 通过 |
+| `link.zhihu.com` 目标解包 | 通过 |
+| `zhihu://` 隐式 Want 冷启动 | 通过 |
+| 已运行实例 `onNewWant` 热启动 | 通过 |
+| 首页入口与页面滚动 | 通过 |
 
-两台虚拟机页面均显示 `通过：19/19 条映射正确`，默认样本均显示 `回答：2040633177593619876`。隐式 Want 日志分别显示 `answer` 和 `question`，且不包含原始链接数据。
+API 24 页面显示 `通过：19/19 条映射正确`，默认样本保持 19 位回答 ID。隐式 Want 日志分别显示 `answer` 和 `question`，且不包含原始链接数据。
 
 ## 构建与测试
 
@@ -60,4 +60,4 @@ HTTPS skill 显式设置 `domainVerify: false`。项目不控制 `zhihu.com`，�
 - 2026-08-10 使用 DevEco 内置 Hvigor `test` 任务完成 46 个 Hypium 用例，失败 0；其中 6 个深链契约测试全部通过。
 - API 24 最终 HAP 的设备矩阵仍显示 `通过：19/19 条映射正确`，证明本地测试和 ArkUI 运行时行为一致。
 
-主要 URL、`link.zhihu.com` 和 `zhihu://` 映射，以及系统冷/热启动分发均在 API 20/24 通过，因此 `P0-LINK-01` 标记为通过。
+主要 URL、`link.zhihu.com` 和 `zhihu://` 映射，以及系统冷/热启动分发均在 API 24 通过，因此 `P0-LINK-01` 标记为通过。

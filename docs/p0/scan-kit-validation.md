@@ -1,18 +1,18 @@
 # P0-SCAN-01 Scan Kit 与二维码登录辅助验证
 
-> 验证日期：2026-07-20
-> 工具链：DevEco Studio 6.1.1 Release，目标 API 24，最低兼容 API 20
+> 首次验证：2026-07-20；API 24 最终复测：2026-08-10
+> 工具链：DevEco Studio 6.1.1 Release，HarmonyOS 6.1.1（API 24）
 
 ## 结论
 
-`P0-SCAN-01` 通过。HarmonyOS 的 Scan Kit 可以在 API 20 和 API 24 上拉起系统默认扫码界面，也可以识别应用沙箱中的固定 QR 码图；因此“本机扫描电脑端知乎登录二维码”的技术路径成立。
+`P0-SCAN-01` 通过。HarmonyOS 的 Scan Kit 可以在 API 24 上拉起系统默认扫码界面，也可以识别应用沙箱中的固定 QR 码图；因此“本机扫描电脑端知乎登录二维码”的技术路径成立。
 
-这不是完整的二维码登录闭环。P0 原型不会向知乎发送登录确认请求，也没有实现“本机生成二维码并轮询登录状态”。后者必须继续接入统一 HTTP 客户端、风控处理和 Session Repository 后才能计入 `P0-LOGIN-01`。
+这不是完整的二维码登录闭环。P0 原型不会向知乎发送登录确认请求，也没有实现“本机生成二维码并轮询登录状态”。后者仍需接入统一 HTTP 客户端、风控处理和 Session Repository；`P0-LOGIN-01` 已由真实手动 Cookie 路径独立完成。
 
 ## 官方能力依据
 
 - [Scan Kit 官方介绍](https://developer.huawei.com/consumer/cn/sdk/scan-kit)列出默认扫码界面、图像识码、码图生成和验证登录等场景。
-- DevEco 6.1.1 本地 SDK 中，`scanBarcode.startScanForResult` 与 `detectBarcode.decode` 的接口起始版本分别不高于 `4.1.0(11)`，低于本项目最低 API 20。
+- DevEco 6.1.1 本地 SDK 中，`scanBarcode.startScanForResult` 与 `detectBarcode.decode` 均可用于本项目 API 24 基线。
 - [华为 Scan Kit ArkTS 官方示例](https://gitee.com/harmonyos_samples/scan-kit_-sample-code_-clientdemo_-arkts)使用 `@kit.ScanKit` 的 `scanBarcode`、`scanCore` 和 `detectBarcode`。示例只为自定义扫码声明相机权限；默认界面扫码由系统安全扫码页面托管。
 
 本项目使用默认界面扫码，不申请 `ohos.permission.CAMERA`。系统页面明确提示应用只能获得二维码/条形码生成的信息，无法访问取景内容。相册入口由系统扫码页提供。
@@ -43,23 +43,23 @@ HarmonyOS 迁移必须保持这两个方向独立：
 - 页面只显示成功、取消或错误摘要；不显示登录 token，不记录扫描原文。
 - 取消错误码映射为“用户取消扫码”，其他错误仅显示错误码。
 
-## API 20/24 验证矩阵
+## API 24 验证矩阵
 
-| 检查项 | API 20 | API 24 |
-| --- | --- | --- |
-| 安装并启动 Debug HAP | 通过 | 通过 |
-| 拉起 Scan Kit 系统默认扫码页 | 通过 | 通过 |
-| 系统页显示安全相机说明和图库入口 | 通过 | 通过 |
-| 返回键触发取消结果 | 通过 | 通过 |
-| `detectBarcode.decode` 识别固定 QR fixture | 通过 | 通过 |
-| 识别值通过知乎登录 URL 策略 | 通过 | 通过 |
-| 页面不显示 fixture token | 通过 | 通过 |
+| 检查项 | 结果 |
+| --- | --- |
+| 安装并启动 Debug HAP | 通过 |
+| 拉起 Scan Kit 系统默认扫码页 | 通过 |
+| 系统页显示安全相机说明和图库入口 | 通过 |
+| 返回键触发取消结果 | 通过 |
+| `detectBarcode.decode` 识别固定 QR fixture | 通过 |
+| 识别值通过知乎登录 URL 策略 | 通过 |
+| 页面不显示 fixture token | 通过 |
 
-两台虚拟机的固定码图均识别为单个 QR 结果。API 20 日志记录的 600 × 600 图像识别耗时约 0.5 秒，该数字只用于证明识别引擎实际运行，不作为真机性能基线。
+API 24 虚拟机的固定码图识别为单个 QR 结果。P0 不把虚拟机识码耗时作为真机性能基线。
 
 页面同时内置 8 条 URL 安全策略矩阵，Hypium 中保留相同规则的单元用例。2026-08-10 已找到并固化 DevEco 内置 Hvigor `test` 任务，46 个 Hypium 用例失败 0；二维码策略的 4 个用例全部通过。
 
-2026-08-10 使用最终 Debug HAP 在 `ZhihuPlus_API20` 与 `ZhihuPlus_API24` 增量复测：两台虚拟机均显示 `8/8` 条策略通过，并成功识别固定码图。该次复测新增拒绝重复路径分隔符和尾随分隔符；系统默认扫码页及取消返回沿用 2026-07-20 的可视化验证结果，未因本次纯 URL 策略收紧重新计入结论。
+2026-08-10 使用最终 Debug HAP 在 `ZhihuPlus_API24` 增量复测：页面显示 `8/8` 条策略通过，并成功识别固定码图。该次复测新增拒绝重复路径分隔符和尾随分隔符；系统默认扫码页及取消返回沿用 2026-07-20 的可视化验证结果，未因本次纯 URL 策略收紧重新计入结论。
 
 同日将深链、二维码和公式来源统一切换到不依赖系统 URL Kit mock 的纯 ArkTS 绝对 URL 解析器；最终 HAP 在 API 24 复测仍显示深链 `19/19`、二维码策略 `8/8`。
 

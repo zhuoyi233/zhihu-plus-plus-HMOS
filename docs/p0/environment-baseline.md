@@ -1,6 +1,6 @@
 # P0 环境基线
 
-> 首次检查：2026-07-20；基线更新：2026-08-10
+> 首次检查：2026-07-20；基线更新：2026-08-11
 
 ## 已确认
 
@@ -47,7 +47,9 @@ $env:DEVECO_SDK_HOME = '<DevEco Studio>/sdk'
   -p 'buildMode=debug'
 ```
 
-2026-08-10 最终结果为 `UnitTestArkTS`、`GenerateUnitTestResult` 和 `entry:test` 全部完成，46 个用例无断言失败。Hvigor 历史版本可能在断言失败时仍返回退出码 0，CI 必须同时检查测试报告内容。
+2026-08-11 P0 收口结果为 `UnitTestArkTS`、`GenerateUnitTestResult` 和 `entry:test` 全部完成，46 个用例无断言失败；测试任务耗时 33.997 秒，其中 ArkTS 用例执行 26.719 秒。Hvigor 历史版本可能在断言失败时仍返回退出码 0，CI 必须同时检查测试报告内容。
+
+同一次 `devecocli build --modules entry --build-mode debug` 完成 `SignHap` 并在 28.750 秒内构建成功。该数字包含 Hvigor daemon 启动且多数任务命中缓存，只作为本机增量构建烟测，不承诺 CI 或全量构建时延。
 
 ## 门禁状态
 
