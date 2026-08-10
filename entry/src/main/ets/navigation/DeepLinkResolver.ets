@@ -1,4 +1,4 @@
-import { url } from '@kit.ArkTS';
+import { parseAbsoluteUrl, ParsedAbsoluteUrl } from './AbsoluteUrlParser';
 
 export enum DeepLinkType {
   ANSWER = 'answer',
@@ -49,10 +49,8 @@ function resolveZhihuLinkAtDepth(input: string, depth: number): DeepLinkDestinat
     return undefined;
   }
 
-  let parsed: url.URL;
-  try {
-    parsed = url.URL.parseURL(input);
-  } catch (_error) {
+  const parsed: ParsedAbsoluteUrl | undefined = parseAbsoluteUrl(input);
+  if (parsed === undefined) {
     return undefined;
   }
 
@@ -62,9 +60,12 @@ function resolveZhihuLinkAtDepth(input: string, depth: number): DeepLinkDestinat
   const emptyQuery = '';
 
   if (protocol === 'http:' || protocol === 'https:') {
+    if (parsed.hasUserInfo || parsed.port.length > 0) {
+      return undefined;
+    }
     if (host === 'link.zhihu.com') {
       const target = parsed.params.get('target');
-      return target === null ? undefined : resolveZhihuLinkAtDepth(target, depth + 1);
+      return target === undefined ? undefined : resolveZhihuLinkAtDepth(target, depth + 1);
     }
     if (host === 'zhuanlan.zhihu.com') {
       if (segments.length === 2 && segments[0] === 'p' && isDecimalId(segments[1])) {

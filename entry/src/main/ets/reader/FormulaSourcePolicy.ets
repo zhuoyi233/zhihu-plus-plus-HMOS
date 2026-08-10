@@ -1,5 +1,15 @@
+import { parseAbsoluteUrl, ParsedAbsoluteUrl } from '../navigation/AbsoluteUrlParser';
+
 export function isTrustedFormulaUrl(value: string): boolean {
-  // An anchored authority/path/query policy keeps this check available in local unit tests,
-  // where the system URL parser is only a stub, without accepting userinfo, ports or lookalike hosts.
-  return /^https:\/\/www\.zhihu\.com\/equation\?tex=[^&#]+(?:&[^#]*)?(?:#.*)?$/i.test(value);
+  const parsed: ParsedAbsoluteUrl | undefined = parseAbsoluteUrl(value);
+  if (parsed === undefined) {
+    return false;
+  }
+  const tex = parsed.params.get('tex');
+  return parsed.protocol === 'https:' &&
+    parsed.hostname === 'www.zhihu.com' &&
+    parsed.port.length === 0 &&
+    !parsed.hasUserInfo &&
+    parsed.pathname === '/equation' &&
+    tex !== undefined && tex.length > 0;
 }

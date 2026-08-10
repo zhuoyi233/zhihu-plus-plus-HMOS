@@ -21,7 +21,7 @@ HarmonyOS 版本以 Android/Lite 的 `resolveContent()` 为兼容基线，使用
 
 知乎已经使用超过 JavaScript 安全整数上限的 19 位内容 ID。解析结果因此始终以字符串保存，不转换为 ArkTS `number`。
 
-解析器只接受精确的 `zhihu.com`、`www.zhihu.com`、`zhuanlan.zhihu.com` 和 `link.zhihu.com` 主机。伪造后缀域名、未知 scheme、非十进制内容 ID、未知路径和超过两层的跳转链接均拒绝。
+解析器只接受精确的 `zhihu.com`、`www.zhihu.com`、`zhuanlan.zhihu.com` 和 `link.zhihu.com` 主机。共享纯 ArkTS 绝对 URL 解析器明确拆分 scheme、authority、用户信息、端口、路径和查询参数；伪造后缀域名、用户信息、显式端口、未知 scheme、非十进制内容 ID、未知路径和超过两层的跳转链接均拒绝。
 
 ## 系统接入
 
@@ -57,6 +57,7 @@ HTTPS skill 显式设置 `domainVerify: false`。项目不控制 `zhihu.com`，�
 
 - API 24 SDK 下 Debug HAP：`BUILD SUCCESSFUL`。
 - 新增 6 个解析契约测试，覆盖主要网页、19 位 ID、用户/视频/搜索、跳转链接、`zhihu://` 和非法输入。
-- 当前 ArkTS 测试定义总数为 36；DevEco CLI 暂未暴露 `src/test` 本地单元测试任务，设备上的 19 条运行时矩阵用于补充验证，但不能替代后续 CI 测试入口。
+- 2026-08-10 使用 DevEco 内置 Hvigor `test` 任务完成 46 个 Hypium 用例，失败 0；其中 6 个深链契约测试全部通过。
+- API 24 最终 HAP 的设备矩阵仍显示 `通过：19/19 条映射正确`，证明本地测试和 ArkUI 运行时行为一致。
 
 主要 URL、`link.zhihu.com` 和 `zhihu://` 映射，以及系统冷/热启动分发均在 API 20/24 通过，因此 `P0-LINK-01` 标记为通过。

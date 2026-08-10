@@ -71,6 +71,7 @@ export default function readerDocumentTest(): void {
       expect(isTrustedFormulaUrl('https://www.zhihu.com.evil.example/equation?tex=x')).assertFalse();
       expect(isTrustedFormulaUrl('http://www.zhihu.com/equation?tex=x')).assertFalse();
       expect(isTrustedFormulaUrl('https://user@www.zhihu.com/equation?tex=x')).assertFalse();
+      expect(isTrustedFormulaUrl('https://www.zhihu.com:443/equation?tex=x')).assertFalse();
       expect(isTrustedFormulaUrl('https://www.zhihu.com/equation?tex=')).assertFalse();
       expect(isTrustedFormulaUrl('https://www.zhihu.com/equation/extra?tex=x')).assertFalse();
     });

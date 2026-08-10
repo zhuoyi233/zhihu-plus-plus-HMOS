@@ -40,7 +40,7 @@ API 20 结果只作为历史证据，不再限制 API 24 的组件选择。API 2
 
 ## 自动化验证
 
-公式解析测试覆盖：行内 run 拆分、块/行内统计、公式 URL 与 TeX 保真、仿冒来源拒绝和可读降级。最终版本通过 `devecocli build --product default --modules entry --build-mode debug`。Hypium 的 `test` 任务能完整生成报告；公式新增用例无失败，但全量任务仍暴露 6 个既有 URL Kit 本地 mock 失败（5 个深链、1 个二维码），Hvigor 即使有断言失败仍返回 0，故不能只依赖进程退出码判断测试通过。
+公式解析测试覆盖：行内 run 拆分、块/行内统计、公式 URL 与 TeX 保真、仿冒来源拒绝和可读降级。最终版本通过 `devecocli build --product default --modules entry --build-mode debug`；完整 Hypium 任务共 46 个用例、失败 0。Hvigor 历史运行中即使有断言失败仍曾返回退出码 0，CI 必须同时检查测试报告内容。
 
 ## 已知边界与下一步
 

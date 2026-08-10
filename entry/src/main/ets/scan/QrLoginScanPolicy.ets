@@ -1,4 +1,4 @@
-import { url } from '@kit.ArkTS';
+import { parseAbsoluteUrl, ParsedAbsoluteUrl } from '../navigation/AbsoluteUrlParser';
 
 export enum QrScanDecision {
   ZHIHU_DESKTOP_LOGIN = 'zhihu_desktop_login',
@@ -22,10 +22,8 @@ export function assessQrScanValue(input: string): QrScanAssessment {
     };
   }
 
-  let parsed: url.URL;
-  try {
-    parsed = url.URL.parseURL(value);
-  } catch (_error) {
+  const parsed: ParsedAbsoluteUrl | undefined = parseAbsoluteUrl(value);
+  if (parsed === undefined) {
     return {
       decision: QrScanDecision.UNSUPPORTED,
       message: '已识别二维码，但不是可处理的知乎登录链接'
@@ -36,8 +34,7 @@ export function assessQrScanValue(input: string): QrScanAssessment {
   const isZhihuDesktopLogin = parsed.protocol.toLowerCase() === 'https:' &&
     parsed.hostname.toLowerCase() === 'www.zhihu.com' &&
     parsed.port.length === 0 &&
-    parsed.username.length === 0 &&
-    parsed.password.length === 0 &&
+    !parsed.hasUserInfo &&
     segments.length === 5 &&
     segments[0].length === 0 &&
     segments[1] === 'account' &&

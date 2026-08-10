@@ -63,6 +63,8 @@ export default function deepLinkResolverTest(): void {
 
     it('rejectsUnknownOrMalformedLinks', 0, () => {
       expect(resolveZhihuLink('https://www.zhihu.com.evil.example/question/1')).assertUndefined();
+      expect(resolveZhihuLink('https://user@www.zhihu.com/question/1')).assertUndefined();
+      expect(resolveZhihuLink('https://www.zhihu.com:8443/question/1')).assertUndefined();
       expect(resolveZhihuLink('https://www.zhihu.com/question/not-a-number')).assertUndefined();
       expect(resolveZhihuLink('zhihu://answers/not-a-number')).assertUndefined();
       expect(resolveZhihuLink('javascript:alert(1)')).assertUndefined();

@@ -16,7 +16,7 @@
 | Hvigor | 6.24.2 | 通过 |
 | HDC | 3.2.0d | 通过 |
 | 命令行签名 Debug HAP 构建 | `devecocli build` / `BUILD SUCCESSFUL` | 通过 |
-| ArkTS 单元测试 | 25 个用例，失败 0 | 通过 |
+| ArkTS 单元测试 | 46 个 Hypium 用例，失败 0 | 通过 |
 
 ## 构建环境要求
 
@@ -34,6 +34,20 @@ $env:DEVECO_SDK_HOME = '<DevEco Studio>/sdk'
 ```
 
 不得把个人机器绝对路径写入受版本控制的 `local.properties`。CI 后续通过 Secret/Runner 环境配置 SDK 根目录。
+
+本地 Hypium 任务可由 DevEco 内置 Node 与 Hvigor 执行；`DEVECO_SDK_HOME` 必须指向 `sdk` 根目录，不能指向 `sdk/default`：
+
+```powershell
+$env:DEVECO_SDK_HOME = '<DevEco Studio>/sdk'
+& '<DevEco Studio>/tools/node/node.exe' `
+  '<DevEco Studio>/tools/hvigor/bin/hvigorw.js' `
+  test --mode module `
+  -p 'module=entry@default' `
+  -p 'product=default' `
+  -p 'buildMode=debug'
+```
+
+2026-08-10 最终结果为 `UnitTestArkTS`、`GenerateUnitTestResult` 和 `entry:test` 全部完成，46 个用例无断言失败。Hvigor 历史版本可能在断言失败时仍返回退出码 0，CI 必须同时检查测试报告内容。
 
 ## 门禁状态
 

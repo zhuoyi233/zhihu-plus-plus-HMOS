@@ -27,7 +27,7 @@
 
 - `devecocli build --product default --modules entry --build-mode debug`：`BUILD SUCCESSFUL`。
 - Hypium 覆盖 200、401、403、408、422、429、503、504、NetworkKit 超时码、普通连接错误和取消文案；本轮报告中网络用例无失败。
-- 当前 Hvigor `test` 即使存在断言失败也会返回退出码 0；全量报告仍有 6 个既有 URL Kit 本地 mock 失败（5 个深链、1 个二维码），与本网络门禁无关，后续需修正测试适配并以报告内容而非退出码作为 CI 判据。
+- 最终全量 Hypium 共 46 个用例、失败 0。Hvigor 历史运行中即使有断言失败仍曾返回退出码 0，因此 CI 必须同时检查测试报告内容而非只看进程退出码。
 
 ## 结论
 
