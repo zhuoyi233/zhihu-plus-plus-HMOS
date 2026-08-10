@@ -1,0 +1,16 @@
+{
+  "id": "30000000000000003",
+  "title": "一篇脱敏测试文章",
+  "content": "<p>文章正文与真实账号无关。</p>",
+  "excerpt": "文章正文与真实账号无关。",
+  "url": "https://zhuanlan.zhihu.com/p/30000000000000003",
+  "voteup_count": 18,
+  "comment_count": 4,
+  "created": 1700002000,
+  "updated": 1700002600,
+  "author": {
+    "id": "user-fixture-003",
+    "name": "文章作者",
+    "is_org": true
+  }
+}

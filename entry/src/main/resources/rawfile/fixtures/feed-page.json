@@ -1,0 +1,50 @@
+{
+  "data": [
+    {
+      "id": "feed-answer-001",
+      "verb": "ANSWER_VOTE_UP",
+      "action_text": "赞同了回答",
+      "created_time": 1700003000,
+      "updated_time": 1700003600,
+      "target": {
+        "type": "answer",
+        "id": "20000000000000002",
+        "url": "https://www.zhihu.com/question/10000000000000001/answer/20000000000000002",
+        "excerpt": "Feed 中的回答摘要",
+        "voteup_count": 27,
+        "comment_count": 2,
+        "question": {
+          "id": "10000000000000001",
+          "title": "HarmonyOS 上如何组织跨平台数据模型？"
+        },
+        "author": {
+          "id": "user-fixture-002",
+          "name": "回答者"
+        }
+      }
+    },
+    {
+      "id": "feed-article-001",
+      "verb": "MEMBER_CREATE_ARTICLE",
+      "target": {
+        "type": "article",
+        "id": "30000000000000003",
+        "title": "一篇脱敏测试文章",
+        "excerpt": "Feed 中的文章摘要",
+        "url": "https://zhuanlan.zhihu.com/p/30000000000000003",
+        "author": {
+          "id": "user-fixture-003",
+          "name": "文章作者"
+        }
+      }
+    }
+  ],
+  "paging": {
+    "page": 1,
+    "is_end": false,
+    "is_start": true,
+    "totals": 25,
+    "previous": "",
+    "next": "https://api.zhihu.com/topstory/recommend?offset=2"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "id": "user-fixture-001",
+  "name": "脱敏用户",
+  "url_token": "fixture-user",
+  "headline": "用于跨平台契约测试",
+  "avatar_url": "https://picx.zhimg.com/fixture-user.png",
+  "follower_count": 42,
+  "is_following": true,
+  "is_org": false
+}
