@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
   classifyLoginResponse,
+  classifyLoginTransportError,
   hasRequiredLoginCookies,
   LoginVerificationStatus,
   parseZhihuProfile
@@ -39,7 +40,15 @@ export default function zhihuLoginClientTest(): void {
     it('classifiesRejectedAndTemporaryResponses', 0, () => {
       expect(classifyLoginResponse(401, '').status).assertEqual(LoginVerificationStatus.REJECTED);
       expect(classifyLoginResponse(403, '').status).assertEqual(LoginVerificationStatus.REJECTED);
+      expect(classifyLoginResponse(429, '').status).assertEqual(LoginVerificationStatus.TEMPORARY_FAILURE);
       expect(classifyLoginResponse(503, '').status).assertEqual(LoginVerificationStatus.TEMPORARY_FAILURE);
+    });
+
+    it('classifiesTimeoutAndNetworkFailures', 0, () => {
+      const timeout = classifyLoginTransportError(2300028);
+      expect(timeout.status).assertEqual(LoginVerificationStatus.TEMPORARY_FAILURE);
+      expect(timeout.message).assertEqual('网络请求超时，请稍后重试');
+      expect(classifyLoginTransportError(2300007).message).assertEqual('网络连接失败，请稍后重试');
     });
 
     it('rejectsInvalidSuccessfulResponse', 0, () => {

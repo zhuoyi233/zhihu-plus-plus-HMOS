@@ -1,16 +1,17 @@
 import { http } from '@kit.NetworkKit';
+import { BusinessError } from '@kit.BasicServicesKit';
+import {
+  classifyHttpStatus,
+  classifyTransportErrorCode,
+  describeHttpFailure,
+  HttpFailureKind
+} from './HttpFailure';
 
 const PROBE_URL = 'https://www.zhihu.com/api/v4/questions/19550228?include=title';
-
-export enum HttpFailureKind {
-  CLIENT = 'client',
-  SERVER = 'server'
-}
 
 export interface HttpProbeResult {
   statusCode: number;
   body: string;
-  cookies: string;
 }
 
 interface ProbeRequestHeaders {
@@ -18,24 +19,16 @@ interface ProbeRequestHeaders {
   'User-Agent': string;
 }
 
-export function classifyHttpStatus(statusCode: number): HttpFailureKind | undefined {
-  if (statusCode >= 400 && statusCode < 500) {
-    return HttpFailureKind.CLIENT;
-  }
-  if (statusCode >= 500) {
-    return HttpFailureKind.SERVER;
-  }
-  return undefined;
-}
-
 export class HttpProbeClient {
   private currentRequest?: http.HttpRequest;
-  private cancelled: boolean = false;
+  private cancelledRequest?: http.HttpRequest;
 
   async requestPublicQuestion(): Promise<HttpProbeResult> {
+    if (this.currentRequest !== undefined) {
+      throw new Error('已有 HTTP 探针请求正在进行');
+    }
     const request = http.createHttp();
     this.currentRequest = request;
-    this.cancelled = false;
 
     const headers: ProbeRequestHeaders = {
       'Accept': 'application/json',
@@ -55,31 +48,36 @@ export class HttpProbeClient {
       const statusCode = Number(response.responseCode);
       const failureKind = classifyHttpStatus(statusCode);
       if (failureKind !== undefined) {
-        throw new Error(`HTTP ${statusCode} (${failureKind})`);
+        throw new Error(describeHttpFailure(failureKind, statusCode));
       }
       const result: HttpProbeResult = {
         statusCode: statusCode,
-        body: response.result as string,
-        cookies: response.cookies
+        body: response.result as string
       };
       return result;
     } catch (error) {
-      if (this.cancelled) {
-        throw new Error('请求已取消');
+      if (this.cancelledRequest === request) {
+        throw new Error(describeHttpFailure(HttpFailureKind.CANCELLED));
       }
-      const message = error instanceof Error ? error.message : '网络请求失败';
-      throw new Error(message);
+      if (error instanceof Error && error.message.startsWith('HTTP ')) {
+        throw error;
+      }
+      const failureKind = classifyTransportErrorCode((error as BusinessError).code);
+      throw new Error(describeHttpFailure(failureKind));
     } finally {
       if (this.currentRequest === request) {
         this.currentRequest = undefined;
+      }
+      if (this.cancelledRequest === request) {
+        this.cancelledRequest = undefined;
       }
       request.destroy();
     }
   }
 
   cancel(): void {
-    this.cancelled = true;
-    this.currentRequest?.destroy();
+    this.cancelledRequest = this.currentRequest;
+    this.cancelledRequest?.destroy();
     this.currentRequest = undefined;
   }
 }

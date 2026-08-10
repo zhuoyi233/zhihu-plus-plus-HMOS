@@ -1,5 +1,7 @@
 import { http } from '@kit.NetworkKit';
+import { BusinessError } from '@kit.BasicServicesKit';
 import { SessionCookie, toCookieHeader } from '../session/CookieSession';
+import { classifyTransportErrorCode, HttpFailureKind } from './HttpFailure';
 import { createZse96Header, ZHIHU_WEB_ZSE93 } from './ZhihuFetchSignature';
 
 export const ZHIHU_ME_URL = 'https://www.zhihu.com/api/v4/me';
@@ -82,6 +84,12 @@ export function classifyLoginResponse(statusCode: number, responseBody: string):
       message: 'Cookie 已失效或被知乎拒绝'
     };
   }
+  if (statusCode === 429) {
+    return {
+      status: LoginVerificationStatus.TEMPORARY_FAILURE,
+      message: '知乎请求过于频繁，请稍后重试'
+    };
+  }
   if (statusCode !== 200) {
     return {
       status: LoginVerificationStatus.TEMPORARY_FAILURE,
@@ -100,6 +108,16 @@ export function classifyLoginResponse(statusCode: number, responseBody: string):
     status: LoginVerificationStatus.AUTHENTICATED,
     message: `已验证账号：${profile.name}`,
     profile: profile
+  };
+}
+
+export function classifyLoginTransportError(errorCode?: number): LoginVerificationResult {
+  const failureKind = classifyTransportErrorCode(errorCode);
+  return {
+    status: LoginVerificationStatus.TEMPORARY_FAILURE,
+    message: failureKind === HttpFailureKind.TIMEOUT
+      ? '网络请求超时，请稍后重试'
+      : '网络连接失败，请稍后重试'
   };
 }
 
@@ -135,11 +153,8 @@ export class ZhihuLoginClient {
     try {
       const response = await request.request(ZHIHU_ME_URL, options);
       return classifyLoginResponse(Number(response.responseCode), response.result as string);
-    } catch (_error) {
-      return {
-        status: LoginVerificationStatus.TEMPORARY_FAILURE,
-        message: '网络请求失败，请稍后重试'
-      };
+    } catch (error) {
+      return classifyLoginTransportError((error as BusinessError).code);
     } finally {
       request.destroy();
     }
