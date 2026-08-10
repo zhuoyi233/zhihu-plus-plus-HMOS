@@ -256,7 +256,7 @@ P0 阶段结论（2026-07-20）：API 20/24 均通过主要知乎 URL、`link.zh
 3. 仅公式节点使用受限 ArkWeb。
 4. 不接受整篇正文退回 Web。
 
-P0 阶段结论（2026-07-20）：知乎公式端点返回 SVG，现有原生 `Image` 路线未形成可靠结果；受 CSP 限制的块公式 `RichText` 仅作为候选实验，真实长文公式尚未完整渲染。正文其余部分保持 ArkUI 原生渲染并保留 TeX 文本，后续继续完成 `P0-MATH-01`。API 20 失败结果只作为历史证据，不再限制后续 API 24 方案选择。详见 `docs/p0/reader-validation.md`。
+P0 阶段结论（2026-08-10）：API 24 虚拟机证明远程 SVG URL 直接交给 `Image`/`ImageSpan` 会失败；最终路线由 `NetworkKit` 下载严格白名单内的公式 SVG，校验状态码、类型、大小与 SVG 根节点，禁止重定向，再把知乎 SVG 的 `ex` 尺寸和 `currentColor` 规范化为 ImageKit 可解码形式。`ImageSource` 解码后的 PixelMap 分别交给原生 `Image` 和 `ImageSpan`，网络或解码失败时仅对应节点降级为 TeX。真实长文的 11 个块公式和 63 个行内公式已在 API 24 虚拟机全部解码并连续滚动到文末，无降级、无崩溃。`RichText` 因底层复用 Web、列表内存与维护状态限制退出主路线，整篇正文保持 ArkUI 原生渲染；`P0-MATH-01` 已关闭。API 20 失败结果只作为历史证据。详见 `docs/p0/reader-validation.md`。
 
 普通网络图片与 GIF 已在 API 20/24 虚拟机通过：正文 AST 选择知乎懒加载真实地址，ArkUI `Image` 负责加载和 GIF 逐帧解码，并提供失败重试与原生全屏预览。P0 像素差验证确认 GIF 不只是静态首帧；缩放、保存、分享和统一缓存留到 P1/P2。详见 `docs/p0/image-validation.md`。
 

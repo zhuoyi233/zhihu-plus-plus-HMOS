@@ -1,5 +1,11 @@
 import { describe, expect, it } from '@ohos/hypium';
-import { parseZhihuHtml, ReaderBlockKind, readerDocumentStats } from '../main/ets/reader/ReaderDocument';
+import { isTrustedFormulaUrl } from '../main/ets/reader/FormulaSourcePolicy';
+import {
+  parseZhihuHtml,
+  ReaderBlockKind,
+  ReaderInlineKind,
+  readerDocumentStats
+} from '../main/ets/reader/ReaderDocument';
 
 export default function readerDocumentTest(): void {
   describe('readerDocumentTest', () => {
@@ -12,9 +18,15 @@ export default function readerDocumentTest(): void {
       expect(blocks[3].kind).assertEqual(ReaderBlockKind.LIST_ITEM);
     });
 
-    it('preservesInlineEquationAsReadableText', 0, () => {
-      const blocks = parseZhihuHtml('<p>欧拉公式<img eeimg="1" src="equation" alt="e^{i&amp;pi;}+1=0">成立</p>');
+    it('parsesInlineEquationAndKeepsReadableFallback', 0, () => {
+      const blocks = parseZhihuHtml('<p>欧拉公式<img eeimg="1" ' +
+        'src="https://www.zhihu.com/equation?tex=e%5Ei" alt="e^{i&amp;pi;}+1=0">成立</p>');
       expect(blocks[0].text).assertEqual('欧拉公式 「e^{i&pi;}+1=0」 成立');
+      expect(blocks[0].inlineRuns.length).assertEqual(3);
+      expect(blocks[0].inlineRuns[1].kind).assertEqual(ReaderInlineKind.FORMULA);
+      expect(blocks[0].inlineRuns[1].text).assertEqual('e^{i&pi;}+1=0');
+      expect(blocks[0].inlineRuns[1].sourceUrl)
+        .assertEqual('https://www.zhihu.com/equation?tex=e%5Ei');
     });
 
     it('detectsBlockEquation', 0, () => {
@@ -30,8 +42,37 @@ export default function readerDocumentTest(): void {
       expect(stats.blockCount).assertEqual(3);
       expect(stats.headingCount).assertEqual(1);
       expect(stats.formulaCount).assertEqual(1);
+      expect(stats.blockFormulaCount).assertEqual(1);
+      expect(stats.inlineFormulaCount).assertEqual(0);
       expect(stats.imageCount).assertEqual(0);
       expect(stats.textLength).assertEqual(5);
+    });
+
+    it('countsBlockAndInlineEquationsSeparately', 0, () => {
+      const blocks = parseZhihuHtml('<p>行内<img eeimg="1" ' +
+        'src="https://www.zhihu.com/equation?tex=x" alt="x">公式</p>' +
+        '<p><img eeimg="2" src="https://www.zhihu.com/equation?tex=y" alt="y"></p>');
+      const stats = readerDocumentStats(blocks);
+
+      expect(stats.formulaCount).assertEqual(2);
+      expect(stats.blockFormulaCount).assertEqual(1);
+      expect(stats.inlineFormulaCount).assertEqual(1);
+    });
+
+    it('rejectsUntrustedFormulaSourceButPreservesTex', 0, () => {
+      const blocks = parseZhihuHtml('<p>公式<img eeimg="1" src="https://example.com/x.svg" alt="x^2">结束</p>');
+
+      expect(blocks[0].inlineRuns.length).assertEqual(0);
+      expect(blocks[0].text).assertEqual('公式 「x^2」 结束');
+    });
+
+    it('allowsOnlyZhihuEquationEndpoint', 0, () => {
+      expect(isTrustedFormulaUrl('https://www.zhihu.com/equation?tex=x')).assertTrue();
+      expect(isTrustedFormulaUrl('https://www.zhihu.com.evil.example/equation?tex=x')).assertFalse();
+      expect(isTrustedFormulaUrl('http://www.zhihu.com/equation?tex=x')).assertFalse();
+      expect(isTrustedFormulaUrl('https://user@www.zhihu.com/equation?tex=x')).assertFalse();
+      expect(isTrustedFormulaUrl('https://www.zhihu.com/equation?tex=')).assertFalse();
+      expect(isTrustedFormulaUrl('https://www.zhihu.com/equation/extra?tex=x')).assertFalse();
     });
 
     it('prefersActualZhihuImageAndCaption', 0, () => {
@@ -53,4 +94,5 @@ export default function readerDocumentTest(): void {
       expect(protocolRelative[0].sourceUrl).assertEqual('https://picx.zhimg.com/reading.jpg');
       expect(unsafe.length).assertEqual(0);
     });
+  });
 }

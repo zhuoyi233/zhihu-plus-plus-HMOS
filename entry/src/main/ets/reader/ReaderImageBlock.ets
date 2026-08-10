@@ -2,7 +2,7 @@ import { ReaderBlock, ReaderBlockKind } from './ReaderDocument';
 
 @Component
 export struct ReaderImageBlock {
-  item: ReaderBlock = { id: '', kind: ReaderBlockKind.IMAGE, text: '', sourceUrl: '' };
+  item: ReaderBlock = { id: '', kind: ReaderBlockKind.IMAGE, text: '', sourceUrl: '', inlineRuns: [] };
   onPreview: (url: string) => void = () => {};
   @State private status: string = '图片等待加载';
   @State private failed: boolean = false;
