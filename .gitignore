@@ -71,6 +71,7 @@ app/full
 **/.test/
 oh_modules/
 **/build/
+**/BuildProfile.ets
 *.hap
 *.hsp
 *.har

@@ -1,7 +1,5 @@
 import { describe, expect, it } from '@ohos/hypium';
-import { md5Hex } from '../main/ets/network/Md5';
-import { encryptZseV4 } from '../main/ets/network/ZseSigner';
-import { createZse96Header } from '../main/ets/network/ZhihuFetchSignature';
+import { createZse96Header, encryptZseV4, md5Hex } from 'data';
 
 export default function zseSignerTest(): void {
   describe('zseSignerTest', () => {

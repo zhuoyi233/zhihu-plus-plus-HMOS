@@ -1,7 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { detectBarcode, scanBarcode, scanCore } from '@kit.ScanKit';
-import { assessQrScanValue, QrScanDecision } from '../scan/QrLoginScanPolicy';
+import { assessQrScanValue, QrScanDecision } from 'core';
 import { QR_FIXTURE_VALUE, writeQrScanFixture } from '../scan/QrScanFixture';
 
 interface QrPolicyCase {

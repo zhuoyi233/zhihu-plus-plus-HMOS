@@ -6,7 +6,7 @@ import {
   StartupPhaseStatus,
   StartupTask,
   StartupTaskStatus
-} from '../main/ets/startup/AppStartup';
+} from 'core';
 
 class StepClock implements StartupClock {
   private current: number = 0;

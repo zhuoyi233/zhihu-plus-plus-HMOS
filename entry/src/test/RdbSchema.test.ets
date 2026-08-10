@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@ohos/hypium';
-import { CURRENT_SCHEMA_VERSION, schemaMigrationTo } from '../main/ets/data/RdbSchema';
+import { CURRENT_SCHEMA_VERSION, schemaMigrationTo } from 'data';
 
 export default function rdbSchemaTest(): void {
   describe('rdbSchemaTest', () => {

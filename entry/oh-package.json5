@@ -1,9 +1,13 @@
 {
   "name": "entry",
   "version": "1.0.0",
-  "description": "Zhihu++ HarmonyOS P0 entry module.",
+  "description": "Zhihu++ HarmonyOS application entry module.",
   "main": "",
   "author": "",
   "license": "",
-  "dependencies": {}
+  "dependencies": {
+    "core": "file:../core",
+    "data": "file:../data",
+    "reader": "file:../reader"
+  }
 }

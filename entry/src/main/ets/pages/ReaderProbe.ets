@@ -1,17 +1,18 @@
 import { common } from '@kit.AbilityKit';
 import { util } from '@kit.ArkTS';
 import { image } from '@kit.ImageKit';
-import { clearFormulaByteCache, loadFormulaPixelMap } from '../reader/FormulaPixelMapLoader';
-import { ReaderBlockDataSource } from '../reader/ReaderBlockDataSource';
-import { ReaderImageBlock } from '../reader/ReaderImageBlock';
 import {
+  clearFormulaByteCache,
+  loadFormulaPixelMap,
   parseZhihuHtml,
   ReaderBlock,
+  ReaderBlockDataSource,
   ReaderBlockKind,
+  ReaderImageBlock,
   ReaderInlineKind,
   ReaderInlineRun,
   readerDocumentStats
-} from '../reader/ReaderDocument';
+} from 'reader';
 
 function inlineFormulaWidth(tex: string): number {
   return Math.min(220, Math.max(20, tex.length * 9));
@@ -312,6 +313,7 @@ export struct ReaderProbe {
     } else if (item.kind === ReaderBlockKind.IMAGE) {
       ReaderImageBlock({
         item: item,
+        secondaryTextColor: $r('app.color.secondary_text'),
         onPreview: (url: string) => {
           this.previewUrl = url;
         }

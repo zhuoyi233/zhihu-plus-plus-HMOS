@@ -1,15 +1,13 @@
 import { common } from '@kit.AbilityKit';
-import { HttpProbeClient } from '../network/HttpProbeClient';
 import {
+  CookieSessionStore,
+  HttpProbeClient,
   LoginVerificationStatus,
-  ZhihuLoginClient
-} from '../network/ZhihuLoginClient';
-import {
   parseCookieAssignments,
   safeSessionSummary,
-  SessionCookie
-} from '../session/CookieSession';
-import { CookieSessionStore } from '../session/CookieSessionStore';
+  SessionCookie,
+  ZhihuLoginClient
+} from 'data';
 import { BackgroundTaskProbePage } from './BackgroundTaskProbe';
 import { DatabaseProbePage } from './DatabaseProbe';
 import { DeepLinkProbePage } from './DeepLinkProbe';
@@ -40,7 +38,11 @@ struct Index {
   }
 
   build() {
-    P1Shell({ technicalLabContent: this.technicalLabContent });
+    Stack() {
+      P1Shell({ technicalLabContent: this.technicalLabContent });
+    }
+    .width('100%')
+    .height('100%')
   }
 
   @Builder

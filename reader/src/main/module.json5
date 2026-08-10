@@ -1,0 +1,9 @@
+{
+  "module": {
+    "name": "reader",
+    "type": "har",
+    "deviceTypes": [
+      "phone"
+    ]
+  }
+}

@@ -1,5 +1,4 @@
 import { describe, expect, it } from '@ohos/hypium';
-import { FeedTargetKind } from '../main/ets/domain/DomainModels';
 import {
   decodeAnswer,
   decodeArticle,
@@ -7,8 +6,9 @@ import {
   decodeQuestion,
   decodeUser,
   DomainDecodeError,
-  DomainDecodeFailureKind
-} from '../main/ets/domain/ZhihuDomainDecoder';
+  DomainDecodeFailureKind,
+  FeedTargetKind
+} from 'data';
 
 export default function domainModelTest(): void {
   describe('domainModelTest', () => {

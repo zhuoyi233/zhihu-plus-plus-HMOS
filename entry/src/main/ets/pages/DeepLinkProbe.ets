@@ -3,7 +3,7 @@ import {
   DeepLinkType,
   describeDeepLink,
   resolveZhihuLink
-} from '../navigation/DeepLinkResolver';
+} from 'core';
 
 interface DeepLinkProbeCase {
   name: string;

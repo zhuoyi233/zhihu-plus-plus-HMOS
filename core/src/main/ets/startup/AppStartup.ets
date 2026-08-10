@@ -84,7 +84,8 @@ export class AppStartup {
   private async executeDeferredAfterCritical(): Promise<StartupPhaseSummary> {
     const criticalSummary = await this.runCritical();
     if (criticalSummary.status !== StartupPhaseStatus.SUCCEEDED) {
-      const skippedTasks: Array<StartupTaskResult> = this.orderedDeferredTasks.map((task: StartupTask) => {
+      const skippedTasks: Array<StartupTaskResult> = this.orderedDeferredTasks.map(
+        (task: StartupTask): StartupTaskResult => {
         this.taskStatuses.set(task.name, StartupTaskStatus.SKIPPED);
         return {
           name: task.name,

@@ -5,7 +5,7 @@ import {
   hasRequiredLoginCookies,
   LoginVerificationStatus,
   parseZhihuProfile
-} from '../main/ets/network/ZhihuLoginClient';
+} from 'data';
 
 export default function zhihuLoginClientTest(): void {
   describe('zhihuLoginClientTest', () => {

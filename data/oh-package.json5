@@ -1,0 +1,9 @@
+{
+  "name": "data",
+  "version": "1.0.0",
+  "description": "Zhihu++ domain, repository, network, session and RDB data layer.",
+  "main": "Index.ets",
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {}
+}

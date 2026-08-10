@@ -1,4 +1,4 @@
-import { parseAbsoluteUrl, ParsedAbsoluteUrl } from '../navigation/AbsoluteUrlParser';
+import { parseAbsoluteUrl, ParsedAbsoluteUrl } from 'core';
 
 export function isTrustedFormulaUrl(value: string): boolean {
   const parsed: ParsedAbsoluteUrl | undefined = parseAbsoluteUrl(value);

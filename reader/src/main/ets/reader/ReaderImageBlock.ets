@@ -4,6 +4,7 @@ import { ReaderBlock, ReaderBlockKind } from './ReaderDocument';
 export struct ReaderImageBlock {
   item: ReaderBlock = { id: '', kind: ReaderBlockKind.IMAGE, text: '', sourceUrl: '', inlineRuns: [] };
   onPreview: (url: string) => void = () => {};
+  secondaryTextColor: ResourceColor = Color.Gray;
   @State private status: string = '图片等待加载';
   @State private failed: boolean = false;
   @State private retryRevision: number = 0;
@@ -40,7 +41,7 @@ export struct ReaderImageBlock {
       if (this.item.text.length > 0) {
         Text(this.item.text)
           .fontSize(14)
-          .fontColor($r('app.color.secondary_text'))
+          .fontColor(this.secondaryTextColor)
           .textAlign(TextAlign.Center)
           .width('100%')
       }
@@ -49,7 +50,7 @@ export struct ReaderImageBlock {
         Text(this.status)
           .id(`p0_reader_image_status_${this.item.id}`)
           .fontSize(13)
-          .fontColor($r('app.color.secondary_text'))
+          .fontColor(this.secondaryTextColor)
         if (this.failed) {
           Button('重试')
             .id(`p0_reader_image_retry_${this.item.id}`)

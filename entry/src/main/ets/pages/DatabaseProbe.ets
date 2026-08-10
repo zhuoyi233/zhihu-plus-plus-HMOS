@@ -1,5 +1,5 @@
 import { common } from '@kit.AbilityKit';
-import { DatabaseProbe, DatabaseProbeResult } from '../data/DatabaseProbe';
+import { DatabaseProbe, DatabaseProbeResult } from 'data';
 
 @Component
 export struct DatabaseProbePage {

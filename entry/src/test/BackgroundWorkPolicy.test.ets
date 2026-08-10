@@ -3,7 +3,7 @@ import {
   BackgroundRoute,
   decideBackgroundRoute,
   ZhihuWorkload
-} from '../main/ets/background/BackgroundWorkPolicy';
+} from 'core';
 
 export default function backgroundWorkPolicyTest(): void {
   describe('backgroundWorkPolicyTest', () => {

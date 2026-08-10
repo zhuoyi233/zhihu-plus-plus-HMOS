@@ -27,7 +27,7 @@ export class AppLogger {
 
   static startupSummary(summary: StartupPhaseSummary): void {
     const taskSummary = summary.tasks.map((task: StartupTaskResult) =>
-      `${this.safeTaskName(task.name)}:${task.status}:${task.durationMs}`).join(',');
+      `${AppLogger.safeTaskName(task.name)}:${task.status}:${task.durationMs}`).join(',');
     hilog.info(LOG_DOMAIN, LOG_TAG,
       'startup phase=%{public}s status=%{public}s durationMs=%{public}d tasks=%{public}s',
       summary.phase, summary.status, summary.durationMs, taskSummary);

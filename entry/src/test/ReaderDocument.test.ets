@@ -1,11 +1,11 @@
 import { describe, expect, it } from '@ohos/hypium';
-import { isTrustedFormulaUrl } from '../main/ets/reader/FormulaSourcePolicy';
 import {
+  isTrustedFormulaUrl,
   parseZhihuHtml,
   ReaderBlockKind,
   ReaderInlineKind,
   readerDocumentStats
-} from '../main/ets/reader/ReaderDocument';
+} from 'reader';
 
 export default function readerDocumentTest(): void {
   describe('readerDocumentTest', () => {

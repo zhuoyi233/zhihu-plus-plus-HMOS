@@ -3,7 +3,7 @@ import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import {
   P1DestinationName,
   ShellDestination
-} from '../navigation/P1Destination';
+} from 'core';
 
 enum P1ThemeMode {
   SYSTEM = 'system',
@@ -23,7 +23,7 @@ export struct P1Shell {
   }
 
   @Builder
-  destinationBuilder(name: string, _param: unknown) {
+  destinationBuilder(name: string, _param: Object) {
     if (name === P1DestinationName.SETTINGS) {
       NavDestination() {
         this.settingsPage();

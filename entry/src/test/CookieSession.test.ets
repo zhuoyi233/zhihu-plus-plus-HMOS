@@ -9,7 +9,7 @@ import {
   SessionCookie,
   toCookieHeader,
   upsertCookie
-} from '../main/ets/session/CookieSession';
+} from 'data';
 
 export default function cookieSessionTest(): void {
   describe('cookieSessionTest', () => {

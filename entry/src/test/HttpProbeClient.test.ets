@@ -4,7 +4,7 @@ import {
   classifyTransportErrorCode,
   describeHttpFailure,
   HttpFailureKind
-} from '../main/ets/network/HttpFailure';
+} from 'data';
 
 export default function httpProbeClientTest(): void {
   describe('httpProbeClientTest', () => {

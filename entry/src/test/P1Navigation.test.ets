@@ -5,7 +5,7 @@ import {
   P1DestinationName,
   SearchDestination,
   ShellDestination
-} from '../main/ets/navigation/P1Destination';
+} from 'core';
 
 export default function p1NavigationTest(): void {
   describe('p1NavigationTest', () => {

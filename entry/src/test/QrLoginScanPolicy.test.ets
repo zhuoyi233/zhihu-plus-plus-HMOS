@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@ohos/hypium';
-import { assessQrScanValue, QrScanDecision } from '../main/ets/scan/QrLoginScanPolicy';
+import { assessQrScanValue, QrScanDecision } from 'core';
 
 export default function qrLoginScanPolicyTest(): void {
   describe('qrLoginScanPolicyTest', () => {

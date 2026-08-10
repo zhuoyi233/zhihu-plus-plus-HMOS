@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@ohos/hypium';
-import { DeepLinkType, resolveZhihuLink } from '../main/ets/navigation/DeepLinkResolver';
+import { DeepLinkType, resolveZhihuLink } from 'core';
 
 export default function deepLinkResolverTest(): void {
   describe('deepLinkResolverTest', () => {

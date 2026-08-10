@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@ohos/hypium';
-import { isApiAvailable } from '../main/ets/compat/ApiLevel';
+import { isApiAvailable } from 'core';
 
 export default function apiLevelTest(): void {
   describe('apiLevelTest', () => {

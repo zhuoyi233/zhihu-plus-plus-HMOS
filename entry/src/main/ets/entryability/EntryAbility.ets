@@ -1,14 +1,15 @@
 import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
-import { AppLogEvent, AppLogger } from '../logging/AppLogger';
-import { resolveZhihuLink } from '../navigation/DeepLinkResolver';
 import {
+  AppLogEvent,
+  AppLogger,
   AppStartup,
+  resolveZhihuLink,
   SystemStartupClock,
   StartupPhase,
   StartupPhaseStatus,
   StartupTask
-} from '../startup/AppStartup';
+} from 'core';
 
 export default class EntryAbility extends UIAbility {
   private startup: AppStartup | undefined = undefined;

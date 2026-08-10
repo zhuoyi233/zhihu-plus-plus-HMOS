@@ -4,7 +4,7 @@ import {
   BackgroundRoute,
   decideBackgroundRoute,
   ZhihuWorkload
-} from '../background/BackgroundWorkPolicy';
+} from 'core';
 
 @Component
 export struct BackgroundTaskProbePage {
