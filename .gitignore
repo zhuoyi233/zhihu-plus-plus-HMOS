@@ -29,6 +29,13 @@ render.experimental.xml
 *.jks
 *.keystore
 
+# HarmonyOS signing materials and local signing config
+*.p12
+*.cer
+*.p7b
+*.csr
+external-signing-config.json
+
 # Google Services (e.g. APIs or Firebase)
 google-services.json
 

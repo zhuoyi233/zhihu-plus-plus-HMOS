@@ -65,6 +65,8 @@
 
 2026-08-10 起维护基线调整为 API 24 单一版本；以上 API 20 结果仅作为历史证据保留。API 24 最终 Debug HAP 的后台任务原型完成增量验证：短时任务获批 180 秒、读取时当日剩余配额 600 秒并主动释放；延迟任务 `24001` 登记成功，最早 60 秒后触发，停止后再次枚举确认无残留。页面结果完整可读且无崩溃，`P0-BG-01` 标记通过，详细边界见 `background-task-validation.md`。
 
+2026-08-10 签名增量复测使用 `Pura 90`（HarmonyOS 6.1.1 / API 24，系统镜像软件版本 6.1.0.126）。`devecocli build --modules entry --build-mode debug` 生成 `entry-default-signed.hap`，`SignHap` 与整体构建成功；`devecocli run --device 127.0.0.1:5555 --skip-build` 安装成功并启动 `com.github.zhuoyi233.zhplus/EntryAbility`。随后读取 UI 树，确认显示“Zhihu++ HarmonyOS”和“目标与最低兼容 API 24”，`P0-ID-01` 标记通过。详见 `signing-validation.md`。
+
 ## 复测命令
 
 ```powershell
@@ -77,3 +79,5 @@ $hdc = '<DevEco Studio>/sdk/default/openharmony/toolchains/hdc.exe'
 ```
 
 DevEco 本地虚拟机允许安装未签名 Debug HAP。该结果不能代替真机、发布证书和 AppGallery Connect 签名验证。
+
+当前 P0 已额外完成本地调试签名 HAP 的安装启动；它证明调试签名链路可用，但仍不能替代 P6 的发布签名、上架和升级连续性验证。

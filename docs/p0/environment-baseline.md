@@ -15,7 +15,7 @@
 | ohpm | 6.1.2.268 | 通过 |
 | Hvigor | 6.24.2 | 通过 |
 | HDC | 3.2.0d | 通过 |
-| 命令行 Debug HAP 构建 | `BUILD SUCCESSFUL` | 通过 |
+| 命令行签名 Debug HAP 构建 | `devecocli build` / `BUILD SUCCESSFUL` | 通过 |
 | ArkTS 单元测试 | 25 个用例，失败 0 | 通过 |
 
 ## 构建环境要求
@@ -35,14 +35,14 @@ $env:DEVECO_SDK_HOME = '<DevEco Studio>/sdk'
 
 不得把个人机器绝对路径写入受版本控制的 `local.properties`。CI 后续通过 Secret/Runner 环境配置 SDK 根目录。
 
-## 尚未通过的门禁
+## 门禁状态
 
 | 项目 | 当前情况 | 后续动作 |
 | --- | --- | --- |
 | Bundle Name | `com.github.zhuoyi233.zhplus` | 通过 |
-| HAP 签名 | 尚无 `signingConfigs` | Bundle Name 确认后由用户在 DevEco 完成华为账号授权和签名配置 |
-| API 24 设备 | `ZhihuPlus_API24`，HarmonyOS 6.1.1（API 24） | 通过 |
-| 安装与启动 | API 24 DevEco 虚拟机可安装并启动 Debug HAP | 通过 |
+| HAP 签名 | `devecocli` 本机调试签名，仓库保留空 `signingConfigs` | 通过 |
+| API 24 设备 | `Pura 90`，HarmonyOS 6.1.1（API 24） | 通过 |
+| 安装与启动 | API 24 DevEco 虚拟机可安装并启动签名 Debug HAP | 通过 |
 
 ## 发现与决定
 
@@ -50,6 +50,7 @@ $env:DEVECO_SDK_HOME = '<DevEco Studio>/sdk'
 - 工程显式配置 `targetSdkVersion` 和 `compatibleSdkVersion` 均为 API 24。
 - 从 2026-08-10 起，新增功能、缺陷修复和验收只考虑 API 24，不再为 API 20 编写版本判断、降级实现或回归用例。
 - 正式 Bundle Name 固定为 `com.github.zhuoyi233.zhplus`，后续签名、应用市场和深链配置统一使用该标识。
-- 当前产物为 `entry-default-unsigned.hap`；未签名产物不能计入签名门禁通过。
-- DevEco 虚拟机允许安装未签名 Debug HAP，因此虚拟机安装启动门禁已通过；真机和发布签名仍需单独验证。
+- `P0-ID-01` 已用 `entry-default-signed.hap` 完成 API 24 虚拟机安装和启动；发布证书与 AppGallery Connect 流程仍属于 P6。
+- 根据 HarmonyOS 官方多人协作 FAQ，Git 只保留空 `signingConfigs`；每台开发机通过 `devecocli signature generate` 生成自己的本地调试配置。生成后的绝对路径、密码密文、私钥、证书和 Profile 均不得提交。
+- HarmonyOS 签名材料扩展名和 `external-signing-config.json` 已加入 `.gitignore`，本机材料保存在用户目录而非仓库。完整命令、验证证据和边界见 `signing-validation.md`。
 - API 20 的既有验证记录仅作为历史证据保留，不再构成发布或维护门禁。设备详细记录见 `device-validation.md`。
