@@ -1,0 +1,48 @@
+{
+  "float": [
+    {
+      "name": "p1_display_font_size",
+      "value": "30fp"
+    },
+    {
+      "name": "p1_heading_font_size",
+      "value": "20fp"
+    },
+    {
+      "name": "p1_body_font_size",
+      "value": "16fp"
+    },
+    {
+      "name": "p1_secondary_font_size",
+      "value": "14fp"
+    },
+    {
+      "name": "p1_page_padding",
+      "value": "20vp"
+    },
+    {
+      "name": "p1_card_padding",
+      "value": "18vp"
+    },
+    {
+      "name": "p1_card_radius",
+      "value": "16vp"
+    },
+    {
+      "name": "p1_spacing_large",
+      "value": "24vp"
+    },
+    {
+      "name": "p1_spacing_medium",
+      "value": "14vp"
+    },
+    {
+      "name": "p1_spacing_small",
+      "value": "10vp"
+    },
+    {
+      "name": "p1_spacing_xsmall",
+      "value": "4vp"
+    }
+  ]
+}

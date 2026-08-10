@@ -13,6 +13,7 @@ import { CookieSessionStore } from '../session/CookieSessionStore';
 import { BackgroundTaskProbePage } from './BackgroundTaskProbe';
 import { DatabaseProbePage } from './DatabaseProbe';
 import { DeepLinkProbePage } from './DeepLinkProbe';
+import { P1Shell } from './P1Shell';
 import { QrScanProbePage } from './QrScanProbe';
 import { ReaderProbe } from './ReaderProbe';
 import { ImageProbe } from './ImageProbe';
@@ -39,6 +40,11 @@ struct Index {
   }
 
   build() {
+    P1Shell({ technicalLabContent: this.technicalLabContent });
+  }
+
+  @Builder
+  technicalLabContent() {
     if (this.showBackgroundTaskProbe) {
       BackgroundTaskProbePage({
         onBack: () => {
@@ -80,38 +86,38 @@ struct Index {
         Column({ space: 16 }) {
           Text('Zhihu++ HarmonyOS')
             .id('p0_title')
-            .fontSize(30)
+            .fontSize($r('app.float.p1_display_font_size'))
             .fontWeight(FontWeight.Bold)
             .fontColor($r('app.color.primary_text'))
 
           Text('P0 技术验证工程')
             .id('p0_subtitle')
-            .fontSize(20)
+            .fontSize($r('app.float.p1_heading_font_size'))
             .fontColor($r('app.color.primary_text'))
 
           Text('目标与最低兼容 API 24')
             .id('p0_sdk_baseline')
-            .fontSize(16)
+            .fontSize($r('app.float.p1_body_font_size'))
             .fontColor($r('app.color.secondary_text'))
 
-          Text('下一步：登录、公式与签名门禁收口')
+          Text('P0 门禁已收口；此页面仅用于技术回归验证')
             .id('p0_next_step')
-            .fontSize(15)
+            .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
 
           Text(this.networkStatus)
             .id('p0_http_status')
-            .fontSize(15)
+            .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
 
           Text(this.sessionStatus)
             .id('p0_session_status')
-            .fontSize(15)
+            .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
 
           Text(this.loginStatus)
             .id('p0_login_status')
-            .fontSize(15)
+            .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
 
           Button('打开原生长正文原型')

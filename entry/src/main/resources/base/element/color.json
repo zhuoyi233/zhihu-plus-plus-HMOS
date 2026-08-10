@@ -15,6 +15,22 @@
     {
       "name": "secondary_text",
       "value": "#666666"
+    },
+    {
+      "name": "surface_background",
+      "value": "#F5F6F8"
+    },
+    {
+      "name": "control_background",
+      "value": "#E9EBEF"
+    },
+    {
+      "name": "brand_primary",
+      "value": "#0066FF"
+    },
+    {
+      "name": "on_brand",
+      "value": "#FFFFFF"
     }
   ]
 }
