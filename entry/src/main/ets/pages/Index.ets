@@ -12,6 +12,7 @@ import {
 import { CookieSessionStore } from '../session/CookieSessionStore';
 import { DatabaseProbePage } from './DatabaseProbe';
 import { DeepLinkProbePage } from './DeepLinkProbe';
+import { QrScanProbePage } from './QrScanProbe';
 import { ReaderProbe } from './ReaderProbe';
 import { ImageProbe } from './ImageProbe';
 
@@ -27,6 +28,7 @@ struct Index {
   @State private showImageProbe: boolean = false;
   @State private showDatabaseProbe: boolean = false;
   @State private showDeepLinkProbe: boolean = false;
+  @State private showQrScanProbe: boolean = false;
   private readonly httpProbeClient: HttpProbeClient = new HttpProbeClient();
   private readonly loginClient: ZhihuLoginClient = new ZhihuLoginClient();
 
@@ -35,7 +37,13 @@ struct Index {
   }
 
   build() {
-    if (this.showDeepLinkProbe) {
+    if (this.showQrScanProbe) {
+      QrScanProbePage({
+        onBack: () => {
+          this.showQrScanProbe = false;
+        }
+      })
+    } else if (this.showDeepLinkProbe) {
       DeepLinkProbePage({
         onBack: () => {
           this.showDeepLinkProbe = false;
@@ -78,7 +86,7 @@ struct Index {
             .fontSize(16)
             .fontColor($r('app.color.secondary_text'))
 
-          Text('下一步：网络、会话、签名、正文与存储验证')
+          Text('下一步：后台任务约束与 P0 收口')
             .id('p0_next_step')
             .fontSize(15)
             .fontColor($r('app.color.secondary_text'))
@@ -120,6 +128,12 @@ struct Index {
             .id('p0_open_deep_link_probe')
             .onClick(() => {
               this.showDeepLinkProbe = true;
+            })
+
+          Button('打开二维码扫描原型')
+            .id('p0_open_qr_scan_probe')
+            .onClick(() => {
+              this.showQrScanProbe = true;
             })
 
           TextInput({ text: this.cookieInput, placeholder: '粘贴 z_c0=…; d_c0=…' })

@@ -180,6 +180,8 @@ ZSE 签名优先迁移为纯 ArkTS，并用 Android 当前测试向量逐字节�
 
 二维码或 Web 登录成功后都进入同一 Session Repository。加密密钥放入 Asset Store，Cookie 密文放应用沙箱；日志、崩溃信息和导出文件不得包含 Cookie。
 
+二维码登录分为两个独立方向：本机扫描电脑端登录码使用 Scan Kit 默认界面；本机显示登录码供其他设备扫描则迁移二维码创建、`scan_info` 轮询、风控和 Cookie 同步协议。扫码成功只表示得到码值，不能直接计为登录成功。P0 验证记录见 [`scan-kit-validation.md`](p0/scan-kit-validation.md)。
+
 ### 6.2 数据模型与解析
 
 继续保留当前数据边界：
