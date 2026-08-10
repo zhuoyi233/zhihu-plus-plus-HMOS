@@ -16,7 +16,7 @@
 | 过滤 | 关键词、用户、话题、广告和付费过滤 | MVP | 规则一致性和记录表 |
 | 本地推荐 | 爬取、行为记录和规则评分 | Lite 对标 | 非 AI 边界、TaskPool、后台限制 |
 | 创作 | 写回答、写想法、图片上传和草稿 | Lite 对标 | 上传风控和草稿安全 |
-| 媒体 | 图片预览、视频、扫码、分享和 TTS | 后置 | Kit 能力与 API 20 降级 |
+| 媒体 | 图片预览、视频、扫码、分享和 TTS | 后置 | API 24 Kit 能力与权限边界 |
 | 导出 | Markdown、HTML、长图和 PDF | 后置 | 像素有效性、存储 Picker |
 | 更新 | Android APK 自更新 | 排除 | 改为应用市场更新策略 |
 | 端侧 AI | HanLP、Embedding 和语义匹配 | 排除 | 禁止依赖、代码和模型进入项目 |
@@ -28,4 +28,4 @@
 - 必须迁移的 preference key、默认值和数据类型。
 - API 端点、请求头配置、Cookie 要求和是否需要 ZSE。
 - Android workaround 的触发条件和上游链接。
-- HarmonyOS 目标模块、验收用例和最低 API。
+- HarmonyOS 目标模块、API 24 验收用例和系统能力要求。

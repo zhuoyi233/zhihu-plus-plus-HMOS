@@ -76,6 +76,14 @@
           }
         ]
       }
+    ],
+    "extensionAbilities": [
+      {
+        "name": "P0WorkSchedulerExtensionAbility",
+        "srcEntry": "./ets/background/P0WorkSchedulerExtensionAbility.ets",
+        "type": "workScheduler",
+        "exported": false
+      }
     ]
   }
 }

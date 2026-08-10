@@ -117,7 +117,7 @@ export struct ReaderProbe {
         .margin({ top: 8, bottom: 8 })
     } else if (item.kind === ReaderBlockKind.FORMULA) {
       Column({ space: 6 }) {
-        // 知乎公式端点返回 SVG；API 20 的 Image 无法稳定加载，故只在公式节点使用受限 RichText。
+        // 知乎公式端点返回 SVG；现有原生 Image 路线未形成可靠结果，故只在公式节点使用受限 RichText。
         RichText(formulaMarkup(item.sourceUrl))
           .id(`p0_formula_${item.id}`)
           .width('100%')

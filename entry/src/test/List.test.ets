@@ -1,4 +1,5 @@
 import apiLevelTest from './ApiLevel.test';
+import backgroundWorkPolicyTest from './BackgroundWorkPolicy.test';
 import cookieSessionTest from './CookieSession.test';
 import deepLinkResolverTest from './DeepLinkResolver.test';
 import httpProbeClientTest from './HttpProbeClient.test';
@@ -10,6 +11,7 @@ import zseSignerTest from './ZseSigner.test';
 
 export default function testsuite(): void {
   apiLevelTest();
+  backgroundWorkPolicyTest();
   cookieSessionTest();
   deepLinkResolverTest();
   httpProbeClientTest();

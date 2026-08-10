@@ -10,6 +10,7 @@ import {
   SessionCookie
 } from '../session/CookieSession';
 import { CookieSessionStore } from '../session/CookieSessionStore';
+import { BackgroundTaskProbePage } from './BackgroundTaskProbe';
 import { DatabaseProbePage } from './DatabaseProbe';
 import { DeepLinkProbePage } from './DeepLinkProbe';
 import { QrScanProbePage } from './QrScanProbe';
@@ -29,6 +30,7 @@ struct Index {
   @State private showDatabaseProbe: boolean = false;
   @State private showDeepLinkProbe: boolean = false;
   @State private showQrScanProbe: boolean = false;
+  @State private showBackgroundTaskProbe: boolean = false;
   private readonly httpProbeClient: HttpProbeClient = new HttpProbeClient();
   private readonly loginClient: ZhihuLoginClient = new ZhihuLoginClient();
 
@@ -37,7 +39,13 @@ struct Index {
   }
 
   build() {
-    if (this.showQrScanProbe) {
+    if (this.showBackgroundTaskProbe) {
+      BackgroundTaskProbePage({
+        onBack: () => {
+          this.showBackgroundTaskProbe = false;
+        }
+      })
+    } else if (this.showQrScanProbe) {
       QrScanProbePage({
         onBack: () => {
           this.showQrScanProbe = false;
@@ -81,12 +89,12 @@ struct Index {
             .fontSize(20)
             .fontColor($r('app.color.primary_text'))
 
-          Text('目标 API 24 · 最低兼容 API 20')
+          Text('目标与最低兼容 API 24')
             .id('p0_sdk_baseline')
             .fontSize(16)
             .fontColor($r('app.color.secondary_text'))
 
-          Text('下一步：后台任务约束与 P0 收口')
+          Text('下一步：登录、公式与签名门禁收口')
             .id('p0_next_step')
             .fontSize(15)
             .fontColor($r('app.color.secondary_text'))
@@ -134,6 +142,12 @@ struct Index {
             .id('p0_open_qr_scan_probe')
             .onClick(() => {
               this.showQrScanProbe = true;
+            })
+
+          Button('打开后台任务约束原型')
+            .id('p0_open_background_task_probe')
+            .onClick(() => {
+              this.showBackgroundTaskProbe = true;
             })
 
           TextInput({ text: this.cookieInput, placeholder: '粘贴 z_c0=…; d_c0=…' })

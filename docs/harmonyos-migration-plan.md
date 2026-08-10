@@ -5,7 +5,7 @@
 > 迁移基线：Android Lite 版本<br>
 > 开发工具：DevEco Studio 6.1.1 Release<br>
 > HarmonyOS SDK：6.1.1（API 24）<br>
-> 最低兼容版本：HarmonyOS 6.0.0（API 20）<br>
+> 最低兼容版本：HarmonyOS 6.1.1（API 24）<br>
 > 目标分支：`dev`（开发）、`main`（发布）<br>
 > Android 上游镜像：`Android-master`
 
@@ -25,7 +25,7 @@
 
 - 开发工具固定为 DevEco Studio 6.1.1 Release。
 - HarmonyOS 开发与验证主基线固定为 6.1.1（API 24）。工程的 `targetSdkVersion` 使用 API 24，编译环境使用 DevEco Studio 6.1.1 自带的 API 24 SDK。
-- 最低兼容版本固定为 HarmonyOS 6.0.0（API 20），`compatibleSdkVersion` 使用 API 20。
+- 最低兼容版本固定为 HarmonyOS 6.1.1（API 24），`compatibleSdkVersion` 使用 API 24。
 - 使用 Stage 模型。
 - 第一阶段支持 Phone，随后适配 Tablet、折叠屏和自由窗口。
 - 开发语言为 ArkTS，UI 使用 ArkUI 声明式范式。
@@ -41,10 +41,9 @@
 - [Stage 应用包结构](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/application-package-structure-stage)
 - [ArkUI 状态管理 V2 迁移说明](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/arkts-v1-v2-migration-inner-class)
 - [HarmonyOS 6.1.1（API 24）版本说明](https://developer.huawei.com/consumer/cn/doc/harmonyos-releases/overview-611)
-- [HarmonyOS 6.0.0（API 20）版本说明](https://developer.huawei.com/consumer/cn/doc/harmonyos-releases/overview-600)
 - [HarmonyOS SDK 文档中心](https://developer.huawei.com/consumer/cn/doc/)
 
-版本矩阵固定为：API 24 是开发、编译、目标行为和主测试基线，API 20 是最低兼容基线。DevEco Studio 6.1.1 官方模板不单独写 `compileSdkVersion`；实际编译 SDK 由构建环境中的 API 24 SDK 决定。使用 API 21–24 才提供的能力时，必须做运行时版本判断，并为 API 20 提供降级实现或明确关闭该非核心功能；不得让高版本可选能力抬高整个应用的最低兼容版本。
+从 2026-08-10 起，版本矩阵收敛为 API 24 单一基线：开发、编译、目标行为、最低兼容和设备回归均只考虑 API 24。DevEco Studio 6.1.1 官方模板不单独写 `compileSdkVersion`；实际编译 SDK 由构建环境中的 API 24 SDK 决定。此前 API 20 的实验结果保留为历史记录，但不再约束新实现，也不再要求 API 20 降级路径。
 
 ## 3. AI 能力边界
 
@@ -257,7 +256,7 @@ P0 阶段结论（2026-07-20）：API 20/24 均通过主要知乎 URL、`link.zh
 3. 仅公式节点使用受限 ArkWeb。
 4. 不接受整篇正文退回 Web。
 
-P0 阶段结论（2026-07-20）：知乎公式端点返回 SVG，API 20 的原生 `Image` 路线失败；受 CSP 限制的块公式 `RichText` 仅作为候选实验，真实长文公式尚未完整渲染。正文其余部分保持 ArkUI 原生渲染并保留 TeX 文本，后续继续完成 `P0-MATH-01`。详见 `docs/p0/reader-validation.md`。
+P0 阶段结论（2026-07-20）：知乎公式端点返回 SVG，现有原生 `Image` 路线未形成可靠结果；受 CSP 限制的块公式 `RichText` 仅作为候选实验，真实长文公式尚未完整渲染。正文其余部分保持 ArkUI 原生渲染并保留 TeX 文本，后续继续完成 `P0-MATH-01`。API 20 失败结果只作为历史证据，不再限制后续 API 24 方案选择。详见 `docs/p0/reader-validation.md`。
 
 普通网络图片与 GIF 已在 API 20/24 虚拟机通过：正文 AST 选择知乎懒加载真实地址，ArkUI `Image` 负责加载和 GIF 逐帧解码，并提供失败重试与原生全屏预览。P0 像素差验证确认 GIF 不只是静态首帧；缩放、保存、分享和统一缓存留到 P1/P2。详见 `docs/p0/image-validation.md`。
 
@@ -296,6 +295,8 @@ P0 阶段结论（2026-07-20）：API 20/24 均通过 RDB v1 建库、v1 → v2 
 
 解析和批量评分可使用 TaskPool。首期只在前台或用户主动触发时执行；Stage 模型严格治理后台常驻，因此不能照搬 Android 的常驻调度逻辑。
 
+P0 阶段结论（2026-08-10）：TaskPool 只解决并发计算，不提供后台存活保证。主动刷新和规则推荐只在前台运行；短时任务只允许收尾已经开始的有限操作；非紧急维护可交给系统延迟任务；首版禁止后台常驻或周期性抓取知乎 Feed。P0 未申请 `KEEP_BACKGROUND_RUNNING`，未来只有音频播放或用户可感知的数据传输等合规场景才单独接入长时任务。API 24 虚拟机已验证短时任务配额读取/释放和延迟任务登记/清理，详见 [`background-task-validation.md`](p0/background-task-validation.md)。
+
 ### 6.7 媒体和系统能力
 
 - 图片：网络加载、预览、缩放、保存和分享。
@@ -315,8 +316,8 @@ P0 阶段结论（2026-07-20）：API 20/24 均通过 RDB v1 建库、v1 → v2 
 交付：
 
 - 使用 DevEco Studio 6.1.1 Release 和 HarmonyOS 6.1.1（API 24）建立工程，验证 API 24 编译环境和 `targetSdkVersion` 配置。
-- 将 `compatibleSdkVersion` 配置为 API 20，建立 API 20 最低兼容设备与 API 24 主版本设备的双基线测试矩阵。
-- 盘点所有 API 21–24 能力，记录版本判断、API 20 降级路径和不可降级功能。
+- 将 `targetSdkVersion` 和 `compatibleSdkVersion` 均配置为 API 24，建立 API 24 单一设备测试基线。
+- 盘点 API 24 系统能力、权限和使用场景限制，不再实现 API 20 降级路径。
 - 创建最小 Stage 应用并完成签名。
 - 验证知乎公开接口请求。
 - 验证 Cookie 保存和恢复。
