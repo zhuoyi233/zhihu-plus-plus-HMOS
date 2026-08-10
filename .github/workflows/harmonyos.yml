@@ -1,0 +1,70 @@
+name: HarmonyOS API 24 Check
+
+on:
+  pull_request:
+    paths:
+      - 'AppScope/**'
+      - 'entry/**'
+      - 'core/**'
+      - 'data/**'
+      - 'reader/**'
+      - 'build-profile.json5'
+      - 'hvigor/**'
+      - 'hvigorfile.ts'
+      - 'oh-package.json5'
+      - 'oh-package-lock.json5'
+      - 'scripts/verify-harmony.ps1'
+      - '.github/workflows/harmonyos.yml'
+  workflow_dispatch:
+    inputs:
+      expected_test_count:
+        description: '可选：固定 Hypium 用例总数；0 表示按 List.test.ets 自动计算'
+        required: false
+        type: number
+        default: 0
+
+concurrency:
+  group: harmonyos-api24-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: API 24 build and Hypium
+    if: ${{ vars.ENABLE_HARMONYOS_API24_CI == 'true' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: [self-hosted, windows, x64, harmonyos-api24]
+    timeout-minutes: 30
+    env:
+      HARMONY_DEVECO_HOME: ${{ vars.HARMONY_DEVECO_HOME }}
+      HARMONY_SDK_ROOT: ${{ vars.HARMONY_SDK_ROOT }}
+      EXPECTED_TEST_COUNT: ${{ inputs.expected_test_count || '0' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify API 24 build and tests
+        shell: pwsh
+        run: |
+          $expected = 0
+          if ($env:EXPECTED_TEST_COUNT -match '^\d+$') {
+            $expected = [int]$env:EXPECTED_TEST_COUNT
+          }
+          ./scripts/verify-harmony.ps1 `
+            -DevEcoHome $env:HARMONY_DEVECO_HOME `
+            -SdkRoot $env:HARMONY_SDK_ROOT `
+            -ExpectedTestCount $expected
+
+      - name: Upload Hypium reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harmonyos-api24-test-reports-${{ github.run_id }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            entry/.test/default/intermediates/test/coverage_data/test_result.txt
+            entry/.test/default/outputs/test/reports/**
