@@ -45,7 +45,7 @@
 28. 使用 `detectBarcode.decode` 识别固定 600 × 600 QR 码图，并通过知乎电脑端登录 URL 策略。
 29. 页面和应用日志不显示固定码图中的测试 token。
 
-第 5 项证明 INTERNET 权限、DNS、TLS 和 HTTP 请求路径在两个 API 基线上可用，但公开请求尚未满足知乎接口的鉴权/反爬要求。P0-NET-01 需在 Cookie 会话和 ZSE96 签名接入后复测，不能因获得 403 标记为通过。
+第 5 项证明 INTERNET 权限、DNS、TLS 和 HTTP 请求路径可用。2026-08-10 在唯一兼容基线 API 24 上进一步确认 403 认证分类、真实请求取消和回调竞态均符合预期；超时、限流和服务端错误映射由 Hypium 覆盖，因此 `P0-NET-01` 已通过。真实 Cookie 的 HTTP 200 成功分支独立归 `P0-LOGIN-01`，不能用公开请求 403 替代。
 
 第 6–10 项在 API 20 和 API 24 上均通过，证明 P0 会话方案可以跨应用进程重启恢复，且最低兼容版本具备所需 Asset Store、Crypto Architecture Kit 和 Preferences 能力。
 
