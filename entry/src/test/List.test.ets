@@ -8,6 +8,9 @@ import readerDocumentTest from './ReaderDocument.test';
 import rdbSchemaTest from './RdbSchema.test';
 import zhihuLoginClientTest from './ZhihuLoginClient.test';
 import zseSignerTest from './ZseSigner.test';
+import appStartupTest from './AppStartup.test';
+import domainModelTest from './DomainModel.test';
+import p1NavigationTest from './P1Navigation.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -20,4 +23,7 @@ export default function testsuite(): void {
   rdbSchemaTest();
   zhihuLoginClientTest();
   zseSignerTest();
+  appStartupTest();
+  domainModelTest();
+  p1NavigationTest();
 }
