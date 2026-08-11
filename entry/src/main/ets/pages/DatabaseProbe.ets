@@ -18,7 +18,7 @@ export struct DatabaseProbePage {
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.primary_text'))
 
-      Text('创建 v1 数据库，注入一次失败的 v2 迁移并验证回滚，再完成 v2 升级和重开校验。')
+      Text('先用隔离库验证故障迁移回滚，再通过生产数据库验证自动升级、覆盖写、关闭重开和清理。')
         .fontSize(16)
         .lineHeight(26)
         .fontColor($r('app.color.secondary_text'))
@@ -50,8 +50,9 @@ export struct DatabaseProbePage {
       const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
       const result: DatabaseProbeResult = await new DatabaseProbe(context).run();
       this.status = `通过：失败迁移回滚到 v${result.rollbackVersion}；` +
-        `升级并重开为 v${result.finalVersion}；保留 ${result.recordCount} 条记录，` +
-        `默认类型 ${result.restoredType}`;
+        `隔离库升级并重开为 v${result.finalVersion}；保留 ${result.recordCount} 条记录，` +
+        `默认类型 ${result.restoredType}；生产库 v${result.productionVersion} 覆盖写恢复 ` +
+        `${result.productionRestoredType}@${result.productionRestoredAt}，探针记录已删除`;
     } catch (error) {
       const message = error instanceof Error ? error.message : '未知错误';
       this.status = `数据库验证失败：${message}`;

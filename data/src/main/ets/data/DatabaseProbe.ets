@@ -1,16 +1,37 @@
 import { common } from '@kit.AbilityKit';
 import { relationalStore } from '@kit.ArkData';
+import { AppDatabase, getAppDatabase } from './AppDatabase';
+import { OpenedContent, OpenedContentStore } from './OpenedContentStore';
 import { CURRENT_SCHEMA_VERSION, schemaMigrationTo, SchemaMigration } from './RdbSchema';
 
 const DATABASE_NAME = 'p0_rdb_probe.db';
 const TABLE_NAME = 'opened_content';
 const PROBE_KEY = 'answer:2035661632110585441';
+const PRODUCTION_PROBE_KEY = 'probe:p1-production-opened-content';
 
 export interface DatabaseProbeResult {
   rollbackVersion: number;
   finalVersion: number;
   recordCount: number;
   restoredType: string;
+  productionVersion: number;
+  productionRestoredAt: number;
+  productionRestoredType: string;
+  productionDeleted: boolean;
+}
+
+interface MigrationProbeResult {
+  rollbackVersion: number;
+  finalVersion: number;
+  recordCount: number;
+  restoredType: string;
+}
+
+interface ProductionProbeResult {
+  version: number;
+  restoredAt: number;
+  restoredType: string;
+  deleted: boolean;
 }
 
 export class DatabaseProbe {
@@ -25,6 +46,21 @@ export class DatabaseProbe {
   }
 
   async run(): Promise<DatabaseProbeResult> {
+    const migration = await this.runMigrationProbe();
+    const production = await this.runProductionProbe();
+    return {
+      rollbackVersion: migration.rollbackVersion,
+      finalVersion: migration.finalVersion,
+      recordCount: migration.recordCount,
+      restoredType: migration.restoredType,
+      productionVersion: production.version,
+      productionRestoredAt: production.restoredAt,
+      productionRestoredType: production.restoredType,
+      productionDeleted: production.deleted
+    };
+  }
+
+  private async runMigrationProbe(): Promise<MigrationProbeResult> {
     await relationalStore.deleteRdbStore(this.context, this.config);
     let store: relationalStore.RdbStore | undefined = undefined;
     try {
@@ -84,6 +120,79 @@ export class DatabaseProbe {
     }
   }
 
+  private async runProductionProbe(): Promise<ProductionProbeResult> {
+    const database: AppDatabase = getAppDatabase(this.context);
+    const openedContent = new OpenedContentStore(database);
+    let result: ProductionProbeResult | undefined = undefined;
+    let failure: Error | undefined = undefined;
+    try {
+      const initialStore = await database.open();
+      if (initialStore.version !== CURRENT_SCHEMA_VERSION) {
+        throw new Error(`生产数据库首次打开版本错误：v${initialStore.version}`);
+      }
+      await openedContent.delete(PRODUCTION_PROBE_KEY);
+      const first: OpenedContent = {
+        contentKey: PRODUCTION_PROBE_KEY,
+        openedAt: 1000,
+        contentType: 'answer'
+      };
+      const latest: OpenedContent = {
+        contentKey: PRODUCTION_PROBE_KEY,
+        openedAt: 2000,
+        contentType: 'article'
+      };
+
+      await openedContent.upsert(first);
+      await openedContent.upsert(latest);
+      await database.close();
+
+      const reopenedStore = await database.open();
+      const restored = await openedContent.query(PRODUCTION_PROBE_KEY);
+      if (reopenedStore.version !== CURRENT_SCHEMA_VERSION || restored === undefined ||
+        restored.openedAt !== latest.openedAt || restored.contentType !== latest.contentType) {
+        throw new Error('生产数据库升级、覆盖写或关闭重开验证失败');
+      }
+
+      const deleted = await openedContent.delete(PRODUCTION_PROBE_KEY);
+      const deletedRecord = await openedContent.query(PRODUCTION_PROBE_KEY);
+      if (!deleted || deletedRecord !== undefined) {
+        throw new Error('生产数据库探针记录删除验证失败');
+      }
+      result = {
+        version: reopenedStore.version,
+        restoredAt: restored.openedAt,
+        restoredType: restored.contentType,
+        deleted: true
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '生产数据库验证发生未知错误';
+      failure = new Error(message);
+    }
+
+    try {
+      await openedContent.delete(PRODUCTION_PROBE_KEY);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '未知清理错误';
+      failure = failure === undefined ? new Error(`生产探针清理失败：${message}`) :
+        new Error(`${failure.message}；生产探针清理失败：${message}`);
+    }
+    try {
+      await database.close();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '未知关闭错误';
+      failure = failure === undefined ? new Error(`生产数据库关闭失败：${message}`) :
+        new Error(`${failure.message}；生产数据库关闭失败：${message}`);
+    }
+
+    if (failure !== undefined) {
+      throw failure;
+    }
+    if (result === undefined) {
+      throw new Error('生产数据库验证未返回结果');
+    }
+    return result;
+  }
+
   private async applyMigration(store: relationalStore.RdbStore, migration: SchemaMigration): Promise<void> {
     if (store.version !== migration.fromVersion) {
       throw new Error(`Schema version mismatch: expected ${migration.fromVersion}, got ${store.version}`);
@@ -94,9 +203,12 @@ export class DatabaseProbe {
         await store.executeSql(migration.statements[index]);
       }
       store.version = migration.toVersion;
-      store.commit();
+      await store.commit();
     } catch (error) {
-      store.rollBack();
+      try {
+        await store.rollBack();
+      } catch (_rollbackError) {
+      }
       const message = error instanceof Error ? error.message : 'Unknown migration error';
       throw new Error(message);
     }
