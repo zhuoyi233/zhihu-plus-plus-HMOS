@@ -1,5 +1,10 @@
 import { describe, expect, it } from '@ohos/hypium';
-import { DeepLinkType, resolveZhihuLink } from 'core';
+import {
+  DeepLinkType,
+  MAX_DEEP_LINK_INPUT_LENGTH,
+  MAX_SEARCH_QUERY_LENGTH,
+  resolveZhihuLink
+} from 'core';
 
 export default function deepLinkResolverTest(): void {
   describe('deepLinkResolverTest', () => {
@@ -68,6 +73,21 @@ export default function deepLinkResolverTest(): void {
       expect(resolveZhihuLink('https://www.zhihu.com/question/not-a-number')).assertUndefined();
       expect(resolveZhihuLink('zhihu://answers/not-a-number')).assertUndefined();
       expect(resolveZhihuLink('javascript:alert(1)')).assertUndefined();
+    });
+
+    it('enforcesUriSearchQueryAndDecimalIdBounds', 0, () => {
+      const maxQuery = 'q'.repeat(MAX_SEARCH_QUERY_LENGTH);
+      const maxId = '9'.repeat(30);
+      expect(resolveZhihuLink(`https://www.zhihu.com/search?q=${maxQuery}`)?.query).assertEqual(maxQuery);
+      expect(resolveZhihuLink(`zhihu://search?q=${'q'.repeat(MAX_SEARCH_QUERY_LENGTH + 1)}`)).assertUndefined();
+      expect(resolveZhihuLink('https://www.zhihu.com/search?q=line%0Abreak')).assertUndefined();
+      expect(resolveZhihuLink(`https://www.zhihu.com/question/${maxId}`)?.id).assertEqual(maxId);
+      expect(resolveZhihuLink(`https://www.zhihu.com/question/${'1'.repeat(31)}`)).assertUndefined();
+      expect(resolveZhihuLink(`https://www.zhihu.com/answer/${'2'.repeat(31)}`)).assertUndefined();
+      expect(resolveZhihuLink(`https://zhuanlan.zhihu.com/p/${'3'.repeat(31)}`)).assertUndefined();
+      expect(resolveZhihuLink(
+        `https://www.zhihu.com/search?q=${'x'.repeat(MAX_DEEP_LINK_INPUT_LENGTH)}`
+      )).assertUndefined();
     });
   });
 }

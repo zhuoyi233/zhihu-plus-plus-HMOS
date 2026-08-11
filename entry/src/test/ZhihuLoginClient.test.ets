@@ -112,8 +112,11 @@ export default function zhihuLoginClientTest(): void {
       const forbidden = classifyLoginResponse(403, '');
       expect(unauthorized.status).assertEqual(LoginVerificationStatus.REJECTED);
       expect(unauthorized.rejectionStatus).assertEqual(401);
+      expect(unauthorized.message).assertEqual('Cookie 已失效或被知乎拒绝');
       expect(forbidden.status).assertEqual(LoginVerificationStatus.REJECTED);
       expect(forbidden.rejectionStatus).assertEqual(403);
+      expect(forbidden.message).assertEqual('知乎拒绝了本次验证请求，可能需要稍后重试或完成风控');
+      expect(forbidden.message.includes('Cookie 已失效')).assertFalse();
       expect(classifyLoginResponse(429, '').status).assertEqual(LoginVerificationStatus.TEMPORARY_FAILURE);
       expect(classifyLoginResponse(503, '').status).assertEqual(LoginVerificationStatus.TEMPORARY_FAILURE);
     });
@@ -123,8 +126,9 @@ export default function zhihuLoginClientTest(): void {
       expect(timeout.status).assertEqual(LoginVerificationStatus.TEMPORARY_FAILURE);
       expect(timeout.message).assertEqual('网络请求超时，请稍后重试');
       expect(classifyLoginTransportError(2300007).message).assertEqual('网络连接失败，请稍后重试');
-      expect(classifyLoginFailure(new HttpFailure(HttpFailureKind.AUTHENTICATION, 403)).status)
-        .assertEqual(LoginVerificationStatus.REJECTED);
+      const forbidden = classifyLoginFailure(new HttpFailure(HttpFailureKind.AUTHENTICATION, 403));
+      expect(forbidden.status).assertEqual(LoginVerificationStatus.REJECTED);
+      expect(forbidden.message).assertEqual('知乎拒绝了本次验证请求，可能需要稍后重试或完成风控');
     });
 
     it('rejectsInvalidSuccessfulResponse', 0, () => {

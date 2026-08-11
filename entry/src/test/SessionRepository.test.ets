@@ -218,7 +218,7 @@ export default function sessionRepositoryTest(): void {
       const verifier = new FixedSessionVerifier();
       verifier.result = {
         status: LoginVerificationStatus.REJECTED,
-        message: 'Cookie 已失效或被知乎拒绝',
+        message: '知乎拒绝了本次验证请求，可能需要稍后重试或完成风控',
         rejectionStatus: 403
       };
       const repository = new SessionRepository(persistence, verifier);
@@ -230,6 +230,8 @@ export default function sessionRepositoryTest(): void {
       expect(persistence.clearCount).assertEqual(0);
       expect(persistence.cookies.length).assertEqual(2);
       expect(repository.getCookies().length).assertEqual(0);
+      expect(state.message).assertEqual('知乎拒绝了本次验证请求，可能需要稍后重试或完成风控；本地会话已保留');
+      expect(state.message.includes('Cookie 已失效')).assertFalse();
     });
 
     it('keepsExistingAuthenticatedMemoryStateOnTemporaryRestoreFailure', 0, async () => {
@@ -283,6 +285,45 @@ export default function sessionRepositoryTest(): void {
 
       expect(persistence.clearCount).assertEqual(1);
       expect(finalState.status).assertEqual(SessionStatus.GUEST);
+      expect(repository.getCookies().length).assertEqual(0);
+    });
+
+    it('cancelledQueuedLoginDoesNotCancelRestoreOrSaveLater', 0, async () => {
+      const persistence = new MemorySessionPersistence();
+      persistence.cookies = loginCookies();
+      const verifier = new BlockingSessionVerifier();
+      const repository = new SessionRepository(persistence, verifier);
+
+      const restoring = repository.load();
+      await verifier.started;
+      const login = repository.beginLoginWithCookieHeader('z_c0=queued; d_c0=queued-device');
+      login.cancel();
+
+      expect(verifier.cancelCount).assertEqual(0);
+      verifier.release();
+      await restoring;
+      const cancelledState = await login.result;
+
+      expect(verifier.verifyCount).assertEqual(1);
+      expect(persistence.saveCount).assertEqual(0);
+      expect(cancelledState.status).assertEqual(SessionStatus.AUTHENTICATED);
+      expect(repository.getCookies()[0].value).assertEqual('login-token');
+    });
+
+    it('cancelsOnlyTheMatchingActiveLoginVerification', 0, async () => {
+      const persistence = new MemorySessionPersistence();
+      const verifier = new BlockingSessionVerifier();
+      const repository = new SessionRepository(persistence, verifier);
+
+      const login = repository.beginLoginWithCookies(loginCookies());
+      await verifier.started;
+      login.cancel();
+      expect(verifier.cancelCount).assertEqual(1);
+      verifier.release();
+      const state = await login.result;
+
+      expect(state.status).assertEqual(SessionStatus.GUEST);
+      expect(persistence.saveCount).assertEqual(0);
       expect(repository.getCookies().length).assertEqual(0);
     });
 

@@ -18,6 +18,11 @@ import homeFeedRepositoryTest from './HomeFeedRepository.test';
 import homeFeedStateTest from './HomeFeedState.test';
 import sessionRepositoryTest from './SessionRepository.test';
 import zhihuQrLoginClientTest from './ZhihuQrLoginClient.test';
+import searchRepositoryTest from './SearchRepository.test';
+import searchStateTest from './SearchState.test';
+import contentDetailRepositoryTest from './ContentDetailRepository.test';
+import contentDetailStateTest from './ContentDetailState.test';
+import loginControllerTest from './LoginController.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -40,4 +45,9 @@ export default function testsuite(): void {
   homeFeedStateTest();
   sessionRepositoryTest();
   zhihuQrLoginClientTest();
+  searchRepositoryTest();
+  searchStateTest();
+  contentDetailRepositoryTest();
+  contentDetailStateTest();
+  loginControllerTest();
 }

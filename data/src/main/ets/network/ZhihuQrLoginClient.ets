@@ -26,6 +26,9 @@ const QR_MAX_TTL_MS = QR_MAX_TTL_SECONDS * 1000;
 const QR_REQUEST_TIMEOUT_MS = 10000;
 const QR_RESPONSE_LIMIT_BYTES = 1024 * 1024;
 const QR_TOKEN_PATTERN = /^[A-Za-z0-9._~-]{1,512}$/;
+const QR_URL_MAX_LENGTH = 4096;
+const QR_CHALLENGE_LINK_MAX_LENGTH = 2048;
+const QR_CHALLENGE_LINK_PREFIX = 'https://www.zhihu.com/account/scan/login/';
 const ZHIHU_QR_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) ' +
     'Chrome/145.0.0.0 Safari/537.36';
@@ -49,6 +52,13 @@ export interface QrLoginState {
   qrLink?: string;
   expiresAt?: number;
   riskControlUrl?: string;
+}
+
+export interface QrLoginGateway {
+  start(initialCookies?: Array<SessionCookie>, now?: number): Promise<QrLoginState>;
+  pollOnce(now?: number): Promise<QrLoginState>;
+  cancel(): void;
+  getCandidateCookies(): Array<SessionCookie>;
 }
 
 export interface QrLoginHeaders {
@@ -140,7 +150,7 @@ function desktopHeaders(referer?: string): QrLoginHeaders {
 }
 
 export function isTrustedQrLoginUrl(url: string): boolean {
-  if (/[\u0000-\u0020\u007F-\uFFFF]/.test(url)) {
+  if (url.length === 0 || url.length > QR_URL_MAX_LENGTH || /[\u0000-\u0020\u007F-\uFFFF]/.test(url)) {
     return false;
   }
   const match = /^([A-Za-z][A-Za-z0-9+.-]*):\/\/([^/?#]+)(?:[/?#]|$)/.exec(url);
@@ -149,6 +159,11 @@ export function isTrustedQrLoginUrl(url: string): boolean {
   }
   const authority = match[2];
   return !authority.includes('@') && !authority.includes(':') && authority.toLowerCase() === 'www.zhihu.com';
+}
+
+export function isTrustedQrChallengeLink(url: string, token: string): boolean {
+  return url.length <= QR_CHALLENGE_LINK_MAX_LENGTH && QR_TOKEN_PATTERN.test(token) &&
+    url === `${QR_CHALLENGE_LINK_PREFIX}${token}`;
 }
 
 export function createQrLoginHeaders(
@@ -209,7 +224,7 @@ function parseQrCode(statusCode: number, responseBody: string, now: number): Par
     const payload = JSON.parse(responseBody) as QrCodePayload;
     const token = payload.token ?? payload.qrcode_token;
     if (token === undefined || !QR_TOKEN_PATTERN.test(token) || payload.link === undefined ||
-      !isTrustedQrLoginUrl(payload.link)) {
+      !isTrustedQrChallengeLink(payload.link, token)) {
       return undefined;
     }
     return {
@@ -355,7 +370,7 @@ class ActiveQrLoginOperation {
   }
 }
 
-export class ZhihuQrLoginClient {
+export class ZhihuQrLoginClient implements QrLoginGateway {
   private readonly transportFactory: QrLoginTransportFactory;
   private cookies: Array<SessionCookie> = [];
   private token?: string;

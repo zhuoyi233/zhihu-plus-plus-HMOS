@@ -5,8 +5,10 @@ import {
   DeepLinkType,
   InfrastructureDestination,
   isP1DestinationName,
+  MAX_SEARCH_QUERY_LENGTH,
   P1DestinationName,
   SearchDestination,
+  shouldReloadAfterAuthentication,
   shouldPushP1Destination,
   toP1Destination
 } from 'core';
@@ -35,6 +37,7 @@ export default function p1NavigationTest(): void {
         P1DestinationName.SEARCH,
         P1DestinationName.COLLECTION,
         P1DestinationName.NOTIFICATION,
+        P1DestinationName.LOGIN,
         P1DestinationName.SETTINGS,
         P1DestinationName.TECHNICAL_LAB,
         P1DestinationName.READER_PROBE,
@@ -68,9 +71,11 @@ export default function p1NavigationTest(): void {
     it('modelsInfrastructurePagesWithoutBooleanPageFlags', 0, () => {
       const settings: InfrastructureDestination = { name: P1DestinationName.SETTINGS };
       const laboratory: InfrastructureDestination = { name: P1DestinationName.TECHNICAL_LAB };
+      const login: InfrastructureDestination = { name: P1DestinationName.LOGIN };
 
       expect(settings.name).assertEqual(P1DestinationName.SETTINGS);
       expect(laboratory.name).assertEqual(P1DestinationName.TECHNICAL_LAB);
+      expect(login.name).assertEqual(P1DestinationName.LOGIN);
     });
 
     it('decodesOnlyMatchingRuntimeDestinations', 0, () => {
@@ -96,6 +101,9 @@ export default function p1NavigationTest(): void {
       const fixtureParam: TestDestinationParam = {
         name: P1DestinationName.DOMAIN_FIXTURE_PROBE
       };
+      const loginParam: TestDestinationParam = {
+        name: P1DestinationName.LOGIN
+      };
       const unexpectedSearchParam: TestDestinationParam = {
         name: P1DestinationName.SEARCH,
         query: 'ArkTS',
@@ -108,17 +116,50 @@ export default function p1NavigationTest(): void {
       };
       const answer = decodeP1Destination(P1DestinationName.ANSWER, answerParam);
       const probe = decodeP1Destination(P1DestinationName.READER_PROBE, probeParam);
+      const login = decodeP1Destination(P1DestinationName.LOGIN, loginParam);
 
       expect(answer?.name).assertEqual(P1DestinationName.ANSWER);
       expect((answer as ContentDestination).id).assertEqual('2040633177593619876');
       expect(probe?.name).assertEqual(P1DestinationName.READER_PROBE);
+      expect(shouldReloadAfterAuthentication(answer as ContentDestination)).assertTrue();
+      expect(shouldReloadAfterAuthentication(login as InfrastructureDestination)).assertFalse();
       expect(decodeP1Destination(P1DestinationName.ANSWER, mismatchedParam)).assertUndefined();
       expect(decodeP1Destination(P1DestinationName.ANSWER, emptyIdParam)).assertUndefined();
       expect(decodeP1Destination(P1DestinationName.READER_PROBE, unexpectedIdParam)).assertUndefined();
       expect(decodeP1Destination(P1DestinationName.DOMAIN_FIXTURE_PROBE, fixtureParam)?.name)
         .assertEqual(P1DestinationName.DOMAIN_FIXTURE_PROBE);
+      expect(login?.name).assertEqual(P1DestinationName.LOGIN);
       expect(decodeP1Destination(P1DestinationName.SEARCH, unexpectedSearchParam)).assertUndefined();
       expect(decodeP1Destination(P1DestinationName.COMMENT, emptyCommentIdParam)).assertUndefined();
+    });
+
+    it('rejectsUnsafeSearchAndDetailRuntimeParameters', 0, () => {
+      const maxQuery: TestDestinationParam = {
+        name: P1DestinationName.SEARCH,
+        query: 'q'.repeat(MAX_SEARCH_QUERY_LENGTH)
+      };
+      const longQuery: TestDestinationParam = {
+        name: P1DestinationName.SEARCH,
+        query: 'q'.repeat(MAX_SEARCH_QUERY_LENGTH + 1)
+      };
+      const controlQuery: TestDestinationParam = {
+        name: P1DestinationName.SEARCH,
+        query: 'line\nbreak'
+      };
+      const maxId = '9'.repeat(30);
+      expect((decodeP1Destination(P1DestinationName.SEARCH, maxQuery) as SearchDestination).query)
+        .assertEqual(maxQuery.query);
+      expect(decodeP1Destination(P1DestinationName.SEARCH, longQuery)).assertUndefined();
+      expect(decodeP1Destination(P1DestinationName.SEARCH, controlQuery)).assertUndefined();
+      [P1DestinationName.QUESTION, P1DestinationName.ANSWER, P1DestinationName.ARTICLE]
+        .forEach((name: P1DestinationName): void => {
+          const maxIdParam: TestDestinationParam = { name: name, id: maxId };
+          const oversizedIdParam: TestDestinationParam = { name: name, id: '1'.repeat(31) };
+          const malformedIdParam: TestDestinationParam = { name: name, id: 'not-decimal' };
+          expect(decodeP1Destination(name, maxIdParam)?.name).assertEqual(name);
+          expect(decodeP1Destination(name, oversizedIdParam)).assertUndefined();
+          expect(decodeP1Destination(name, malformedIdParam)).assertUndefined();
+        });
     });
 
     it('mapsResolvedLinksToTypedStartupDestinations', 0, () => {

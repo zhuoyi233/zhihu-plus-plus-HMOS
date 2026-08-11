@@ -103,6 +103,13 @@ export function classifyLoginResponse(statusCode: number, responseBody: string):
 
 export function classifyLoginFailure(failure: HttpFailure): LoginVerificationResult {
   if (failure.kind === HttpFailureKind.AUTHENTICATION) {
+    if (failure.status === 403) {
+      return {
+        status: LoginVerificationStatus.REJECTED,
+        message: '知乎拒绝了本次验证请求，可能需要稍后重试或完成风控',
+        rejectionStatus: failure.status
+      };
+    }
     return {
       status: LoginVerificationStatus.REJECTED,
       message: 'Cookie 已失效或被知乎拒绝',

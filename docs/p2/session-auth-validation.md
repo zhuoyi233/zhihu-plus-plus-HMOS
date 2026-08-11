@@ -13,7 +13,7 @@
 
 提交前安全审查进一步收紧了生命周期和凭据发布合同：
 
-- 首次恢复时，持久 Cookie 在 `/api/v4/me` 明确认证前不会进入同步 provider；临时失败和普通 403 保留密文但 provider 为空。只有明确 401 或必要 Cookie 缺失才永久清理。若进程内已有已认证会话，后续恢复遇临时失败可继续保留原内存身份和原 Cookie，不用未经验证的新值替换。
+- 首次恢复时，持久 Cookie 在 `/api/v4/me` 明确认证前不会进入同步 provider；临时失败和普通 403 保留密文但 provider 为空。普通 403 只显示“请求被拒绝，可能需要稍后重试或完成风控”的固定语义，不声称 Cookie 已失效。只有明确 401 或必要 Cookie 缺失才永久清理。若进程内已有已认证会话，后续恢复遇临时失败可继续保留原内存身份和原 Cookie，不用未经验证的新值替换。
 - `logout()` 在尝试清理持久层前先清空运行时 Cookie 和 profile。即使 Preferences 或 Asset Store 部分清理失败，后续 HTTP 也不会继续携带旧凭据；错误态只用 `hasRetainedCredentials` 提示磁盘可能仍有残留。
 - `SessionState` 返回的 profile 采用字段级深拷贝，页面不能通过修改返回对象污染仓库内部身份。
 - 二维码客户端采用单 active 和 generation 合同。重叠 `start()`/`pollOnce()` 返回固定 `BUSY`，`cancel()` 通过独立取消 Promise 立即结束调用并销毁当前 NetworkKit handle；即使 `destroy()` 不能让底层 Promise settle，旧 generation 的 token、Cookie 和响应也不能回写。
@@ -22,7 +22,7 @@
 
 仓库提供游客、已登录、已过期和可恢复错误四种状态。启动恢复时，只有知乎明确返回 401，或 Cookie 缺失必要字段，才清除加密会话；普通 403、弱网、超时、限流、服务异常和无法识别的响应会保留本地凭据。新 Cookie 必须先通过 `/api/v4/me` 身份校验，再写入 `CookieSessionStore`，只有加密保存成功后才替换同步请求凭据。导入无效 Cookie 或保存失败不会覆盖旧会话。
 
-二维码登录已落地经过 Android-master Lite 源码证实的专用 NetworkKit 协议客户端与状态机，但还没有接入产品登录页面。协议临时 Cookie 与应用会话隔离；只有轮询同步到非空 `z_c0` 后才开放候选 Cookie，调用方仍必须交给 `SessionRepository.loginWithCookies()` 完成 `/api/v4/me` 校验和加密保存。扫码、返回 `success` 或 `status=1` 都不等于登录成功。
+二维码登录已通过正式 `LoginPage` 接入产品导航。协议临时 Cookie 与应用会话隔离；只有轮询同步到非空 `z_c0` 后才开放候选 Cookie，调用方仍必须交给 `SessionRepository` 的独立 login operation 完成 `/api/v4/me` 校验和加密保存。扫码、返回 `success` 或 `status=1` 都不等于登录成功。
 
 ## Android Lite 协议证据
 
@@ -53,10 +53,10 @@
 
 ## 自动化覆盖
 
-会话与二维码当前共有 19 个 Hypium 用例，另在 AppStartup 套件增加 2 个生命周期合同：
+会话与二维码当前共有 22 个 Hypium 用例，另在 AppStartup 套件保留生命周期合同：
 
-- `SessionRepository.test.ets` 11 个：首次恢复发布门禁、profile 深拷贝、401/403 分流、临时失败保留密文、已有认证态回退、退出部分失败仍清运行时凭据、校验后保存、load/logout 串行化、owner 单例/恢复去重，以及销毁只取消验证、不清凭据并允许下次 Ability 生命周期重新恢复；
-- `ZhihuQrLoginClient.test.ets` 8 个：四步请求顺序与临时 Cookie 汇入、句柄清理异常隔离、`z_c0` 门禁、扫码/确认状态、终态停止轮询、过期和风控、有效期运行时校验、重叠 start/poll 的 BUSY 合同、取消不依赖 transport settle、旧响应禁止回写，以及恶意域名和二维码链接拒绝。
+- `SessionRepository.test.ets` 13 个：在既有恢复、保存、401/403、退出和 owner 合同上，新增排队登录取消不影响启动恢复、活动登录只取消同一 operation 且不保存的所有权回归；
+- `ZhihuQrLoginClient.test.ets` 9 个：在既有请求顺序、临时 Cookie、终态、过期、风控、并发和取消合同上，增加挑战链接长度、精确路径与 token 一致性门禁；
 - `AppStartup.test.ets` 增加 2 个：关键数据库/深链阶段结束前不运行 `session-restore`；Ability 销毁使异步启动 generation 失效，不能继续 loadContent 或 deferred。
 
 `data/Index.ets` 已导出 owner；现有 `SessionRepository.test.ets` 与 `AppStartup.test.ets` 已在共享 `List.test.ets` 注册，因此无需新增测试入口。
@@ -69,15 +69,12 @@
 ./scripts/verify-harmony.ps1 -ExpectedTestCount <当前用例数> -SkipDependencyInstall
 ```
 
-最终执行 `./scripts/verify-harmony.ps1 -ExpectedTestCount 128 -SkipDependencyInstall`：四模块 API 24 Debug HAP `BUILD SUCCESSFUL`，共享 Hypium `128/128`，其中会话 `11/11`、二维码 `8/8` 和启动生命周期用例全部通过，失败、错误和忽略均为 0。新增实现没有 ArkTS 编译错误；构建仍显示仓库已有 RDB 异常处理告警和 NetworkKit INTERNET 权限提示。
+最终执行 `./scripts/verify-harmony.ps1 -ExpectedTestCount 172 -SkipDependencyInstall`：四模块 API 24 Debug HAP `BUILD SUCCESSFUL`，共享 Hypium `172/172`，失败、错误和忽略均为 0。新增实现没有 ArkTS 编译错误；构建仍显示仓库已有 RDB 异常处理告警。
 
 ## API 24 产品化剩余门禁
 
-1. 将 P0 技术实验页的手动 Cookie 操作迁入正式登录页面。页面通过 `getAppSessionOwner(context).getRepository()` 取得同一仓库；输入框继续使用密码类型，提交时立即清空页面字符串，只消费安全状态文案。
-2. 为二维码链接接入 HarmonyOS 码图生成与正式登录 UI，按 500 ms 调 `pollOnce()`，在后台、离页、过期和取消时停止轮询。
-3. 收到 `CREDENTIAL_READY` 后调用全局仓库的 `loginWithCookies(client.getCandidateCookies())`；只有返回 `AUTHENTICATED` 才展示成功并离开登录页。
-4. 风控页必须采用受限原生流程或单独安全评审的 ArkWeb 容器，限定 `www.zhihu.com`、禁任意跳转，并将通过验证取得的 Cookie 只汇回二维码临时容器。当前实现不会自动打开风控页面。
-5. 使用真实 Cookie 在 API 24 DevEco 虚拟机复测延迟冷启动恢复、退出清理、401/403 过期和弱网保留；销毁 Ability 时只取消在途校验，不调用 `logout()` 或 `CookieSessionStore.clear()`。
-6. 使用另一台已登录知乎的设备扫描 API 24 虚拟机二维码，验证“已扫码→待确认→`z_c0`→身份校验→加密保存”的完整闭环；补测过期、取消、前后台和 40352 风控。虚拟机无法代表真实手机相机质量，本机扫描电脑端码仍需真实 HarmonyOS 手机补测。
+1. 风控页若后续自动打开，必须采用受限原生流程或单独安全评审的 ArkWeb 容器，限定 `www.zhihu.com` 并禁止任意跳转；当前实现只显示安全提示。
+2. 使用真实 Cookie 在最终 API 24 包复测正式页面的冷启动恢复、搜索、三类详情与退出清理；浏览器 Cookie 不由自动化读取。
+3. 使用另一台已登录知乎的设备扫描 API 24 虚拟机二维码，验证“已扫码→待确认→`z_c0`→身份校验→加密保存”的完整闭环；当前虚拟机请求只验证到安全失败分支。
 
 本批没有引入端侧 AI、模型、推理依赖，也没有把 P0 Scan Kit 识码结果当作账号登录结果。

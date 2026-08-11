@@ -2,6 +2,10 @@ const COOKIE_ATTRIBUTES: Set<string> = new Set<string>([
   'domain', 'path', 'expires', 'max-age', 'httponly', 'secure', 'samesite'
 ]);
 const COOKIE_NAME_CHARACTERS = "!#$%&'*+-.^_`|~0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+export const COOKIE_HEADER_MAX_LENGTH = 8192;
+export const COOKIE_FIELD_MAX_COUNT = 64;
+export const COOKIE_NAME_MAX_LENGTH = 128;
+export const COOKIE_VALUE_MAX_LENGTH = 4096;
 
 export interface SessionCookie {
   name: string;
@@ -24,7 +28,7 @@ export function copySessionCookies(cookies: Array<SessionCookie>): Array<Session
 }
 
 function isValidCookieName(name: string): boolean {
-  if (name.length === 0) {
+  if (name.length === 0 || name.length > COOKIE_NAME_MAX_LENGTH) {
     return false;
   }
   for (let index = 0; index < name.length; index += 1) {
@@ -36,6 +40,9 @@ function isValidCookieName(name: string): boolean {
 }
 
 function isSafeCookieValue(value: string): boolean {
+  if (value.length > COOKIE_VALUE_MAX_LENGTH) {
+    return false;
+  }
   for (let index = 0; index < value.length; index += 1) {
     const character = value.charCodeAt(index);
     if (character === 0 || character === 10 || character === 13 || character === 59) {
@@ -46,8 +53,14 @@ function isSafeCookieValue(value: string): boolean {
 }
 
 export function parseCookieAssignments(rawCookie: string, includeEmptyValues: boolean = false): Array<SessionCookie> {
+  if (rawCookie.length === 0 || rawCookie.length > COOKIE_HEADER_MAX_LENGTH) {
+    return [];
+  }
   const cookies: Array<SessionCookie> = [];
   const assignments = rawCookie.split(';');
+  if (assignments.length > COOKIE_FIELD_MAX_COUNT) {
+    return [];
+  }
   for (let index = 0; index < assignments.length; index += 1) {
     const assignment = assignments[index].trim();
     const separator = assignment.indexOf('=');
@@ -108,7 +121,8 @@ export function encodeCookieSession(cookies: Array<SessionCookie>, savedAt: numb
 export function decodeCookieSession(serialized: string): CookieSessionData {
   const payload = JSON.parse(serialized) as CookieSessionData;
   if (payload === null || typeof payload !== 'object' || Array.isArray(payload) || payload.version !== 1 ||
-    typeof payload.savedAt !== 'number' || !Number.isFinite(payload.savedAt) || !Array.isArray(payload.cookies)) {
+    typeof payload.savedAt !== 'number' || !Number.isFinite(payload.savedAt) || !Array.isArray(payload.cookies) ||
+    payload.cookies.length > COOKIE_FIELD_MAX_COUNT) {
     throw new Error('Unsupported cookie session format');
   }
   payload.cookies.forEach((cookie: SessionCookie): void => {

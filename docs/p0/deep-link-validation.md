@@ -21,7 +21,7 @@ HarmonyOS 版本以 Android/Lite 的 `resolveContent()` 为兼容基线，使用
 
 知乎已经使用超过 JavaScript 安全整数上限的 19 位内容 ID。解析结果因此始终以字符串保存，不转换为 ArkTS `number`。
 
-解析器只接受精确的 `zhihu.com`、`www.zhihu.com`、`zhuanlan.zhihu.com` 和 `link.zhihu.com` 主机。共享纯 ArkTS 绝对 URL 解析器明确拆分 scheme、authority、用户信息、端口、路径和查询参数；伪造后缀域名、用户信息、显式端口、未知 scheme、非十进制内容 ID、未知路径和超过两层的跳转链接均拒绝。
+解析器只接受精确的 `zhihu.com`、`www.zhihu.com`、`zhuanlan.zhihu.com` 和 `link.zhihu.com` 主机。共享纯 ArkTS 绝对 URL 解析器明确拆分 scheme、authority、用户信息、端口、路径和查询参数；伪造后缀域名、用户信息、显式端口、未知 scheme、未知路径和超过两层的跳转链接均拒绝。外部 URI 总长度上限为 8192，十进制内容 ID 限制为 1–30 位；搜索词最多 200 个 UTF-16 code unit 且不能包含控制字符。相同搜索与问题/回答/文章 ID 合同也在 `P1Destination` 运行时恢复边界执行，不能用构造或恢复参数绕过深链校验。
 
 ## 系统接入
 
@@ -57,6 +57,7 @@ API 24 页面显示 `通过：19/19 条映射正确`，默认样本保持 19 位
 
 - API 24 SDK 下 Debug HAP：`BUILD SUCCESSFUL`。
 - 新增 6 个解析契约测试，覆盖主要网页、19 位 ID、用户/视频/搜索、跳转链接、`zhihu://` 和非法输入。
+- P2 安全收口在既有 suite 增加 1 个 URI 总长度、搜索词和 30 位 ID 边界用例，并在 P1 导航 suite 增加 1 个同合同运行时解码用例；需随本批全量门禁验证。
 - 2026-08-10 使用 DevEco 内置 Hvigor `test` 任务完成 46 个 Hypium 用例，失败 0；其中 6 个深链契约测试全部通过。
 - API 24 最终 HAP 的设备矩阵仍显示 `通过：19/19 条映射正确`，证明本地测试和 ArkUI 运行时行为一致。
 

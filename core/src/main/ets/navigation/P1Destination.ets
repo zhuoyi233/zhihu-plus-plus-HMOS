@@ -10,6 +10,7 @@ export enum P1DestinationName {
   SEARCH = 'Search',
   COLLECTION = 'Collection',
   NOTIFICATION = 'Notification',
+  LOGIN = 'Login',
   SETTINGS = 'Settings',
   TECHNICAL_LAB = 'TechnicalLab',
   READER_PROBE = 'ReaderProbe',
@@ -26,7 +27,7 @@ export interface StatelessDestination {
 }
 
 export interface InfrastructureDestination {
-  readonly name: P1DestinationName.SETTINGS | P1DestinationName.TECHNICAL_LAB |
+  readonly name: P1DestinationName.LOGIN | P1DestinationName.SETTINGS | P1DestinationName.TECHNICAL_LAB |
     P1DestinationName.READER_PROBE | P1DestinationName.IMAGE_PROBE |
     P1DestinationName.DATABASE_PROBE | P1DestinationName.DEEP_LINK_PROBE |
     P1DestinationName.QR_SCAN_PROBE | P1DestinationName.BACKGROUND_TASK_PROBE |
@@ -54,6 +55,18 @@ export interface SearchDestination {
 export type P1Destination = StatelessDestination | InfrastructureDestination | ContentDestination |
   CommentDestination | SearchDestination;
 
+export const MAX_SEARCH_QUERY_LENGTH: number = 200;
+export const MAX_DECIMAL_CONTENT_ID_LENGTH: number = 30;
+
+export function isSafeSearchDestinationQuery(value: string | undefined): boolean {
+  return typeof value === 'string' && value.length <= MAX_SEARCH_QUERY_LENGTH &&
+    !/[\u0000-\u001F\u007F-\u009F]/.test(value);
+}
+
+export function isSafeDecimalContentId(value: string | undefined): boolean {
+  return typeof value === 'string' && /^\d{1,30}$/.test(value);
+}
+
 interface WireDestination {
   name?: string;
   id?: string;
@@ -75,6 +88,7 @@ export function isP1DestinationName(name: string): boolean {
     case P1DestinationName.SEARCH:
     case P1DestinationName.COLLECTION:
     case P1DestinationName.NOTIFICATION:
+    case P1DestinationName.LOGIN:
     case P1DestinationName.SETTINGS:
     case P1DestinationName.TECHNICAL_LAB:
     case P1DestinationName.READER_PROBE:
@@ -109,6 +123,8 @@ export function decodeP1Destination(name: string, param: Object): P1Destination 
       return hasNoParameters(wire) ? { name: P1DestinationName.HOME } : undefined;
     case P1DestinationName.NOTIFICATION:
       return hasNoParameters(wire) ? { name: P1DestinationName.NOTIFICATION } : undefined;
+    case P1DestinationName.LOGIN:
+      return hasNoParameters(wire) ? { name: P1DestinationName.LOGIN } : undefined;
     case P1DestinationName.SETTINGS:
       return hasNoParameters(wire) ? { name: P1DestinationName.SETTINGS } : undefined;
     case P1DestinationName.TECHNICAL_LAB:
@@ -155,11 +171,11 @@ export function decodeP1Destination(name: string, param: Object): P1Destination 
           commentId: wire.commentId
         };
     case P1DestinationName.SEARCH:
-      if (typeof wire.query !== 'string' || wire.id !== undefined || wire.contentId !== undefined ||
+      if (!isSafeSearchDestinationQuery(wire.query) || wire.id !== undefined || wire.contentId !== undefined ||
         wire.commentId !== undefined || !hasOnlyFields(wire, ['name', 'query'])) {
         return undefined;
       }
-      return { name: P1DestinationName.SEARCH, query: wire.query };
+      return { name: P1DestinationName.SEARCH, query: wire.query as string };
     default:
       return undefined;
   }
@@ -167,6 +183,7 @@ export function decodeP1Destination(name: string, param: Object): P1Destination 
 
 export function isInfrastructureDestination(destination: P1Destination): boolean {
   switch (destination.name) {
+    case P1DestinationName.LOGIN:
     case P1DestinationName.SETTINGS:
     case P1DestinationName.TECHNICAL_LAB:
     case P1DestinationName.READER_PROBE:
@@ -182,10 +199,24 @@ export function isInfrastructureDestination(destination: P1Destination): boolean
   }
 }
 
+export function shouldReloadAfterAuthentication(destination: P1Destination): boolean {
+  switch (destination.name) {
+    case P1DestinationName.QUESTION:
+    case P1DestinationName.ANSWER:
+    case P1DestinationName.ARTICLE:
+      return true;
+    default:
+      return false;
+  }
+}
+
 function decodeContent(wire: WireDestination, name: P1DestinationName.QUESTION | P1DestinationName.ANSWER |
   P1DestinationName.ARTICLE | P1DestinationName.VIDEO | P1DestinationName.PIN |
   P1DestinationName.PEOPLE | P1DestinationName.COLLECTION): ContentDestination | undefined {
-  if (!hasText(wire.id) || wire.contentId !== undefined || wire.commentId !== undefined || wire.query !== undefined ||
+  const strictDecimalId = name === P1DestinationName.QUESTION || name === P1DestinationName.ANSWER ||
+    name === P1DestinationName.ARTICLE;
+  if ((strictDecimalId ? !isSafeDecimalContentId(wire.id) : !hasText(wire.id)) ||
+    wire.contentId !== undefined || wire.commentId !== undefined || wire.query !== undefined ||
     !hasOnlyFields(wire, ['name', 'id'])) {
     return undefined;
   }

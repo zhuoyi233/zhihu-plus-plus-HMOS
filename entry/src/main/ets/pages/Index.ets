@@ -1,4 +1,13 @@
+import { common } from '@kit.AbilityKit';
 import { P1Destination } from 'core';
+import {
+  DefaultContentRepository,
+  DefaultSearchRepository,
+  getAppDatabase,
+  getAppSessionOwner,
+  OpenedContentStore,
+  ZhihuHttpClient
+} from 'data';
 import { BackgroundTaskProbePage } from './BackgroundTaskProbe';
 import { DatabaseProbePage } from './DatabaseProbe';
 import { DeepLinkProbePage } from './DeepLinkProbe';
@@ -9,6 +18,9 @@ import { ReaderProbe } from './ReaderProbe';
 import { ImageProbe } from './ImageProbe';
 import { TechnicalLabPage } from './TechnicalLabPage';
 import { HomeFeedPage } from './HomeFeedPage';
+import { SearchPage } from './SearchPage';
+import { AnswerDetailPage, ArticleDetailPage, QuestionDetailPage } from './ContentDetailPages';
+import { LoginPage } from './LoginPage';
 
 @Entry
 @Component
@@ -17,6 +29,11 @@ struct Index {
     Stack() {
       P1Shell({
         homeContent: this.homeContent,
+        searchContent: this.searchContent,
+        questionContent: this.questionContent,
+        answerContent: this.answerContent,
+        articleContent: this.articleContent,
+        loginContent: this.loginContent,
         technicalLabContent: this.technicalLabContent,
         readerProbeContent: this.readerProbeContent,
         imageProbeContent: this.imageProbeContent,
@@ -34,6 +51,64 @@ struct Index {
   @Builder
   homeContent(navigate: (destination: P1Destination) => void) {
     HomeFeedPage({ navigate: navigate });
+  }
+
+  @Builder
+  searchContent(query: string, navigate: (destination: P1Destination) => void) {
+    SearchPage({
+      initialQuery: query,
+      repository: new DefaultSearchRepository(new ZhihuHttpClient(
+        getAppSessionOwner(this.getUIContext().getHostContext() as common.UIAbilityContext).getRepository()
+      )),
+      navigate: navigate
+    });
+  }
+
+  @Builder
+  questionContent(id: string, navigate: (destination: P1Destination) => void) {
+    QuestionDetailPage({
+      contentId: id,
+      repository: new DefaultContentRepository(new ZhihuHttpClient(
+        getAppSessionOwner(this.getUIContext().getHostContext() as common.UIAbilityContext).getRepository()
+      )),
+      openedContentStore: new OpenedContentStore(
+        getAppDatabase(this.getUIContext().getHostContext() as common.UIAbilityContext)
+      ),
+      navigate: navigate
+    });
+  }
+
+  @Builder
+  answerContent(id: string, navigate: (destination: P1Destination) => void) {
+    AnswerDetailPage({
+      contentId: id,
+      repository: new DefaultContentRepository(new ZhihuHttpClient(
+        getAppSessionOwner(this.getUIContext().getHostContext() as common.UIAbilityContext).getRepository()
+      )),
+      openedContentStore: new OpenedContentStore(
+        getAppDatabase(this.getUIContext().getHostContext() as common.UIAbilityContext)
+      ),
+      navigate: navigate
+    });
+  }
+
+  @Builder
+  articleContent(id: string, navigate: (destination: P1Destination) => void) {
+    ArticleDetailPage({
+      contentId: id,
+      repository: new DefaultContentRepository(new ZhihuHttpClient(
+        getAppSessionOwner(this.getUIContext().getHostContext() as common.UIAbilityContext).getRepository()
+      )),
+      openedContentStore: new OpenedContentStore(
+        getAppDatabase(this.getUIContext().getHostContext() as common.UIAbilityContext)
+      ),
+      navigate: navigate
+    });
+  }
+
+  @Builder
+  loginContent(onBack: () => void, onAuthenticated: () => void) {
+    LoginPage({ onBack: onBack, onAuthenticated: onAuthenticated });
   }
 
   @Builder

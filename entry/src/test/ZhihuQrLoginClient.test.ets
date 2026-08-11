@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
   isTrustedQrLoginUrl,
+  isTrustedQrChallengeLink,
   normalizeQrDeadline,
   QrLoginRequest,
   QrLoginResponse,
@@ -243,6 +244,25 @@ export default function zhihuQrLoginClientTest(): void {
 
       expect(state.status).assertEqual(QrLoginStatus.TEMPORARY_FAILURE);
       expect(state.message.includes('evil.example')).assertFalse();
+    });
+
+    it('requiresExactBoundedChallengePathForTheReturnedToken', 0, async () => {
+      expect(isTrustedQrChallengeLink(
+        'https://www.zhihu.com/account/scan/login/exact-token', 'exact-token')).assertTrue();
+      expect(isTrustedQrChallengeLink(
+        'https://www.zhihu.com/account/scan/login/other-token', 'exact-token')).assertFalse();
+      expect(isTrustedQrChallengeLink(
+        'https://www.zhihu.com/account/risk_control/exact-token', 'exact-token')).assertFalse();
+
+      const factory = new ScriptedQrTransportFactory();
+      factory.responses.push(response(200, ''));
+      factory.responses.push(response(200, '{}'));
+      factory.responses.push(response(200, '{}'));
+      factory.responses.push(response(200,
+        '{"link":"https://www.zhihu.com/account/scan/login/wrong","token":"expected"}'));
+      const state = await new ZhihuQrLoginClient(factory).start();
+      expect(state.status).assertEqual(QrLoginStatus.TEMPORARY_FAILURE);
+      expect(state.qrLink).assertUndefined();
     });
   });
 }

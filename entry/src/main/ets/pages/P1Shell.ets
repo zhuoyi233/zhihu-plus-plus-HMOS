@@ -8,6 +8,8 @@ import {
   LatestOperationGuard,
   P1Destination,
   P1DestinationName,
+  SearchDestination,
+  shouldReloadAfterAuthentication,
   shouldPushP1Destination,
   startupDestinationChannel,
   StartupDestinationListener
@@ -18,6 +20,15 @@ export struct P1Shell {
   @BuilderParam homeContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
   @BuilderParam technicalLabContent: (navigate: (destination: P1Destination) => void) => void =
     this.emptyTechnicalLab;
+  @BuilderParam searchContent: (query: string, navigate: (destination: P1Destination) => void) => void =
+    this.emptySearch;
+  @BuilderParam questionContent: (id: string, navigate: (destination: P1Destination) => void) => void =
+    this.emptyContent;
+  @BuilderParam answerContent: (id: string, navigate: (destination: P1Destination) => void) => void =
+    this.emptyContent;
+  @BuilderParam articleContent: (id: string, navigate: (destination: P1Destination) => void) => void =
+    this.emptyContent;
+  @BuilderParam loginContent: (onBack: () => void, onAuthenticated: () => void) => void = this.emptyLogin;
   @BuilderParam readerProbeContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam imageProbeContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam databaseProbeContent: (onBack: () => void) => void = this.emptyProbe;
@@ -62,7 +73,22 @@ export struct P1Shell {
   }
 
   @Builder
+  emptySearch(_query: string, _navigate: (destination: P1Destination) => void) {
+    Blank();
+  }
+
+  @Builder
+  emptyContent(_id: string, _navigate: (destination: P1Destination) => void) {
+    Blank();
+  }
+
+  @Builder
   emptyProbe(_onBack: () => void) {
+    Blank();
+  }
+
+  @Builder
+  emptyLogin(_onBack: () => void, _onAuthenticated: () => void) {
     Blank();
   }
 
@@ -85,6 +111,52 @@ export struct P1Shell {
         this.technicalLabContent((destination: P1Destination): void => this.navigate(destination));
       }
       .title('技术实验室')
+      .backgroundColor($r('app.color.page_background'))
+    } else if (name === P1DestinationName.LOGIN) {
+      NavDestination() {
+        this.loginContent((): void => {
+          this.pathStack.pop();
+        }, (): void => {
+          this.returnFromSuccessfulLogin();
+        });
+      }
+      .hideTitleBar(true)
+      .backgroundColor($r('app.color.page_background'))
+    } else if (name === P1DestinationName.SEARCH) {
+      NavDestination() {
+        this.searchContent(
+          (decodeP1Destination(name, param) as SearchDestination).query,
+          (destination: P1Destination): void => this.navigate(destination)
+        );
+      }
+      .title('搜索')
+      .backgroundColor($r('app.color.page_background'))
+    } else if (name === P1DestinationName.QUESTION) {
+      NavDestination() {
+        this.questionContent(
+          (decodeP1Destination(name, param) as ContentDestination).id,
+          (destination: P1Destination): void => this.navigate(destination)
+        );
+      }
+      .title('问题')
+      .backgroundColor($r('app.color.page_background'))
+    } else if (name === P1DestinationName.ANSWER) {
+      NavDestination() {
+        this.answerContent(
+          (decodeP1Destination(name, param) as ContentDestination).id,
+          (destination: P1Destination): void => this.navigate(destination)
+        );
+      }
+      .title('回答')
+      .backgroundColor($r('app.color.page_background'))
+    } else if (name === P1DestinationName.ARTICLE) {
+      NavDestination() {
+        this.articleContent(
+          (decodeP1Destination(name, param) as ContentDestination).id,
+          (destination: P1Destination): void => this.navigate(destination)
+        );
+      }
+      .title('文章')
       .backgroundColor($r('app.color.page_background'))
     } else if (name === P1DestinationName.READER_PROBE) {
       NavDestination() {
@@ -229,6 +301,12 @@ export struct P1Shell {
           .width('100%')
           .fontSize($r('app.float.p1_body_font_size'))
           .onClick(() => this.navigate({ name: P1DestinationName.TECHNICAL_LAB }))
+
+        Button('账号与登录')
+          .id('p2_open_login')
+          .width('100%')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .onClick(() => this.navigate({ name: P1DestinationName.LOGIN }))
         }
         .width('100%')
         .padding($r('app.float.p1_page_padding'))
@@ -327,6 +405,24 @@ export struct P1Shell {
     } else {
       this.pathStack.pushPath(path);
     }
+  }
+
+  private returnFromSuccessfulLogin(): void {
+    this.pathStack.pop();
+    const paths: Array<NavPathInfo> | undefined = this.pathStack.getPathStack();
+    if (paths === undefined || paths.length === 0) {
+      return;
+    }
+    const current = paths[paths.length - 1];
+    if (!(current.param instanceof Object)) {
+      return;
+    }
+    const destination = decodeP1Destination(current.name, current.param);
+    if (destination === undefined || !shouldReloadAfterAuthentication(destination)) {
+      return;
+    }
+    this.pathStack.pop();
+    this.pathStack.pushPath({ name: destination.name, param: destination });
   }
 
   private destinationDescription(destination: P1Destination): string {

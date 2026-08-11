@@ -1,4 +1,5 @@
 import { parseAbsoluteUrl, ParsedAbsoluteUrl } from './AbsoluteUrlParser';
+import { isSafeDecimalContentId, isSafeSearchDestinationQuery } from './P1Destination';
 
 export enum DeepLinkType {
   ANSWER = 'answer',
@@ -18,9 +19,16 @@ export interface DeepLinkDestination {
 }
 
 const MAX_REDIRECT_DEPTH: number = 2;
+export const MAX_DEEP_LINK_INPUT_LENGTH: number = 8192;
 
 export function resolveZhihuLink(input: string): DeepLinkDestination | undefined {
-  return resolveZhihuLinkAtDepth(input.trim(), 0);
+  if (input.length === 0 || input.length > MAX_DEEP_LINK_INPUT_LENGTH) {
+    return undefined;
+  }
+  const normalized = input.trim();
+  return normalized.length === 0 || normalized.length > MAX_DEEP_LINK_INPUT_LENGTH
+    ? undefined
+    : resolveZhihuLinkAtDepth(normalized, 0);
 }
 
 export function describeDeepLink(destination: DeepLinkDestination): string {
@@ -45,7 +53,7 @@ export function describeDeepLink(destination: DeepLinkDestination): string {
 }
 
 function resolveZhihuLinkAtDepth(input: string, depth: number): DeepLinkDestination | undefined {
-  if (input.length === 0 || depth > MAX_REDIRECT_DEPTH) {
+  if (input.length === 0 || input.length > MAX_DEEP_LINK_INPUT_LENGTH || depth > MAX_REDIRECT_DEPTH) {
     return undefined;
   }
 
@@ -68,7 +76,7 @@ function resolveZhihuLinkAtDepth(input: string, depth: number): DeepLinkDestinat
       return target === undefined ? undefined : resolveZhihuLinkAtDepth(target, depth + 1);
     }
     if (host === 'zhuanlan.zhihu.com') {
-      if (segments.length === 2 && segments[0] === 'p' && isDecimalId(segments[1])) {
+      if (segments.length === 2 && segments[0] === 'p' && isSafeDecimalContentId(segments[1])) {
         return { type: DeepLinkType.ARTICLE, id: segments[1], query: emptyQuery };
       }
       return undefined;
@@ -77,30 +85,30 @@ function resolveZhihuLinkAtDepth(input: string, depth: number): DeepLinkDestinat
       return undefined;
     }
 
-    if (segments.length === 4 && segments[0] === 'question' && isDecimalId(segments[1]) &&
-      segments[2] === 'answer' && isDecimalId(segments[3])) {
+    if (segments.length === 4 && segments[0] === 'question' && isSafeDecimalContentId(segments[1]) &&
+      segments[2] === 'answer' && isSafeDecimalContentId(segments[3])) {
       return { type: DeepLinkType.ANSWER, id: segments[3], query: emptyQuery };
     }
-    if (segments.length === 2 && segments[0] === 'answer' && isDecimalId(segments[1])) {
+    if (segments.length === 2 && segments[0] === 'answer' && isSafeDecimalContentId(segments[1])) {
       return { type: DeepLinkType.ANSWER, id: segments[1], query: emptyQuery };
     }
-    if (segments.length === 2 && segments[0] === 'question' && isDecimalId(segments[1])) {
+    if (segments.length === 2 && segments[0] === 'question' && isSafeDecimalContentId(segments[1])) {
       return { type: DeepLinkType.QUESTION, id: segments[1], query: emptyQuery };
     }
     if (segments.length === 3 && segments[0] === 'oia' && segments[1] === 'articles' &&
-      isDecimalId(segments[2])) {
+      isSafeDecimalContentId(segments[2])) {
       return { type: DeepLinkType.ARTICLE, id: segments[2], query: emptyQuery };
     }
     if (segments.length === 2 && segments[0] === 'people' && segments[1].length > 0) {
       return { type: DeepLinkType.PERSON, id: segments[1], query: emptyQuery };
     }
-    if (segments.length === 2 && segments[0] === 'video' && isDecimalId(segments[1])) {
+    if (segments.length === 2 && segments[0] === 'video' && isSafeDecimalContentId(segments[1])) {
       return { type: DeepLinkType.VIDEO, id: segments[1], query: emptyQuery };
     }
-    if (segments.length === 2 && segments[0] === 'pin' && isDecimalId(segments[1])) {
+    if (segments.length === 2 && segments[0] === 'pin' && isSafeDecimalContentId(segments[1])) {
       return { type: DeepLinkType.PIN, id: segments[1], query: emptyQuery };
     }
-    if (segments.length === 3 && segments[0] === 'appview' && isDecimalId(segments[2])) {
+    if (segments.length === 3 && segments[0] === 'appview' && isSafeDecimalContentId(segments[2])) {
       if (segments[1] === 'pin') {
         return { type: DeepLinkType.PIN, id: segments[2], query: emptyQuery };
       }
@@ -113,7 +121,10 @@ function resolveZhihuLinkAtDepth(input: string, depth: number): DeepLinkDestinat
       return undefined;
     }
     if (segments.length === 1 && segments[0] === 'search') {
-      return { type: DeepLinkType.SEARCH, id: '', query: parsed.params.get('q') ?? '' };
+      const query = parsed.params.get('q') ?? '';
+      return isSafeSearchDestinationQuery(query)
+        ? { type: DeepLinkType.SEARCH, id: '', query: query }
+        : undefined;
     }
     return undefined;
   }
@@ -125,9 +136,12 @@ function resolveZhihuLinkAtDepth(input: string, depth: number): DeepLinkDestinat
     return { type: DeepLinkType.MAIN_TABS, id: '', query: emptyQuery };
   }
   if (host === 'search' && segments.length === 0) {
-    return { type: DeepLinkType.SEARCH, id: '', query: parsed.params.get('q') ?? '' };
+    const query = parsed.params.get('q') ?? '';
+    return isSafeSearchDestinationQuery(query)
+      ? { type: DeepLinkType.SEARCH, id: '', query: query }
+      : undefined;
   }
-  if (segments.length !== 1 || !isDecimalId(segments[0])) {
+  if (segments.length !== 1 || !isSafeDecimalContentId(segments[0])) {
     return undefined;
   }
   if (host === 'answers') {
@@ -143,8 +157,4 @@ function resolveZhihuLinkAtDepth(input: string, depth: number): DeepLinkDestinat
     return { type: DeepLinkType.PIN, id: segments[0], query: emptyQuery };
   }
   return undefined;
-}
-
-function isDecimalId(value: string): boolean {
-  return /^\d+$/.test(value);
 }

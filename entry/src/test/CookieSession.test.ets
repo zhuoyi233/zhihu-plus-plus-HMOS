@@ -1,5 +1,8 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
+  COOKIE_FIELD_MAX_COUNT,
+  COOKIE_HEADER_MAX_LENGTH,
+  COOKIE_VALUE_MAX_LENGTH,
   decodeCookieSession,
   encodeCookieSession,
   parseCookieAssignments,
@@ -49,6 +52,16 @@ export default function cookieSessionTest(): void {
       const original: Array<SessionCookie> = [{ name: 'safe', value: 'value' }];
       expect(upsertCookie(original, { name: 'bad name', value: 'other' }).length).assertEqual(1);
       expect(toCookieHeader([{ name: 'safe', value: 'value\r\nInjected: yes' }], 0)).assertEqual('');
+    });
+
+    it('rejectsOversizedCookieHeadersFieldsAndValues', 0, () => {
+      expect(parseCookieAssignments(`z_c0=${'x'.repeat(COOKIE_HEADER_MAX_LENGTH)}`).length).assertEqual(0);
+      expect(parseCookieAssignments(`z_c0=${'x'.repeat(COOKIE_VALUE_MAX_LENGTH + 1)}`).length).assertEqual(0);
+      const fields: Array<string> = [];
+      for (let index = 0; index <= COOKIE_FIELD_MAX_COUNT; index += 1) {
+        fields.push(`c${index}=v`);
+      }
+      expect(parseCookieAssignments(fields.join(';')).length).assertEqual(0);
     });
 
     it('roundTripsSessionPayload', 0, () => {

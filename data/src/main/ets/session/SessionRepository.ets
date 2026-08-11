@@ -32,18 +32,55 @@ export interface SessionState {
   profile?: ZhihuProfile;
 }
 
+export interface SessionLoginOperation {
+  readonly result: Promise<SessionState>;
+  cancel(): void;
+}
+
+export interface LoginSessionGateway {
+  getState(): SessionState;
+  beginLoginWithCookieHeader(rawCookie: string): SessionLoginOperation;
+  beginLoginWithCookies(cookies: Array<SessionCookie>): SessionLoginOperation;
+  logout(): Promise<SessionState>;
+}
+
 const INITIAL_SESSION_STATE: SessionState = {
   status: SessionStatus.GUEST,
   message: '当前为游客模式',
   hasRetainedCredentials: false
 };
 
-export class SessionRepository implements SessionCookieProvider {
+class LoginOperationToken {
+  cancelled: boolean = false;
+  cancellable: boolean = true;
+}
+
+class RepositorySessionLoginOperation implements SessionLoginOperation {
+  readonly result: Promise<SessionState>;
+  private readonly cancelAction: () => void;
+  private cancelled: boolean = false;
+
+  constructor(result: Promise<SessionState>, cancelAction: () => void) {
+    this.result = result;
+    this.cancelAction = cancelAction;
+  }
+
+  cancel(): void {
+    if (this.cancelled) {
+      return;
+    }
+    this.cancelled = true;
+    this.cancelAction();
+  }
+}
+
+export class SessionRepository implements SessionCookieProvider, LoginSessionGateway {
   private readonly persistence: SessionPersistence;
   private readonly verifier: SessionVerifier;
   private cookies: Array<SessionCookie> = [];
   private state: SessionState = INITIAL_SESSION_STATE;
   private operationQueue: Promise<SessionState> = Promise.resolve(INITIAL_SESSION_STATE);
+  private activeLoginToken?: LoginOperationToken;
 
   constructor(persistence: SessionPersistence, verifier: SessionVerifier = new ZhihuLoginClient()) {
     this.persistence = persistence;
@@ -88,33 +125,57 @@ export class SessionRepository implements SessionCookieProvider {
   }
 
   loginWithCookieHeader(rawCookie: string): Promise<SessionState> {
-    const cookies = parseCookieAssignments(rawCookie);
-    return this.loginWithCookies(cookies);
+    return this.beginLoginWithCookieHeader(rawCookie).result;
   }
 
   loginWithCookies(cookies: Array<SessionCookie>): Promise<SessionState> {
+    return this.beginLoginWithCookies(cookies).result;
+  }
+
+  beginLoginWithCookieHeader(rawCookie: string): SessionLoginOperation {
+    return this.beginLoginWithCookies(parseCookieAssignments(rawCookie));
+  }
+
+  beginLoginWithCookies(cookies: Array<SessionCookie>): SessionLoginOperation {
     const candidateCookies = copySessionCookies(cookies);
-    return this.enqueue(async (): Promise<SessionState> => {
-      let result: LoginVerificationResult;
+    const token = new LoginOperationToken();
+    const operationResult = this.enqueue(async (): Promise<SessionState> => {
+      if (token.cancelled) {
+        return this.getState();
+      }
+      this.activeLoginToken = token;
+      let verification: LoginVerificationResult;
       try {
-        result = await this.verifier.verify(copySessionCookies(candidateCookies));
+        verification = await this.verifier.verify(copySessionCookies(candidateCookies));
       } catch (_error) {
+        if (token.cancelled) {
+          return this.getState();
+        }
         return this.updateState({
           status: SessionStatus.ERROR,
           message: '登录验证失败，请稍后重试',
           hasRetainedCredentials: this.cookies.length > 0,
           profile: this.state.profile
         });
+      } finally {
+        if (this.activeLoginToken === token) {
+          this.activeLoginToken = undefined;
+        }
       }
-      if (result.status !== LoginVerificationStatus.AUTHENTICATED || result.profile === undefined) {
+      if (token.cancelled) {
+        return this.getState();
+      }
+      if (verification.status !== LoginVerificationStatus.AUTHENTICATED || verification.profile === undefined) {
+        token.cancellable = false;
         return this.updateState({
           status: SessionStatus.ERROR,
-          message: result.message,
+          message: verification.message,
           hasRetainedCredentials: this.cookies.length > 0,
           profile: this.state.profile
         });
       }
 
+      token.cancellable = false;
       try {
         await this.persistence.save(copySessionCookies(candidateCookies));
       } catch (_error) {
@@ -128,11 +189,12 @@ export class SessionRepository implements SessionCookieProvider {
       this.cookies = copySessionCookies(candidateCookies);
       return this.updateState({
         status: SessionStatus.AUTHENTICATED,
-        message: `已登录：${result.profile.name}`,
+        message: `已登录：${verification.profile.name}`,
         hasRetainedCredentials: true,
-        profile: result.profile
+        profile: verification.profile
       });
     });
+    return new RepositorySessionLoginOperation(operationResult, (): void => this.cancelLoginOperation(token));
   }
 
   logout(): Promise<SessionState> {
@@ -157,7 +219,20 @@ export class SessionRepository implements SessionCookieProvider {
   }
 
   cancelVerification(): void {
+    if (this.activeLoginToken !== undefined) {
+      this.activeLoginToken.cancelled = true;
+    }
     this.verifier.cancel();
+  }
+
+  private cancelLoginOperation(token: LoginOperationToken): void {
+    if (!token.cancellable) {
+      return;
+    }
+    token.cancelled = true;
+    if (this.activeLoginToken === token) {
+      this.verifier.cancel();
+    }
   }
 
   private enqueue(operation: () => Promise<SessionState>): Promise<SessionState> {
