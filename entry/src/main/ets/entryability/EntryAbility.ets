@@ -1,11 +1,14 @@
 import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
+import { closeAppDatabase, getAppDatabase } from 'data';
 import {
   AppLogEvent,
   AppLogger,
   AppStartup,
   resolveZhihuLink,
+  startupDestinationChannel,
   SystemStartupClock,
+  toP1Destination,
   StartupPhase,
   StartupPhaseStatus,
   StartupTask
@@ -18,11 +21,20 @@ export default class EntryAbility extends UIAbility {
     AppLogger.info(AppLogEvent.ABILITY_CREATED);
     const tasks: Array<StartupTask> = [
       {
-        name: 'deep-link-routing',
+        name: 'database-migration',
         phase: StartupPhase.CRITICAL,
         dependencies: [],
         run: (): Promise<void> => {
-          this.logIncomingLink(want);
+          return getAppDatabase(this.context).open().then((): void => {
+          });
+        }
+      },
+      {
+        name: 'deep-link-routing',
+        phase: StartupPhase.CRITICAL,
+        dependencies: ['database-migration'],
+        run: (): Promise<void> => {
+          this.routeIncomingLink(want);
           return Promise.resolve();
         }
       },
@@ -43,11 +55,16 @@ export default class EntryAbility extends UIAbility {
   }
 
   onNewWant(want: Want, _launchParam: AbilityConstant.LaunchParam): void {
-    this.logIncomingLink(want);
+    this.routeIncomingLink(want);
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
     this.loadContentAfterCriticalStartup(windowStage);
+  }
+
+  onDestroy(): void {
+    closeAppDatabase().catch((_error: Error): void => {
+    });
   }
 
   private async loadContentAfterCriticalStartup(windowStage: window.WindowStage): Promise<void> {
@@ -70,13 +87,16 @@ export default class EntryAbility extends UIAbility {
     });
   }
 
-  private logIncomingLink(want: Want): void {
+  private routeIncomingLink(want: Want): void {
     if (want.uri === undefined || want.uri.length === 0) {
       return;
     }
     const destination = resolveZhihuLink(want.uri);
-    AppLogger.info(destination === undefined
-      ? AppLogEvent.DEEP_LINK_UNSUPPORTED
-      : AppLogEvent.DEEP_LINK_RESOLVED);
+    if (destination === undefined) {
+      AppLogger.info(AppLogEvent.DEEP_LINK_UNSUPPORTED);
+      return;
+    }
+    startupDestinationChannel.publish(toP1Destination(destination));
+    AppLogger.info(AppLogEvent.DEEP_LINK_RESOLVED);
   }
 }

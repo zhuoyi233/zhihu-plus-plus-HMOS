@@ -346,6 +346,8 @@ P0 阶段结论（2026-08-10）：TaskPool 只解决并发计算，不提供后�
 - 日志、构建配置、测试框架和 CI。
 - 首个 AppStartup 初始化图，非必要初始化不得阻塞首页。参考：[AppStartup](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides-V5/app-startup-V5)。
 
+状态（2026-08-11）：P1 本地实现与 API 24 验证已收口。工程拆分为 `entry/core/data/reader`，主题与 Preferences、强类型 Navigation/冷热深链、统一 HTTP/Cookie/ZSE 安全边界、生产 RDB 生命周期、DomainModel 与 7 份真实 rawfile fixture、AppStartup、日志和自托管 CI 门禁均已落地。`scripts/verify-harmony.ps1 -ExpectedTestCount 89` 的四模块构建与 Hypium `89/89` 通过；`ZhihuPlus_API24` 设备验证覆盖大字体/安全区、主题跨进程恢复、数据库迁移与 CRUD、rawfile `7/7`、冷/热深链及真实网络结构化错误。远端 CI 仍需要仓库侧启用 `ENABLE_HARMONYOS_API24_CI` 并提供匹配的 self-hosted runner，属于外部环境配置，不阻塞进入 P2。
+
 ### P2：只读 MVP，4–6 周
 
 范围：

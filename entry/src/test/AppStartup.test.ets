@@ -1,6 +1,11 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
   AppStartup,
+  LatestOperationGuard,
+  P1Destination,
+  p1DestinationIdentity,
+  P1DestinationName,
+  StartupDestinationChannel,
   StartupClock,
   StartupPhase,
   StartupPhaseStatus,
@@ -22,14 +27,14 @@ export default function appStartupTest(): void {
     it('runsCriticalTasksInDeterministicDependencyOrder', 0, async () => {
       const executionOrder: Array<string> = [];
       const tasks: Array<StartupTask> = [
-        startupTask('content', StartupPhase.CRITICAL, ['account', 'storage'], executionOrder),
-        startupTask('storage', StartupPhase.CRITICAL, [], executionOrder),
-        startupTask('account', StartupPhase.CRITICAL, [], executionOrder)
+        startupTask('content', StartupPhase.CRITICAL, ['deep-link-routing'], executionOrder),
+        startupTask('deep-link-routing', StartupPhase.CRITICAL, ['database-migration'], executionOrder),
+        startupTask('database-migration', StartupPhase.CRITICAL, [], executionOrder)
       ];
 
       const summary = await new AppStartup(tasks, new StepClock()).runCritical();
 
-      expect(executionOrder.join(',')).assertEqual('account,storage,content');
+      expect(executionOrder.join(',')).assertEqual('database-migration,deep-link-routing,content');
       expect(summary.status).assertEqual(StartupPhaseStatus.SUCCEEDED);
       expect(summary.tasks.length).assertEqual(3);
       expect(summary.tasks[0].durationMs).assertEqual(5);
@@ -100,6 +105,50 @@ export default function appStartupTest(): void {
       expect(deferredSummary.status).assertEqual(StartupPhaseStatus.DEGRADED);
       expect(deferredSummary.tasks[0].status).assertEqual(StartupTaskStatus.SKIPPED);
       expect(executionOrder.join(',')).assertEqual('critical');
+    });
+
+    it('keepsOnlyLatestColdStartupDestination', 0, () => {
+      const channel = new StartupDestinationChannel();
+      const received: Array<P1Destination> = [];
+      channel.publish({ name: P1DestinationName.ANSWER, id: 'cold-a' });
+      channel.publish({ name: P1DestinationName.ARTICLE, id: 'cold-b' });
+
+      const unsubscribe = channel.subscribe((destination: P1Destination): void => {
+        received.push(destination);
+      });
+      unsubscribe();
+
+      expect(received.length).assertEqual(1);
+      expect(received[0].name).assertEqual(P1DestinationName.ARTICLE);
+      expect(p1DestinationIdentity(received[0])).assertEqual('Article:cold-b');
+    });
+
+    it('doesNotDeliverDuplicateNewWantDestination', 0, () => {
+      const channel = new StartupDestinationChannel();
+      const received: Array<P1Destination> = [];
+      const unsubscribe = channel.subscribe((destination: P1Destination): void => {
+        received.push(destination);
+      });
+      channel.publish({ name: P1DestinationName.SEARCH, query: 'ArkTS 导航' });
+      channel.publish({ name: P1DestinationName.SEARCH, query: 'ArkTS 导航' });
+      channel.publish({ name: P1DestinationName.SEARCH, query: 'HarmonyOS' });
+      unsubscribe();
+
+      expect(received.length).assertEqual(2);
+      expect(p1DestinationIdentity(received[0]))
+        .assertEqual(`Search:${encodeURIComponent('ArkTS 导航')}`);
+      expect(p1DestinationIdentity(received[1])).assertEqual('Search:HarmonyOS');
+    });
+
+    it('makesNewerThemeSelectionOutrankRestoreAndInvalidatesOnLeave', 0, () => {
+      const guard = new LatestOperationGuard();
+      const restoreGeneration = guard.next();
+      const selectionGeneration = guard.next();
+
+      expect(guard.isCurrent(restoreGeneration)).assertFalse();
+      expect(guard.isCurrent(selectionGeneration)).assertTrue();
+      guard.invalidate();
+      expect(guard.isCurrent(selectionGeneration)).assertFalse();
     });
   });
 }

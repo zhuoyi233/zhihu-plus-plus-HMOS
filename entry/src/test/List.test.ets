@@ -10,6 +10,9 @@ import zhihuLoginClientTest from './ZhihuLoginClient.test';
 import zseSignerTest from './ZseSigner.test';
 import appStartupTest from './AppStartup.test';
 import domainModelTest from './DomainModel.test';
+import domainFixtureGateTest from './DomainFixtureGate.test';
+import zhihuHttpClientTest from './ZhihuHttpClient.test';
+import p1PersistenceTest from './P1Persistence.test';
 import p1NavigationTest from './P1Navigation.test';
 
 export default function testsuite(): void {
@@ -25,5 +28,8 @@ export default function testsuite(): void {
   zseSignerTest();
   appStartupTest();
   domainModelTest();
+  domainFixtureGateTest();
+  zhihuHttpClientTest();
+  p1PersistenceTest();
   p1NavigationTest();
 }

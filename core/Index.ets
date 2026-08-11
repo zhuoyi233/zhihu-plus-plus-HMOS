@@ -4,5 +4,6 @@ export * from './src/main/ets/logging/AppLogger';
 export * from './src/main/ets/navigation/AbsoluteUrlParser';
 export * from './src/main/ets/navigation/DeepLinkResolver';
 export * from './src/main/ets/navigation/P1Destination';
+export * from './src/main/ets/navigation/StartupDestinationChannel';
 export * from './src/main/ets/scan/QrLoginScanPolicy';
 export * from './src/main/ets/startup/AppStartup';
