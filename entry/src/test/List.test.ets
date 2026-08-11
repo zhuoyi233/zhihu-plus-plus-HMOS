@@ -14,6 +14,10 @@ import domainFixtureGateTest from './DomainFixtureGate.test';
 import zhihuHttpClientTest from './ZhihuHttpClient.test';
 import p1PersistenceTest from './P1Persistence.test';
 import p1NavigationTest from './P1Navigation.test';
+import homeFeedRepositoryTest from './HomeFeedRepository.test';
+import homeFeedStateTest from './HomeFeedState.test';
+import sessionRepositoryTest from './SessionRepository.test';
+import zhihuQrLoginClientTest from './ZhihuQrLoginClient.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -32,4 +36,8 @@ export default function testsuite(): void {
   zhihuHttpClientTest();
   p1PersistenceTest();
   p1NavigationTest();
+  homeFeedRepositoryTest();
+  homeFeedStateTest();
+  sessionRepositoryTest();
+  zhihuQrLoginClientTest();
 }

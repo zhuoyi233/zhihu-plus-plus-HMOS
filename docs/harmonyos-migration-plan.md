@@ -346,7 +346,7 @@ P0 阶段结论（2026-08-10）：TaskPool 只解决并发计算，不提供后�
 - 日志、构建配置、测试框架和 CI。
 - 首个 AppStartup 初始化图，非必要初始化不得阻塞首页。参考：[AppStartup](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides-V5/app-startup-V5)。
 
-状态（2026-08-11）：P1 本地实现与 API 24 验证已收口。工程拆分为 `entry/core/data/reader`，主题与 Preferences、强类型 Navigation/冷热深链、统一 HTTP/Cookie/ZSE 安全边界、生产 RDB 生命周期、DomainModel 与 7 份真实 rawfile fixture、AppStartup、日志和自托管 CI 门禁均已落地。`scripts/verify-harmony.ps1 -ExpectedTestCount 89` 的四模块构建与 Hypium `89/89` 通过；`ZhihuPlus_API24` 设备验证覆盖大字体/安全区、主题跨进程恢复、数据库迁移与 CRUD、rawfile `7/7`、冷/热深链及真实网络结构化错误。远端 CI 仍需要仓库侧启用 `ENABLE_HARMONYOS_API24_CI` 并提供匹配的 self-hosted runner，属于外部环境配置，不阻塞进入 P2。
+状态（2026-08-11）：P1 本地实现与 API 24 验证已收口。工程拆分为 `entry/core/data/reader`，主题与 Preferences、强类型 Navigation/冷热深链、统一 HTTP/Cookie/ZSE 安全边界、生产 RDB 生命周期、DomainModel 与真实 rawfile fixture、AppStartup、日志和自托管 CI 门禁均已落地。P1 基线的四模块构建与 Hypium `89/89` 已通过；进入 P2 后 fixture catalog 增加 mixed Feed 样本至 8 份，统一门禁升级为 Hypium `128/128`。远端 CI 仍需要仓库侧启用 `ENABLE_HARMONYOS_API24_CI` 并提供匹配的 self-hosted runner，属于外部环境配置，不阻塞 P2 开发。
 
 ### P2：只读 MVP，4–6 周
 
@@ -376,6 +376,8 @@ P0 阶段结论（2026-08-10）：TaskPool 只解决并发计算，不提供后�
 - AIGC 标记
 
 退出条件：用户能够登录、浏览主要 Feed、搜索和阅读正文，并在异常网络和会话失效时得到可恢复反馈。
+
+状态（2026-08-11，首批纵向切片）：游客首页 Feed、统一分页/稳定内容键去重/规范化游标/错误重试状态、真实 `api.zhihu.com` 数据接入、会话加密恢复、手动 Cookie 校验仓库、二维码登录协议状态机与 app-scoped 延迟恢复已落地；`api.zhihu.com` 仅允许无 Cookie/无 ZSE 的游客请求，敏感会话仍限定精确 `www.zhihu.com`。`ZhihuPlus_API24` 已验证真实 Feed 冷启动、刷新、连续滚动分页、显示设置与技术实验室入口，以及打包 rawfile fixture `8/8`；四模块构建与 Hypium `128/128` 通过。正式登录 UI、二维码图形与真实扫码闭环、搜索、关注/热榜/日报、内容详情/用户页、屏蔽和已读记录仍待后续 P2 切片，因此 P2 尚未完成。
 
 ### P3：社交交互，4–6 周
 

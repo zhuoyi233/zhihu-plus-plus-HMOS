@@ -1,14 +1,17 @@
 import { common } from '@kit.AbilityKit';
 import {
+  DOMAIN_FIXTURE_SPECS,
   DomainFixtureCaseResult,
   DomainFixtureValidationReport,
   DomainFixtureValidator
 } from '../fixtures/DomainFixtureValidator';
 
+const DOMAIN_FIXTURE_COUNT = DOMAIN_FIXTURE_SPECS.length;
+
 @Component
 export struct DomainFixtureProbe {
   onBack: () => void = () => {};
-  @State private status: string = '正在读取 7 份 rawfile fixture…';
+  @State private status: string = `正在读取 ${DOMAIN_FIXTURE_COUNT} 份 rawfile fixture…`;
   @State private failures: Array<DomainFixtureCaseResult> = [];
   @State private running: boolean = false;
   private runGeneration: number = 0;
@@ -46,7 +49,7 @@ export struct DomainFixtureProbe {
             .fontColor($r('app.color.primary_text'))
             .width('100%')
 
-          Text('门禁由 API 24 ResourceManager 直接读取打包后的 7 份脱敏 JSON，并调用 data 模块 decoder。')
+          Text(`门禁由 API 24 ResourceManager 直接读取打包后的 ${DOMAIN_FIXTURE_COUNT} 份脱敏 JSON，并调用 data 模块 decoder。`)
             .id('p1_domain_fixture_gate_description')
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
@@ -102,7 +105,7 @@ export struct DomainFixtureProbe {
     const generation = ++this.runGeneration;
     this.running = true;
     this.failures = [];
-    this.status = '正在读取 7 份 rawfile fixture…';
+    this.status = `正在读取 ${DOMAIN_FIXTURE_COUNT} 份 rawfile fixture…`;
     try {
       const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
       const report: DomainFixtureValidationReport = await new DomainFixtureValidator(context).validateAll();
@@ -116,7 +119,7 @@ export struct DomainFixtureProbe {
       if (generation !== this.runGeneration) {
         return;
       }
-      this.status = '未通过：0/7（门禁启动失败）';
+      this.status = `未通过：0/${DOMAIN_FIXTURE_COUNT}（门禁启动失败）`;
     }
     this.running = false;
   }

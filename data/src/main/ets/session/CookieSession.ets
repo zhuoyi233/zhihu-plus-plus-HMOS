@@ -15,6 +15,14 @@ export interface CookieSessionData {
   cookies: Array<SessionCookie>;
 }
 
+export function copySessionCookies(cookies: Array<SessionCookie>): Array<SessionCookie> {
+  return cookies.map((cookie: SessionCookie): SessionCookie => ({
+    name: cookie.name,
+    value: cookie.value,
+    expiresAt: cookie.expiresAt
+  }));
+}
+
 function isValidCookieName(name: string): boolean {
   if (name.length === 0) {
     return false;
@@ -37,7 +45,7 @@ function isSafeCookieValue(value: string): boolean {
   return true;
 }
 
-export function parseCookieAssignments(rawCookie: string): Array<SessionCookie> {
+export function parseCookieAssignments(rawCookie: string, includeEmptyValues: boolean = false): Array<SessionCookie> {
   const cookies: Array<SessionCookie> = [];
   const assignments = rawCookie.split(';');
   for (let index = 0; index < assignments.length; index += 1) {
@@ -48,7 +56,7 @@ export function parseCookieAssignments(rawCookie: string): Array<SessionCookie> 
     }
     const name = assignment.substring(0, separator).trim();
     const value = assignment.substring(separator + 1).trim();
-    if (!isValidCookieName(name) || value.length === 0 || !isSafeCookieValue(value) ||
+    if (!isValidCookieName(name) || (!includeEmptyValues && value.length === 0) || !isSafeCookieValue(value) ||
       COOKIE_ATTRIBUTES.has(name.toLowerCase())) {
       continue;
     }
@@ -99,10 +107,24 @@ export function encodeCookieSession(cookies: Array<SessionCookie>, savedAt: numb
 
 export function decodeCookieSession(serialized: string): CookieSessionData {
   const payload = JSON.parse(serialized) as CookieSessionData;
-  if (payload.version !== 1 || !Array.isArray(payload.cookies)) {
+  if (payload === null || typeof payload !== 'object' || Array.isArray(payload) || payload.version !== 1 ||
+    typeof payload.savedAt !== 'number' || !Number.isFinite(payload.savedAt) || !Array.isArray(payload.cookies)) {
     throw new Error('Unsupported cookie session format');
   }
-  return payload;
+  payload.cookies.forEach((cookie: SessionCookie): void => {
+    if (cookie === null || typeof cookie !== 'object' || Array.isArray(cookie) ||
+      typeof cookie.name !== 'string' || typeof cookie.value !== 'string' ||
+      !isValidCookieName(cookie.name) || !isSafeCookieValue(cookie.value) ||
+      (cookie.expiresAt !== undefined &&
+        (typeof cookie.expiresAt !== 'number' || !Number.isFinite(cookie.expiresAt)))) {
+      throw new Error('Unsupported cookie session format');
+    }
+  });
+  return {
+    version: 1,
+    savedAt: payload.savedAt,
+    cookies: copySessionCookies(payload.cookies)
+  };
 }
 
 export function safeSessionSummary(label: string, cookies: Array<SessionCookie>): string {

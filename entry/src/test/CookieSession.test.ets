@@ -58,6 +58,37 @@ export default function cookieSessionTest(): void {
       expect(decoded.cookies[0].value).assertEqual('token');
     });
 
+    it('rejectsMalformedPersistedCookieEntries', 0, () => {
+      let rejectedNullCookie = false;
+      let rejectedInvalidName = false;
+      let rejectedNonStringValue = false;
+      try {
+        decodeCookieSession('{"version":1,"savedAt":1234,"cookies":[null]}');
+      } catch (_) {
+        rejectedNullCookie = true;
+      }
+      try {
+        decodeCookieSession(
+          '{"version":1,"savedAt":1234,"cookies":[{"name":"bad name","value":"secret"}]}'
+        );
+      } catch (_) {
+        rejectedInvalidName = true;
+      }
+      try {
+        decodeCookieSession(
+          '{"version":1,"savedAt":1234,"cookies":[{"name":"z_c0","value":1}]}'
+        );
+      } catch (_) {
+        rejectedNonStringValue = true;
+      }
+      expect(rejectedNullCookie).assertTrue();
+      expect(rejectedInvalidName).assertTrue();
+      expect(rejectedNonStringValue).assertTrue();
+      const deletions = parseCookieAssignments('z_c0=; Max-Age=0', true);
+      expect(deletions.length).assertEqual(1);
+      expect(deletions[0].value).assertEqual('');
+    });
+
     it('redactsSecretsFromLogs', 0, () => {
       const redacted = redactSensitiveText('Cookie: z_c0=secret; d_c0=hidden');
       expect(redacted.includes('secret')).assertFalse();

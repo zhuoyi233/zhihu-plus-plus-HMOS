@@ -74,6 +74,10 @@ export interface FeedItem {
   target: FeedTargetSummary;
 }
 
+export function feedItemIdentity(item: FeedItem): string {
+  return `${item.target.kind}:${item.target.id}`;
+}
+
 export interface PageCursor {
   isEnd: boolean;
   isStart: boolean;

@@ -108,8 +108,12 @@ export default function zhihuLoginClientTest(): void {
     });
 
     it('classifiesRejectedAndTemporaryResponses', 0, () => {
-      expect(classifyLoginResponse(401, '').status).assertEqual(LoginVerificationStatus.REJECTED);
-      expect(classifyLoginResponse(403, '').status).assertEqual(LoginVerificationStatus.REJECTED);
+      const unauthorized = classifyLoginResponse(401, '');
+      const forbidden = classifyLoginResponse(403, '');
+      expect(unauthorized.status).assertEqual(LoginVerificationStatus.REJECTED);
+      expect(unauthorized.rejectionStatus).assertEqual(401);
+      expect(forbidden.status).assertEqual(LoginVerificationStatus.REJECTED);
+      expect(forbidden.rejectionStatus).assertEqual(403);
       expect(classifyLoginResponse(429, '').status).assertEqual(LoginVerificationStatus.TEMPORARY_FAILURE);
       expect(classifyLoginResponse(503, '').status).assertEqual(LoginVerificationStatus.TEMPORARY_FAILURE);
     });

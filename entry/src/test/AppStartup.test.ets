@@ -107,6 +107,42 @@ export default function appStartupTest(): void {
       expect(executionOrder.join(',')).assertEqual('critical');
     });
 
+    it('startsSessionRestoreOnlyAfterCriticalUiStartup', 0, async () => {
+      const executionOrder: Array<string> = [];
+      const startup = new AppStartup([
+        startupTask('database-migration', StartupPhase.CRITICAL, [], executionOrder),
+        startupTask('deep-link-routing', StartupPhase.CRITICAL, ['database-migration'], executionOrder),
+        startupTask('session-restore', StartupPhase.DEFERRED, ['deep-link-routing'], executionOrder)
+      ]);
+
+      const critical = await startup.runCritical();
+      expect(critical.status).assertEqual(StartupPhaseStatus.SUCCEEDED);
+      expect(executionOrder.join(',')).assertEqual('database-migration,deep-link-routing');
+
+      await startup.runDeferred();
+      expect(executionOrder.join(',')).assertEqual('database-migration,deep-link-routing,session-restore');
+    });
+
+    it('doesNotContinueAsyncStartupAfterAbilityDestroy', 0, async () => {
+      const guard = new LatestOperationGuard();
+      const generation = guard.next();
+      let loadContentRuns = 0;
+      let deferredRuns = 0;
+      const pendingStartup = Promise.resolve().then((): void => {
+        if (!guard.isCurrent(generation)) {
+          return;
+        }
+        loadContentRuns += 1;
+        deferredRuns += 1;
+      });
+
+      guard.invalidate();
+      await pendingStartup;
+
+      expect(loadContentRuns).assertEqual(0);
+      expect(deferredRuns).assertEqual(0);
+    });
+
     it('keepsOnlyLatestColdStartupDestination', 0, () => {
       const channel = new StartupDestinationChannel();
       const received: Array<P1Destination> = [];

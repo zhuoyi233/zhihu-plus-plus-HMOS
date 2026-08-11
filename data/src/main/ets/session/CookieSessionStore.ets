@@ -9,15 +9,16 @@ import {
 } from './CookieSession';
 import { decryptSession, encryptSession } from './SessionCipher';
 import { SessionKeyStore } from './SessionKeyStore';
+import { SessionPersistence } from './SessionRepository';
 
 const PREFERENCES_NAME = 'secure_session';
 const ENCRYPTED_SESSION_KEY = 'cookie_session_v1';
 
-export class CookieSessionStore {
-  private readonly context: common.UIAbilityContext;
+export class CookieSessionStore implements SessionPersistence {
+  private readonly context: common.Context;
   private readonly keyStore: SessionKeyStore;
 
-  constructor(context: common.UIAbilityContext, keyStore: SessionKeyStore = new SessionKeyStore()) {
+  constructor(context: common.Context, keyStore: SessionKeyStore = new SessionKeyStore()) {
     this.context = context;
     this.keyStore = keyStore;
   }

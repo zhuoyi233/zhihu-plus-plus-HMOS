@@ -16,6 +16,7 @@ export enum DomainFixtureTarget {
   ANSWER = 'answer',
   ARTICLE = 'article',
   FEED_PAGE = 'feed_page',
+  MIXED_FEED_PAGE = 'mixed_feed_page',
   EMPTY_FEED_PAGE = 'empty_feed_page',
   ERROR_RESPONSE = 'error_response'
 }
@@ -32,6 +33,7 @@ export const DOMAIN_FIXTURE_SPECS: ReadonlyArray<DomainFixtureSpec> = [
   { fileName: 'answer.json', target: DomainFixtureTarget.ANSWER },
   { fileName: 'article.json', target: DomainFixtureTarget.ARTICLE },
   { fileName: 'feed-page.json', target: DomainFixtureTarget.FEED_PAGE },
+  { fileName: 'feed-page-mixed.json', target: DomainFixtureTarget.MIXED_FEED_PAGE },
   { fileName: 'empty-fields.json', target: DomainFixtureTarget.EMPTY_FEED_PAGE },
   {
     fileName: 'error-response.json',
@@ -138,6 +140,14 @@ export class DomainFixtureValidator {
       const page = decodeFeedPage(json);
       if (page.items.length !== 2 || page.cursor.isEnd || page.cursor.page !== 1 || page.cursor.total !== 25) {
         throw new Error('feed page contract mismatch');
+      }
+      return;
+    }
+    if (target === DomainFixtureTarget.MIXED_FEED_PAGE) {
+      const page = decodeFeedPage(json);
+      if (page.items.length !== 1 || page.items[0].id !== 'feed-answer-supported' ||
+        page.cursor.isEnd || page.cursor.next === undefined) {
+        throw new Error('mixed feed page contract mismatch');
       }
       return;
     }

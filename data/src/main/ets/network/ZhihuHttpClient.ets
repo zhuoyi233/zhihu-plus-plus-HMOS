@@ -67,7 +67,7 @@ export interface ZhihuHttpTransportFactory {
   create(): ZhihuHttpTransport;
 }
 
-const TRUSTED_ZHIHU_HOSTS: Array<string> = ['www.zhihu.com'];
+const TRUSTED_ZHIHU_HOSTS: Array<string> = ['www.zhihu.com', 'api.zhihu.com'];
 
 export function isTrustedZhihuRequestUrl(url: string): boolean {
   if (/[\u0000-\u0020\u007F-\uFFFF]/.test(url)) {
@@ -84,6 +84,13 @@ export function isTrustedZhihuRequestUrl(url: string): boolean {
   return TRUSTED_ZHIHU_HOSTS.includes(authority.toLowerCase());
 }
 
+export function isSessionCapableZhihuRequestUrl(url: string): boolean {
+  if (!isTrustedZhihuRequestUrl(url)) {
+    return false;
+  }
+  return /^https:\/\/www\.zhihu\.com(?:[/?#]|$)/.test(url);
+}
+
 export function sessionCookieValue(cookies: Array<SessionCookie>, name: string): string | undefined {
   const cookie = cookies.find((candidate: SessionCookie) => candidate.name === name && candidate.value.length > 0);
   return cookie?.value;
@@ -95,6 +102,10 @@ export function prepareZhihuHttpRequest(
   now: number = Date.now()
 ): PreparedZhihuHttpRequest {
   if (!isTrustedZhihuRequestUrl(request.url)) {
+    throw new HttpFailure(HttpFailureKind.CLIENT);
+  }
+  if ((request.useSession === true || request.signWithZse === true) &&
+    !isSessionCapableZhihuRequestUrl(request.url)) {
     throw new HttpFailure(HttpFailureKind.CLIENT);
   }
   let cookieHeader: string | undefined = undefined;
@@ -267,6 +278,10 @@ export class ZhihuHttpClient {
       throw new HttpFailure(HttpFailureKind.BUSY);
     }
     if (!isTrustedZhihuRequestUrl(request.url)) {
+      throw new HttpFailure(HttpFailureKind.CLIENT);
+    }
+    if ((request.useSession === true || request.signWithZse === true) &&
+      !isSessionCapableZhihuRequestUrl(request.url)) {
       throw new HttpFailure(HttpFailureKind.CLIENT);
     }
     let activeRequest: ActiveZhihuRequest | undefined = undefined;

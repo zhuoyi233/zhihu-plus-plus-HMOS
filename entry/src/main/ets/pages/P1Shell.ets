@@ -15,6 +15,7 @@ import {
 
 @Component
 export struct P1Shell {
+  @BuilderParam homeContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
   @BuilderParam technicalLabContent: (navigate: (destination: P1Destination) => void) => void =
     this.emptyTechnicalLab;
   @BuilderParam readerProbeContent: (onBack: () => void) => void = this.emptyProbe;
@@ -48,6 +49,11 @@ export struct P1Shell {
     this.themeOperationGuard.invalidate();
     this.unsubscribeStartupDestination?.();
     this.unsubscribeStartupDestination = undefined;
+  }
+
+  @Builder
+  emptyHome(_navigate: (destination: P1Destination) => void) {
+    Blank();
   }
 
   @Builder
@@ -141,86 +147,7 @@ export struct P1Shell {
   build() {
     Navigation(this.pathStack) {
       Stack({ alignContent: Alignment.TopStart }) {
-        Scroll() {
-        Column({ space: $r('app.float.p1_spacing_large') }) {
-          Column({ space: $r('app.float.p1_spacing_small') }) {
-            Text('轻量、原生、尊重隐私')
-              .id('p1_home_title')
-              .fontSize($r('app.float.p1_display_font_size'))
-              .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.primary_text'))
-
-            Text('P1 正在建立 HarmonyOS 原生基础设施，不包含端侧 AI。')
-              .id('p1_home_description')
-              .fontSize($r('app.float.p1_body_font_size'))
-              .fontColor($r('app.color.secondary_text'))
-          }
-          .alignItems(HorizontalAlign.Start)
-          .width('100%')
-
-          Column({ space: $r('app.float.p1_spacing_medium') }) {
-            Button({ type: ButtonType.Normal, stateEffect: true }) {
-              Column({ space: $r('app.float.p1_spacing_xsmall') }) {
-                Text('显示与阅读')
-                  .fontSize($r('app.float.p1_heading_font_size'))
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor($r('app.color.primary_text'))
-                Text('主题、深浅色与系统字体缩放')
-                  .fontSize($r('app.float.p1_secondary_font_size'))
-                  .fontColor($r('app.color.secondary_text'))
-              }
-              .alignItems(HorizontalAlign.Start)
-              .width('100%')
-            }
-            .id('p1_open_display_settings')
-            .width('100%')
-            .padding($r('app.float.p1_card_padding'))
-            .borderRadius($r('app.float.p1_card_radius'))
-            .backgroundColor($r('app.color.surface_background'))
-            .onClick(() => {
-              const destination: P1Destination = { name: P1DestinationName.SETTINGS };
-              this.navigate(destination);
-            })
-
-            Button({ type: ButtonType.Normal, stateEffect: true }) {
-              Column({ space: $r('app.float.p1_spacing_xsmall') }) {
-                Text('技术实验室')
-                  .fontSize($r('app.float.p1_heading_font_size'))
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor($r('app.color.primary_text'))
-                Text('保留 P0 网络、登录、正文、图片与数据原型')
-                  .fontSize($r('app.float.p1_secondary_font_size'))
-                  .fontColor($r('app.color.secondary_text'))
-              }
-              .alignItems(HorizontalAlign.Start)
-              .width('100%')
-            }
-            .id('p1_open_technical_lab')
-            .width('100%')
-            .padding($r('app.float.p1_card_padding'))
-            .borderRadius($r('app.float.p1_card_radius'))
-            .backgroundColor($r('app.color.surface_background'))
-            .onClick(() => {
-              const destination: P1Destination = { name: P1DestinationName.TECHNICAL_LAB };
-              this.navigate(destination);
-            })
-          }
-          .width('100%')
-
-        }
-        .width('100%')
-        .padding({
-          left: $r('app.float.p1_page_padding'),
-          right: $r('app.float.p1_page_padding'),
-          top: $r('app.float.p1_page_padding'),
-          bottom: $r('app.float.p1_page_padding')
-        })
-      }
-        .id('p1_home_scroll')
-        .width('100%')
-        .height('100%')
-        .align(Alignment.TopStart)
-        .backgroundColor($r('app.color.page_background'))
+        this.homeContent((destination: P1Destination): void => this.navigate(destination));
       }
       .id('p1_home_top_start_container')
       .width('100%')
@@ -296,6 +223,12 @@ export struct P1Shell {
           .id('p1_safe_area_description')
           .fontSize($r('app.float.p1_secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
+
+        Button('技术实验室')
+          .id('p1_open_technical_lab')
+          .width('100%')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .onClick(() => this.navigate({ name: P1DestinationName.TECHNICAL_LAB }))
         }
         .width('100%')
         .padding($r('app.float.p1_page_padding'))

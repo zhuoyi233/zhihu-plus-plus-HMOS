@@ -106,22 +106,43 @@ export default function domainModelTest(): void {
       expect(failureKind).assertEqual(DomainDecodeFailureKind.UPSTREAM_ERROR);
     });
 
-    it('rejectsMissingRequiredFieldsAndUnsupportedFeedTargets', 0, () => {
+    it('rejectsMissingRequiredFieldsAndSkipsUnsupportedFeedTargets', 0, () => {
       let missingKind: DomainDecodeFailureKind | undefined = undefined;
-      let unsupportedKind: DomainDecodeFailureKind | undefined = undefined;
       try {
         decodeUser('{"id":"","name":""}');
       } catch (error) {
         missingKind = (error as DomainDecodeError).kind;
       }
-      try {
-        decodeFeedPage('{"data":[{"id":"feed-2","target":{"type":"zvideo","id":"video-1"}}]}');
-      } catch (error) {
-        unsupportedKind = (error as DomainDecodeError).kind;
-      }
+      const page = decodeFeedPage('{"data":[{"type":"tab_list"},{"id":"feed-2",' +
+        '"target":{"type":"zvideo","id":"video-1"}},{"id":"feed-3",' +
+        '"target":{"type":"article","id":"article-1","title":"可支持文章"}}]}');
 
       expect(missingKind).assertEqual(DomainDecodeFailureKind.MISSING_FIELD);
-      expect(unsupportedKind).assertEqual(DomainDecodeFailureKind.UNSUPPORTED_CONTENT);
+      expect(page.items.length).assertEqual(1);
+      expect(page.items[0].id).assertEqual('feed-3');
+    });
+
+    it('mapsMalformedFeedStructuresToDomainErrors', 0, () => {
+      const malformed: Array<string> = [
+        'null',
+        '{"data":{}}',
+        '{"data":[null]}',
+        '{"data":[],"paging":"next"}',
+        '{"data":[{"id":"feed","target":{}}]}',
+        '{"data":[{"id":"feed","target":{"type":"article","id":"article","title":"标题",' +
+          '"excerpt":7}}]}',
+        '{"data":[],"paging":{"is_end":"false"}}'
+      ];
+      malformed.forEach((payload: string): void => {
+        let failure: DomainDecodeError | undefined = undefined;
+        try {
+          decodeFeedPage(payload);
+        } catch (error) {
+          failure = error as DomainDecodeError;
+        }
+        expect(failure instanceof DomainDecodeError).assertTrue();
+        expect(failure?.kind).assertEqual(DomainDecodeFailureKind.MISSING_FIELD);
+      });
     });
   });
 }

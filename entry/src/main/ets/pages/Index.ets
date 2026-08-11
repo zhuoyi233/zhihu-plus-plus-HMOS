@@ -8,6 +8,7 @@ import { QrScanProbePage } from './QrScanProbe';
 import { ReaderProbe } from './ReaderProbe';
 import { ImageProbe } from './ImageProbe';
 import { TechnicalLabPage } from './TechnicalLabPage';
+import { HomeFeedPage } from './HomeFeedPage';
 
 @Entry
 @Component
@@ -15,6 +16,7 @@ struct Index {
   build() {
     Stack() {
       P1Shell({
+        homeContent: this.homeContent,
         technicalLabContent: this.technicalLabContent,
         readerProbeContent: this.readerProbeContent,
         imageProbeContent: this.imageProbeContent,
@@ -27,6 +29,11 @@ struct Index {
     }
     .width('100%')
     .height('100%')
+  }
+
+  @Builder
+  homeContent(navigate: (destination: P1Destination) => void) {
+    HomeFeedPage({ navigate: navigate });
   }
 
   @Builder

@@ -22,8 +22,8 @@
 
 1. 使用 DevEco Studio 6.1.1 Release / HarmonyOS API 24 构建并安装 `entry`。
 2. 从“技术实验室”进入“Domain fixture 设备门禁”。页面进入后会自动运行；也可点击“重新运行”。
-3. 等待 `p1_domain_fixture_gate_status` 显示 `通过：7/7`。
-4. 点击 `p1_run_domain_fixture_gate` 再运行一次，确认仍为 `通过：7/7`，且不存在 `p1_domain_fixture_gate_failures`。
+3. 等待 `p1_domain_fixture_gate_status` 显示 `通过：8/8`。
+4. 点击 `p1_run_domain_fixture_gate` 再运行一次，确认仍为 `通过：8/8`，且不存在 `p1_domain_fixture_gate_failures`。
 5. 使用 `p1_domain_fixture_gate_back` 返回，确认 Navigation 返回栈正常。
 
 设备证据应记录：模拟器名称、API 版本、HAP 构建提交、门禁状态文本，以及必要的页面截图。若显示失败，只能在设备日志和 UI 中保留文件名及 `resource_read_failed`、`decoder_rejected`、`expected_failure_missing`、`wrong_failure_kind` 或 `contract_mismatch` 等安全类别。
@@ -33,11 +33,11 @@
 `DomainFixtureGate.test.ets` 提供 3 个纯测试：
 
 1. catalog 恰好包含 7 个唯一 rawfile 文件名；
-2. 7 份 fixture 各自绑定唯一的 decoder 合同类型；
+2. 8 份 fixture 各自绑定唯一的 decoder 合同类型；
 3. 仅错误 envelope 预期失败，且分类必须为 `UPSTREAM_ERROR`。
 
 这些测试不会复制 fixture JSON，也不把“catalog 正确”表述为“设备已读取 rawfile”。
 
 ## 实测结果
 
-DevEco 虚拟机 `ZhihuPlus_API24`（HarmonyOS 6.1.1 / API 24）进入该目的地后，`p1_domain_fixture_gate_status` 显示 `通过：7/7`。该结果来自打包 HAP 的 `ResourceManager.getRawFileContent()`，不是主机内嵌 JSON 或 catalog 数量推断；页面没有生成失败列表。
+DevEco 虚拟机 `ZhihuPlus_API24`（HarmonyOS 6.1.1 / API 24）进入该目的地后，`p1_domain_fixture_gate_status` 实际显示 `通过：8/8`。该结果来自打包 HAP 的 `ResourceManager.getRawFileContent()`，不是主机内嵌 JSON 或 catalog 数量推断；页面未生成失败列表。

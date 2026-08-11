@@ -1,10 +1,11 @@
 import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
-import { closeAppDatabase, getAppDatabase } from 'data';
+import { AppSessionOwner, closeAppDatabase, getAppDatabase, getAppSessionOwner } from 'data';
 import {
   AppLogEvent,
   AppLogger,
   AppStartup,
+  LatestOperationGuard,
   resolveZhihuLink,
   startupDestinationChannel,
   SystemStartupClock,
@@ -16,9 +17,14 @@ import {
 
 export default class EntryAbility extends UIAbility {
   private startup: AppStartup | undefined = undefined;
+  private sessionOwner: AppSessionOwner | undefined = undefined;
+  private readonly lifecycleGuard: LatestOperationGuard = new LatestOperationGuard();
+  private lifecycleGeneration: number = 0;
 
   onCreate(want: Want, _launchParam: AbilityConstant.LaunchParam): void {
+    this.lifecycleGeneration = this.lifecycleGuard.next();
     AppLogger.info(AppLogEvent.ABILITY_CREATED);
+    this.sessionOwner = getAppSessionOwner(this.context);
     const tasks: Array<StartupTask> = [
       {
         name: 'database-migration',
@@ -36,6 +42,15 @@ export default class EntryAbility extends UIAbility {
         run: (): Promise<void> => {
           this.routeIncomingLink(want);
           return Promise.resolve();
+        }
+      },
+      {
+        name: 'session-restore',
+        phase: StartupPhase.DEFERRED,
+        dependencies: ['deep-link-routing'],
+        run: (): Promise<void> => {
+          return this.sessionOwner?.restoreDeferred().then((): void => {
+          }) ?? Promise.resolve();
         }
       },
       {
@@ -59,26 +74,35 @@ export default class EntryAbility extends UIAbility {
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
-    this.loadContentAfterCriticalStartup(windowStage);
+    this.loadContentAfterCriticalStartup(windowStage, this.lifecycleGeneration);
   }
 
   onDestroy(): void {
+    this.lifecycleGuard.invalidate();
+    this.sessionOwner?.cancelInFlightVerification();
     closeAppDatabase().catch((_error: Error): void => {
     });
   }
 
-  private async loadContentAfterCriticalStartup(windowStage: window.WindowStage): Promise<void> {
+  private async loadContentAfterCriticalStartup(windowStage: window.WindowStage,
+    lifecycleGeneration: number): Promise<void> {
     if (this.startup === undefined) {
       AppLogger.failure(AppLogEvent.STARTUP_NOT_READY);
       return;
     }
     const criticalSummary = await this.startup.runCritical();
+    if (!this.lifecycleGuard.isCurrent(lifecycleGeneration)) {
+      return;
+    }
     if (criticalSummary.status !== StartupPhaseStatus.SUCCEEDED) {
       AppLogger.failure(AppLogEvent.STARTUP_NOT_READY);
       return;
     }
 
     windowStage.loadContent('pages/Index', (error) => {
+      if (!this.lifecycleGuard.isCurrent(lifecycleGeneration)) {
+        return;
+      }
       if (error.code) {
         AppLogger.failure(AppLogEvent.CONTENT_LOAD_FAILED, error.code);
         return;

@@ -28,6 +28,7 @@ export interface ZhihuProfile {
 export interface LoginVerificationResult {
   status: LoginVerificationStatus;
   message: string;
+  rejectionStatus?: number;
   profile?: ZhihuProfile;
 }
 
@@ -104,7 +105,8 @@ export function classifyLoginFailure(failure: HttpFailure): LoginVerificationRes
   if (failure.kind === HttpFailureKind.AUTHENTICATION) {
     return {
       status: LoginVerificationStatus.REJECTED,
-      message: 'Cookie 已失效或被知乎拒绝'
+      message: 'Cookie 已失效或被知乎拒绝',
+      rejectionStatus: failure.status
     };
   }
   if (failure.kind === HttpFailureKind.RATE_LIMITED) {

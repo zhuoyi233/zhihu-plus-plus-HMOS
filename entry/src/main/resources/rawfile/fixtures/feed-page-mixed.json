@@ -1,0 +1,32 @@
+{
+  "data": [
+    {
+      "type": "tab_list"
+    },
+    {
+      "id": "feed-video-unsupported",
+      "target": {
+        "type": "zvideo",
+        "id": "video-1"
+      }
+    },
+    {
+      "id": "feed-answer-supported",
+      "action_text": "回答了问题",
+      "target": {
+        "type": "answer",
+        "id": "answer-1",
+        "excerpt": "保留的回答摘要",
+        "question": {
+          "id": "question-1",
+          "title": "受支持的 Feed 是否仍能展示？"
+        }
+      }
+    }
+  ],
+  "paging": {
+    "is_end": false,
+    "is_start": true,
+    "next": "https://api.zhihu.com/topstory/recommend?offset=2"
+  }
+}

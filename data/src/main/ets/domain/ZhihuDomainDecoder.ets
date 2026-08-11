@@ -76,6 +76,7 @@ interface WireFeedTarget {
 }
 
 interface WireFeedItem {
+  type?: string;
   id?: string | number;
   verb?: string;
   action_text?: string;
@@ -101,8 +102,8 @@ interface WireApiError {
 
 interface WireFeedPage {
   data?: Array<WireFeedItem>;
-  paging?: WirePaging;
-  error?: WireApiError;
+  paging?: WirePaging | null;
+  error?: WireApiError | null;
 }
 
 export enum DomainDecodeFailureKind {
@@ -149,6 +150,36 @@ function requiredText(value: string | undefined, field: string): string {
 
 function optionalText(value: string | undefined): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
+}
+
+function textOrEmpty(value: string | undefined, field: string): string {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  if (typeof value !== 'string') {
+    throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, `${field} 类型无效`);
+  }
+  return value;
+}
+
+function finiteNumberOrDefault(value: number | undefined, fallback: number, field: string): number {
+  if (value === undefined || value === null) {
+    return fallback;
+  }
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, `${field} 类型无效`);
+  }
+  return value;
+}
+
+function booleanOrDefault(value: boolean | undefined, fallback: boolean, field: string): boolean {
+  if (value === undefined || value === null) {
+    return fallback;
+  }
+  if (typeof value !== 'boolean') {
+    throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, `${field} 类型无效`);
+  }
+  return value;
 }
 
 function userFromWire(wire: WireUser): UserProfile {
@@ -221,9 +252,19 @@ export function decodeArticle(json: string): Article {
 }
 
 function feedTargetFromWire(wire: WireFeedTarget): FeedTargetSummary {
+  if (wire === null || typeof wire !== 'object' || Array.isArray(wire)) {
+    throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, 'feed.target 结构无效');
+  }
+  if (typeof wire.type !== 'string' || wire.type.trim().length === 0) {
+    throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, 'feed.target.type 不能为空');
+  }
   let kind: FeedTargetKind;
   let title: string;
   if (wire.type === FeedTargetKind.ANSWER) {
+    if (wire.question === undefined || wire.question === null ||
+      typeof wire.question !== 'object' || Array.isArray(wire.question)) {
+      throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, 'feed.target.question 结构无效');
+    }
     kind = FeedTargetKind.ANSWER;
     title = requiredText(wire.question?.title ?? wire.question?.name, 'feed.target.question.title');
   } else if (wire.type === FeedTargetKind.ARTICLE) {
@@ -242,49 +283,79 @@ function feedTargetFromWire(wire: WireFeedTarget): FeedTargetSummary {
     kind: kind,
     id: requiredId(wire.id, 'feed.target.id'),
     title: title,
-    excerpt: wire.excerpt ?? '',
-    url: wire.url ?? '',
-    voteupCount: wire.voteup_count ?? 0,
-    commentCount: wire.comment_count ?? 0,
+    excerpt: textOrEmpty(wire.excerpt, 'feed.target.excerpt'),
+    url: textOrEmpty(wire.url, 'feed.target.url'),
+    voteupCount: finiteNumberOrDefault(wire.voteup_count, 0, 'feed.target.voteup_count'),
+    commentCount: finiteNumberOrDefault(wire.comment_count, 0, 'feed.target.comment_count'),
     author: optionalUser(wire.author)
   };
 }
 
-function pageCursorFromWire(wire?: WirePaging): PageCursor {
+function pageCursorFromWire(wire?: WirePaging | null): PageCursor {
   return {
-    isEnd: wire?.is_end ?? true,
-    isStart: wire?.is_start ?? true,
+    isEnd: booleanOrDefault(wire?.is_end, true, 'feed.paging.is_end'),
+    isStart: booleanOrDefault(wire?.is_start, true, 'feed.paging.is_start'),
     next: optionalText(wire?.next),
     previous: optionalText(wire?.previous) ?? optionalText(wire?.prev),
-    page: wire?.page ?? -1,
-    total: wire?.totals ?? 0
+    page: finiteNumberOrDefault(wire?.page, -1, 'feed.paging.page'),
+    total: finiteNumberOrDefault(wire?.totals, 0, 'feed.paging.totals')
   };
 }
 
 export function decodeFeedPage(json: string): FeedPage {
-  const wire = parseJson<WireFeedPage>(json);
-  if (wire.error !== undefined) {
+  const parsed = parseJson<Object | string | number | boolean | null>(json);
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, 'feed 响应结构无效');
+  }
+  const wire = parsed as WireFeedPage;
+  if (wire.error !== undefined && wire.error !== null) {
+    const errorCode = typeof wire.error.code === 'number' ? wire.error.code.toString() : 'unknown';
     throw new DomainDecodeError(
       DomainDecodeFailureKind.UPSTREAM_ERROR,
-      `知乎接口返回错误（${wire.error.code ?? 'unknown'}）`
+      `知乎接口返回错误（${errorCode}）`
     );
   }
-  if (wire.data === undefined) {
+  if (!Array.isArray(wire.data)) {
     throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, 'feed.data 不能为空');
   }
-  const sourceItems = wire.data;
-  const items: Array<FeedItem> = sourceItems.map((item: WireFeedItem): FeedItem => {
-    if (item.target === undefined) {
-      throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, 'feed.target 不能为空');
+  if (wire.paging !== undefined &&
+    (wire.paging === null || typeof wire.paging !== 'object' || Array.isArray(wire.paging))) {
+    throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, 'feed.paging 结构无效');
+  }
+  const items: Array<FeedItem> = [];
+  wire.data.forEach((item: WireFeedItem): void => {
+    try {
+      if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+        throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, 'feed.item 结构无效');
+      }
+      if (item.type !== undefined && typeof item.type !== 'string') {
+        throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, 'feed.item.type 类型无效');
+      }
+      if (item.type === 'invited_answer' || item.type === 'tab_list' ||
+        item.type === 'feed_item_index_group') {
+        return;
+      }
+      if (item.target === undefined || item.target === null ||
+        typeof item.target !== 'object' || Array.isArray(item.target)) {
+        throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, 'feed.target 不能为空');
+      }
+      items.push({
+        id: requiredId(item.id, 'feed.id'),
+        verb: textOrEmpty(item.verb, 'feed.verb'),
+        actionText: optionalText(item.action_text),
+        createdAt: finiteNumberOrDefault(item.created_time, 0, 'feed.created_time'),
+        updatedAt: finiteNumberOrDefault(item.updated_time, 0, 'feed.updated_time'),
+        target: feedTargetFromWire(item.target)
+      });
+    } catch (error) {
+      if (error instanceof DomainDecodeError && error.kind === DomainDecodeFailureKind.UNSUPPORTED_CONTENT) {
+        return;
+      }
+      if (error instanceof DomainDecodeError) {
+        throw error;
+      }
+      throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, 'feed.item 结构无效');
     }
-    return {
-      id: requiredId(item.id, 'feed.id'),
-      verb: item.verb ?? '',
-      actionText: optionalText(item.action_text),
-      createdAt: item.created_time ?? 0,
-      updatedAt: item.updated_time ?? 0,
-      target: feedTargetFromWire(item.target)
-    };
   });
   return {
     items: items,
