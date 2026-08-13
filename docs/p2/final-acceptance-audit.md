@@ -25,7 +25,7 @@
 - 所有失败路径显示固定提示，不输出系统异常、响应体或敏感数据；
 - `UIAbilityContext` 使用运行时检查，没有通过类型断言绕过严格模式。
 
-这些 API 和交互仍需由 DevEco Code 的 `arkts_check`、`build_project` 和 API 24 `start_app` 验证。官方文档中，Media Library Kit 提供相册资源保存能力，Share Kit 提供系统分享能力；最终以 API 24 SDK 的实际编译结果为准。
+这些 API 和交互仍需由 DevEco Code 的 `arkts_check`、`build_project` 和 API 24 `start_app` 验证。相册保存使用 Media Library Kit，分享使用 AbilityKit 的系统 `Want`；最终以 API 24 SDK 的实际编译结果为准。
 
 ## 当前工具与外部阻塞
 

@@ -8,7 +8,7 @@
 2. `zhihuHttpClientTest()`：校验共享 HTTP 会话、请求生命周期和结构化错误。
 3. `p1PersistenceTest()`：校验 Preferences 与 RDB 持久化契约。
 
-P2 新增的 Feed、会话、搜索、内容详情、登录 UI、频道、人员/想法详情、屏蔽规则和已读历史测试入口同样只导入、调用一次；原有入口的相对顺序未改变。
+P2 新增的 Feed、会话、搜索、内容详情、登录 UI、频道、日报原生跳转、人员/想法详情、用户内容列表、屏蔽规则和已读历史测试入口同样只导入、调用一次；原有入口的相对顺序未改变。
 
 ## 源码静态计数
 
@@ -43,14 +43,16 @@ P2 新增的 Feed、会话、搜索、内容详情、登录 UI、频道、人员
 | 25 | `LoginController.test.ets` | 7 |
 | 26 | `ChannelFeedRepository.test.ets` | 10 |
 | 27 | `ChannelFeedState.test.ets` | 8 |
-| 28 | `PeoplePinDetailRepository.test.ets` | 6 |
-| 29 | `PeoplePinDetailState.test.ets` | 7 |
+| 28 | `PeoplePinDetailRepository.test.ets` | 8 |
+| 29 | `PeoplePinDetailState.test.ets` | 9 |
 | 30 | `BlockingRuleMatcher.test.ets` | 7 |
 | 31 | `BlockingRulesState.test.ets` | 5 |
 | 32 | `ReadHistoryState.test.ets` | 5 |
-|  | **合计** | **223** |
+| 33 | `DailyStoryRepository.test.ets` | 5 |
+| 34 | `DailyStoryDetailState.test.ets` | 5 |
+|  | **合计** | **237** |
 
-第二批 P2 统一门禁实际执行 172 项；第三批接入后静态注册为 32 组、223 项，等待 DevEco Code `build_project` 生成新的执行报告。
+第二批 P2 统一门禁实际执行 172 项；第三批和 P2 补齐切片接入后静态注册为 34 组、237 项，等待 DevEco Code `build_project` 生成新的执行报告。
 
 ## 本轮检查边界
 

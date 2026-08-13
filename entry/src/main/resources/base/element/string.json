@@ -11,6 +11,10 @@
     {
       "name": "EntryAbility_label",
       "value": "Zhihu++ P0"
+    },
+    {
+      "name": "write_imagevideo_reason",
+      "value": "保存用户主动选择的知乎正文图片到系统相册"
     }
   ]
 }
