@@ -2,6 +2,10 @@ import { P1Destination, P1DestinationName } from 'core';
 import {
   LoginSessionGateway,
   OpenedContentStore,
+  PeopleContentItem,
+  PeopleContentKind,
+  PeopleContentRepository,
+  PeopleContentSection,
   PeopleDetailRepository,
   PeopleProfile,
   PinDetail,
@@ -15,6 +19,7 @@ import {
   PinDetailViewState,
   ReadOnlyDetailPhase
 } from './PeoplePinDetailState';
+import { PeopleContentController, PeopleContentPhase, PeopleContentViewState } from './PeopleContentState';
 import { NativeContentDocument } from './NativeContentDocument';
 
 @Component
@@ -67,6 +72,7 @@ struct ReadOnlyDetailStatusPanel {
 export struct PeopleDetailPage {
   identifier: string = '';
   repository: PeopleDetailRepository | undefined = undefined;
+  contentRepository: PeopleContentRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
@@ -74,7 +80,15 @@ export struct PeopleDetailPage {
   @State private profile: PeopleProfile | undefined = undefined;
   @State private errorMessage: string = '';
   @State private requiresLogin: boolean = false;
+  @State private selectedSection: PeopleContentSection = PeopleContentSection.ANSWERS;
+  @State private contentPhase: PeopleContentPhase = PeopleContentPhase.IDLE;
+  @State private contentItems: Array<PeopleContentItem> = [];
+  @State private contentLoadingMore: boolean = false;
+  @State private contentCanLoadMore: boolean = false;
+  @State private contentRequiresLogin: boolean = false;
+  @State private contentErrorMessage: string = '';
   private controller?: PeopleDetailController;
+  private contentController?: PeopleContentController;
 
   aboutToAppear(): void {
     if (this.repository === undefined || this.session === undefined) {
@@ -93,7 +107,9 @@ export struct PeopleDetailPage {
 
   aboutToDisappear(): void {
     this.controller?.deactivate();
+    this.contentController?.deactivate();
     this.controller = undefined;
+    this.contentController = undefined;
   }
 
   build() {
@@ -190,6 +206,9 @@ export struct PeopleDetailPage {
           .id('p2_people_detail_relationship')
           .fontSize($r('app.float.p1_secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
+
+        this.contentSectionTabs()
+        this.contentList()
       }
       .alignItems(HorizontalAlign.Center)
       .width('100%')
@@ -220,7 +239,181 @@ export struct PeopleDetailPage {
     this.profile = state.profile;
     this.errorMessage = state.errorMessage ?? '';
     this.requiresLogin = state.requiresLogin;
+    if (state.phase === ReadOnlyDetailPhase.READY && this.contentController === undefined) {
+      this.activateContent();
+    }
   }
+
+  @Builder
+  private contentSectionTabs() {
+    Row({ space: $r('app.float.p1_spacing_small') }) {
+      this.contentTab('回答', PeopleContentSection.ANSWERS)
+      this.contentTab('文章', PeopleContentSection.ARTICLES)
+      this.contentTab('动态', PeopleContentSection.ACTIVITIES)
+    }
+    .id('p2_people_content_tabs')
+    .width('100%')
+  }
+
+  @Builder
+  private contentTab(label: string, section: PeopleContentSection) {
+    Button(label, { type: ButtonType.Normal })
+      .id(`p2_people_content_tab_${section}`)
+      .layoutWeight(1)
+      .fontSize($r('app.float.p1_body_font_size'))
+      .fontColor(this.selectedSection === section ? $r('app.color.brand_primary') : $r('app.color.secondary_text'))
+      .enabled(this.selectedSection !== section)
+      .onClick((): void => this.selectSection(section))
+  }
+
+  @Builder
+  private contentList() {
+    Column({ space: $r('app.float.p1_spacing_small') }) {
+      if (this.contentPhase === PeopleContentPhase.IDLE || this.contentPhase === PeopleContentPhase.LOADING) {
+        Text('正在加载用户内容…')
+          .id('p2_people_content_loading')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+      } else if (this.contentPhase === PeopleContentPhase.ERROR) {
+        this.contentStatus(true)
+      } else if (this.contentPhase === PeopleContentPhase.EMPTY) {
+        Text('暂时没有可展示的内容')
+          .id('p2_people_content_empty')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+      } else {
+        ForEach(this.contentItems, (item: PeopleContentItem) => {
+          this.contentCard(item)
+        }, (item: PeopleContentItem): string => `${item.kind}:${item.id}`)
+        if (this.contentErrorMessage.length > 0) {
+          this.contentStatus(false)
+        }
+        if (this.contentLoadingMore || this.contentCanLoadMore) {
+          Button(this.contentLoadingMore ? '正在加载更多…' : '加载更多')
+            .id('p2_people_content_load_more')
+            .width('100%')
+            .enabled(!this.contentLoadingMore)
+            .onClick((): void => this.contentController?.loadMore())
+        }
+      }
+    }
+    .id('p2_people_content_list')
+    .alignItems(HorizontalAlign.Start)
+    .width('100%')
+  }
+
+  @Builder
+  private contentStatus(initial: boolean) {
+    Column({ space: $r('app.float.p1_spacing_small') }) {
+      Text(this.contentErrorMessage)
+        .id('p2_people_content_status')
+        .fontSize($r('app.float.p1_body_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
+      if (this.contentRequiresLogin) {
+        Button('去登录')
+          .id('p2_people_content_login')
+          .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
+      } else {
+        Button(initial ? '重新加载' : '重试加载更多')
+          .id('p2_people_content_retry')
+          .onClick((): void => this.contentController?.retry())
+      }
+    }
+    .width('100%')
+  }
+
+  @Builder
+  private contentCard(item: PeopleContentItem) {
+    Button({ type: ButtonType.Normal, stateEffect: true }) {
+      Column({ space: $r('app.float.p1_spacing_small') }) {
+        Text(peopleContentKindLabel(item.kind))
+          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontColor($r('app.color.brand_primary'))
+        Text(item.title)
+          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.primary_text'))
+          .width('100%')
+        if (item.excerpt.trim().length > 0) {
+          Text(item.excerpt)
+            .fontSize($r('app.float.p1_body_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
+            .maxLines(3)
+        }
+        Text(`${item.voteupCount} 赞同 · ${item.commentCount} 评论`)
+          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+    }
+    .id(`p2_people_content_${item.kind}_${item.id}`)
+    .width('100%')
+    .padding($r('app.float.p1_card_padding'))
+    .borderRadius($r('app.float.p1_card_radius'))
+    .backgroundColor($r('app.color.surface_background'))
+    .onClick((): void => this.navigate(peopleContentDestination(item)))
+  }
+
+  private selectSection(section: PeopleContentSection): void {
+    if (this.selectedSection === section) {
+      return;
+    }
+    this.contentController?.deactivate();
+    this.contentController = undefined;
+    this.selectedSection = section;
+    this.contentItems = [];
+    this.contentErrorMessage = '';
+    this.contentPhase = PeopleContentPhase.IDLE;
+    this.activateContent();
+  }
+
+  private activateContent(): void {
+    if (this.contentRepository === undefined) {
+      this.contentPhase = PeopleContentPhase.ERROR;
+      this.contentErrorMessage = '用户内容数据源未配置';
+      return;
+    }
+    this.contentController = new PeopleContentController(
+      this.identifier,
+      this.selectedSection,
+      this.contentRepository,
+      (state: PeopleContentViewState): void => this.applyContentState(state)
+    );
+    this.contentController.activate();
+    this.contentController.loadInitial();
+  }
+
+  private applyContentState(state: PeopleContentViewState): void {
+    this.contentPhase = state.phase;
+    this.contentItems = state.items;
+    this.contentLoadingMore = state.loadingMore;
+    this.contentCanLoadMore = state.canLoadMore;
+    this.contentRequiresLogin = state.requiresLogin;
+    this.contentErrorMessage = state.errorMessage ?? '';
+  }
+}
+
+function peopleContentKindLabel(kind: PeopleContentKind): string {
+  if (kind === PeopleContentKind.ANSWER) {
+    return '回答';
+  }
+  if (kind === PeopleContentKind.ARTICLE) {
+    return '文章';
+  }
+  return '想法';
+}
+
+function peopleContentDestination(item: PeopleContentItem): P1Destination {
+  if (item.kind === PeopleContentKind.ANSWER) {
+    return { name: P1DestinationName.ANSWER, id: item.id };
+  }
+  if (item.kind === PeopleContentKind.ARTICLE) {
+    return { name: P1DestinationName.ARTICLE, id: item.id };
+  }
+  return { name: P1DestinationName.PIN, id: item.id };
 }
 
 @Component

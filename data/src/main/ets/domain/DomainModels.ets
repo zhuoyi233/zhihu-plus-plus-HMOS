@@ -116,3 +116,34 @@ export interface FeedPage {
   items: Array<FeedItem>;
   cursor: PageCursor;
 }
+
+export enum PeopleContentSection {
+  ANSWERS = 'answers',
+  ARTICLES = 'articles',
+  ACTIVITIES = 'activities'
+}
+
+export enum PeopleContentKind {
+  ANSWER = 'answer',
+  ARTICLE = 'article',
+  PIN = 'pin'
+}
+
+export interface PeopleContentItem {
+  kind: PeopleContentKind;
+  id: string;
+  title: string;
+  excerpt: string;
+  voteupCount: number;
+  commentCount: number;
+  createdAt: number;
+}
+
+export interface PeopleContentPage {
+  items: Array<PeopleContentItem>;
+  cursor: PageCursor;
+}
+
+export function peopleContentIdentity(item: PeopleContentItem): string {
+  return `${item.kind}:${item.id}`;
+}

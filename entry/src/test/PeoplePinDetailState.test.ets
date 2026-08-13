@@ -4,6 +4,11 @@ import {
   HttpFailureKind,
   LoginSessionGateway,
   PeopleDetailRepository,
+  PeopleContentItem,
+  PeopleContentKind,
+  PeopleContentPage,
+  PeopleContentRepository,
+  PeopleContentSection,
   PeopleProfile,
   PinDetail,
   PinRepository,
@@ -17,6 +22,7 @@ import {
   PinDetailController,
   ReadOnlyDetailPhase
 } from '../main/ets/pages/PeoplePinDetailState';
+import { PeopleContentController, PeopleContentPhase } from '../main/ets/pages/PeopleContentState';
 import { parseZhihuHtml, ReaderInlineKind } from 'reader';
 
 class UnusedLoginOperation implements SessionLoginOperation {
@@ -102,6 +108,25 @@ class FixedPinRepository implements PinRepository {
       throw this.failure;
     }
     return pinFixture();
+  }
+
+  cancel(): void {
+    this.cancelCount += 1;
+  }
+}
+
+class FixedPeopleContentRepository implements PeopleContentRepository {
+  requestCount: number = 0;
+  cancelCount: number = 0;
+  pages: Array<PeopleContentPage> = [];
+
+  async getContentPage(_identifier: string, _section: PeopleContentSection, _cursor?: string): Promise<PeopleContentPage> {
+    this.requestCount += 1;
+    const page = this.pages.shift();
+    if (page === undefined) {
+      throw new Error('missing fixture');
+    }
+    return page;
   }
 
   cancel(): void {
@@ -231,7 +256,53 @@ export default function peoplePinDetailStateTest(): void {
       expect(blocks[0].inlineRuns[1].kind).assertEqual(ReaderInlineKind.FORMULA);
       expect(blocks[0].inlineRuns[1].text).assertEqual('x+y');
     });
+
+    it('loadsPeopleContentPagesAndDeduplicatesItems', 0, async () => {
+      const repository = new FixedPeopleContentRepository();
+      repository.pages = [
+        peopleContentPage([peopleAnswer('101')], false, 'next'),
+        peopleContentPage([peopleAnswer('101'), peopleAnswer('102')], true)
+      ];
+      const controller = new PeopleContentController('alice-token', PeopleContentSection.ANSWERS, repository);
+      controller.activate();
+      await controller.loadInitial();
+      expect(controller.snapshot().phase).assertEqual(PeopleContentPhase.READY);
+      expect(controller.snapshot().canLoadMore).assertTrue();
+      await controller.loadMore();
+      expect(controller.snapshot().items.length).assertEqual(2);
+      expect(controller.snapshot().items[1].id).assertEqual('102');
+      expect(controller.snapshot().canLoadMore).assertFalse();
+    });
+
+    it('cancelsPeopleContentWhenLeavingPage', 0, async () => {
+      const repository = new FixedPeopleContentRepository();
+      repository.pages = [peopleContentPage([peopleAnswer('101')], true)];
+      const controller = new PeopleContentController('alice-token', PeopleContentSection.ANSWERS, repository);
+      controller.activate();
+      await controller.loadInitial();
+      controller.deactivate();
+      expect(repository.cancelCount).assertEqual(2);
+    });
   });
+}
+
+function peopleContentPage(items: Array<PeopleContentItem>, isEnd: boolean, next?: string): PeopleContentPage {
+  return {
+    items: items,
+    cursor: { isEnd: isEnd, isStart: true, next: next, page: 0, total: 0 }
+  };
+}
+
+function peopleAnswer(id: string): PeopleContentItem {
+  return {
+    kind: PeopleContentKind.ANSWER,
+    id: id,
+    title: `问题 ${id}`,
+    excerpt: `摘要 ${id}`,
+    voteupCount: 1,
+    commentCount: 2,
+    createdAt: 3
+  };
 }
 
 function peopleFixture(): PeopleProfile {

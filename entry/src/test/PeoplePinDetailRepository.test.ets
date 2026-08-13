@@ -1,16 +1,21 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
   buildPeopleDetailUrl,
+  buildPeopleContentUrl,
   buildPinDetailUrl,
   decodePeopleDetail,
   decodePinDetail,
   DefaultPeopleRepository,
+  DefaultPeopleContentRepository,
   DefaultPinRepository,
   DomainDecodeError,
   HttpFailure,
   HttpFailureKind,
   PeopleRepositoryFailure,
   PeopleRepositoryFailureKind,
+  PeopleContentRepositoryFailure,
+  PeopleContentRepositoryFailureKind,
+  PeopleContentSection,
   PinRepositoryFailure,
   PinRepositoryFailureKind,
   PreparedZhihuHttpRequest,
@@ -220,6 +225,44 @@ export default function peoplePinDetailRepositoryTest(): void {
       expect(factory.transport.requestCount).assertEqual(1);
       expect(factory.transport.destroyCount).assertEqual(1);
     });
+
+    it('buildsSignedPeopleContentEndpointsAndRejectsForeignCursors', 0, () => {
+      expect(buildPeopleContentUrl('alice-token', PeopleContentSection.ANSWERS)).assertEqual(
+        'https://www.zhihu.com/api/v4/members/alice-token/answers?sort_by=voteups&limit=20&' +
+          'include=data%5B%2A%5D.question%2Cexcerpt%2Cvoteup_count%2Ccomment_count%2Ccreated_time'
+      );
+      expect(buildPeopleContentUrl('alice-token', PeopleContentSection.ARTICLES)).assertEqual(
+        'https://www.zhihu.com/api/v4/members/alice-token/articles?sort_by=created&limit=20&' +
+          'include=data%5B%2A%5D.title%2Cexcerpt%2Cvoteup_count%2Ccomment_count%2Ccreated%2Cupdated'
+      );
+      let failure: PeopleContentRepositoryFailure | undefined = undefined;
+      try {
+        buildPeopleContentUrl('alice-token', PeopleContentSection.ANSWERS,
+          'https://www.zhihu.com/api/v4/members/other/answers?offset=20');
+      } catch (error) {
+        if (error instanceof PeopleContentRepositoryFailure) {
+          failure = error;
+        }
+      }
+      expect(failure?.kind).assertEqual(PeopleContentRepositoryFailureKind.INVALID_CURSOR);
+    });
+
+    it('decodesAndDeduplicatesPeopleContentPages', 0, async () => {
+      const next = 'https://www.zhihu.com/api/v4/members/alice-token/answers?offset=20&limit=20';
+      const factory = new DetailTransportFactory([
+        { statusCode: 200, body: PEOPLE_ANSWERS_JSON },
+        { statusCode: 200, body: PEOPLE_ANSWERS_NEXT_JSON }
+      ]);
+      const repository = new DefaultPeopleContentRepository(new ZhihuHttpClient(new DetailCookieProvider(), factory));
+      const first = await repository.getContentPage('alice-token', PeopleContentSection.ANSWERS);
+      const second = await repository.getContentPage('alice-token', PeopleContentSection.ANSWERS, next);
+      expect(first.items.length).assertEqual(1);
+      expect(first.items[0].title).assertEqual('用户回答的问题');
+      expect(second.items.length).assertEqual(1);
+      expect(second.items[0].id).assertEqual('103');
+      expect(factory.requests[0].headers.Cookie?.includes('people-pin-session')).assertTrue();
+      expect(JSON.stringify(factory.requests[0].headers).includes('x-zse-96')).assertTrue();
+    });
   });
 }
 
@@ -232,3 +275,12 @@ const PIN_JSON = '{"id":9007199254740993,"content_html":"<p>想法正文</p>",' 
   '"author":{"id":"pin-author","url_token":"pin-author-token","name":"Pin Author",' +
   '"headline":"作者签名","avatar_url":"https://pic1.zhimg.com/author.png"},' +
   '"topics":[{"id":19551275,"name":"HarmonyOS"}]}';
+const PEOPLE_ANSWERS_JSON = '{"data":[{"id":101,"question":{"id":1,"title":"用户回答的问题"},' +
+  '"excerpt":"回答摘要","voteup_count":3,"comment_count":2,"created_time":1},' +
+  '{"id":101,"question":{"id":1,"title":"重复回答"},"excerpt":"重复","voteup_count":3,' +
+  '"comment_count":2,"created_time":1}],"paging":{"is_end":false,' +
+  '"next":"https://www.zhihu.com/api/v4/members/alice-token/answers?offset=20&limit=20"}}';
+const PEOPLE_ANSWERS_NEXT_JSON = '{"data":[{"id":101,"question":{"id":1,"title":"重复回答"},' +
+  '"excerpt":"重复","voteup_count":3,"comment_count":2,"created_time":1},' +
+  '{"id":103,"question":{"id":2,"title":"第二个问题"},"excerpt":"第二条",' +
+  '"voteup_count":4,"comment_count":1,"created_time":2}],"paging":{"is_end":true}}';
