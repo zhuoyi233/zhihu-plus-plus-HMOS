@@ -6,7 +6,7 @@ import {
   HttpFailure,
   HttpFailureKind
 } from 'data';
-import { P1Destination, P1DestinationName } from 'core';
+import { ContentDestination, P1Destination, P1DestinationName } from 'core';
 import {
   DailyStoryDetailController,
   DailyStoryDetailPhase,
@@ -20,7 +20,7 @@ interface PendingDailyStoryRequest {
 class ControlledDailyStoryRepository implements DailyStoryRepository {
   readonly pending: Array<PendingDailyStoryRequest> = [];
   cancelCount: number = 0;
-  failure?: Error;
+  failure?: Error | HttpFailure | DailyStoryRepositoryFailure;
 
   getDestination(_storyId: string): Promise<P1Destination | undefined> {
     if (this.failure !== undefined) {
@@ -42,11 +42,14 @@ export default function dailyStoryDetailStateTest(): void {
       const repository = new ControlledDailyStoryRepository();
       const states: Array<DailyStoryDetailViewState> = [];
       const controller = new DailyStoryDetailController(repository,
-        (state: DailyStoryDetailViewState): void => states.push(state));
+        (state: DailyStoryDetailViewState): void => {
+          states.push(state);
+        });
       controller.activate();
       const pending = controller.load('1');
       expect(controller.snapshot().phase).assertEqual(DailyStoryDetailPhase.LOADING);
-      repository.pending[0].resolve({ name: P1DestinationName.ARTICLE, id: '2' });
+      const article: ContentDestination = { name: P1DestinationName.ARTICLE, id: '2' };
+      repository.pending[0].resolve(article);
       await pending;
       expect(controller.snapshot().phase).assertEqual(DailyStoryDetailPhase.READY);
       expect(controller.snapshot().destination?.name).assertEqual(P1DestinationName.ARTICLE);
@@ -87,8 +90,10 @@ export default function dailyStoryDetailStateTest(): void {
       const first = controller.load('1');
       const second = controller.load('2');
       expect(repository.cancelCount).assertEqual(1);
-      repository.pending[0].resolve({ name: P1DestinationName.QUESTION, id: '1' });
-      repository.pending[1].resolve({ name: P1DestinationName.ANSWER, id: '2' });
+      const question: ContentDestination = { name: P1DestinationName.QUESTION, id: '1' };
+      const answer: ContentDestination = { name: P1DestinationName.ANSWER, id: '2' };
+      repository.pending[0].resolve(question);
+      repository.pending[1].resolve(answer);
       await first;
       await second;
       expect(controller.snapshot().destination?.name).assertEqual(P1DestinationName.ANSWER);
@@ -103,7 +108,8 @@ export default function dailyStoryDetailStateTest(): void {
       controller.activate();
       const pending = controller.load('1');
       controller.deactivate();
-      repository.pending[0].resolve({ name: P1DestinationName.QUESTION, id: '1' });
+      const question: ContentDestination = { name: P1DestinationName.QUESTION, id: '1' };
+      repository.pending[0].resolve(question);
       await pending;
       expect(repository.cancelCount).assertEqual(1);
       expect(emissions).assertEqual(2);

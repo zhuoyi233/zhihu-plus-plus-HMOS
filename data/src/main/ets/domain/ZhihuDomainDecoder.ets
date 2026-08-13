@@ -78,6 +78,17 @@ function optionalText(value: JsonValue | undefined): string | undefined {
   return text !== undefined && text.trim().length > 0 ? text : undefined;
 }
 
+function optionalTextStrict(value: JsonValue | undefined, field: string): string | undefined {
+  if (value === undefined || value instanceof JsonNullValue) {
+    return undefined;
+  }
+  const text = jsonString(value);
+  if (text === undefined) {
+    throw invalid(`${field} 类型无效`);
+  }
+  return text.trim().length === 0 ? undefined : text;
+}
+
 function textOrEmpty(value: JsonValue | undefined, field: string): string {
   if (value === undefined || value instanceof JsonNullValue) {
     return '';
@@ -165,7 +176,9 @@ function appendArrayValues(value: JsonValue | undefined, result: Array<JsonValue
   if (!(value instanceof JsonArrayValue)) {
     throw invalid(`${field} 类型无效`);
   }
-  value.items.forEach((item: JsonValue): void => result.push(item));
+  value.items.forEach((item: JsonValue): void => {
+    result.push(item);
+  });
 }
 
 export function decodeUser(json: string): UserProfile {
@@ -306,8 +319,9 @@ export function decodeFeedPage(json: string): FeedPage {
       items.push({
         id: requiredId(item.get('id'), 'feed.id'),
         verb: textOrEmpty(item.get('verb'), 'feed.verb'),
-        actionText: optionalText(item.get('action_text')) ?? optionalText(item.get('moment_desc')) ??
-          optionalText(item.get('detail_text')),
+        actionText: optionalTextStrict(item.get('action_text'), 'feed.action_text') ??
+          optionalTextStrict(item.get('moment_desc'), 'feed.moment_desc') ??
+          optionalTextStrict(item.get('detail_text'), 'feed.detail_text'),
         createdAt: numberOrDefault(item.get('created_time'), 0, 'feed.created_time'),
         updatedAt: numberOrDefault(item.get('updated_time'), 0, 'feed.updated_time'),
         target: feedTargetFromObject(target)

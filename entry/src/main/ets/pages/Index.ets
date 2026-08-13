@@ -1,4 +1,3 @@
-import { common } from '@kit.AbilityKit';
 import { P1Destination, P1DestinationName } from 'core';
 import {
   AppPreferencesStore,
@@ -69,7 +68,7 @@ struct Index {
 
   aboutToAppear(): void {
     const context = this.getUIContext().getHostContext();
-    if (!(context instanceof common.UIAbilityContext)) {
+    if (context === undefined) {
       return;
     }
     const session = getAppSessionOwner(context).getRepository();

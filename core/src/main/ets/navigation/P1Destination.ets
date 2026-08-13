@@ -69,20 +69,20 @@ export const MAX_SEARCH_QUERY_LENGTH: number = 200;
 export const MAX_DECIMAL_CONTENT_ID_LENGTH: number = 30;
 export const MAX_PEOPLE_IDENTIFIER_LENGTH: number = 200;
 
-export function isSafeSearchDestinationQuery(value: string | undefined): value is string {
+export function isSafeSearchDestinationQuery(value: string | undefined): boolean {
   return typeof value === 'string' && value.length <= MAX_SEARCH_QUERY_LENGTH &&
     !/[\u0000-\u001F\u007F-\u009F]/.test(value);
 }
 
-export function isSafeDecimalContentId(value: string | undefined): value is string {
+export function isSafeDecimalContentId(value: string | undefined): boolean {
   return typeof value === 'string' && /^\d{1,30}$/.test(value);
 }
 
-export function isSafePinContentId(value: string | undefined): value is string {
+export function isSafePinContentId(value: string | undefined): boolean {
   return typeof value === 'string' && /^[1-9][0-9]{0,29}$/.test(value);
 }
 
-export function isSafePeopleIdentifier(value: string | undefined): value is string {
+export function isSafePeopleIdentifier(value: string | undefined): boolean {
   return typeof value === 'string' && /^[A-Za-z0-9_-]{1,200}$/.test(value);
 }
 
@@ -194,7 +194,7 @@ export function decodeP1Destination(name: string, param: Object): P1Destination 
     case P1DestinationName.COMMENT:
       const contentId = readString(wire, 'contentId');
       const commentId = readString(wire, 'commentId');
-      if (!hasText(contentId) || readString(wire, 'id') !== undefined || readString(wire, 'query') !== undefined ||
+      if (contentId === undefined || !hasText(contentId) || readString(wire, 'id') !== undefined || readString(wire, 'query') !== undefined ||
         (commentId !== undefined && !hasText(commentId)) ||
         !hasOnlyFields(wire, ['name', 'contentId', 'commentId'])) {
         return undefined;
@@ -208,7 +208,7 @@ export function decodeP1Destination(name: string, param: Object): P1Destination 
         };
     case P1DestinationName.SEARCH:
       const query = readString(wire, 'query');
-      if (!isSafeSearchDestinationQuery(query) || readString(wire, 'id') !== undefined ||
+      if (query === undefined || !isSafeSearchDestinationQuery(query) || readString(wire, 'id') !== undefined ||
         readString(wire, 'contentId') !== undefined || readString(wire, 'commentId') !== undefined ||
         !hasOnlyFields(wire, ['name', 'query'])) {
         return undefined;
@@ -258,18 +258,21 @@ function decodeContent(wire: JsonObjectValue, name: P1DestinationName.QUESTION |
   P1DestinationName.ARTICLE | P1DestinationName.VIDEO | P1DestinationName.PIN |
   P1DestinationName.PEOPLE | P1DestinationName.COLLECTION | P1DestinationName.DAILY_STORY): ContentDestination | undefined {
   const id = readString(wire, 'id');
-  if (!hasText(id) ||
+  if (id === undefined || !hasText(id) ||
     readString(wire, 'contentId') !== undefined || readString(wire, 'commentId') !== undefined ||
     readString(wire, 'query') !== undefined ||
     !hasOnlyFields(wire, ['name', 'id'])) {
     return undefined;
   }
-  const validId = name === P1DestinationName.PIN ? isSafePinContentId(id) :
-    name === P1DestinationName.PEOPLE ? isSafePeopleIdentifier(id) :
-      name === P1DestinationName.QUESTION || name === P1DestinationName.ANSWER ||
-        name === P1DestinationName.ARTICLE || name === P1DestinationName.DAILY_STORY
-          ? isSafeDecimalContentId(id)
-          : true;
+  let validId = true;
+  if (name === P1DestinationName.PIN || name === P1DestinationName.DAILY_STORY) {
+    validId = isSafePinContentId(id);
+  } else if (name === P1DestinationName.PEOPLE) {
+    validId = isSafePeopleIdentifier(id);
+  } else if (name === P1DestinationName.QUESTION || name === P1DestinationName.ANSWER ||
+    name === P1DestinationName.ARTICLE) {
+    validId = isSafeDecimalContentId(id);
+  }
   return validId ? { name: name, id: id } : undefined;
 }
 
@@ -279,7 +282,7 @@ function hasNoParameters(wire: JsonObjectValue): boolean {
     hasOnlyFields(wire, ['name']);
 }
 
-function hasText(value: string | undefined): value is string {
+function hasText(value: string | undefined): boolean {
   return typeof value === 'string' && value.trim().length > 0;
 }
 

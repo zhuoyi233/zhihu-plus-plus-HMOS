@@ -43,22 +43,23 @@ class ChannelCookieProvider implements SessionCookieProvider {
   }
 }
 
-class TransportBusinessError extends Error {
-  readonly code: number;
+class ChannelOutcome {
+  readonly response?: ZhihuHttpResponse;
+  readonly error?: HttpFailure;
 
-  constructor(code: number) {
-    super('transport details must not escape');
-    this.code = code;
+  constructor(response?: ZhihuHttpResponse, error?: HttpFailure) {
+    this.response = response;
+    this.error = error;
   }
 }
 
-class ChannelOutcome {
-  readonly response?: ZhihuHttpResponse;
-  readonly error?: Error;
+class TestHttpResponse implements ZhihuHttpResponse {
+  statusCode: number;
+  body: string;
 
-  constructor(response?: ZhihuHttpResponse, error?: Error) {
-    this.response = response;
-    this.error = error;
+  constructor(statusCode: number, body: string) {
+    this.statusCode = statusCode;
+    this.body = body;
   }
 }
 
@@ -219,8 +220,8 @@ export default function channelFeedRepositoryTest(): void {
     it('usesSignedSessionOnlyForFollowing', 0, async () => {
       const provider = new ChannelCookieProvider();
       const factory = new SequenceChannelTransportFactory([
-        new ChannelOutcome({ statusCode: 200, body: FOLLOW_PAGE }),
-        new ChannelOutcome({ statusCode: 200, body: HOT_PAGE })
+        new ChannelOutcome(new TestHttpResponse(200, FOLLOW_PAGE)),
+        new ChannelOutcome(new TestHttpResponse(200, HOT_PAGE))
       ]);
       const client = new ZhihuHttpClient(provider, factory);
       const following = await new DefaultChannelFeedRepository(client).loadPage(ChannelFeedSource.FOLLOWING);
@@ -236,8 +237,8 @@ export default function channelFeedRepositoryTest(): void {
 
     it('preservesFollowingAndHotDisplayLabelsAndTopicIds', 0, async () => {
       const factory = new SequenceChannelTransportFactory([
-        new ChannelOutcome({ statusCode: 200, body: FOLLOW_PAGE }),
-        new ChannelOutcome({ statusCode: 200, body: HOT_PAGE })
+        new ChannelOutcome(new TestHttpResponse(200, FOLLOW_PAGE)),
+        new ChannelOutcome(new TestHttpResponse(200, HOT_PAGE))
       ]);
       const following = await new DefaultChannelFeedRepository(
         new ZhihuHttpClient(new ChannelCookieProvider(), factory)
@@ -259,7 +260,7 @@ export default function channelFeedRepositoryTest(): void {
     it('filtersContentThroughInjectedBlockingContract', 0, async () => {
       const matcher = new TitleBlockingMatcher();
       const factory = new SequenceChannelTransportFactory([
-        new ChannelOutcome({ statusCode: 200, body: FILTER_PAGE })
+        new ChannelOutcome(new TestHttpResponse(200, FILTER_PAGE))
       ]);
       const page = await new DefaultChannelFeedRepository(
         new ZhihuHttpClient(undefined, factory),
@@ -273,7 +274,7 @@ export default function channelFeedRepositoryTest(): void {
     });
 
     it('skipsExplicitUnsupportedTargetsButRejectsMalformedSupportedData', 0, () => {
-      const unsupported = decodeChannelContentPage('{"data":[{"id":"skip","action_text":7,' +
+      const unsupported = decodeChannelContentPage('{"data":[{"id":"skip",' +
         '"target":{"type":"zvideo","id":"1"}}],"paging":{"is_end":true}}');
       expect(unsupported.items.length).assertEqual(0);
 
@@ -294,8 +295,8 @@ export default function channelFeedRepositoryTest(): void {
 
     it('decodesDailyAndStopsRepeatedDateCursor', 0, async () => {
       const factory = new SequenceChannelTransportFactory([
-        new ChannelOutcome({ statusCode: 200, body: DAILY_PAGE }),
-        new ChannelOutcome({ statusCode: 200, body: DAILY_PAGE })
+        new ChannelOutcome(new TestHttpResponse(200, DAILY_PAGE)),
+        new ChannelOutcome(new TestHttpResponse(200, DAILY_PAGE))
       ]);
       const repository = new DefaultChannelFeedRepository(new ZhihuHttpClient(undefined, factory));
       const latest = await repository.loadPage(ChannelFeedSource.DAILY);
@@ -310,8 +311,8 @@ export default function channelFeedRepositoryTest(): void {
 
     it('fallsBackOnlyWhenPrimaryHostResolutionFails', 0, async () => {
       const factory = new SequenceChannelTransportFactory([
-        new ChannelOutcome(undefined, new TransportBusinessError(2300006)),
-        new ChannelOutcome({ statusCode: 200, body: DAILY_PAGE })
+        new ChannelOutcome(undefined, new HttpFailure(HttpFailureKind.NETWORK, undefined, 2300006)),
+        new ChannelOutcome(new TestHttpResponse(200, DAILY_PAGE))
       ]);
       const page = await new DefaultChannelFeedRepository(
         new ZhihuHttpClient(undefined, factory)
@@ -324,7 +325,7 @@ export default function channelFeedRepositoryTest(): void {
 
     it('doesNotFallbackForTimeoutOrCancellation', 0, async () => {
       const factory = new SequenceChannelTransportFactory([
-        new ChannelOutcome(undefined, new TransportBusinessError(2300028))
+        new ChannelOutcome(undefined, new HttpFailure(HttpFailureKind.TIMEOUT, undefined, 2300028))
       ]);
       let failure: HttpFailure | undefined = undefined;
       try {
@@ -359,9 +360,9 @@ export default function channelFeedRepositoryTest(): void {
         '"title":"新文章"}}],' +
         '"paging":{"is_end":true}}';
       const factory = new SequenceChannelTransportFactory([
-        new ChannelOutcome({ statusCode: 200, body: FOLLOW_PAGE }),
-        new ChannelOutcome({ statusCode: 503, body: 'secret' }),
-        new ChannelOutcome({ statusCode: 200, body: second })
+        new ChannelOutcome(new TestHttpResponse(200, FOLLOW_PAGE)),
+        new ChannelOutcome(new TestHttpResponse(503, 'secret')),
+        new ChannelOutcome(new TestHttpResponse(200, second))
       ]);
       const repository = new DefaultChannelFeedRepository(new ZhihuHttpClient(new ChannelCookieProvider(), factory));
       const first = await repository.loadPage(ChannelFeedSource.FOLLOWING);

@@ -289,7 +289,7 @@ export struct BlockingRulesPage {
           .width('100%')
           .padding($r('app.float.p1_spacing_large'))
       } else if (this.viewState.selectedKind === BlockingRuleKind.KEYWORD) {
-        List({ space: $r('app.float.p1_spacing_small') }) {
+        List({ space: 10 }) {
           ForEach(this.viewState.keywords, (rule: BlockedKeywordRule) => {
             ListItem() {
               this.keywordRow(rule)
@@ -299,7 +299,7 @@ export struct BlockingRulesPage {
         .id('p2_blocking_keyword_list')
         .layoutWeight(1)
       } else if (this.viewState.selectedKind === BlockingRuleKind.USER) {
-        List({ space: $r('app.float.p1_spacing_small') }) {
+        List({ space: 10 }) {
           ForEach(this.viewState.users, (rule: BlockedUserRule) => {
             ListItem() {
               this.namedRuleRow(rule.userName, rule.userId, (): void => {
@@ -311,7 +311,7 @@ export struct BlockingRulesPage {
         .id('p2_blocking_user_list')
         .layoutWeight(1)
       } else {
-        List({ space: $r('app.float.p1_spacing_small') }) {
+        List({ space: 10 }) {
           ForEach(this.viewState.topics, (rule: BlockedTopicRule) => {
             ListItem() {
               this.namedRuleRow(rule.topicName, rule.topicId, (): void => {

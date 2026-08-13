@@ -48,7 +48,7 @@ export struct DatabaseProbePage {
     this.status = '正在执行事务迁移与故障回滚…';
     try {
       const context = this.getUIContext().getHostContext();
-      if (!(context instanceof common.UIAbilityContext)) {
+      if (context === undefined) {
         throw new Error('无法获取应用上下文');
       }
       const result: DatabaseProbeResult = await new DatabaseProbe(context).run();

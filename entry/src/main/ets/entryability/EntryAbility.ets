@@ -1,6 +1,7 @@
 import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { AppSessionOwner, closeAppDatabase, getAppDatabase, getAppSessionOwner } from 'data';
+import { clearAbilityContext, setAbilityContext } from './AbilityContextHolder';
 import {
   AppLogEvent,
   AppLogger,
@@ -23,6 +24,7 @@ export default class EntryAbility extends UIAbility {
 
   onCreate(want: Want, _launchParam: AbilityConstant.LaunchParam): void {
     this.lifecycleGeneration = this.lifecycleGuard.next();
+    setAbilityContext(this.context);
     AppLogger.info(AppLogEvent.ABILITY_CREATED);
     this.sessionOwner = getAppSessionOwner(this.context);
     const tasks: Array<StartupTask> = [
@@ -79,6 +81,7 @@ export default class EntryAbility extends UIAbility {
 
   onDestroy(): void {
     this.lifecycleGuard.invalidate();
+    clearAbilityContext();
     this.sessionOwner?.cancelInFlightVerification();
     closeAppDatabase().catch((_error: Error): void => {
     });

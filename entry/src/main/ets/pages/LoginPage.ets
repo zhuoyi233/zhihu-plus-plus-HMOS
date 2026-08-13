@@ -40,7 +40,7 @@ export struct LoginPage {
 
   aboutToAppear(): void {
     const context = this.getUIContext().getHostContext();
-    if (!(context instanceof common.UIAbilityContext)) {
+    if (context === undefined) {
       this.viewState = {
         phase: LoginPhase.ERROR,
         message: '无法获取应用上下文，请重新打开页面',

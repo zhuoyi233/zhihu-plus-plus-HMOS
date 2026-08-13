@@ -62,7 +62,9 @@ export struct DailyStoryDetailPage {
           .textAlign(TextAlign.Center)
         Button('重新加载')
           .id('p2_daily_story_retry')
-          .onClick((): void => this.controller?.load(this.storyId))
+          .onClick((): void => {
+            this.controller?.load(this.storyId);
+          })
       }
     }
     .id('p2_daily_story_detail_page')

@@ -117,7 +117,7 @@ export struct QrScanProbePage {
     this.status = '正在打开 HarmonyOS 系统扫码界面…';
     try {
       const context = this.getUIContext().getHostContext();
-      if (!(context instanceof common.UIAbilityContext)) {
+      if (context === undefined) {
         throw new Error('无法获取应用上下文');
       }
       const result = await scanBarcode.startScanForResult(context, {
@@ -143,7 +143,7 @@ export struct QrScanProbePage {
     this.status = '正在用 Scan Kit 识别内置测试码图…';
     try {
       const context = this.getUIContext().getHostContext();
-      if (!(context instanceof common.UIAbilityContext)) {
+      if (context === undefined) {
         throw new Error('无法获取应用上下文');
       }
       const fixturePath = writeQrScanFixture(context.cacheDir);

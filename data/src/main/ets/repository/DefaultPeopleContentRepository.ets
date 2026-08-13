@@ -180,6 +180,8 @@ export class DefaultPeopleContentRepository implements PeopleContentRepository {
 
 function cloneSet(source: Set<string>): Set<string> {
   const result = new Set<string>();
-  source.forEach((value: string): void => result.add(value));
+  source.forEach((value: string): void => {
+    result.add(value);
+  });
   return result;
 }

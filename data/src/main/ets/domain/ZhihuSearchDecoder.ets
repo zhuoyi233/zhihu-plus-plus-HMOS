@@ -170,7 +170,9 @@ function searchTopicIds(object: JsonObjectValue): Array<string> {
     if (!(boundIds instanceof JsonArrayValue)) {
       throw malformed('search.item.object.bound_topic_ids 类型无效');
     }
-    boundIds.items.forEach((value: JsonValue): void => values.push(value));
+    boundIds.items.forEach((value: JsonValue): void => {
+      values.push(value);
+    });
   }
   const result: Array<string> = [];
   values.forEach((value: JsonValue): void => {

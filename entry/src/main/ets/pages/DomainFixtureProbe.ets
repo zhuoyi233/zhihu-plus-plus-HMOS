@@ -108,7 +108,7 @@ export struct DomainFixtureProbe {
     this.status = `正在读取 ${DOMAIN_FIXTURE_COUNT} 份 rawfile fixture…`;
     try {
       const context = this.getUIContext().getHostContext();
-      if (!(context instanceof common.UIAbilityContext)) {
+      if (context === undefined) {
         throw new Error('无法获取应用上下文');
       }
       const report: DomainFixtureValidationReport = await new DomainFixtureValidator(context).validateAll();

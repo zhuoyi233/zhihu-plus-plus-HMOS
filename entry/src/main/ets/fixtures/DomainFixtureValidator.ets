@@ -63,9 +63,9 @@ export interface DomainFixtureValidationReport {
 }
 
 export class DomainFixtureValidator {
-  private readonly context: common.UIAbilityContext;
+  private readonly context: common.Context;
 
-  constructor(context: common.UIAbilityContext) {
+  constructor(context: common.Context) {
     this.context = context;
   }
 

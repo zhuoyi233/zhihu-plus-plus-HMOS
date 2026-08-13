@@ -293,7 +293,9 @@ export struct PeopleDetailPage {
             .id('p2_people_content_load_more')
             .width('100%')
             .enabled(!this.contentLoadingMore)
-            .onClick((): void => this.contentController?.loadMore())
+            .onClick((): void => {
+              this.contentController?.loadMore();
+            })
         }
       }
     }
@@ -317,7 +319,9 @@ export struct PeopleDetailPage {
       } else {
         Button(initial ? '重新加载' : '重试加载更多')
           .id('p2_people_content_retry')
-          .onClick((): void => this.contentController?.retry())
+          .onClick((): void => {
+            this.contentController?.retry();
+          })
       }
     }
     .width('100%')

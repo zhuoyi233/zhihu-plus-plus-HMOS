@@ -1,5 +1,4 @@
 import { util } from '@kit.ArkTS';
-import { BusinessError } from '@kit.BasicServicesKit';
 import { cryptoFramework } from '@kit.CryptoArchitectureKit';
 import { JsonNumberValue, JsonObjectValue, JsonStringValue, parseStrictJson } from 'core';
 
@@ -49,13 +48,9 @@ function createParams(iv: Uint8Array, authTag: Uint8Array): cryptoFramework.GcmP
 function createSymKey(keyData: Uint8Array): cryptoFramework.SymKey {
   try {
     return cryptoFramework.createSymKeyGenerator(KEY_ALGORITHM).convertKeySync({ data: keyData });
-  } catch (error: BusinessError) {
-    throw cryptoError('Session key conversion', error);
+  } catch (_error) {
+    throw new Error('Session key conversion failed');
   }
-}
-
-function cryptoError(operation: string, error: BusinessError): Error {
-  return new Error(`${operation} failed (${error.code})`);
 }
 
 export function generateSessionKey(): Uint8Array {
@@ -63,8 +58,8 @@ export function generateSessionKey(): Uint8Array {
   try {
     key = cryptoFramework.createSymKeyGenerator(KEY_ALGORITHM).generateSymKeySync();
     return new Uint8Array(key.getEncoded().data);
-  } catch (error: BusinessError) {
-    throw cryptoError('Session key generation', error);
+  } catch (_error) {
+    throw new Error('Session key generation failed');
   } finally {
     key?.clearMem();
   }
@@ -83,8 +78,8 @@ export async function encryptSession(plainText: string, keyData: Uint8Array): Pr
     const envelope = new CipherEnvelope(1, encodeBase64(iv), encodeBase64(cipherText.data),
       encodeBase64(authTag.data));
     return JSON.stringify(envelope);
-  } catch (error: BusinessError) {
-    throw cryptoError('Session encryption', error);
+  } catch (_error) {
+    throw new Error('Session encryption failed');
   } finally {
     key?.clearMem();
   }
@@ -114,8 +109,8 @@ export async function decryptSession(serialized: string, keyData: Uint8Array): P
     const plainText = await cipher.update({ data: decodeBase64(cipherText.value) });
     await cipher.doFinal(null);
     return decodeUtf8(plainText.data);
-  } catch (error: BusinessError) {
-    throw cryptoError('Session decryption', error);
+  } catch (_error) {
+    throw new Error('Session decryption failed');
   } finally {
     key?.clearMem();
   }

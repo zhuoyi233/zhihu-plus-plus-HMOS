@@ -35,13 +35,13 @@ interface ProductionProbeResult {
 }
 
 export class DatabaseProbe {
-  private readonly context: common.UIAbilityContext;
+  private readonly context: common.Context;
   private readonly config: relationalStore.StoreConfig = {
     name: DATABASE_NAME,
     securityLevel: relationalStore.SecurityLevel.S1
   };
 
-  constructor(context: common.UIAbilityContext) {
+  constructor(context: common.Context) {
     this.context = context;
   }
 

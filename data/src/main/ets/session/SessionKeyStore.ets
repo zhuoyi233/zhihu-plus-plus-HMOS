@@ -1,5 +1,4 @@
 import { util } from '@kit.ArkTS';
-import { BusinessError } from '@kit.BasicServicesKit';
 import { asset } from '@kit.AssetStoreKit';
 import { generateSessionKey } from './SessionCipher';
 
@@ -27,11 +26,8 @@ export class SessionKeyStore {
       }
       const secret = results[0].get(asset.Tag.SECRET);
       return secret instanceof Uint8Array ? secret : undefined;
-    } catch (error: BusinessError) {
-      if (error.code === ASSET_NOT_FOUND) {
-        return undefined;
-      }
-      throw new Error(`Asset Store query failed (${error.code}): ${error.message}`);
+    } catch (_error) {
+      return undefined;
     }
   }
 
@@ -50,19 +46,16 @@ export class SessionKeyStore {
     try {
       await asset.add(attributes);
       return keyData;
-    } catch (error: BusinessError) {
+    } catch (_error) {
       keyData.fill(0);
-      throw new Error(`Asset Store add failed (${error.code})`);
+      throw new Error('Asset Store add failed');
     }
   }
 
   async clear(): Promise<void> {
     try {
       await asset.remove(keyQuery());
-    } catch (error: BusinessError) {
-      if (error.code !== ASSET_NOT_FOUND) {
-        throw new Error(`Asset Store remove failed (${error.code}): ${error.message}`);
-      }
+    } catch (_error) {
     }
   }
 }

@@ -20,7 +20,7 @@ import {
 
 interface PendingChannelRequest {
   resolve: (page: ChannelFeedPage) => void;
-  reject: (error: Error) => void;
+  reject: (error: HttpFailure) => void;
 }
 
 class ControlledChannelRepository implements ChannelFeedRepository {
@@ -33,7 +33,7 @@ class ControlledChannelRepository implements ChannelFeedRepository {
     this.sources.push(source);
     this.cursors.push(cursor);
     return new Promise<ChannelFeedPage>((resolve: (page: ChannelFeedPage) => void,
-      reject: (error: Error) => void): void => {
+      reject: (error: HttpFailure) => void): void => {
       this.pending.push({ resolve: resolve, reject: reject });
     });
   }
@@ -48,7 +48,7 @@ class ControlledChannelRepository implements ChannelFeedRepository {
     request?.resolve(value);
   }
 
-  fail(index: number, error: Error = new Error('details must not escape')): void {
+  fail(index: number, error: HttpFailure = new HttpFailure(HttpFailureKind.NETWORK)): void {
     const request = this.pending.find((_request: PendingChannelRequest, currentIndex: number): boolean =>
       currentIndex === index);
     request?.reject(error);

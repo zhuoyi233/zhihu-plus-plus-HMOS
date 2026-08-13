@@ -97,7 +97,7 @@ export struct ReadHistoryPage {
         .layoutWeight(1)
         .width('100%')
       } else {
-        List({ space: $r('app.float.p1_spacing_small') }) {
+        List({ space: 10 }) {
           ForEach(this.viewState.items, (item: ReadHistoryItem) => {
             ListItem() {
               this.historyRow(item)

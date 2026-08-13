@@ -5,6 +5,9 @@ import {
   BlockingRuleGateway,
   BlockingRuleKind,
   BlockingRuleSnapshot,
+  BlockedKeywordRule,
+  BlockedTopicRule,
+  BlockedUserRule,
   defaultBlockingPreferences
 } from 'data';
 import {
@@ -13,7 +16,7 @@ import {
 } from '../main/ets/pages/BlockingRulesState';
 
 class FakeBlockingRules implements BlockingRuleGateway {
-  snapshot: BlockingRuleSnapshot = { keywords: [], users: [], topics: [] };
+  snapshot: BlockingRuleSnapshot = new FakeBlockingRuleSnapshot();
   fail: boolean = false;
   clearCount: number = 0;
 
@@ -21,11 +24,11 @@ class FakeBlockingRules implements BlockingRuleGateway {
     if (this.fail) {
       return Promise.reject(new Error('database path and rule secret'));
     }
-    return Promise.resolve({
-      keywords: this.snapshot.keywords.slice(),
-      users: this.snapshot.users.slice(),
-      topics: this.snapshot.topics.slice()
-    });
+    const copy = new FakeBlockingRuleSnapshot();
+    copy.keywords = this.snapshot.keywords.slice();
+    copy.users = this.snapshot.users.slice();
+    copy.topics = this.snapshot.topics.slice();
+    return Promise.resolve(copy);
   }
 
   addKeyword(keyword: string, caseSensitive: boolean, isRegex: boolean): Promise<void> {
@@ -70,6 +73,12 @@ class FakeBlockingRules implements BlockingRuleGateway {
     }
     return Promise.resolve();
   }
+}
+
+class FakeBlockingRuleSnapshot implements BlockingRuleSnapshot {
+  keywords: Array<BlockedKeywordRule> = [];
+  users: Array<BlockedUserRule> = [];
+  topics: Array<BlockedTopicRule> = [];
 }
 
 class FakeBlockingPreferences implements BlockingPreferencesGateway {

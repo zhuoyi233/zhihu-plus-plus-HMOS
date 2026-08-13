@@ -1,6 +1,6 @@
-import { common } from '@kit.AbilityKit';
-import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import { AppPreferencesStore, AppThemeMode } from 'data';
+import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
+import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import {
   decodeP1Destination,
   isInfrastructureDestination,
@@ -108,7 +108,11 @@ export struct P1Shell {
 
   @Builder
   destinationBuilder(name: string, param: Object) {
-    const destination = decodeP1Destination(name, param);
+    this.destinationContent(decodeP1Destination(name, param));
+  }
+
+  @Builder
+  private destinationContent(destination: P1Destination | undefined) {
     if (destination === undefined) {
       NavDestination() {
         this.invalidDestinationPage();
@@ -283,7 +287,7 @@ export struct P1Shell {
       NavDestination() {
         this.businessPlaceholder(destination);
       }
-      .title(name)
+      .title(destination.name)
       .backgroundColor($r('app.color.page_background'))
     }
   }
@@ -532,11 +536,6 @@ export struct P1Shell {
   }
 
   private async restoreThemeMode(): Promise<void> {
-    const context = this.getAbilityContext();
-    if (context === undefined) {
-      this.themePersistenceStatus = '无法访问应用上下文';
-      return;
-    }
     const generation = this.themeOperationGuard.next();
     try {
       await this.themeSaveQueue.catch((_error: Error): void => {
@@ -544,31 +543,36 @@ export struct P1Shell {
       if (!this.themeMounted || !this.themeOperationGuard.isCurrent(generation)) {
         return;
       }
+      const context = this.getUIContext().getHostContext();
+      if (context === undefined) {
+        this.themePersistenceStatus = '无法访问应用上下文';
+        return;
+      }
       const mode = await new AppPreferencesStore(context).loadThemeMode();
       if (!this.themeMounted || !this.themeOperationGuard.isCurrent(generation)) {
         return;
       }
-      this.themePersistenceStatus = this.applyThemeMode(context, mode)
+      this.themePersistenceStatus = this.applyThemeMode(mode)
         ? '主题设置已恢复'
         : '主题模式应用失败，请重试';
     } catch (_error) {
       if (!this.themeMounted || !this.themeOperationGuard.isCurrent(generation)) {
         return;
       }
-      this.themePersistenceStatus = this.applyThemeMode(context, AppThemeMode.SYSTEM)
+      this.themePersistenceStatus = this.applyThemeMode(AppThemeMode.SYSTEM)
         ? '无法读取已保存主题，当前跟随系统'
         : '无法读取或应用主题设置，请重试';
     }
   }
 
   private async selectThemeMode(mode: AppThemeMode): Promise<void> {
-    const context = this.getAbilityContext();
+    const context = getAbilityContext();
     if (context === undefined) {
       this.themePersistenceStatus = '无法访问应用上下文';
       return;
     }
     const generation = this.themeOperationGuard.next();
-    if (!this.applyThemeMode(context, mode)) {
+    if (!this.applyThemeMode(mode)) {
       this.themePersistenceStatus = '主题模式应用失败，请重试';
       return;
     }
@@ -593,7 +597,11 @@ export struct P1Shell {
     }
   }
 
-  private applyThemeMode(context: common.UIAbilityContext, mode: AppThemeMode): boolean {
+  private applyThemeMode(mode: AppThemeMode): boolean {
+    const context = getAbilityContext();
+    if (context === undefined) {
+      return false;
+    }
     try {
       if (mode === AppThemeMode.DARK) {
         context.setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_DARK);
@@ -609,8 +617,4 @@ export struct P1Shell {
     }
   }
 
-  private getAbilityContext(): common.UIAbilityContext | undefined {
-    const context = this.getUIContext().getHostContext();
-    return context instanceof common.UIAbilityContext ? context : undefined;
-  }
 }

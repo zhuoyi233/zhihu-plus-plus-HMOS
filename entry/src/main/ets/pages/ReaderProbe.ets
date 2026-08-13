@@ -341,7 +341,7 @@ export struct ReaderProbe {
   private async loadDocument(): Promise<void> {
     try {
       const context = this.getUIContext().getHostContext();
-      if (!(context instanceof common.UIAbilityContext)) {
+      if (context === undefined) {
         throw new Error('无法获取应用上下文');
       }
       const bytes = await context.resourceManager.getRawFileContent('reader_probe.html');

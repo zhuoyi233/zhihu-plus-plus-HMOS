@@ -2,6 +2,7 @@ import { common } from '@kit.AbilityKit';
 import { preferences } from '@kit.ArkData';
 import {
   BlockingPreferences,
+  BlockingPreferencesGateway,
   defaultBlockingPreferences,
   normalizeBlockingPreferences
 } from '../data/BlockingRuleStore';
@@ -38,11 +39,11 @@ export function appPreferencesFailureMessage(operation: string, error: Object | 
   return `${operation} failed`;
 }
 
-export class AppPreferencesStore {
-  private readonly context: common.UIAbilityContext;
+export class AppPreferencesStore implements BlockingPreferencesGateway {
+  private readonly context: common.Context;
   private saveQueue: Promise<void> = Promise.resolve();
 
-  constructor(context: common.UIAbilityContext) {
+  constructor(context: common.Context) {
     this.context = context;
   }
 

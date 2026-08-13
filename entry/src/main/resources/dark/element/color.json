@@ -21,6 +21,14 @@
       "value": "#191A1D"
     },
     {
+      "name": "card_background",
+      "value": "#191A1D"
+    },
+    {
+      "name": "error_text",
+      "value": "#FFB4AB"
+    },
+    {
       "name": "control_background",
       "value": "#2A2C31"
     },

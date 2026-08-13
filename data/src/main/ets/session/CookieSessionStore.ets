@@ -1,6 +1,5 @@
 import { common } from '@kit.AbilityKit';
 import { preferences } from '@kit.ArkData';
-import { BusinessError } from '@kit.BasicServicesKit';
 import {
   decodeCookieSession,
   encodeCookieSession,
@@ -31,8 +30,8 @@ export class CookieSessionStore implements SessionPersistence {
       const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
       await store.put(ENCRYPTED_SESSION_KEY, encrypted);
       await store.flush();
-    } catch (error: BusinessError) {
-      throw this.storeError('Session save', error);
+    } catch (_error) {
+      throw this.storeError('Session save');
     } finally {
       keyData.fill(0);
     }
@@ -67,8 +66,8 @@ export class CookieSessionStore implements SessionPersistence {
         await this.save(activeCookies, now);
       }
       return activeCookies;
-    } catch (error: BusinessError) {
-      throw this.storeError('Session load', error);
+    } catch (_error) {
+      throw this.storeError('Session load');
     }
   }
 
@@ -77,8 +76,8 @@ export class CookieSessionStore implements SessionPersistence {
       const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
       await this.removeEncryptedSession(store);
       await this.keyStore.clear();
-    } catch (error: BusinessError) {
-      throw this.storeError('Session clear', error);
+    } catch (_error) {
+      throw this.storeError('Session clear');
     }
   }
 
@@ -86,12 +85,12 @@ export class CookieSessionStore implements SessionPersistence {
     try {
       await store.delete(ENCRYPTED_SESSION_KEY);
       await store.flush();
-    } catch (error: BusinessError) {
-      throw this.storeError('Encrypted session removal', error);
+    } catch (_error) {
+      throw this.storeError('Encrypted session removal');
     }
   }
 
-  private storeError(operation: string, error: BusinessError): Error {
-    return new Error(`${operation} failed (${error.code})`);
+  private storeError(operation: string): Error {
+    return new Error(`${operation} failed`);
   }
 }

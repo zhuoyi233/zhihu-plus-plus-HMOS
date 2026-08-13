@@ -35,7 +35,7 @@ export class AppSessionOwner {
 
 let appSessionOwner: AppSessionOwner | undefined = undefined;
 
-export function getAppSessionOwner(context: common.UIAbilityContext): AppSessionOwner {
+export function getAppSessionOwner(context: common.Context): AppSessionOwner {
   if (appSessionOwner === undefined) {
     const applicationContext = context.getApplicationContext();
     appSessionOwner = new AppSessionOwner((): SessionRepository =>

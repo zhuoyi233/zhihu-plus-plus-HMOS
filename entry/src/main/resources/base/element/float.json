@@ -17,6 +17,10 @@
       "value": "14fp"
     },
     {
+      "name": "p1_caption_font_size",
+      "value": "12fp"
+    },
+    {
       "name": "p1_page_padding",
       "value": "20vp"
     },

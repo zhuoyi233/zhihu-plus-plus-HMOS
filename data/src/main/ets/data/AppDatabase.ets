@@ -200,7 +200,7 @@ export class AppDatabase {
 
 let appDatabase: AppDatabase | undefined = undefined;
 
-export function getAppDatabase(context: common.UIAbilityContext): AppDatabase {
+export function getAppDatabase(context: common.Context): AppDatabase {
   if (appDatabase === undefined) {
     appDatabase = new AppDatabase(context.getApplicationContext());
   }

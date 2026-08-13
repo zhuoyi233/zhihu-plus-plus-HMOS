@@ -225,8 +225,10 @@ export class DefaultChannelFeedRepository implements ChannelFeedRepository {
     try {
       return await this.httpClient.execute({ url: primaryUrl, accept: 'application/json' });
     } catch (error) {
-      if (!(error instanceof HttpFailure) || error.kind !== HttpFailureKind.NETWORK ||
-        error.transportCode !== DAILY_HOST_RESOLUTION_ERROR_CODE) {
+      if (!(error instanceof HttpFailure)) {
+        throw new ChannelFeedRepositoryFailure(ChannelFeedRepositoryFailureKind.CANCELLED);
+      }
+      if (error.kind !== HttpFailureKind.NETWORK || error.transportCode !== DAILY_HOST_RESOLUTION_ERROR_CODE) {
         throw error;
       }
       if (requestGeneration !== this.generation) {

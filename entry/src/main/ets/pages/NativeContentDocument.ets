@@ -1,7 +1,8 @@
 import { image } from '@kit.ImageKit';
 import { http } from '@kit.NetworkKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
-import { Want, wantConstant, common } from '@kit.AbilityKit';
+import { abilityAccessCtrl, Want } from '@kit.AbilityKit';
+import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import {
   clearFormulaByteCache,
   loadFormulaPixelMap,
@@ -28,7 +29,7 @@ function isTrustedPreviewImageUrl(value: string): boolean {
 
 function previewImageExtension(value: string): string {
   const match = value.match(/\.([a-z0-9]{2,5})(?:[?#]|$)/i);
-  if (match === null) {
+  if (match === null || match[1] === undefined) {
     return 'jpg';
   }
   const extension = match[1].toLowerCase();
@@ -41,7 +42,7 @@ function previewImageExtension(value: string): string {
 struct ContentImagePreview {
   url: string = '';
   onClose: () => void = () => {};
-  @State private scale: number = 1;
+  @State private previewScale: number = 1;
   @State private actionStatus: string = '';
   private saveInFlight: boolean = false;
   private pinchStartScale: number = 1;
@@ -53,20 +54,20 @@ struct ContentImagePreview {
         .width('100%')
         .height('100%')
         .objectFit(ImageFit.Contain)
-        .scale({ x: this.scale, y: this.scale, z: 1 })
+        .scale({ x: this.previewScale, y: this.previewScale, z: 1 })
         .gesture(
           PinchGesture({ fingers: 2 })
             .onActionStart((): void => {
-              this.pinchStartScale = this.scale;
+              this.pinchStartScale = this.previewScale;
             })
             .onActionUpdate((event: GestureEvent): void => {
-              this.scale = clampPreviewScale(this.pinchStartScale * event.scale);
+              this.previewScale = clampPreviewScale(this.pinchStartScale * event.scale);
             })
         )
         .parallelGesture(
           TapGesture({ count: 2 })
             .onAction((): void => {
-              this.scale = 1;
+              this.previewScale = 1;
               this.actionStatus = '已恢复原始大小';
             })
         )
@@ -115,8 +116,8 @@ struct ContentImagePreview {
       this.actionStatus = '图片来源不受支持';
       return;
     }
-    const context = this.getUIContext().getHostContext();
-    if (!(context instanceof common.UIAbilityContext)) {
+    const context = getAbilityContext();
+    if (context === undefined) {
       this.actionStatus = '当前页面无法访问相册';
       return;
     }
@@ -124,7 +125,10 @@ struct ContentImagePreview {
     this.actionStatus = '正在保存…';
     let request: http.HttpRequest | undefined = undefined;
     try {
-      const permission = await context.requestPermissionsFromUser(['ohos.permission.WRITE_IMAGEVIDEO'], 2401);
+      const permission = await abilityAccessCtrl.createAtManager().requestPermissionsFromUser(
+        context,
+        ['ohos.permission.WRITE_IMAGEVIDEO']
+      );
       if (permission.permissions.length === 0 || permission.authResults.length === 0 ||
         permission.authResults[0] !== 0) {
         this.actionStatus = '未获得相册写入权限';
@@ -154,7 +158,7 @@ struct ContentImagePreview {
       changeRequest.addResource(photoAccessHelper.ResourceType.IMAGE_RESOURCE, response.result);
       await helper.applyChanges(changeRequest);
       this.actionStatus = '已保存到相册';
-    } catch (_error: Error) {
+    } catch {
       this.actionStatus = '保存失败，请稍后重试';
     } finally {
       request?.destroy();
@@ -163,19 +167,19 @@ struct ContentImagePreview {
   }
 
   private shareImage(): void {
-    const context = this.getUIContext().getHostContext();
-    if (!(context instanceof common.UIAbilityContext) || !isTrustedPreviewImageUrl(this.url)) {
+    const context = getAbilityContext();
+    if (context === undefined || !isTrustedPreviewImageUrl(this.url)) {
       this.actionStatus = '图片来源不受支持';
       return;
     }
     const want: Want = {
-      action: wantConstant.Action.ACTION_SEND_DATA,
+      action: 'ohos.want.action.sendData',
       type: 'text/plain',
       uri: this.url
     };
     context.startAbility(want).then((): void => {
       this.actionStatus = '已打开分享面板';
-    }).catch((_error: Error): void => {
+    }).catch((): void => {
       this.actionStatus = '暂时无法打开分享面板';
     });
   }

@@ -1,4 +1,3 @@
-import { BusinessError } from '@kit.BasicServicesKit';
 import { http } from '@kit.NetworkKit';
 import {
   JsonBooleanValue,
@@ -318,8 +317,8 @@ class NetworkKitQrLoginTransport implements QrLoginTransport {
         body: typeof response.result === 'string' ? response.result : '',
         cookies: parseCookieAssignments(response.cookies, true)
       };
-    } catch (error: BusinessError) {
-      throw httpFailureFromTransport(error.code);
+    } catch (_error) {
+      throw httpFailureFromTransport();
     }
   }
 

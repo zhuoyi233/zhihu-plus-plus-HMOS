@@ -8,6 +8,7 @@ import {
   MAX_SEARCH_QUERY_LENGTH,
   P1DestinationName,
   SearchDestination,
+  StatelessDestination,
   shouldReloadAfterAuthentication,
   shouldPushP1Destination,
   toP1Destination
@@ -136,6 +137,10 @@ export default function p1NavigationTest(): void {
       const probe = decodeP1Destination(P1DestinationName.READER_PROBE, probeParam);
       const login = decodeP1Destination(P1DestinationName.LOGIN, loginParam);
       const dailyStory = decodeP1Destination(P1DestinationName.DAILY_STORY, dailyStoryParam);
+      const search: SearchDestination = { name: P1DestinationName.SEARCH, query: 'ArkTS' };
+      const following: StatelessDestination = { name: P1DestinationName.FOLLOWING };
+      const pin: ContentDestination = { name: P1DestinationName.PIN, id: '1' };
+      const people: ContentDestination = { name: P1DestinationName.PEOPLE, id: 'member-token' };
 
       expect(answer?.name).assertEqual(P1DestinationName.ANSWER);
       if (answer?.name === P1DestinationName.ANSWER) {
@@ -147,9 +152,9 @@ export default function p1NavigationTest(): void {
         expect(dailyStory.id).assertEqual('987654321');
       }
       expect(shouldReloadAfterAuthentication(search)).assertTrue();
-      expect(shouldReloadAfterAuthentication({ name: P1DestinationName.FOLLOWING })).assertTrue();
-      expect(shouldReloadAfterAuthentication({ name: P1DestinationName.PIN, id: '1' })).assertTrue();
-      expect(shouldReloadAfterAuthentication({ name: P1DestinationName.PEOPLE, id: 'member-token' })).assertTrue();
+      expect(shouldReloadAfterAuthentication(following)).assertTrue();
+      expect(shouldReloadAfterAuthentication(pin)).assertTrue();
+      expect(shouldReloadAfterAuthentication(people)).assertTrue();
       if (login?.name === P1DestinationName.LOGIN) {
         expect(shouldReloadAfterAuthentication(login)).assertFalse();
       }
@@ -177,6 +182,20 @@ export default function p1NavigationTest(): void {
         query: 'line\nbreak'
       };
       const maxId = '9'.repeat(30);
+      const maxDailyStoryParam: TestDestinationParam = {
+        name: P1DestinationName.DAILY_STORY,
+        id: '9'.repeat(30)
+      };
+      const malformedDailyStoryParam: TestDestinationParam = {
+        name: P1DestinationName.DAILY_STORY,
+        id: '01'
+      };
+      const maxPinParam: TestDestinationParam = { name: P1DestinationName.PIN, id: '9'.repeat(30) };
+      const malformedPinParam: TestDestinationParam = { name: P1DestinationName.PIN, id: '01' };
+      const oversizedPinParam: TestDestinationParam = { name: P1DestinationName.PIN, id: '1'.repeat(31) };
+      const peopleParam: TestDestinationParam = { name: P1DestinationName.PEOPLE, id: 'member_token-1' };
+      const malformedPeopleParam: TestDestinationParam = { name: P1DestinationName.PEOPLE, id: '../member' };
+      const oversizedPeopleParam: TestDestinationParam = { name: P1DestinationName.PEOPLE, id: 'a'.repeat(201) };
       const decodedMaxQuery = decodeP1Destination(P1DestinationName.SEARCH, maxQuery);
       expect(decodedMaxQuery?.name).assertEqual(P1DestinationName.SEARCH);
       if (decodedMaxQuery?.name === P1DestinationName.SEARCH) {
@@ -193,38 +212,22 @@ export default function p1NavigationTest(): void {
           expect(decodeP1Destination(name, oversizedIdParam)).assertUndefined();
           expect(decodeP1Destination(name, malformedIdParam)).assertUndefined();
         });
-      expect(decodeP1Destination(P1DestinationName.PIN, {
-        name: P1DestinationName.PIN,
-        id: '9'.repeat(30)
-      })?.name).assertEqual(P1DestinationName.PIN);
-      expect(decodeP1Destination(P1DestinationName.PIN, {
-        name: P1DestinationName.PIN,
-        id: '01'
-      })).assertUndefined();
-      expect(decodeP1Destination(P1DestinationName.PIN, {
-        name: P1DestinationName.PIN,
-        id: '1'.repeat(31)
-      })).assertUndefined();
+      expect(decodeP1Destination(P1DestinationName.PIN, maxPinParam)?.name).assertEqual(P1DestinationName.PIN);
+      expect(decodeP1Destination(P1DestinationName.PIN, malformedPinParam)).assertUndefined();
+      expect(decodeP1Destination(P1DestinationName.PIN, oversizedPinParam)).assertUndefined();
       expect(decodeP1Destination(P1DestinationName.DAILY_STORY, maxDailyStoryParam)?.name)
         .assertEqual(P1DestinationName.DAILY_STORY);
       expect(decodeP1Destination(P1DestinationName.DAILY_STORY, malformedDailyStoryParam)).assertUndefined();
-      expect(decodeP1Destination(P1DestinationName.PEOPLE, {
-        name: P1DestinationName.PEOPLE,
-        id: 'member_token-1'
-      })?.name).assertEqual(P1DestinationName.PEOPLE);
-      expect(decodeP1Destination(P1DestinationName.PEOPLE, {
-        name: P1DestinationName.PEOPLE,
-        id: '../member'
-      })).assertUndefined();
-      expect(decodeP1Destination(P1DestinationName.PEOPLE, {
-        name: P1DestinationName.PEOPLE,
-        id: 'a'.repeat(201)
-      })).assertUndefined();
+      expect(decodeP1Destination(P1DestinationName.PEOPLE, peopleParam)?.name).assertEqual(P1DestinationName.PEOPLE);
+      expect(decodeP1Destination(P1DestinationName.PEOPLE, malformedPeopleParam)).assertUndefined();
+      expect(decodeP1Destination(P1DestinationName.PEOPLE, oversizedPeopleParam)).assertUndefined();
       [P1DestinationName.FOLLOWING, P1DestinationName.HOT, P1DestinationName.DAILY,
         P1DestinationName.BLOCKING_RULES, P1DestinationName.READ_HISTORY]
         .forEach((name: P1DestinationName): void => {
-          expect(decodeP1Destination(name, { name: name })?.name).assertEqual(name);
-          expect(decodeP1Destination(name, { name: name, id: 'unexpected' })).assertUndefined();
+          const validParam: TestDestinationParam = { name: name };
+          const invalidParam: TestDestinationParam = { name: name, id: 'unexpected' };
+          expect(decodeP1Destination(name, validParam)?.name).assertEqual(name);
+          expect(decodeP1Destination(name, invalidParam)).assertUndefined();
         });
     });
 

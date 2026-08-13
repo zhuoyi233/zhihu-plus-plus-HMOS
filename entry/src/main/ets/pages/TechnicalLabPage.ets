@@ -206,7 +206,7 @@ export struct TechnicalLabPage {
 
   private sessionStore(): CookieSessionStore {
     const context = this.getUIContext().getHostContext();
-    if (!(context instanceof common.UIAbilityContext)) {
+    if (context === undefined) {
       throw new Error('无法获取应用上下文');
     }
     return new CookieSessionStore(context);

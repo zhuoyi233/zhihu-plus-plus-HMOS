@@ -215,14 +215,17 @@ class NetworkKitHttpTransport implements ZhihuHttpTransport {
       maxLimit: request.maxLimit,
       usingCache: false
     };
-    const response = await this.requestHandle.request(request.url, options);
-    if (typeof response.result !== 'string') {
-      throw new Error('HTTP response body must be text');
-    }
-    return {
-      statusCode: Number(response.responseCode),
-      body: response.result
-    };
+    return this.requestHandle.request(request.url, options).then((response): ZhihuHttpResponse => {
+      if (typeof response.result !== 'string') {
+        throw new Error('HTTP response body must be text');
+      }
+      return {
+        statusCode: Number(response.responseCode),
+        body: response.result
+      };
+    }).catch((error: BusinessError): never => {
+      throw httpFailureFromTransport(error.code);
+    });
   }
 
   destroy(): void {
@@ -310,11 +313,11 @@ export class ZhihuHttpClient {
         throw failure;
       }
       return response;
-    } catch (error: BusinessError) {
+    } catch (error) {
       if (error instanceof HttpFailure) {
         throw error;
       }
-      throw httpFailureFromTransport(error.code);
+      throw httpFailureFromTransport();
     } finally {
       if (activeRequest !== undefined) {
         if (this.activeRequest === activeRequest) {
