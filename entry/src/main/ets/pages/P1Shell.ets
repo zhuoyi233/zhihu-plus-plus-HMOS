@@ -19,6 +19,8 @@ export struct P1Shell {
   @BuilderParam followingContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
   @BuilderParam hotContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
   @BuilderParam dailyContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
+  @BuilderParam dailyStoryContent: (id: string, navigate: (destination: P1Destination) => void) => void =
+    this.emptyContent;
   @BuilderParam technicalLabContent: (navigate: (destination: P1Destination) => void) => void =
     this.emptyTechnicalLab;
   @BuilderParam searchContent: (query: string, navigate: (destination: P1Destination) => void) => void =
@@ -173,6 +175,15 @@ export struct P1Shell {
         this.dailyContent((destination: P1Destination): void => this.navigate(destination));
       }
       .title('知乎日报')
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.DAILY_STORY) {
+      NavDestination() {
+        this.dailyStoryContent(
+          destination.id,
+          (destination: P1Destination): void => this.navigate(destination)
+        );
+      }
+      .title('日报正文')
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.QUESTION) {
       NavDestination() {
@@ -513,6 +524,7 @@ export struct P1Shell {
       case P1DestinationName.PIN:
       case P1DestinationName.PEOPLE:
       case P1DestinationName.COLLECTION:
+      case P1DestinationName.DAILY_STORY:
         return `内容 ID：${destination.id}`;
       default:
         return destination.name;

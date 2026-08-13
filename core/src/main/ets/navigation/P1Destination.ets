@@ -5,6 +5,7 @@ export enum P1DestinationName {
   FOLLOWING = 'Following',
   HOT = 'Hot',
   DAILY = 'Daily',
+  DAILY_STORY = 'DailyStory',
   QUESTION = 'Question',
   ANSWER = 'Answer',
   ARTICLE = 'Article',
@@ -46,7 +47,7 @@ export interface InfrastructureDestination {
 export interface ContentDestination {
   readonly name: P1DestinationName.QUESTION | P1DestinationName.ANSWER |
     P1DestinationName.ARTICLE | P1DestinationName.VIDEO | P1DestinationName.PIN |
-    P1DestinationName.PEOPLE | P1DestinationName.COLLECTION;
+    P1DestinationName.PEOPLE | P1DestinationName.COLLECTION | P1DestinationName.DAILY_STORY;
   readonly id: string;
 }
 
@@ -91,6 +92,7 @@ export function isP1DestinationName(name: string): boolean {
     case P1DestinationName.FOLLOWING:
     case P1DestinationName.HOT:
     case P1DestinationName.DAILY:
+    case P1DestinationName.DAILY_STORY:
     case P1DestinationName.QUESTION:
     case P1DestinationName.ANSWER:
     case P1DestinationName.ARTICLE:
@@ -147,6 +149,8 @@ export function decodeP1Destination(name: string, param: Object): P1Destination 
       return hasNoParameters(wire) ? { name: P1DestinationName.HOT } : undefined;
     case P1DestinationName.DAILY:
       return hasNoParameters(wire) ? { name: P1DestinationName.DAILY } : undefined;
+    case P1DestinationName.DAILY_STORY:
+      return decodeContent(wire, P1DestinationName.DAILY_STORY);
     case P1DestinationName.NOTIFICATION:
       return hasNoParameters(wire) ? { name: P1DestinationName.NOTIFICATION } : undefined;
     case P1DestinationName.LOGIN:
@@ -252,7 +256,7 @@ export function shouldReloadAfterAuthentication(destination: P1Destination): boo
 
 function decodeContent(wire: JsonObjectValue, name: P1DestinationName.QUESTION | P1DestinationName.ANSWER |
   P1DestinationName.ARTICLE | P1DestinationName.VIDEO | P1DestinationName.PIN |
-  P1DestinationName.PEOPLE | P1DestinationName.COLLECTION): ContentDestination | undefined {
+  P1DestinationName.PEOPLE | P1DestinationName.COLLECTION | P1DestinationName.DAILY_STORY): ContentDestination | undefined {
   const id = readString(wire, 'id');
   if (!hasText(id) ||
     readString(wire, 'contentId') !== undefined || readString(wire, 'commentId') !== undefined ||
@@ -263,7 +267,9 @@ function decodeContent(wire: JsonObjectValue, name: P1DestinationName.QUESTION |
   const validId = name === P1DestinationName.PIN ? isSafePinContentId(id) :
     name === P1DestinationName.PEOPLE ? isSafePeopleIdentifier(id) :
       name === P1DestinationName.QUESTION || name === P1DestinationName.ANSWER ||
-        name === P1DestinationName.ARTICLE ? isSafeDecimalContentId(id) : true;
+        name === P1DestinationName.ARTICLE || name === P1DestinationName.DAILY_STORY
+          ? isSafeDecimalContentId(id)
+          : true;
   return validId ? { name: name, id: id } : undefined;
 }
 

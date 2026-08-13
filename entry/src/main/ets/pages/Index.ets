@@ -9,7 +9,9 @@ import {
   ContentRepository,
   DefaultChannelFeedRepository,
   DefaultContentRepository,
+  DefaultDailyStoryRepository,
   DefaultFeedRepository,
+  DefaultPeopleContentRepository,
   DefaultPeopleRepository,
   DefaultPinRepository,
   DefaultSearchRepository,
@@ -17,10 +19,12 @@ import {
   getAppDatabase,
   getAppSessionOwner,
   OpenedContentStore,
+  PeopleContentRepository,
   PeopleDetailRepository,
   PinRepository,
   SearchRepository,
   SessionRepository,
+  DailyStoryRepository,
   ZhihuHttpClient
 } from 'data';
 import { BackgroundTaskProbePage } from './BackgroundTaskProbe';
@@ -37,6 +41,7 @@ import { SearchPage } from './SearchPage';
 import { AnswerDetailPage, ArticleDetailPage, QuestionDetailPage } from './ContentDetailPages';
 import { LoginPage } from './LoginPage';
 import { ChannelFeedPage } from './ChannelFeedPage';
+import { DailyStoryDetailPage } from './DailyStoryDetailPage';
 import { PeopleDetailPage, PinDetailPage } from './PeoplePinDetailPages';
 import { BlockingRulesPage } from './BlockingRulesPage';
 import { ReadHistoryPage } from './ReadHistoryPage';
@@ -54,10 +59,12 @@ struct Index {
   private followingRepository?: ChannelFeedRepository;
   private hotRepository?: ChannelFeedRepository;
   private dailyRepository?: ChannelFeedRepository;
+  private dailyStoryRepository?: DailyStoryRepository;
   private questionRepository?: ContentRepository;
   private answerRepository?: ContentRepository;
   private articleRepository?: ContentRepository;
   private peopleRepository?: PeopleDetailRepository;
+  private peopleContentRepository?: PeopleContentRepository;
   private pinRepository?: PinRepository;
 
   aboutToAppear(): void {
@@ -79,10 +86,12 @@ struct Index {
     this.followingRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
     this.hotRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(), blockingMatcher);
     this.dailyRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(), blockingMatcher);
+    this.dailyStoryRepository = new DefaultDailyStoryRepository(new ZhihuHttpClient());
     this.questionRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
     this.answerRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
     this.articleRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
     this.peopleRepository = new DefaultPeopleRepository(new ZhihuHttpClient(session));
+    this.peopleContentRepository = new DefaultPeopleContentRepository(new ZhihuHttpClient(session));
     this.pinRepository = new DefaultPinRepository(new ZhihuHttpClient(session));
   }
 
@@ -93,6 +102,7 @@ struct Index {
         followingContent: this.followingContent,
         hotContent: this.hotContent,
         dailyContent: this.dailyContent,
+        dailyStoryContent: this.dailyStoryContent,
         searchContent: this.searchContent,
         questionContent: this.questionContent,
         answerContent: this.answerContent,
@@ -141,6 +151,11 @@ struct Index {
   }
 
   @Builder
+  dailyStoryContent(id: string, navigate: (destination: P1Destination) => void) {
+    DailyStoryDetailPage({ storyId: id, repository: this.dailyStoryRepository, navigate: navigate });
+  }
+
+  @Builder
   searchContent(query: string, navigate: (destination: P1Destination) => void) {
     SearchPage({
       initialQuery: query,
@@ -184,6 +199,7 @@ struct Index {
     PeopleDetailPage({
       identifier: id,
       repository: this.peopleRepository,
+      contentRepository: this.peopleContentRepository,
       session: this.session,
       navigate: navigate
     });

@@ -30,6 +30,8 @@ import peoplePinDetailStateTest from './PeoplePinDetailState.test';
 import blockingRuleMatcherTest from './BlockingRuleMatcher.test';
 import blockingRulesStateTest from './BlockingRulesState.test';
 import readHistoryStateTest from './ReadHistoryState.test';
+import dailyStoryRepositoryTest from './DailyStoryRepository.test';
+import dailyStoryDetailStateTest from './DailyStoryDetailState.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -64,4 +66,6 @@ export default function testsuite(): void {
   blockingRuleMatcherTest();
   blockingRulesStateTest();
   readHistoryStateTest();
+  dailyStoryRepositoryTest();
+  dailyStoryDetailStateTest();
 }

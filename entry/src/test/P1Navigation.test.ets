@@ -30,6 +30,7 @@ export default function p1NavigationTest(): void {
         P1DestinationName.FOLLOWING,
         P1DestinationName.HOT,
         P1DestinationName.DAILY,
+        P1DestinationName.DAILY_STORY,
         P1DestinationName.QUESTION,
         P1DestinationName.ANSWER,
         P1DestinationName.ARTICLE,
@@ -109,6 +110,18 @@ export default function p1NavigationTest(): void {
       const loginParam: TestDestinationParam = {
         name: P1DestinationName.LOGIN
       };
+      const dailyStoryParam: TestDestinationParam = {
+        name: P1DestinationName.DAILY_STORY,
+        id: '987654321'
+      };
+      const maxDailyStoryParam: TestDestinationParam = {
+        name: P1DestinationName.DAILY_STORY,
+        id: '9'.repeat(30)
+      };
+      const malformedDailyStoryParam: TestDestinationParam = {
+        name: P1DestinationName.DAILY_STORY,
+        id: '01'
+      };
       const unexpectedSearchParam: TestDestinationParam = {
         name: P1DestinationName.SEARCH,
         query: 'ArkTS',
@@ -122,6 +135,7 @@ export default function p1NavigationTest(): void {
       const answer = decodeP1Destination(P1DestinationName.ANSWER, answerParam);
       const probe = decodeP1Destination(P1DestinationName.READER_PROBE, probeParam);
       const login = decodeP1Destination(P1DestinationName.LOGIN, loginParam);
+      const dailyStory = decodeP1Destination(P1DestinationName.DAILY_STORY, dailyStoryParam);
 
       expect(answer?.name).assertEqual(P1DestinationName.ANSWER);
       if (answer?.name === P1DestinationName.ANSWER) {
@@ -129,6 +143,9 @@ export default function p1NavigationTest(): void {
         expect(shouldReloadAfterAuthentication(answer)).assertTrue();
       }
       expect(probe?.name).assertEqual(P1DestinationName.READER_PROBE);
+      if (dailyStory?.name === P1DestinationName.DAILY_STORY) {
+        expect(dailyStory.id).assertEqual('987654321');
+      }
       expect(shouldReloadAfterAuthentication(search)).assertTrue();
       expect(shouldReloadAfterAuthentication({ name: P1DestinationName.FOLLOWING })).assertTrue();
       expect(shouldReloadAfterAuthentication({ name: P1DestinationName.PIN, id: '1' })).assertTrue();
@@ -188,6 +205,9 @@ export default function p1NavigationTest(): void {
         name: P1DestinationName.PIN,
         id: '1'.repeat(31)
       })).assertUndefined();
+      expect(decodeP1Destination(P1DestinationName.DAILY_STORY, maxDailyStoryParam)?.name)
+        .assertEqual(P1DestinationName.DAILY_STORY);
+      expect(decodeP1Destination(P1DestinationName.DAILY_STORY, malformedDailyStoryParam)).assertUndefined();
       expect(decodeP1Destination(P1DestinationName.PEOPLE, {
         name: P1DestinationName.PEOPLE,
         id: 'member_token-1'

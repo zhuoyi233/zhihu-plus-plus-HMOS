@@ -234,7 +234,8 @@ export struct ChannelFeedPage {
 
   @Builder
   private dailyCard(item: ChannelDailyStoryItem) {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
+    Button({ type: ButtonType.Normal, stateEffect: true }) {
+      Column({ space: $r('app.float.p1_spacing_small') }) {
       Row({ space: $r('app.float.p1_spacing_small') }) {
         Text('知乎日报')
           .fontSize($r('app.float.p1_secondary_font_size'))
@@ -256,14 +257,19 @@ export struct ChannelFeedPage {
           .fontColor($r('app.color.secondary_text'))
           .width('100%')
       }
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
     }
     .id(`p2_channel_daily_${item.story.id}`)
-    .alignItems(HorizontalAlign.Start)
     .width('100%')
     .padding($r('app.float.p1_card_padding'))
     .borderRadius($r('app.float.p1_card_radius'))
     .backgroundColor($r('app.color.surface_background'))
     .accessibilityText(`知乎日报：${item.story.title}`)
+    .onClick((): void => {
+      this.navigate({ name: P1DestinationName.DAILY_STORY, id: item.story.id });
+    })
   }
 
   private applyState(state: ChannelFeedViewState): void {
