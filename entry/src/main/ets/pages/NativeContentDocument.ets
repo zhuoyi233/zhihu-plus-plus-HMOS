@@ -44,6 +44,7 @@ struct ContentImagePreview {
   @State private scale: number = 1;
   @State private actionStatus: string = '';
   private saveInFlight: boolean = false;
+  private pinchStartScale: number = 1;
 
   build() {
     Stack({ alignContent: Alignment.TopEnd }) {
@@ -55,18 +56,21 @@ struct ContentImagePreview {
         .scale({ x: this.scale, y: this.scale, z: 1 })
         .gesture(
           PinchGesture({ fingers: 2 })
+            .onActionStart((): void => {
+              this.pinchStartScale = this.scale;
+            })
             .onActionUpdate((event: GestureEvent): void => {
-              this.scale = clampPreviewScale(this.scale * event.scale);
+              this.scale = clampPreviewScale(this.pinchStartScale * event.scale);
             })
         )
-        .gesture(
+        .parallelGesture(
           TapGesture({ count: 2 })
             .onAction((): void => {
               this.scale = 1;
               this.actionStatus = '已恢复原始大小';
             })
         )
-        .gesture(
+        .parallelGesture(
           LongPressGesture({ duration: 600 })
             .onAction((): void => {
               this.saveImage();
