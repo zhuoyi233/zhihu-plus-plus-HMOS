@@ -1,4 +1,4 @@
-# P1 HarmonyOS API 24 本地与 CI 验证
+# HarmonyOS API 26 编译 / API 24 兼容本地与 CI 验证
 
 ## 验证入口
 
@@ -11,9 +11,9 @@
 脚本按以下顺序执行：
 
 1. 定位 DevEco Studio 根目录、`sdk` 根目录、内置 Node、Hvigor 和 ohpm。
-2. 从 `sdk/default/sdk-pkg.json` 验证 HarmonyOS 6.1.1 / API 24，并检查工程的 `targetSdkVersion`、`compatibleSdkVersion` 均为 `6.1.1(24)`。
+2. 从 `sdk/default/sdk-pkg.json` 验证 HarmonyOS 26.0.0 / API 26，并检查工程的 `targetSdkVersion`、`compatibleSdkVersion` 均为 `6.1.1(24)`。
 3. 缺少 Hypium 或 `entry` 到 `core/data/reader` 的本地模块链接时，执行内置 ohpm 的 `install --all`。
-4. 使用 DevEco 内置 Node 调用 Hvigor `assembleHap`，先验证 Debug HAP 构建。
+4. 使用 DevEco 内置 Node 调用 Hvigor `assembleHap`，先验证 API 26 编译的 Debug HAP；随后读取 HAP 元数据，确认 target/compatible API 均为 24。
 5. 删除旧的 `test_result.txt`，再运行 Hvigor `test`，避免把上一次成功报告误判为本次结果。
 6. 同时检查退出码、`BUILD SUCCESSFUL`、任务链输出和新生成的 Hypium 报告。
 7. 将报告中的汇总数、逐条 `test/result` 数和 `List.test.ets` 已注册测试源码数交叉核对；失败、错误或忽略数必须全部为零。
@@ -50,19 +50,19 @@ SDK 可通过 `HARMONY_SDK_ROOT` 或 `DEVECO_SDK_HOME` 指定。该路径必须�
 `.github/workflows/harmonyos.yml` 只调度带有以下标签的自托管 Windows runner：
 
 ```text
-self-hosted, windows, x64, harmonyos-api24
+self-hosted, windows, x64, harmonyos-compile-api26
 ```
 
 runner 前置条件：
 
 - Windows x64 与 PowerShell 7；
-- DevEco Studio 6.1.1 Release；
-- HarmonyOS 6.1.1（API 24）SDK 完整安装；
+- DevEco Studio 26.0.0 Beta2；
+- HarmonyOS 26.0.0（API 26）SDK 完整安装；
 - runner 账号可执行 DevEco 内置 Node、Hvigor 和 ohpm；
 - 首次安装依赖时可以访问配置的 ohpm registry，或已有可用缓存；
 - 工作目录有足够空间写入忽略的 `.hvigor/`、`oh_modules/`、`entry/build/` 和 `entry/.test/`。
 
-只有 repository variable `ENABLE_HARMONYOS_API24_CI` 精确等于 `true` 时 job 才会运行。应先注册并在线验证带 `harmonyos-api24` 标签的 runner，再启用变量；否则 PR job 会安全跳过，不会把没有 DevEco SDK 的 GitHub-hosted runner 置于永久失败状态。
+workflow 实际使用 `self-hosted, windows, x64, harmonyos-compile-api26` 标签，只有 repository variable `ENABLE_HARMONYOS_API26_API24_CI` 精确等于 `true` 时 job 才会运行。应先注册并在线验证该标签的 runner，再启用变量；否则 PR job 会安全跳过，不会把没有 DevEco SDK 的 GitHub-hosted runner 置于永久失败状态。
 
 自托管 runner 不执行来自外部 fork 的 PR 代码：PR job 还要求 head repository 与当前 repository 相同，外部贡献需由维护者审查后复制到受信分支或手动触发。workflow 权限固定为只读 contents，checkout 不持久化 GitHub token，降低自托管 runner 暴露面。
 
@@ -86,11 +86,11 @@ CI 的目标是编译和单元测试，不负责生成可安装发布包：
 
 workflow 只上传 Hypium 文本结果和覆盖率 HTML，保留 14 天；这些报告不得写入 Cookie、账号标识、原始请求或响应正文。
 
-## 2026-08-11 本地验证结果
+## 2026-08-13 本地验证结果
 
-最终脚本在 DevEco Studio 6.1.1 Release、HarmonyOS 6.1.1（API 24）环境完成两次完整运行：
+迁移脚本在 DevEco Studio 26.0.0 Beta2、HarmonyOS 26.0.0（API 26）环境完成完整运行：
 
-- `entry/core/data/reader` 四模块 `assembleHap` 输出 `BUILD SUCCESSFUL`，无仓库签名配置时生成 `entry-default-unsigned.hap`。
+- `entry/core/data/reader` 四模块 `assembleHap` 输出 `BUILD SUCCESSFUL`；SDK 元数据为 API 26，HAP 的 target/compatible API 元数据均为 24。
 - 脚本先移除旧报告，再确认 `UnitTestArkTS`、`GenerateUnitTestResult` 和 `entry:test` 均执行完成。
-- `List.test.ets` 源码注册数、报告逐条记录和报告汇总均为 62；最终 `Pass=62, Failure=0, Error=0, Ignore=0`。
+- `List.test.ets` 源码注册数、报告逐条记录和报告汇总均为 237；最终 `Pass=237, Failure=0, Error=0, Ignore=0`。
 - PowerShell AST、workflow YAML 和 `git diff --check` 静态验证通过。

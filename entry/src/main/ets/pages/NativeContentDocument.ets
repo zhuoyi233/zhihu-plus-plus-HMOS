@@ -125,12 +125,15 @@ struct ContentImagePreview {
     this.actionStatus = '正在保存…';
     let request: http.HttpRequest | undefined = undefined;
     try {
-      const permission = await abilityAccessCtrl.createAtManager().requestPermissionsFromUser(
+      await abilityAccessCtrl.createAtManager().requestPermissionsFromUser(
         context,
         ['ohos.permission.WRITE_IMAGEVIDEO']
       );
-      if (permission.permissions.length === 0 || permission.authResults.length === 0 ||
-        permission.authResults[0] !== 0) {
+      const grantStatus = await abilityAccessCtrl.createAtManager().checkAccessToken(
+        context.applicationInfo.accessTokenId,
+        'ohos.permission.WRITE_IMAGEVIDEO'
+      );
+      if (grantStatus !== abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED) {
         this.actionStatus = '未获得相册写入权限';
         return;
       }

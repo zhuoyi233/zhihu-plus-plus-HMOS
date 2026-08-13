@@ -5,6 +5,11 @@ param(
   [string]$NodePath = '',
   [string]$HvigorPath = '',
   [string]$OhpmPath = '',
+  [string]$ExpectedCompileApiVersion = '26',
+  [string]$ExpectedCompilePlatformVersion = '26.0.0',
+  [string]$ExpectedTargetSdkVersion = '6.1.1(24)',
+  [string]$ExpectedCompatibleSdkVersion = '6.1.1(24)',
+  [string]$ExpectedBundleName = 'com.github.zhuoyi233.zhplus',
   [ValidateRange(0, 100000)]
   [int]$ExpectedTestCount = 0,
   [switch]$SkipDependencyInstall,
@@ -20,8 +25,6 @@ if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
 $script:Module = 'entry'
 $script:Product = 'default'
 $script:BuildMode = 'debug'
-$script:ExpectedApiVersion = '24'
-$script:ExpectedPlatformVersion = '6.1.1'
 $script:RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
 function Resolve-ExistingFile {
@@ -70,6 +73,7 @@ function Find-DevEcoHome {
   $localAppData = [Environment]::GetFolderPath('LocalApplicationData')
   $programFiles = [Environment]::GetFolderPath('ProgramFiles')
   if (-not [string]::IsNullOrWhiteSpace($userProfile)) {
+    $candidates += (Join-Path $userProfile 'App\Huawei\DevEco Studio')
     $candidates += (Join-Path $userProfile 'App\DevEco Studio')
   }
   if (-not [string]::IsNullOrWhiteSpace($localAppData)) {
@@ -179,6 +183,57 @@ function Get-RegisteredTestCount {
   return $testCount
 }
 
+function Assert-HapApiVersions {
+  param(
+    [string]$HapPath,
+    [int]$ExpectedTargetApiVersion,
+    [int]$ExpectedCompatibleApiVersion,
+    [string]$ExpectedBundleName
+  )
+
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $archive = [System.IO.Compression.ZipFile]::OpenRead($HapPath)
+  try {
+    $packInfoEntry = $archive.Entries | Where-Object { $_.FullName -eq 'pack.info' } | Select-Object -First 1
+    if ($null -eq $packInfoEntry) {
+      throw "HAP 缺少 pack.info：$HapPath"
+    }
+    $reader = [System.IO.StreamReader]::new($packInfoEntry.Open())
+    try {
+      $packInfo = $reader.ReadToEnd() | ConvertFrom-Json
+    } finally {
+      $reader.Dispose()
+    }
+  } finally {
+    $archive.Dispose()
+  }
+
+  $module = $packInfo.summary.modules | Select-Object -First 1
+  if ($null -eq $module -or $null -eq $module.apiVersion) {
+    throw "HAP pack.info 缺少模块 API 版本：$HapPath"
+  }
+  if ($module.apiVersion.target -ne $ExpectedTargetApiVersion -or
+    $module.apiVersion.compatible -ne $ExpectedCompatibleApiVersion) {
+    throw "HAP API 版本不匹配：target=$($module.apiVersion.target)，compatible=$($module.apiVersion.compatible)，期望 target=$ExpectedTargetApiVersion，compatible=$ExpectedCompatibleApiVersion。"
+  }
+  if ($packInfo.summary.app.bundleName -ne $ExpectedBundleName) {
+    throw "HAP Bundle Name 不匹配：$($packInfo.summary.app.bundleName)，期望 $ExpectedBundleName。"
+  }
+  Write-Host "HAP API：target=$($module.apiVersion.target)，compatible=$($module.apiVersion.compatible)"
+  Write-Host "HAP Bundle Name：$($packInfo.summary.app.bundleName)"
+}
+
+function Get-SdkApiVersion {
+  param(
+    [string]$SdkVersion,
+    [string]$Description
+  )
+  if ($SdkVersion -notmatch '\((\d+)\)$') {
+    throw "$Description 必须以 API 版本结尾，例如 6.1.1(24)：$SdkVersion"
+  }
+  return [int]$Matches[1]
+}
+
 $previousLocation = Get-Location
 try {
   Set-Location $script:RepositoryRoot
@@ -196,9 +251,9 @@ try {
     throw "SDK 根目录必须包含 default\sdk-pkg.json，不能指向 sdk\default：$resolvedSdkRoot"
   }
   $sdkMetadata = Get-Content -LiteralPath $sdkMetadataPath -Raw | ConvertFrom-Json
-  if ($sdkMetadata.data.apiVersion -ne $script:ExpectedApiVersion -or
-    $sdkMetadata.data.platformVersion -ne $script:ExpectedPlatformVersion) {
-    throw "仅支持 HarmonyOS 6.1.1 API 24，实际 SDK 为 $($sdkMetadata.data.platformVersion) API $($sdkMetadata.data.apiVersion)。"
+  if ($sdkMetadata.data.apiVersion -ne $ExpectedCompileApiVersion -or
+    $sdkMetadata.data.platformVersion -ne $ExpectedCompilePlatformVersion) {
+    throw "编译 SDK 不匹配：实际为 $($sdkMetadata.data.platformVersion) API $($sdkMetadata.data.apiVersion)，期望为 $ExpectedCompilePlatformVersion API $ExpectedCompileApiVersion。"
   }
 
   $resolvedNode = Resolve-ExistingFile -ExplicitPath $NodePath `
@@ -212,15 +267,17 @@ try {
     -Description 'DevEco 内置 ohpm'
 
   $buildProfile = Get-Content -LiteralPath (Join-Path $script:RepositoryRoot 'build-profile.json5') -Raw
-  if ($buildProfile -notmatch '"targetSdkVersion"\s*:\s*"6\.1\.1\(24\)"' -or
-    $buildProfile -notmatch '"compatibleSdkVersion"\s*:\s*"6\.1\.1\(24\)"') {
-    throw 'build-profile.json5 必须同时固定 targetSdkVersion 和 compatibleSdkVersion 为 6.1.1(24)。'
+  $targetPattern = '["'']?targetSdkVersion["'']?\s*:\s*["'']' + [regex]::Escape($ExpectedTargetSdkVersion) + '["'']'
+  $compatiblePattern = '["'']?compatibleSdkVersion["'']?\s*:\s*["'']' + [regex]::Escape($ExpectedCompatibleSdkVersion) + '["'']'
+  if ($buildProfile -notmatch $targetPattern -or $buildProfile -notmatch $compatiblePattern) {
+    throw "build-profile.json5 必须固定 targetSdkVersion 为 $ExpectedTargetSdkVersion 且 compatibleSdkVersion 为 $ExpectedCompatibleSdkVersion。"
   }
 
   $env:DEVECO_SDK_HOME = $resolvedSdkRoot
   $nodeVersion = Invoke-NativeTool -Executable $resolvedNode -Arguments @('--version') -Description '检查 DevEco Node'
   Write-Host "DevEco: $resolvedDevEcoHome"
-  Write-Host "SDK: $resolvedSdkRoot ($($sdkMetadata.data.displayName), API $($sdkMetadata.data.apiVersion))"
+  Write-Host "编译 SDK: $resolvedSdkRoot ($($sdkMetadata.data.displayName), API $($sdkMetadata.data.apiVersion))"
+  Write-Host "运行基线: target=$ExpectedTargetSdkVersion，compatible=$ExpectedCompatibleSdkVersion"
   Write-Host "Node: $resolvedNode ($nodeVersion)"
   Write-Host "Hvigor: $resolvedHvigor"
 
@@ -253,7 +310,7 @@ try {
   if (-not $SkipBuild) {
     Invoke-Hvigor -ResolvedNode $resolvedNode -ResolvedHvigor $resolvedHvigor `
       -Arguments (@('assembleHap') + $commonProperties + @('--no-daemon')) `
-      -Description '构建 API 24 Debug HAP' | Out-Null
+      -Description '构建 API 26 编译 / API 24 兼容 Debug HAP' | Out-Null
     $hapDirectory = Join-Path $script:RepositoryRoot "entry\build\$($script:Product)\outputs\$($script:Product)"
     $hap = Get-ChildItem -LiteralPath $hapDirectory -Filter '*.hap' -File -ErrorAction SilentlyContinue |
       Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
@@ -261,6 +318,10 @@ try {
       throw "构建成功但没有在预期目录生成 HAP：$hapDirectory"
     }
     Write-Host "HAP: $($hap.FullName)"
+    Assert-HapApiVersions -HapPath $hap.FullName `
+      -ExpectedTargetApiVersion (Get-SdkApiVersion -SdkVersion $ExpectedTargetSdkVersion -Description 'targetSdkVersion') `
+      -ExpectedCompatibleApiVersion (Get-SdkApiVersion -SdkVersion $ExpectedCompatibleSdkVersion -Description 'compatibleSdkVersion') `
+      -ExpectedBundleName $ExpectedBundleName
   }
 
   $sourceTestCount = Get-RegisteredTestCount
@@ -315,7 +376,7 @@ try {
     throw "Hypium 未全量通过：Pass=$passed Failure=$failures Error=$errors Ignore=$ignored。"
   }
 
-  Write-Host "HarmonyOS API 24 验证通过：构建完成，Hypium $passed/$requiredTestCount。"
+  Write-Host "HarmonyOS 迁移验证通过：API $ExpectedCompileApiVersion 编译，target=$ExpectedTargetSdkVersion，compatible=$ExpectedCompatibleSdkVersion，Hypium $passed/$requiredTestCount。"
   Write-Host "测试报告：$testResultPath"
 } finally {
   Set-Location $previousLocation

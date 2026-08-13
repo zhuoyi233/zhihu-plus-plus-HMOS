@@ -6,7 +6,7 @@
 
 - `entry/src/test` 共 34 个测试套件，源码中共有 237 个 `it(...)`。
 - 34 个套件均有默认导出，并在 `List.test.ets` 中恰好导入一次、调用一次；没有漏注册或重复注册。
-- 本轮仅确认静态注册，不能替代新的 Hypium 执行报告。最近已执行的报告仍是第二批的 `172/172`。
+- 2026-08-13 已在 DevEco Studio 26.0.0 Beta2 / API 26 工具链取得新的 Hypium 报告：`237/237`，Failure、Error、Ignore 均为 0。
 - `build-profile.json5` 仍为 API 24：`targetSdkVersion` 和 `compatibleSdkVersion` 均为 `6.1.1(24)`，且 `signingConfigs` 为空。
 - 仓库工作区未发现 `p12`、`cer`、`p7b`、`csr` 或 `external-signing-config.json`；Git 索引也未跟踪这些材料。
 - `.gitignore` 已覆盖 HarmonyOS 构建产物、`BuildProfile.ets` 和签名材料。
@@ -25,26 +25,24 @@
 - 所有失败路径显示固定提示，不输出系统异常、响应体或敏感数据；
 - `UIAbilityContext` 使用运行时检查，没有通过类型断言绕过严格模式。
 
-这些 API 和交互仍需由 DevEco Code 的 `arkts_check`、`build_project` 和 API 24 `start_app` 验证。相册保存使用 Media Library Kit，分享使用 AbilityKit 的系统 `Want`；最终以 API 24 SDK 的实际编译结果为准。
+API 26 编译与 API 24 安装启动已完成：四模块 HAP 构建成功，已签名调试 HAP 在 API 24 虚拟机安装、冷启动并通过首页、显示设置、搜索页 UI 树验证。相册保存和分享的交互分支仍需设备人工回归。
 
 ## 当前工具与外部阻塞
 
-本会话未暴露 DevEco Code 的 `arkts_check`、`build_project` 或 `start_app` 工具，因此无法按仓库规定执行“静态检查 → 构建 → 启动”。Windows 终端同时因系统错误 1920 无法创建进程，不能使用终端替代完成 Git 状态查询、构建或测试。
+本次使用 Studio 26 内置 Node、Hvigor、devecocli 与 HDC 完成了“构建 → Hypium → API 24 安装启动”验证。API 26 虚拟机镜像当前不在本机 CLI 可用目录中，因此只能把 API 26 运行时回归保留为外部设备门禁。
 
 待 DevEco Code 工具可用后，最终门禁顺序为：
 
-1. 对本批修改的 `.ets` 执行 `arkts_check`；
-2. 执行 `build_project`，确认 entry、core、data、reader 均通过 API 24 编译；
-3. 运行 Hypium，取得新的 `237/237` 且 Failure、Error、Ignore 均为 0 的报告；
-4. 通过 API 24 `start_app` 验证冷启动、导航和图片预览；
-5. 验证图片关闭、缩放、双击复位、权限拒绝、相册保存和系统分享；
-6. 验证断网、非知乎图床、超限图片和分享取消均安全返回正文；
-7. 构建或签名后再次确认 `build-profile.json5` 与签名材料没有进入提交。
+1. 在 API 24 设备验证图片关闭、缩放、双击复位、权限拒绝、相册保存和系统分享；
+2. 验证断网、非知乎图床、超限图片和分享取消均安全返回正文；
+3. 在 API 24 设备执行真实二维码挑战和已登录会话回归；
+4. 在 API 26 虚拟机或真机执行完整新系统行为回归；
+5. 构建或签名后再次确认 `build-profile.json5` 与签名材料没有进入提交。
 
 ## P2 完成状态
 
 可静态判定完成：237 测试注册、API 24 工程基线、图片预览安全边界、日报原生跳转、用户内容列表、签名材料排除、P2 功能源码与验收清单。
 
-外部条件未闭环：新的 237 项 Hypium 执行报告、API 24 构建与启动、图片预览设备交互、相册权限/写入、系统分享面板，以及知乎真实二维码挑战和真实登录会话回归。
+外部条件未闭环：图片预览设备交互、相册权限/写入、系统分享面板，以及知乎真实二维码挑战和真实登录会话回归；另需在 API 26 虚拟机或真机完成完整产品回归。
 
 本轮没有引入端侧 AI、模型、推理依赖或 WebView 正文路径。

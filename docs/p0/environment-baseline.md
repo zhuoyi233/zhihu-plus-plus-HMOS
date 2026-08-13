@@ -1,6 +1,6 @@
 # P0 环境基线
 
-> 首次检查：2026-07-20；基线更新：2026-08-11
+> 首次检查：2026-07-20；API 26 编译迁移更新：2026-08-13
 
 ## 已确认
 
@@ -17,6 +17,21 @@
 | HDC | 3.2.0d | 通过 |
 | 命令行签名 Debug HAP 构建 | `devecocli build` / `BUILD SUCCESSFUL` | 通过 |
 | ArkTS 单元测试 | 46 个 Hypium 用例，失败 0 | 通过 |
+
+## 2026-08-13 API 26 编译迁移证据
+
+| 项目 | 结果 | 状态 |
+| --- | --- | --- |
+| DevEco Studio | 26.0.0.621 Beta2 | 通过 |
+| HarmonyOS SDK | 26.0.0.32 / API 26 | 通过 |
+| Node.js / ohpm | 24.14.1 / 26.0.0.410 | 通过 |
+| 工程 target / compatible | 6.1.1(24) / 6.1.1(24) | 保持不变 |
+| 四模块 Debug HAP | `BUILD SUCCESSFUL` | 通过 |
+| HAP API 元数据 | target=24、compatible=24 | 通过 |
+| Hypium | 237/237，Failure=0，Error=0，Ignore=0 | 通过 |
+| API 24 模拟器 | `ZhihuPlus_API24`，API 24 Release / 6.1.0.125 | 通过 |
+| API 24 设备验收 | 安装、冷启动、首页、显示设置、搜索导航 | 通过 |
+| API 26 设备验收 | 本机镜像目录无 API 26，待有镜像或真机后补做 | 待补 |
 
 ## 构建环境要求
 
