@@ -97,8 +97,6 @@ function formulaSource(tag: string): string {
 function inlineRuns(content: string, blockId: string): Array<ReaderInlineRun> {
   const runs: Array<ReaderInlineRun> = [];
   let cursor = 0;
-  // Keep the iterator independent from plainText(), which also uses IMAGE_PATTERN.
-  // Reusing the same global RegExp resets lastIndex during nested parsing and loops forever on a formula tag.
   const inlineImagePattern = /<img\b[^>]*>/gi;
   let match: RegExpExecArray | null = inlineImagePattern.exec(content);
   while (match !== null) {

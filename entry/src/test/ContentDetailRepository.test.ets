@@ -81,11 +81,13 @@ export default function contentDetailRepositoryTest(): void {
         try {
           buildContentDetailUrl(ContentDetailKind.ANSWER, id);
         } catch (error) {
-          failure = error as ContentRepositoryFailure;
+          if (error instanceof ContentRepositoryFailure) {
+            failure = error;
+          }
         }
         expect(failure?.kind).assertEqual(ContentRepositoryFailureKind.INVALID_ID);
-        if (id.length > 0) {
-          expect((failure as ContentRepositoryFailure).message.includes(id)).assertFalse();
+        if (id.length > 0 && failure !== undefined) {
+          expect(failure.message.includes(id)).assertFalse();
         }
       });
     });
@@ -141,12 +143,16 @@ export default function contentDetailRepositoryTest(): void {
       try {
         decodeQuestionDetail('{"id":124,"title":"错配"}', '123');
       } catch (error) {
-        mismatched = error as DomainDecodeError;
+        if (error instanceof DomainDecodeError) {
+          mismatched = error;
+        }
       }
       try {
         decodeArticleDetail('{"id":789,"title":"文章","voteup_count":-1}', '789');
       } catch (error) {
-        invalidCount = error as DomainDecodeError;
+        if (error instanceof DomainDecodeError) {
+          invalidCount = error;
+        }
       }
       expect(mismatched instanceof DomainDecodeError).assertTrue();
       expect(invalidCount instanceof DomainDecodeError).assertTrue();
@@ -155,7 +161,9 @@ export default function contentDetailRepositoryTest(): void {
       try {
         decodeArticleDetail('{"id":789.5,"title":"文章"}', '789');
       } catch (error) {
-        fractionalId = error as DomainDecodeError;
+        if (error instanceof DomainDecodeError) {
+          fractionalId = error;
+        }
       }
       expect(fractionalId instanceof DomainDecodeError).assertTrue();
     });
@@ -168,11 +176,13 @@ export default function contentDetailRepositoryTest(): void {
           '789'
         );
       } catch (error) {
-        failure = error as DomainDecodeError;
+        if (error instanceof DomainDecodeError) {
+          failure = error;
+        }
       }
       expect(failure instanceof DomainDecodeError).assertTrue();
-      expect((failure as DomainDecodeError).message.includes('z_c0-secret')).assertFalse();
-      expect((failure as DomainDecodeError).message.includes('evil.example')).assertFalse();
+      expect(failure?.message.includes('z_c0-secret')).assertFalse();
+      expect(failure?.message.includes('evil.example')).assertFalse();
     });
   });
 }

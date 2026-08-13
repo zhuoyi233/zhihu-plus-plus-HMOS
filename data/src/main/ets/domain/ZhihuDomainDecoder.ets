@@ -9,102 +9,20 @@ import {
   Question,
   UserProfile
 } from './DomainModels';
-
-interface WireUser {
-  id?: string | number;
-  name?: string;
-  url_token?: string;
-  headline?: string;
-  avatar_url?: string;
-  follower_count?: number;
-  followers_count?: number;
-  is_following?: boolean;
-  is_org?: boolean;
-}
-
-interface WireQuestion {
-  id?: string | number;
-  title?: string;
-  name?: string;
-  detail?: string;
-  url?: string;
-  answer_count?: number;
-  comment_count?: number;
-  follower_count?: number;
-  created?: number;
-  updated_time?: number;
-  author?: WireUser;
-}
-
-interface WireAnswer {
-  id?: string | number;
-  question?: WireQuestion;
-  content?: string;
-  excerpt?: string;
-  url?: string;
-  voteup_count?: number;
-  comment_count?: number;
-  created_time?: number;
-  updated_time?: number;
-  author?: WireUser;
-}
-
-interface WireArticle {
-  id?: string | number;
-  title?: string;
-  content?: string;
-  excerpt?: string;
-  url?: string;
-  voteup_count?: number;
-  comment_count?: number;
-  created?: number;
-  updated?: number;
-  author?: WireUser;
-}
-
-interface WireFeedTarget {
-  type?: string;
-  id?: string | number;
-  title?: string;
-  name?: string;
-  excerpt?: string;
-  url?: string;
-  voteup_count?: number;
-  comment_count?: number;
-  author?: WireUser;
-  question?: WireQuestion;
-}
-
-interface WireFeedItem {
-  type?: string;
-  id?: string | number;
-  verb?: string;
-  action_text?: string;
-  created_time?: number;
-  updated_time?: number;
-  target?: WireFeedTarget;
-}
-
-interface WirePaging {
-  is_end?: boolean;
-  is_start?: boolean;
-  next?: string;
-  previous?: string;
-  prev?: string;
-  page?: number;
-  totals?: number;
-}
-
-interface WireApiError {
-  code?: number;
-  message?: string;
-}
-
-interface WireFeedPage {
-  data?: Array<WireFeedItem>;
-  paging?: WirePaging | null;
-  error?: WireApiError | null;
-}
+import {
+  JsonArrayValue,
+  jsonBoolean,
+  JsonNullValue,
+  jsonNumber,
+  JsonNumberValue,
+  jsonObject,
+  JsonObjectValue,
+  jsonString,
+  JsonStringValue,
+  JsonValue,
+  parseStrictJson,
+  StrictJsonError
+} from 'core';
 
 export enum DomainDecodeFailureKind {
   INVALID_JSON = 'invalid_json',
@@ -123,229 +41,276 @@ export class DomainDecodeError extends Error {
   }
 }
 
-function parseJson<T>(json: string): T {
+function root(json: string): JsonObjectValue {
   try {
-    return JSON.parse(json) as T;
-  } catch (_error) {
-    throw new DomainDecodeError(DomainDecodeFailureKind.INVALID_JSON, '响应不是有效 JSON');
+    const value = parseStrictJson(json);
+    if (value instanceof JsonObjectValue) {
+      return value;
+    }
+  } catch (error) {
+    if (error instanceof StrictJsonError) {
+      throw new DomainDecodeError(DomainDecodeFailureKind.INVALID_JSON, '响应不是有效 JSON');
+    }
   }
+  throw invalid('响应结构无效');
 }
 
-function requiredId(value: string | number | undefined, field: string): string {
-  if (typeof value === 'string' && value.trim().length > 0) {
-    return value;
+function requiredId(value: JsonValue | undefined, field: string): string {
+  if (value instanceof JsonStringValue && value.value.trim().length > 0) {
+    return value.value;
   }
-  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) {
-    return value.toString();
+  if (value instanceof JsonNumberValue && Number.isSafeInteger(value.value) && value.value >= 0) {
+    return value.value.toString();
   }
-  throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, `${field} 缺少有效 ID`);
+  throw invalid(`${field} 缺少有效 ID`);
 }
 
-function requiredText(value: string | undefined, field: string): string {
-  if (typeof value === 'string' && value.trim().length > 0) {
-    return value;
+function requiredText(value: JsonValue | undefined, field: string): string {
+  const text = jsonString(value);
+  if (text !== undefined && text.trim().length > 0) {
+    return text;
   }
-  throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, `${field} 不能为空`);
+  throw invalid(`${field} 不能为空`);
 }
 
-function optionalText(value: string | undefined): string | undefined {
-  return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
+function optionalText(value: JsonValue | undefined): string | undefined {
+  const text = jsonString(value);
+  return text !== undefined && text.trim().length > 0 ? text : undefined;
 }
 
-function textOrEmpty(value: string | undefined, field: string): string {
-  if (value === undefined || value === null) {
+function textOrEmpty(value: JsonValue | undefined, field: string): string {
+  if (value === undefined || value instanceof JsonNullValue) {
     return '';
   }
-  if (typeof value !== 'string') {
-    throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, `${field} 类型无效`);
+  const text = jsonString(value);
+  if (text === undefined) {
+    throw invalid(`${field} 类型无效`);
   }
-  return value;
+  return text;
 }
 
-function finiteNumberOrDefault(value: number | undefined, fallback: number, field: string): number {
-  if (value === undefined || value === null) {
+function numberOrDefault(value: JsonValue | undefined, fallback: number, field: string): number {
+  if (value === undefined || value instanceof JsonNullValue) {
     return fallback;
   }
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, `${field} 类型无效`);
+  const numberValue = jsonNumber(value);
+  if (numberValue === undefined || !Number.isFinite(numberValue)) {
+    throw invalid(`${field} 类型无效`);
   }
-  return value;
+  return numberValue;
 }
 
-function booleanOrDefault(value: boolean | undefined, fallback: boolean, field: string): boolean {
-  if (value === undefined || value === null) {
+function booleanOrDefault(value: JsonValue | undefined, fallback: boolean, field: string): boolean {
+  if (value === undefined || value instanceof JsonNullValue) {
     return fallback;
   }
-  if (typeof value !== 'boolean') {
-    throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, `${field} 类型无效`);
+  const booleanValue = jsonBoolean(value);
+  if (booleanValue === undefined) {
+    throw invalid(`${field} 类型无效`);
   }
-  return value;
+  return booleanValue;
 }
 
-function userFromWire(wire: WireUser): UserProfile {
+function userFromObject(object: JsonObjectValue): UserProfile {
+  const followerCount = object.get('follower_count') ?? object.get('followers_count');
   return {
-    id: requiredId(wire.id, 'user.id'),
-    name: requiredText(wire.name, 'user.name'),
-    urlToken: optionalText(wire.url_token),
-    headline: wire.headline ?? '',
-    avatarUrl: optionalText(wire.avatar_url),
-    followerCount: wire.follower_count ?? wire.followers_count ?? 0,
-    isFollowing: wire.is_following ?? false,
-    isOrganization: wire.is_org ?? false
+    id: requiredId(object.get('id'), 'user.id'),
+    name: requiredText(object.get('name'), 'user.name'),
+    urlToken: optionalText(object.get('url_token')),
+    headline: textOrEmpty(object.get('headline'), 'user.headline'),
+    avatarUrl: optionalText(object.get('avatar_url')),
+    followerCount: numberOrDefault(followerCount, 0, 'user.follower_count'),
+    isFollowing: booleanOrDefault(object.get('is_following'), false, 'user.is_following'),
+    isOrganization: booleanOrDefault(object.get('is_org'), false, 'user.is_org')
   };
 }
 
-function optionalUser(wire?: WireUser): UserProfile | undefined {
-  return wire === undefined ? undefined : userFromWire(wire);
+function optionalUser(value: JsonValue | undefined): UserProfile | undefined {
+  if (value === undefined || value instanceof JsonNullValue) {
+    return undefined;
+  }
+  const object = jsonObject(value);
+  if (object === undefined) {
+    throw invalid('user 结构无效');
+  }
+  return userFromObject(object);
+}
+
+function topicIdsFromObject(target: JsonObjectValue): Array<string> {
+  const values: Array<JsonValue> = [];
+  appendArrayValues(target.get('bound_topic_ids'), values, 'feed.target.bound_topic_ids');
+  const question = jsonObject(target.get('question'));
+  if (question !== undefined) {
+    appendArrayValues(question.get('bound_topic_ids'), values, 'feed.target.question.bound_topic_ids');
+  }
+  const result: Array<string> = [];
+  values.forEach((value: JsonValue): void => {
+    let id: string | undefined;
+    if (value instanceof JsonNumberValue && Number.isSafeInteger(value.value) && value.value > 0) {
+      id = value.value.toString();
+    } else if (value instanceof JsonStringValue && /^[1-9][0-9]{0,29}$/.test(value.value)) {
+      id = value.value;
+    }
+    if (id !== undefined && !result.includes(id)) {
+      result.push(id);
+    }
+  });
+  return result;
+}
+
+function appendArrayValues(value: JsonValue | undefined, result: Array<JsonValue>, field: string): void {
+  if (value === undefined) {
+    return;
+  }
+  if (!(value instanceof JsonArrayValue)) {
+    throw invalid(`${field} 类型无效`);
+  }
+  value.items.forEach((item: JsonValue): void => result.push(item));
 }
 
 export function decodeUser(json: string): UserProfile {
-  return userFromWire(parseJson<WireUser>(json));
+  return userFromObject(root(json));
 }
 
 export function decodeQuestion(json: string): Question {
-  const wire = parseJson<WireQuestion>(json);
+  const object = root(json);
   return {
-    id: requiredId(wire.id, 'question.id'),
-    title: requiredText(wire.title ?? wire.name, 'question.title'),
-    detailHtml: wire.detail ?? '',
-    url: wire.url ?? '',
-    answerCount: wire.answer_count ?? 0,
-    commentCount: wire.comment_count ?? 0,
-    followerCount: wire.follower_count ?? 0,
-    createdAt: wire.created ?? 0,
-    updatedAt: wire.updated_time ?? 0,
-    author: optionalUser(wire.author)
+    id: requiredId(object.get('id'), 'question.id'),
+    title: requiredText(object.get('title') ?? object.get('name'), 'question.title'),
+    detailHtml: textOrEmpty(object.get('detail'), 'question.detail'),
+    url: textOrEmpty(object.get('url'), 'question.url'),
+    answerCount: numberOrDefault(object.get('answer_count'), 0, 'question.answer_count'),
+    commentCount: numberOrDefault(object.get('comment_count'), 0, 'question.comment_count'),
+    followerCount: numberOrDefault(object.get('follower_count'), 0, 'question.follower_count'),
+    createdAt: numberOrDefault(object.get('created'), 0, 'question.created'),
+    updatedAt: numberOrDefault(object.get('updated_time'), 0, 'question.updated_time'),
+    author: optionalUser(object.get('author'))
   };
 }
 
 export function decodeAnswer(json: string): Answer {
-  const wire = parseJson<WireAnswer>(json);
+  const object = root(json);
+  const question = jsonObject(object.get('question'));
   return {
-    id: requiredId(wire.id, 'answer.id'),
-    questionId: requiredId(wire.question?.id, 'answer.question.id'),
-    contentHtml: wire.content ?? '',
-    excerpt: wire.excerpt ?? '',
-    url: wire.url ?? '',
-    voteupCount: wire.voteup_count ?? 0,
-    commentCount: wire.comment_count ?? 0,
-    createdAt: wire.created_time ?? 0,
-    updatedAt: wire.updated_time ?? 0,
-    author: optionalUser(wire.author)
+    id: requiredId(object.get('id'), 'answer.id'),
+    questionId: requiredId(question?.get('id'), 'answer.question.id'),
+    contentHtml: textOrEmpty(object.get('content'), 'answer.content'),
+    excerpt: textOrEmpty(object.get('excerpt'), 'answer.excerpt'),
+    url: textOrEmpty(object.get('url'), 'answer.url'),
+    voteupCount: numberOrDefault(object.get('voteup_count'), 0, 'answer.voteup_count'),
+    commentCount: numberOrDefault(object.get('comment_count'), 0, 'answer.comment_count'),
+    createdAt: numberOrDefault(object.get('created_time'), 0, 'answer.created_time'),
+    updatedAt: numberOrDefault(object.get('updated_time'), 0, 'answer.updated_time'),
+    author: optionalUser(object.get('author'))
   };
 }
 
 export function decodeArticle(json: string): Article {
-  const wire = parseJson<WireArticle>(json);
+  const object = root(json);
   return {
-    id: requiredId(wire.id, 'article.id'),
-    title: requiredText(wire.title, 'article.title'),
-    contentHtml: wire.content ?? '',
-    excerpt: wire.excerpt ?? '',
-    url: wire.url ?? '',
-    voteupCount: wire.voteup_count ?? 0,
-    commentCount: wire.comment_count ?? 0,
-    createdAt: wire.created ?? 0,
-    updatedAt: wire.updated ?? 0,
-    author: optionalUser(wire.author)
+    id: requiredId(object.get('id'), 'article.id'),
+    title: requiredText(object.get('title'), 'article.title'),
+    contentHtml: textOrEmpty(object.get('content'), 'article.content'),
+    excerpt: textOrEmpty(object.get('excerpt'), 'article.excerpt'),
+    url: textOrEmpty(object.get('url'), 'article.url'),
+    voteupCount: numberOrDefault(object.get('voteup_count'), 0, 'article.voteup_count'),
+    commentCount: numberOrDefault(object.get('comment_count'), 0, 'article.comment_count'),
+    createdAt: numberOrDefault(object.get('created'), 0, 'article.created'),
+    updatedAt: numberOrDefault(object.get('updated'), 0, 'article.updated'),
+    author: optionalUser(object.get('author'))
   };
 }
 
-function feedTargetFromWire(wire: WireFeedTarget): FeedTargetSummary {
-  if (wire === null || typeof wire !== 'object' || Array.isArray(wire)) {
-    throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, 'feed.target 结构无效');
-  }
-  if (typeof wire.type !== 'string' || wire.type.trim().length === 0) {
-    throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, 'feed.target.type 不能为空');
-  }
+function feedTargetFromObject(object: JsonObjectValue): FeedTargetSummary {
+  const type = requiredText(object.get('type'), 'feed.target.type');
   let kind: FeedTargetKind;
   let title: string;
-  if (wire.type === FeedTargetKind.ANSWER) {
-    if (wire.question === undefined || wire.question === null ||
-      typeof wire.question !== 'object' || Array.isArray(wire.question)) {
-      throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, 'feed.target.question 结构无效');
+  if (type === FeedTargetKind.ANSWER) {
+    const question = jsonObject(object.get('question'));
+    if (question === undefined) {
+      throw invalid('feed.target.question 结构无效');
     }
     kind = FeedTargetKind.ANSWER;
-    title = requiredText(wire.question?.title ?? wire.question?.name, 'feed.target.question.title');
-  } else if (wire.type === FeedTargetKind.ARTICLE) {
+    title = requiredText(question.get('title') ?? question.get('name'), 'feed.target.question.title');
+  } else if (type === FeedTargetKind.ARTICLE) {
     kind = FeedTargetKind.ARTICLE;
-    title = requiredText(wire.title, 'feed.target.title');
-  } else if (wire.type === FeedTargetKind.QUESTION) {
+    title = requiredText(object.get('title'), 'feed.target.title');
+  } else if (type === FeedTargetKind.QUESTION) {
     kind = FeedTargetKind.QUESTION;
-    title = requiredText(wire.title ?? wire.name, 'feed.target.title');
+    title = requiredText(object.get('title') ?? object.get('name'), 'feed.target.title');
   } else {
-    throw new DomainDecodeError(
-      DomainDecodeFailureKind.UNSUPPORTED_CONTENT,
-      `不支持的 Feed 内容类型：${wire.type ?? '<empty>'}`
-    );
+    throw new DomainDecodeError(DomainDecodeFailureKind.UNSUPPORTED_CONTENT,
+      `不支持的 Feed 内容类型：${type}`);
   }
   return {
     kind: kind,
-    id: requiredId(wire.id, 'feed.target.id'),
+    id: requiredId(object.get('id'), 'feed.target.id'),
     title: title,
-    excerpt: textOrEmpty(wire.excerpt, 'feed.target.excerpt'),
-    url: textOrEmpty(wire.url, 'feed.target.url'),
-    voteupCount: finiteNumberOrDefault(wire.voteup_count, 0, 'feed.target.voteup_count'),
-    commentCount: finiteNumberOrDefault(wire.comment_count, 0, 'feed.target.comment_count'),
-    author: optionalUser(wire.author)
+    excerpt: textOrEmpty(object.get('excerpt'), 'feed.target.excerpt'),
+    url: textOrEmpty(object.get('url'), 'feed.target.url'),
+    voteupCount: numberOrDefault(object.get('voteup_count'), 0, 'feed.target.voteup_count'),
+    commentCount: numberOrDefault(object.get('comment_count'), 0, 'feed.target.comment_count'),
+    author: optionalUser(object.get('author')),
+    topicIds: topicIdsFromObject(object)
   };
 }
 
-function pageCursorFromWire(wire?: WirePaging | null): PageCursor {
+function pageCursorFromObject(object: JsonObjectValue | undefined): PageCursor {
   return {
-    isEnd: booleanOrDefault(wire?.is_end, true, 'feed.paging.is_end'),
-    isStart: booleanOrDefault(wire?.is_start, true, 'feed.paging.is_start'),
-    next: optionalText(wire?.next),
-    previous: optionalText(wire?.previous) ?? optionalText(wire?.prev),
-    page: finiteNumberOrDefault(wire?.page, -1, 'feed.paging.page'),
-    total: finiteNumberOrDefault(wire?.totals, 0, 'feed.paging.totals')
+    isEnd: booleanOrDefault(object?.get('is_end'), true, 'feed.paging.is_end'),
+    isStart: booleanOrDefault(object?.get('is_start'), true, 'feed.paging.is_start'),
+    next: optionalText(object?.get('next')),
+    previous: optionalText(object?.get('previous')) ?? optionalText(object?.get('prev')),
+    page: numberOrDefault(object?.get('page'), -1, 'feed.paging.page'),
+    total: numberOrDefault(object?.get('totals'), 0, 'feed.paging.totals')
   };
 }
 
 export function decodeFeedPage(json: string): FeedPage {
-  const parsed = parseJson<Object | string | number | boolean | null>(json);
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, 'feed 响应结构无效');
+  const object = root(json);
+  const errorValue = object.get('error');
+  if (errorValue !== undefined && !(errorValue instanceof JsonNullValue)) {
+    const error = jsonObject(errorValue);
+    const code = error === undefined ? undefined : jsonNumber(error.get('code'));
+    throw new DomainDecodeError(DomainDecodeFailureKind.UPSTREAM_ERROR,
+      `知乎接口返回错误（${code === undefined ? 'unknown' : code.toString()}）`);
   }
-  const wire = parsed as WireFeedPage;
-  if (wire.error !== undefined && wire.error !== null) {
-    const errorCode = typeof wire.error.code === 'number' ? wire.error.code.toString() : 'unknown';
-    throw new DomainDecodeError(
-      DomainDecodeFailureKind.UPSTREAM_ERROR,
-      `知乎接口返回错误（${errorCode}）`
-    );
+  const data = object.get('data');
+  if (!(data instanceof JsonArrayValue)) {
+    throw invalid('feed.data 不能为空');
   }
-  if (!Array.isArray(wire.data)) {
-    throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, 'feed.data 不能为空');
-  }
-  if (wire.paging !== undefined &&
-    (wire.paging === null || typeof wire.paging !== 'object' || Array.isArray(wire.paging))) {
-    throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, 'feed.paging 结构无效');
+  const pagingValue = object.get('paging');
+  if (pagingValue !== undefined && !(pagingValue instanceof JsonNullValue) &&
+    !(pagingValue instanceof JsonObjectValue)) {
+    throw invalid('feed.paging 结构无效');
   }
   const items: Array<FeedItem> = [];
-  wire.data.forEach((item: WireFeedItem): void => {
+  data.items.forEach((value: JsonValue): void => {
+    const item = jsonObject(value);
+    if (item === undefined) {
+      throw invalid('feed.item 结构无效');
+    }
+    const typeValue = item.get('type');
+    if (typeValue !== undefined && !(typeValue instanceof JsonStringValue)) {
+      throw invalid('feed.item.type 类型无效');
+    }
+    const type = jsonString(typeValue);
+    if (type === 'invited_answer' || type === 'tab_list' || type === 'feed_item_index_group') {
+      return;
+    }
+    const target = jsonObject(item.get('target'));
+    if (target === undefined) {
+      throw invalid('feed.target 不能为空');
+    }
     try {
-      if (item === null || typeof item !== 'object' || Array.isArray(item)) {
-        throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, 'feed.item 结构无效');
-      }
-      if (item.type !== undefined && typeof item.type !== 'string') {
-        throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, 'feed.item.type 类型无效');
-      }
-      if (item.type === 'invited_answer' || item.type === 'tab_list' ||
-        item.type === 'feed_item_index_group') {
-        return;
-      }
-      if (item.target === undefined || item.target === null ||
-        typeof item.target !== 'object' || Array.isArray(item.target)) {
-        throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, 'feed.target 不能为空');
-      }
       items.push({
-        id: requiredId(item.id, 'feed.id'),
-        verb: textOrEmpty(item.verb, 'feed.verb'),
-        actionText: optionalText(item.action_text),
-        createdAt: finiteNumberOrDefault(item.created_time, 0, 'feed.created_time'),
-        updatedAt: finiteNumberOrDefault(item.updated_time, 0, 'feed.updated_time'),
-        target: feedTargetFromWire(item.target)
+        id: requiredId(item.get('id'), 'feed.id'),
+        verb: textOrEmpty(item.get('verb'), 'feed.verb'),
+        actionText: optionalText(item.get('action_text')) ?? optionalText(item.get('moment_desc')) ??
+          optionalText(item.get('detail_text')),
+        createdAt: numberOrDefault(item.get('created_time'), 0, 'feed.created_time'),
+        updatedAt: numberOrDefault(item.get('updated_time'), 0, 'feed.updated_time'),
+        target: feedTargetFromObject(target)
       });
     } catch (error) {
       if (error instanceof DomainDecodeError && error.kind === DomainDecodeFailureKind.UNSUPPORTED_CONTENT) {
@@ -354,11 +319,13 @@ export function decodeFeedPage(json: string): FeedPage {
       if (error instanceof DomainDecodeError) {
         throw error;
       }
-      throw new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, 'feed.item 结构无效');
+      throw invalid('feed.item 结构无效');
     }
   });
-  return {
-    items: items,
-    cursor: pageCursorFromWire(wire.paging)
-  };
+  const paging = pagingValue instanceof JsonObjectValue ? pagingValue : undefined;
+  return { items: items, cursor: pageCursorFromObject(paging) };
+}
+
+function invalid(message: string): DomainDecodeError {
+  return new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, message);
 }

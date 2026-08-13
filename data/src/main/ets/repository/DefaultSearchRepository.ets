@@ -1,10 +1,13 @@
 import { PageCursor } from '../domain/DomainModels';
+import { ContentBlockingMatcher, ContentBlockingSession } from '../data/BlockingRuleStore';
 import { SearchResultItem, SearchResultPage, searchResultIdentity } from '../domain/SearchModels';
 import { decodeSearchResultPage } from '../domain/ZhihuSearchDecoder';
 import { ZhihuHttpClient, ZhihuHttpResponse } from '../network/ZhihuHttpClient';
 import { SearchRepository } from './SearchRepository';
 
-export const SEARCH_INCLUDE = 'data[*].highlight,object,type';
+export const SEARCH_INCLUDE =
+  'data[*].highlight,object,type,object.author,object.topics,object.bound_topic_ids,object.question.topics,' +
+    'object.question.bound_topic_ids';
 const SEARCH_INCLUDE_QUERY = `include=${encodeURIComponent(SEARCH_INCLUDE).replace(/\*/g, '%2A')}`;
 const SEARCH_BASE_URL = 'https://www.zhihu.com/api/v4/search_v3';
 const SEARCH_QUERY_MAX_LENGTH = 200;
@@ -148,13 +151,15 @@ function terminalCursor(cursor: PageCursor): PageCursor {
 
 export class DefaultSearchRepository implements SearchRepository {
   private readonly httpClient: ZhihuHttpClient;
+  private readonly blockingMatcher?: ContentBlockingMatcher;
   private requestedCursors: Set<string> = new Set<string>();
   private deliveredIdentities: Set<string> = new Set<string>();
   private activeQuery?: string;
   private generation: number = 0;
 
-  constructor(httpClient: ZhihuHttpClient) {
+  constructor(httpClient: ZhihuHttpClient, blockingMatcher?: ContentBlockingMatcher) {
     this.httpClient = httpClient;
+    this.blockingMatcher = blockingMatcher;
   }
 
   cancel(): void {
@@ -183,12 +188,31 @@ export class DefaultSearchRepository implements SearchRepository {
       throw new SearchRepositoryFailure(SearchRepositoryFailureKind.CANCELLED);
     }
     const decoded = decodeSearchResultPage(response.body);
+    let visibleItems = decoded.items;
+    if (this.blockingMatcher !== undefined) {
+      const blockingSession: ContentBlockingSession = await this.blockingMatcher.createSession();
+      visibleItems = decoded.items.filter((item: SearchResultItem): boolean => {
+        return blockingSession.match(item.authorId === undefined ? {
+          title: item.title,
+          excerpt: item.excerpt,
+          topicIds: item.topicIds
+        } : {
+          title: item.title,
+          excerpt: item.excerpt,
+          authorId: item.authorId,
+          topicIds: item.topicIds
+        }) === undefined;
+      });
+    }
+    if (requestGeneration !== this.generation) {
+      throw new SearchRepositoryFailure(SearchRepositoryFailureKind.CANCELLED);
+    }
     const next = decoded.cursor.next;
     const nextKey = next === undefined ? undefined : canonicalSearchCursorKey(normalizedQuery, next);
     const requested = cursor === undefined ? new Set<string>() : cloneStringSet(this.requestedCursors);
     const delivered = cursor === undefined ? new Set<string>() : cloneStringSet(this.deliveredIdentities);
     requested.add(cursorKey);
-    const items = decoded.items.filter((item: SearchResultItem): boolean => {
+    const items = visibleItems.filter((item: SearchResultItem): boolean => {
       const identity = searchResultIdentity(item);
       if (delivered.has(identity)) {
         return false;

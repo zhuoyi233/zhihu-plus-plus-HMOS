@@ -55,13 +55,14 @@ struct ContentInlineFormula {
         Span('• ')
       }
       ForEach(this.item.inlineRuns, (run: ReaderInlineRun) => {
-        if (run.kind === ReaderInlineKind.TEXT || !this.loadedRunIds.includes(run.id)) {
+        if (run.kind === ReaderInlineKind.TEXT || !this.loadedRunIds.includes(run.id) ||
+          this.pixelMaps.get(run.id) === undefined) {
           Span(run.kind === ReaderInlineKind.TEXT ? run.text : `「${run.text}」`)
             .fontColor(run.kind === ReaderInlineKind.TEXT
               ? $r('app.color.primary_text')
               : $r('app.color.secondary_text'))
         } else {
-          ImageSpan(this.pixelMaps.get(run.id) as image.PixelMap)
+          ImageSpan(this.pixelMaps.get(run.id) ?? run.text)
             .id(`p2_content_inline_formula_${run.id}`)
             .width(inlineFormulaWidth(run.text))
             .height(24)
@@ -184,7 +185,6 @@ struct ContentBlockFormula {
   }
 }
 
-/** 仅把知乎正文转换为受控 ArkUI 节点；不会执行 HTML、脚本或 WebView 内容。 */
 @Component
 export struct NativeContentDocument {
   html: string = '';

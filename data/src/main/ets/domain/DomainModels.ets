@@ -9,6 +9,30 @@ export interface UserProfile {
   isOrganization: boolean;
 }
 
+export interface PeopleProfile extends UserProfile {
+  followingCount: number;
+  answerCount: number;
+  articleCount: number;
+  canonicalUrl: string;
+}
+
+export interface PinTopic {
+  id: string;
+  name: string;
+}
+
+export interface PinDetail {
+  id: string;
+  contentHtml: string;
+  url: string;
+  likeCount: number;
+  commentCount: number;
+  createdAt: number;
+  updatedAt: number;
+  author: UserProfile;
+  topics: Array<PinTopic>;
+}
+
 export interface Question {
   id: string;
   title: string;
@@ -63,6 +87,7 @@ export interface FeedTargetSummary {
   voteupCount: number;
   commentCount: number;
   author?: UserProfile;
+  topicIds: Array<string>;
 }
 
 export interface FeedItem {

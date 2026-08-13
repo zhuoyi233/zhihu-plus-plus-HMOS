@@ -1,5 +1,10 @@
+import { JsonObjectValue, JsonStringValue, parseStrictJson } from './StrictJson';
+
 export enum P1DestinationName {
   HOME = 'Home',
+  FOLLOWING = 'Following',
+  HOT = 'Hot',
+  DAILY = 'Daily',
   QUESTION = 'Question',
   ANSWER = 'Answer',
   ARTICLE = 'Article',
@@ -12,6 +17,8 @@ export enum P1DestinationName {
   NOTIFICATION = 'Notification',
   LOGIN = 'Login',
   SETTINGS = 'Settings',
+  BLOCKING_RULES = 'BlockingRules',
+  READ_HISTORY = 'ReadHistory',
   TECHNICAL_LAB = 'TechnicalLab',
   READER_PROBE = 'ReaderProbe',
   IMAGE_PROBE = 'ImageProbe',
@@ -23,11 +30,13 @@ export enum P1DestinationName {
 }
 
 export interface StatelessDestination {
-  readonly name: P1DestinationName.HOME | P1DestinationName.NOTIFICATION;
+  readonly name: P1DestinationName.HOME | P1DestinationName.FOLLOWING | P1DestinationName.HOT |
+    P1DestinationName.DAILY | P1DestinationName.NOTIFICATION;
 }
 
 export interface InfrastructureDestination {
-  readonly name: P1DestinationName.LOGIN | P1DestinationName.SETTINGS | P1DestinationName.TECHNICAL_LAB |
+  readonly name: P1DestinationName.LOGIN | P1DestinationName.SETTINGS | P1DestinationName.BLOCKING_RULES |
+    P1DestinationName.READ_HISTORY | P1DestinationName.TECHNICAL_LAB |
     P1DestinationName.READER_PROBE | P1DestinationName.IMAGE_PROBE |
     P1DestinationName.DATABASE_PROBE | P1DestinationName.DEEP_LINK_PROBE |
     P1DestinationName.QR_SCAN_PROBE | P1DestinationName.BACKGROUND_TASK_PROBE |
@@ -57,27 +66,31 @@ export type P1Destination = StatelessDestination | InfrastructureDestination | C
 
 export const MAX_SEARCH_QUERY_LENGTH: number = 200;
 export const MAX_DECIMAL_CONTENT_ID_LENGTH: number = 30;
+export const MAX_PEOPLE_IDENTIFIER_LENGTH: number = 200;
 
-export function isSafeSearchDestinationQuery(value: string | undefined): boolean {
+export function isSafeSearchDestinationQuery(value: string | undefined): value is string {
   return typeof value === 'string' && value.length <= MAX_SEARCH_QUERY_LENGTH &&
     !/[\u0000-\u001F\u007F-\u009F]/.test(value);
 }
 
-export function isSafeDecimalContentId(value: string | undefined): boolean {
+export function isSafeDecimalContentId(value: string | undefined): value is string {
   return typeof value === 'string' && /^\d{1,30}$/.test(value);
 }
 
-interface WireDestination {
-  name?: string;
-  id?: string;
-  contentId?: string;
-  commentId?: string;
-  query?: string;
+export function isSafePinContentId(value: string | undefined): value is string {
+  return typeof value === 'string' && /^[1-9][0-9]{0,29}$/.test(value);
+}
+
+export function isSafePeopleIdentifier(value: string | undefined): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{1,200}$/.test(value);
 }
 
 export function isP1DestinationName(name: string): boolean {
   switch (name) {
     case P1DestinationName.HOME:
+    case P1DestinationName.FOLLOWING:
+    case P1DestinationName.HOT:
+    case P1DestinationName.DAILY:
     case P1DestinationName.QUESTION:
     case P1DestinationName.ANSWER:
     case P1DestinationName.ARTICLE:
@@ -90,6 +103,8 @@ export function isP1DestinationName(name: string): boolean {
     case P1DestinationName.NOTIFICATION:
     case P1DestinationName.LOGIN:
     case P1DestinationName.SETTINGS:
+    case P1DestinationName.BLOCKING_RULES:
+    case P1DestinationName.READ_HISTORY:
     case P1DestinationName.TECHNICAL_LAB:
     case P1DestinationName.READER_PROBE:
     case P1DestinationName.IMAGE_PROBE:
@@ -108,25 +123,40 @@ export function decodeP1Destination(name: string, param: Object): P1Destination 
   if (!isP1DestinationName(name)) {
     return undefined;
   }
-  let wire: WireDestination;
+  let wire: JsonObjectValue;
   try {
-    wire = JSON.parse(JSON.stringify(param)) as WireDestination;
+    const parsed = parseStrictJson(JSON.stringify(param));
+    if (!(parsed instanceof JsonObjectValue)) {
+      return undefined;
+    }
+    wire = parsed;
   } catch (_error) {
     return undefined;
   }
-  if (wire.name !== name) {
+  const wireName = readString(wire, 'name');
+  if (wireName !== name) {
     return undefined;
   }
 
   switch (name) {
     case P1DestinationName.HOME:
       return hasNoParameters(wire) ? { name: P1DestinationName.HOME } : undefined;
+    case P1DestinationName.FOLLOWING:
+      return hasNoParameters(wire) ? { name: P1DestinationName.FOLLOWING } : undefined;
+    case P1DestinationName.HOT:
+      return hasNoParameters(wire) ? { name: P1DestinationName.HOT } : undefined;
+    case P1DestinationName.DAILY:
+      return hasNoParameters(wire) ? { name: P1DestinationName.DAILY } : undefined;
     case P1DestinationName.NOTIFICATION:
       return hasNoParameters(wire) ? { name: P1DestinationName.NOTIFICATION } : undefined;
     case P1DestinationName.LOGIN:
       return hasNoParameters(wire) ? { name: P1DestinationName.LOGIN } : undefined;
     case P1DestinationName.SETTINGS:
       return hasNoParameters(wire) ? { name: P1DestinationName.SETTINGS } : undefined;
+    case P1DestinationName.BLOCKING_RULES:
+      return hasNoParameters(wire) ? { name: P1DestinationName.BLOCKING_RULES } : undefined;
+    case P1DestinationName.READ_HISTORY:
+      return hasNoParameters(wire) ? { name: P1DestinationName.READ_HISTORY } : undefined;
     case P1DestinationName.TECHNICAL_LAB:
       return hasNoParameters(wire) ? { name: P1DestinationName.TECHNICAL_LAB } : undefined;
     case P1DestinationName.READER_PROBE:
@@ -158,24 +188,28 @@ export function decodeP1Destination(name: string, param: Object): P1Destination 
     case P1DestinationName.COLLECTION:
       return decodeContent(wire, P1DestinationName.COLLECTION);
     case P1DestinationName.COMMENT:
-      if (!hasText(wire.contentId) || wire.id !== undefined || wire.query !== undefined ||
-        (wire.commentId !== undefined && !hasText(wire.commentId)) ||
+      const contentId = readString(wire, 'contentId');
+      const commentId = readString(wire, 'commentId');
+      if (!hasText(contentId) || readString(wire, 'id') !== undefined || readString(wire, 'query') !== undefined ||
+        (commentId !== undefined && !hasText(commentId)) ||
         !hasOnlyFields(wire, ['name', 'contentId', 'commentId'])) {
         return undefined;
       }
-      return wire.commentId === undefined
-        ? { name: P1DestinationName.COMMENT, contentId: wire.contentId as string }
+      return commentId === undefined
+        ? { name: P1DestinationName.COMMENT, contentId: contentId }
         : {
           name: P1DestinationName.COMMENT,
-          contentId: wire.contentId as string,
-          commentId: wire.commentId
+          contentId: contentId,
+          commentId: commentId
         };
     case P1DestinationName.SEARCH:
-      if (!isSafeSearchDestinationQuery(wire.query) || wire.id !== undefined || wire.contentId !== undefined ||
-        wire.commentId !== undefined || !hasOnlyFields(wire, ['name', 'query'])) {
+      const query = readString(wire, 'query');
+      if (!isSafeSearchDestinationQuery(query) || readString(wire, 'id') !== undefined ||
+        readString(wire, 'contentId') !== undefined || readString(wire, 'commentId') !== undefined ||
+        !hasOnlyFields(wire, ['name', 'query'])) {
         return undefined;
       }
-      return { name: P1DestinationName.SEARCH, query: wire.query as string };
+      return { name: P1DestinationName.SEARCH, query: query };
     default:
       return undefined;
   }
@@ -185,6 +219,8 @@ export function isInfrastructureDestination(destination: P1Destination): boolean
   switch (destination.name) {
     case P1DestinationName.LOGIN:
     case P1DestinationName.SETTINGS:
+    case P1DestinationName.BLOCKING_RULES:
+    case P1DestinationName.READ_HISTORY:
     case P1DestinationName.TECHNICAL_LAB:
     case P1DestinationName.READER_PROBE:
     case P1DestinationName.IMAGE_PROBE:
@@ -204,34 +240,48 @@ export function shouldReloadAfterAuthentication(destination: P1Destination): boo
     case P1DestinationName.QUESTION:
     case P1DestinationName.ANSWER:
     case P1DestinationName.ARTICLE:
+    case P1DestinationName.SEARCH:
+    case P1DestinationName.FOLLOWING:
+    case P1DestinationName.PIN:
+    case P1DestinationName.PEOPLE:
       return true;
     default:
       return false;
   }
 }
 
-function decodeContent(wire: WireDestination, name: P1DestinationName.QUESTION | P1DestinationName.ANSWER |
+function decodeContent(wire: JsonObjectValue, name: P1DestinationName.QUESTION | P1DestinationName.ANSWER |
   P1DestinationName.ARTICLE | P1DestinationName.VIDEO | P1DestinationName.PIN |
   P1DestinationName.PEOPLE | P1DestinationName.COLLECTION): ContentDestination | undefined {
-  const strictDecimalId = name === P1DestinationName.QUESTION || name === P1DestinationName.ANSWER ||
-    name === P1DestinationName.ARTICLE;
-  if ((strictDecimalId ? !isSafeDecimalContentId(wire.id) : !hasText(wire.id)) ||
-    wire.contentId !== undefined || wire.commentId !== undefined || wire.query !== undefined ||
+  const id = readString(wire, 'id');
+  if (!hasText(id) ||
+    readString(wire, 'contentId') !== undefined || readString(wire, 'commentId') !== undefined ||
+    readString(wire, 'query') !== undefined ||
     !hasOnlyFields(wire, ['name', 'id'])) {
     return undefined;
   }
-  return { name: name, id: wire.id as string };
+  const validId = name === P1DestinationName.PIN ? isSafePinContentId(id) :
+    name === P1DestinationName.PEOPLE ? isSafePeopleIdentifier(id) :
+      name === P1DestinationName.QUESTION || name === P1DestinationName.ANSWER ||
+        name === P1DestinationName.ARTICLE ? isSafeDecimalContentId(id) : true;
+  return validId ? { name: name, id: id } : undefined;
 }
 
-function hasNoParameters(wire: WireDestination): boolean {
-  return wire.id === undefined && wire.contentId === undefined && wire.commentId === undefined &&
-    wire.query === undefined && hasOnlyFields(wire, ['name']);
+function hasNoParameters(wire: JsonObjectValue): boolean {
+  return readString(wire, 'id') === undefined && readString(wire, 'contentId') === undefined &&
+    readString(wire, 'commentId') === undefined && readString(wire, 'query') === undefined &&
+    hasOnlyFields(wire, ['name']);
 }
 
-function hasText(value: string | undefined): boolean {
+function hasText(value: string | undefined): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
-function hasOnlyFields(wire: WireDestination, allowed: Array<string>): boolean {
-  return Object.keys(wire).every((key: string) => allowed.includes(key));
+function hasOnlyFields(wire: JsonObjectValue, allowed: Array<string>): boolean {
+  return wire.entries.every((entry): boolean => allowed.includes(entry.name));
+}
+
+function readString(wire: JsonObjectValue, name: string): string | undefined {
+  const value = wire.get(name);
+  return value instanceof JsonStringValue ? value.value : undefined;
 }

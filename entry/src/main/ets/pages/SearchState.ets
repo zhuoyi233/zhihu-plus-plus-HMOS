@@ -133,7 +133,10 @@ export class SearchController {
       return;
     }
     const generation = this.generation;
-    const cursor = this.nextCursor as string;
+    const cursor = this.nextCursor;
+    if (cursor === undefined) {
+      return;
+    }
     this.loadingMore = true;
     this.retryLoadMore = false;
     this.paginationBlocked = false;

@@ -5,6 +5,11 @@ import {
   canonicalSearchCursorKey,
   decodeSearchResultPage,
   DefaultSearchRepository,
+  BlockableContentSummary,
+  BlockingMatch,
+  BlockingRuleKind,
+  ContentBlockingMatcher,
+  ContentBlockingSession,
   FeedTargetKind,
   HttpFailure,
   HttpFailureKind,
@@ -88,11 +93,35 @@ class PendingSearchTransportFactory implements ZhihuHttpTransportFactory {
   }
 }
 
+class RecordingSearchBlockingSession implements ContentBlockingSession {
+  readonly summaries: Array<BlockableContentSummary> = [];
+
+  match(content: BlockableContentSummary): BlockingMatch | undefined {
+    this.summaries.push(content);
+    return content.title.includes('屏蔽') ? {
+      kind: BlockingRuleKind.KEYWORD,
+      ruleId: '1',
+      reason: 'test'
+    } : undefined;
+  }
+}
+
+class RecordingSearchBlockingMatcher implements ContentBlockingMatcher {
+  readonly session: RecordingSearchBlockingSession = new RecordingSearchBlockingSession();
+  createCount: number = 0;
+
+  createSession(): Promise<ContentBlockingSession> {
+    this.createCount += 1;
+    return Promise.resolve(this.session);
+  }
+}
+
 const QUERY = 'HarmonyOS ArkTS';
 const NEXT_CURSOR = 'https://www.zhihu.com/api/v4/search_v3?t=general&q=HarmonyOS+ArkTS&offset=20&limit=20';
 const FIRST_PAGE = '{"data":[{"type":"search_result","id":"wrapper-answer-1","object":{' +
   '"type":"answer","id":"answer-1","excerpt":"回答摘要","voteup_count":12,' +
-  '"comment_count":3,"question":{"title":"ArkTS 如何开发？"},"author":{"name":"开发者"}}},' +
+  '"comment_count":3,"question":{"title":"ArkTS 如何开发？","bound_topic_ids":[19551275]},' +
+  '"author":{"id":"member-1","name":"开发者"}}},' +
   '{"type":"knowledge_ad","id":"ad-1","object":{"type":"article"}}],"paging":{' +
   '"is_end":false,"is_start":true,"next":"' + NEXT_CURSOR + '"}}';
 const SECOND_PAGE = '{"data":[{"type":"search_result","id":"another-wrapper","object":{' +
@@ -113,12 +142,15 @@ export default function searchRepositoryTest(): void {
       const initial = buildInitialSearchUrl('  HarmonyOS ArkTS  ');
       expect(initial.includes('t=general&q=HarmonyOS+ArkTS')).assertTrue();
       expect(initial.includes('offset=0&limit=20&search_source=Normal')).assertTrue();
-      expect(initial.includes('include=data%5B%2A%5D.highlight%2Cobject%2Ctype')).assertTrue();
+      expect(initial.includes('include=data%5B%2A%5D.highlight%2Cobject%2Ctype%2Cobject.author%2C' +
+        'object.topics%2Cobject.bound_topic_ids%2Cobject.question.topics%2Cobject.question.bound_topic_ids'))
+        .assertTrue();
       expect(buildSearchRequestUrl(QUERY,
         'https://www.zhihu.com/api/v4/search_v3?include=stale&t=general&q=HarmonyOS%20ArkTS&offset=20'
       )).assertEqual(
         'https://www.zhihu.com/api/v4/search_v3?t=general&q=HarmonyOS+ArkTS&offset=20&' +
-          'include=data%5B%2A%5D.highlight%2Cobject%2Ctype'
+          'include=data%5B%2A%5D.highlight%2Cobject%2Ctype%2Cobject.author%2Cobject.topics%2C' +
+            'object.bound_topic_ids%2Cobject.question.topics%2Cobject.question.bound_topic_ids'
       );
       expect(canonicalSearchCursorKey(QUERY,
         'https://www.zhihu.com/api/v4/search_v3?offset=20&t=general&q=HarmonyOS+ArkTS'
@@ -150,7 +182,9 @@ export default function searchRepositoryTest(): void {
         try {
           buildSearchRequestUrl(QUERY, cursor);
         } catch (error) {
-          failure = error as SearchRepositoryFailure;
+          if (error instanceof SearchRepositoryFailure) {
+            failure = error;
+          }
         }
         expect(failure?.kind).assertEqual(SearchRepositoryFailureKind.INVALID_CURSOR);
       });
@@ -183,7 +217,9 @@ export default function searchRepositoryTest(): void {
         try {
           decodeSearchResultPage(payload);
         } catch (cause) {
-          error = cause as SearchDecodeError;
+          if (cause instanceof SearchDecodeError) {
+            error = cause;
+          }
         }
         expect(error instanceof SearchDecodeError).assertTrue();
         expect(error?.kind).assertEqual(SearchDecodeFailureKind.MALFORMED_RESPONSE);
@@ -207,6 +243,27 @@ export default function searchRepositoryTest(): void {
       expect(factory.requests[0].headers.Cookie).assertEqual('z_c0=search-login; d_c0=search-device');
       expect(JSON.stringify(factory.requests[0].headers).includes('x-zse-96')).assertTrue();
       expect(factory.requests[1].url.includes('offset=20')).assertTrue();
+    });
+
+    it('filtersEachPageWithOneSnapshotAndDecodedAuthorTopics', 0, async () => {
+      const factory = new SearchTransportFactory([{ statusCode: 200, body: '{"data":[' +
+        '{"type":"search_result","id":"w1","object":{"type":"article","id":"1",' +
+        '"title":"保留","author":{"id":"member-1","name":"作者"},"topics":[{"id":19551275}]}},' +
+        '{"type":"search_result","id":"w2","object":{"type":"article","id":"2",' +
+        '"title":"屏蔽内容","bound_topic_ids":[19551276]}}],"paging":{"is_end":true}}' }]);
+      const matcher = new RecordingSearchBlockingMatcher();
+      const repository = new DefaultSearchRepository(
+        new ZhihuHttpClient(new SearchCookieProvider(), factory),
+        matcher
+      );
+      const page = await repository.search('test');
+
+      expect(matcher.createCount).assertEqual(1);
+      expect(matcher.session.summaries.length).assertEqual(2);
+      expect(matcher.session.summaries[0].authorId).assertEqual('member-1');
+      expect(matcher.session.summaries[0].topicIds[0]).assertEqual('19551275');
+      expect(page.items.length).assertEqual(1);
+      expect(page.items[0].contentId).assertEqual('1');
     });
 
     it('doesNotCommitCursorAfterRejectedResponse', 0, async () => {
@@ -240,7 +297,9 @@ export default function searchRepositoryTest(): void {
       try {
         await pending;
       } catch (error) {
-        failure = error as HttpFailure;
+        if (error instanceof HttpFailure) {
+          failure = error;
+        }
       }
       expect(failure?.kind).assertEqual(HttpFailureKind.CANCELLED);
       expect(factory.transport.requests.length).assertEqual(1);

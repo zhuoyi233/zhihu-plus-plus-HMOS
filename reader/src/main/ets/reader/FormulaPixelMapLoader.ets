@@ -1,7 +1,6 @@
 import { image } from '@kit.ImageKit';
 import { http } from '@kit.NetworkKit';
 import { util } from '@kit.ArkTS';
-import { BusinessError } from '@kit.BasicServicesKit';
 import { isTrustedFormulaUrl } from './FormulaSourcePolicy';
 
 const MAX_SVG_BYTES = 1024 * 1024;
@@ -83,8 +82,8 @@ async function downloadSvg(url: string): Promise<ArrayBuffer> {
     if (response.result.byteLength === 0 || response.result.byteLength > MAX_SVG_BYTES) {
       throw new Error('公式响应大小不合法');
     }
-    const headers = response.header as Record<string, string>;
-    const contentType = headers['content-type'] ?? headers['Content-Type'] ?? '';
+    const headerText = JSON.stringify(response.header).toLowerCase();
+    const contentType = headerText.includes('image/svg+xml') ? 'image/svg+xml' : '';
     if (!isSvgResponse(contentType, response.result)) {
       throw new Error('公式响应不是有效 SVG');
     }
@@ -134,7 +133,6 @@ export async function loadFormulaPixelMap(url: string): Promise<image.PixelMap> 
   const normalizedBytes = normalizeZhihuSvg(bytes);
   let source: image.ImageSource | undefined = undefined;
   try {
-    // Give every decoder its own buffer because identical formulas may become visible concurrently.
     source = image.createImageSource(normalizedBytes.slice(0));
     const info = await source.getImageInfo();
     if (info.size.width <= 0 || info.size.height <= 0 || info.size.width > 4096 || info.size.height > 4096) {
@@ -147,8 +145,9 @@ export async function loadFormulaPixelMap(url: string): Promise<image.PixelMap> 
     if (error instanceof Error) {
       throw error;
     }
-    const code = (error as BusinessError).code;
     const details = JSON.stringify(error);
+    const codeMatch = /"code"\s*:\s*(-?\d+)/.exec(details ?? '');
+    const code = codeMatch === null ? undefined : Number(codeMatch[1]);
     if (code !== undefined) {
       throw new Error(`公式 SVG 解码失败（ImageKit ${code}）`);
     }

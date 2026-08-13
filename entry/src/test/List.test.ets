@@ -23,6 +23,13 @@ import searchStateTest from './SearchState.test';
 import contentDetailRepositoryTest from './ContentDetailRepository.test';
 import contentDetailStateTest from './ContentDetailState.test';
 import loginControllerTest from './LoginController.test';
+import channelFeedRepositoryTest from './ChannelFeedRepository.test';
+import channelFeedStateTest from './ChannelFeedState.test';
+import peoplePinDetailRepositoryTest from './PeoplePinDetailRepository.test';
+import peoplePinDetailStateTest from './PeoplePinDetailState.test';
+import blockingRuleMatcherTest from './BlockingRuleMatcher.test';
+import blockingRulesStateTest from './BlockingRulesState.test';
+import readHistoryStateTest from './ReadHistoryState.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -50,4 +57,11 @@ export default function testsuite(): void {
   contentDetailRepositoryTest();
   contentDetailStateTest();
   loginControllerTest();
+  channelFeedRepositoryTest();
+  channelFeedStateTest();
+  peoplePinDetailRepositoryTest();
+  peoplePinDetailStateTest();
+  blockingRuleMatcherTest();
+  blockingRulesStateTest();
+  readHistoryStateTest();
 }

@@ -29,11 +29,13 @@ class ControlledFeedRepository implements FeedRepository {
   }
 
   succeed(index: number, page: FeedPage): void {
-    this.pending[index].resolve(page);
+    const request = this.pending.find((_request: PendingRequest, currentIndex: number): boolean => currentIndex === index);
+    request?.resolve(page);
   }
 
   fail(index: number): void {
-    this.pending[index].reject(new Error('network details must not reach UI'));
+    const request = this.pending.find((_request: PendingRequest, currentIndex: number): boolean => currentIndex === index);
+    request?.reject(new Error('network details must not reach UI'));
   }
 }
 
@@ -188,7 +190,8 @@ function feed(id: string, kind: FeedTargetKind = FeedTargetKind.ANSWER): FeedIte
       excerpt: `${id} excerpt`,
       url: `https://www.zhihu.com/${id}`,
       voteupCount: 2,
-      commentCount: 1
+      commentCount: 1,
+      topicIds: []
     }
   };
 }

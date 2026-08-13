@@ -1,5 +1,5 @@
-import { BusinessError } from '@kit.BasicServicesKit';
 import { http } from '@kit.NetworkKit';
+import { BusinessError } from '@kit.BasicServicesKit';
 import { SessionCookie, toCookieHeader } from '../session/CookieSession';
 import { HttpFailure, HttpFailureKind, httpFailureFromStatus, httpFailureFromTransport } from './HttpFailure';
 import { createZse96Header, ZHIHU_WEB_ZSE93 } from './ZhihuFetchSignature';
@@ -67,7 +67,12 @@ export interface ZhihuHttpTransportFactory {
   create(): ZhihuHttpTransport;
 }
 
-const TRUSTED_ZHIHU_HOSTS: Array<string> = ['www.zhihu.com', 'api.zhihu.com'];
+const TRUSTED_ZHIHU_HOSTS: Array<string> = [
+  'www.zhihu.com',
+  'api.zhihu.com',
+  'news-at.zhihu.com',
+  'daily.zhihu.com'
+];
 
 export function isTrustedZhihuRequestUrl(url: string): boolean {
   if (/[\u0000-\u0020\u007F-\uFFFF]/.test(url)) {
@@ -211,9 +216,12 @@ class NetworkKitHttpTransport implements ZhihuHttpTransport {
       usingCache: false
     };
     const response = await this.requestHandle.request(request.url, options);
+    if (typeof response.result !== 'string') {
+      throw new Error('HTTP response body must be text');
+    }
     return {
       statusCode: Number(response.responseCode),
-      body: response.result as string
+      body: response.result
     };
   }
 
@@ -258,7 +266,6 @@ class ActiveZhihuRequest {
     try {
       this.transport.destroy();
     } catch (_error) {
-      // 清理失败不能覆盖请求结果；NetworkKit handle 已不再被客户端引用。
     }
   }
 }
@@ -303,11 +310,11 @@ export class ZhihuHttpClient {
         throw failure;
       }
       return response;
-    } catch (error) {
+    } catch (error: BusinessError) {
       if (error instanceof HttpFailure) {
         throw error;
       }
-      throw httpFailureFromTransport((error as BusinessError).code);
+      throw httpFailureFromTransport(error.code);
     } finally {
       if (activeRequest !== undefined) {
         if (this.activeRequest === activeRequest) {

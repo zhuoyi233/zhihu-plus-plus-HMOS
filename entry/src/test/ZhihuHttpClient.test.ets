@@ -102,8 +102,20 @@ export default function zhihuHttpClientTest(): void {
         url: 'https://www.zhihu.com/api/v4/questions/1',
         accept: 'application/json'
       });
+      const dailyPrimary = prepareZhihuHttpRequest({
+        url: 'https://news-at.zhihu.com/api/4/stories/latest',
+        accept: 'application/json'
+      });
+      const dailyFallback = prepareZhihuHttpRequest({
+        url: 'https://daily.zhihu.com/api/4/stories/latest',
+        accept: 'application/json'
+      });
       expect(prepared.headers.Cookie).assertUndefined();
       expect(JSON.stringify(prepared.headers).includes('x-zse-93')).assertFalse();
+      expect(dailyPrimary.headers.Cookie).assertUndefined();
+      expect(JSON.stringify(dailyPrimary.headers).includes('x-zse-')).assertFalse();
+      expect(dailyFallback.headers.Cookie).assertUndefined();
+      expect(JSON.stringify(dailyFallback.headers).includes('x-zse-')).assertFalse();
       expect(prepared.connectTimeout).assertEqual(10000);
       expect(prepared.readTimeout).assertEqual(15000);
       expect(prepared.maxRedirects).assertEqual(0);
@@ -119,11 +131,14 @@ export default function zhihuHttpClientTest(): void {
         'https://www.zhihu.com:443/api/v4/me',
         'https://api.zhihu.com.evil.example/topstory/recommend'
       ];
-      for (let index = 0; index < rejectedUrls.length; index += 1) {
-        expect(isTrustedZhihuRequestUrl(rejectedUrls[index])).assertFalse();
+      for (const rejectedUrl of rejectedUrls) {
+        expect(isTrustedZhihuRequestUrl(rejectedUrl)).assertFalse();
       }
       expect(isTrustedZhihuRequestUrl('https://www.zhihu.com/api/v4/me')).assertTrue();
       expect(isTrustedZhihuRequestUrl('https://api.zhihu.com/topstory/recommend')).assertTrue();
+      expect(isTrustedZhihuRequestUrl('https://news-at.zhihu.com/api/4/stories/latest')).assertTrue();
+      expect(isTrustedZhihuRequestUrl('https://daily.zhihu.com/api/4/stories/latest')).assertTrue();
+      expect(isTrustedZhihuRequestUrl('https://daily.zhihu.com.evil.example/api/4/stories/latest')).assertFalse();
 
       const provider = new CountingCookieProvider();
       let failure: HttpFailure | undefined = undefined;
@@ -134,7 +149,9 @@ export default function zhihuHttpClientTest(): void {
           signWithZse: true
         });
       } catch (error) {
-        failure = error as HttpFailure;
+        if (error instanceof HttpFailure) {
+          failure = error;
+        }
       }
       expect(failure?.kind).assertEqual(HttpFailureKind.CLIENT);
       expect(failure?.retryable).assertFalse();
@@ -156,17 +173,25 @@ export default function zhihuHttpClientTest(): void {
     it('rejectsSensitiveSessionHeadersForApiHostBeforeReadingCookies', 0, async () => {
       expect(isSessionCapableZhihuRequestUrl('https://www.zhihu.com/api/v4/me')).assertTrue();
       expect(isSessionCapableZhihuRequestUrl('https://api.zhihu.com/topstory/recommend')).assertFalse();
+      expect(isSessionCapableZhihuRequestUrl('https://news-at.zhihu.com/api/4/stories/latest')).assertFalse();
+      expect(isSessionCapableZhihuRequestUrl('https://daily.zhihu.com/api/4/stories/latest')).assertFalse();
       const provider = new CountingCookieProvider();
       const rejectedRequests: Array<ZhihuHttpRequest> = [
         { url: 'https://api.zhihu.com/topstory/recommend', useSession: true },
-        { url: 'https://api.zhihu.com/topstory/recommend', signWithZse: true }
+        { url: 'https://api.zhihu.com/topstory/recommend', signWithZse: true },
+        { url: 'https://news-at.zhihu.com/api/4/stories/latest', useSession: true },
+        { url: 'https://news-at.zhihu.com/api/4/stories/latest', signWithZse: true },
+        { url: 'https://daily.zhihu.com/api/4/stories/latest', useSession: true },
+        { url: 'https://daily.zhihu.com/api/4/stories/latest', signWithZse: true }
       ];
-      for (let index = 0; index < rejectedRequests.length; index += 1) {
+      for (const rejectedRequest of rejectedRequests) {
         let failure: HttpFailure | undefined = undefined;
         try {
-          await new ZhihuHttpClient(provider).execute(rejectedRequests[index]);
+          await new ZhihuHttpClient(provider).execute(rejectedRequest);
         } catch (error) {
-          failure = error as HttpFailure;
+          if (error instanceof HttpFailure) {
+            failure = error;
+          }
         }
         expect(failure?.kind).assertEqual(HttpFailureKind.CLIENT);
       }
@@ -181,14 +206,18 @@ export default function zhihuHttpClientTest(): void {
           useSession: true
         });
       } catch (error) {
-        failures.push(error as HttpFailure);
+        if (error instanceof HttpFailure) {
+          failures.push(error);
+        }
       }
       try {
         await new ZhihuHttpClient(undefined, new ThrowingTransportFactory()).execute({
           url: 'https://www.zhihu.com/api/v4/test'
         });
       } catch (error) {
-        failures.push(error as HttpFailure);
+        if (error instanceof HttpFailure) {
+          failures.push(error);
+        }
       }
       expect(failures.length).assertEqual(2);
       expect(failures[0].kind).assertEqual(HttpFailureKind.NETWORK);
@@ -226,12 +255,14 @@ export default function zhihuHttpClientTest(): void {
       try {
         await new ZhihuHttpClient(undefined, factory).execute({ url: 'https://www.zhihu.com/api/v4/test' });
       } catch (error) {
-        failure = error as HttpFailure;
+        if (error instanceof HttpFailure) {
+          failure = error;
+        }
       }
       expect(failure?.kind).assertEqual(HttpFailureKind.SERVER);
       expect(failure?.status).assertEqual(503);
       expect(failure?.retryable).assertTrue();
-      expect((failure as HttpFailure).message.includes('upstream body')).assertFalse();
+      expect(failure?.message.includes('upstream body')).assertFalse();
       expect(factory.transport.destroyCount).assertEqual(1);
     });
 
@@ -242,7 +273,9 @@ export default function zhihuHttpClientTest(): void {
       try {
         await new ZhihuHttpClient(undefined, factory).execute({ url: 'https://www.zhihu.com/api/v4/test' });
       } catch (error) {
-        failure = error as HttpFailure;
+        if (error instanceof HttpFailure) {
+          failure = error;
+        }
       }
       expect(factory.transport.requestValue?.maxRedirects).assertEqual(0);
       expect(failure?.kind).assertEqual(HttpFailureKind.CLIENT);
@@ -261,7 +294,9 @@ export default function zhihuHttpClientTest(): void {
       try {
         await pending;
       } catch (error) {
-        failure = error as HttpFailure;
+        if (error instanceof HttpFailure) {
+          failure = error;
+        }
       }
       expect(failure?.kind).assertEqual(HttpFailureKind.CANCELLED);
       expect(replacement.statusCode).assertEqual(200);

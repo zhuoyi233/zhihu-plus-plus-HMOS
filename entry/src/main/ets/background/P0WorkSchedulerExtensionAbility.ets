@@ -5,7 +5,6 @@ export default class P0WorkSchedulerExtensionAbility extends WorkSchedulerExtens
     try {
       workScheduler.stopWork(work, false);
     } catch (_error) {
-      // The UI probe can cancel this one-off work before the callback runs; that race is already a clean stop.
     }
   }
 }

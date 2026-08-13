@@ -27,6 +27,9 @@ export default function p1NavigationTest(): void {
     it('recognizesEveryDeclaredDestinationName', 0, () => {
       const names: Array<P1DestinationName> = [
         P1DestinationName.HOME,
+        P1DestinationName.FOLLOWING,
+        P1DestinationName.HOT,
+        P1DestinationName.DAILY,
         P1DestinationName.QUESTION,
         P1DestinationName.ANSWER,
         P1DestinationName.ARTICLE,
@@ -39,6 +42,8 @@ export default function p1NavigationTest(): void {
         P1DestinationName.NOTIFICATION,
         P1DestinationName.LOGIN,
         P1DestinationName.SETTINGS,
+        P1DestinationName.BLOCKING_RULES,
+        P1DestinationName.READ_HISTORY,
         P1DestinationName.TECHNICAL_LAB,
         P1DestinationName.READER_PROBE,
         P1DestinationName.IMAGE_PROBE,
@@ -119,10 +124,18 @@ export default function p1NavigationTest(): void {
       const login = decodeP1Destination(P1DestinationName.LOGIN, loginParam);
 
       expect(answer?.name).assertEqual(P1DestinationName.ANSWER);
-      expect((answer as ContentDestination).id).assertEqual('2040633177593619876');
+      if (answer?.name === P1DestinationName.ANSWER) {
+        expect(answer.id).assertEqual('2040633177593619876');
+        expect(shouldReloadAfterAuthentication(answer)).assertTrue();
+      }
       expect(probe?.name).assertEqual(P1DestinationName.READER_PROBE);
-      expect(shouldReloadAfterAuthentication(answer as ContentDestination)).assertTrue();
-      expect(shouldReloadAfterAuthentication(login as InfrastructureDestination)).assertFalse();
+      expect(shouldReloadAfterAuthentication(search)).assertTrue();
+      expect(shouldReloadAfterAuthentication({ name: P1DestinationName.FOLLOWING })).assertTrue();
+      expect(shouldReloadAfterAuthentication({ name: P1DestinationName.PIN, id: '1' })).assertTrue();
+      expect(shouldReloadAfterAuthentication({ name: P1DestinationName.PEOPLE, id: 'member-token' })).assertTrue();
+      if (login?.name === P1DestinationName.LOGIN) {
+        expect(shouldReloadAfterAuthentication(login)).assertFalse();
+      }
       expect(decodeP1Destination(P1DestinationName.ANSWER, mismatchedParam)).assertUndefined();
       expect(decodeP1Destination(P1DestinationName.ANSWER, emptyIdParam)).assertUndefined();
       expect(decodeP1Destination(P1DestinationName.READER_PROBE, unexpectedIdParam)).assertUndefined();
@@ -147,8 +160,11 @@ export default function p1NavigationTest(): void {
         query: 'line\nbreak'
       };
       const maxId = '9'.repeat(30);
-      expect((decodeP1Destination(P1DestinationName.SEARCH, maxQuery) as SearchDestination).query)
-        .assertEqual(maxQuery.query);
+      const decodedMaxQuery = decodeP1Destination(P1DestinationName.SEARCH, maxQuery);
+      expect(decodedMaxQuery?.name).assertEqual(P1DestinationName.SEARCH);
+      if (decodedMaxQuery?.name === P1DestinationName.SEARCH) {
+        expect(decodedMaxQuery.query).assertEqual(maxQuery.query);
+      }
       expect(decodeP1Destination(P1DestinationName.SEARCH, longQuery)).assertUndefined();
       expect(decodeP1Destination(P1DestinationName.SEARCH, controlQuery)).assertUndefined();
       [P1DestinationName.QUESTION, P1DestinationName.ANSWER, P1DestinationName.ARTICLE]
@@ -160,6 +176,36 @@ export default function p1NavigationTest(): void {
           expect(decodeP1Destination(name, oversizedIdParam)).assertUndefined();
           expect(decodeP1Destination(name, malformedIdParam)).assertUndefined();
         });
+      expect(decodeP1Destination(P1DestinationName.PIN, {
+        name: P1DestinationName.PIN,
+        id: '9'.repeat(30)
+      })?.name).assertEqual(P1DestinationName.PIN);
+      expect(decodeP1Destination(P1DestinationName.PIN, {
+        name: P1DestinationName.PIN,
+        id: '01'
+      })).assertUndefined();
+      expect(decodeP1Destination(P1DestinationName.PIN, {
+        name: P1DestinationName.PIN,
+        id: '1'.repeat(31)
+      })).assertUndefined();
+      expect(decodeP1Destination(P1DestinationName.PEOPLE, {
+        name: P1DestinationName.PEOPLE,
+        id: 'member_token-1'
+      })?.name).assertEqual(P1DestinationName.PEOPLE);
+      expect(decodeP1Destination(P1DestinationName.PEOPLE, {
+        name: P1DestinationName.PEOPLE,
+        id: '../member'
+      })).assertUndefined();
+      expect(decodeP1Destination(P1DestinationName.PEOPLE, {
+        name: P1DestinationName.PEOPLE,
+        id: 'a'.repeat(201)
+      })).assertUndefined();
+      [P1DestinationName.FOLLOWING, P1DestinationName.HOT, P1DestinationName.DAILY,
+        P1DestinationName.BLOCKING_RULES, P1DestinationName.READ_HISTORY]
+        .forEach((name: P1DestinationName): void => {
+          expect(decodeP1Destination(name, { name: name })?.name).assertEqual(name);
+          expect(decodeP1Destination(name, { name: name, id: 'unexpected' })).assertUndefined();
+        });
     });
 
     it('mapsResolvedLinksToTypedStartupDestinations', 0, () => {
@@ -168,9 +214,13 @@ export default function p1NavigationTest(): void {
       const home = toP1Destination({ type: DeepLinkType.MAIN_TABS, id: '', query: '' });
 
       expect(video.name).assertEqual(P1DestinationName.VIDEO);
-      expect((video as ContentDestination).id).assertEqual('123');
+      if (video.name === P1DestinationName.VIDEO) {
+        expect(video.id).assertEqual('123');
+      }
       expect(search.name).assertEqual(P1DestinationName.SEARCH);
-      expect((search as SearchDestination).query).assertEqual('ArkTS');
+      if (search.name === P1DestinationName.SEARCH) {
+        expect(search.query).assertEqual('ArkTS');
+      }
       expect(home.name).assertEqual(P1DestinationName.HOME);
     });
 

@@ -4,6 +4,15 @@ import { detectBarcode, scanBarcode, scanCore } from '@kit.ScanKit';
 import { assessQrScanValue, QrScanDecision } from 'core';
 import { QR_FIXTURE_VALUE, writeQrScanFixture } from '../scan/QrScanFixture';
 
+class QrScanServiceFailure extends Error {
+  readonly code: number;
+
+  constructor(code: number) {
+    super('QR scan service failed');
+    this.code = code;
+  }
+}
+
 interface QrPolicyCase {
   input: string;
   expected: QrScanDecision;
@@ -107,18 +116,23 @@ export struct QrScanProbePage {
     this.scanning = true;
     this.status = '正在打开 HarmonyOS 系统扫码界面…';
     try {
-      const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      const context = this.getUIContext().getHostContext();
+      if (!(context instanceof common.UIAbilityContext)) {
+        throw new Error('无法获取应用上下文');
+      }
       const result = await scanBarcode.startScanForResult(context, {
         scanTypes: [scanCore.ScanType.QR_CODE],
         enableMultiMode: false,
         enableAlbum: true
+      }).catch((error: BusinessError) => {
+        throw new QrScanServiceFailure(error.code);
       });
       this.status = assessQrScanValue(result.originalValue).message;
     } catch (error) {
-      const businessError = error as BusinessError;
-      this.status = businessError.code === scanCore.ScanErrorCode.SCAN_SERVICE_CANCELED
+      const code = error instanceof QrScanServiceFailure ? error.code : undefined;
+      this.status = code === scanCore.ScanErrorCode.SCAN_SERVICE_CANCELED
         ? '用户取消扫码'
-        : `扫码服务不可用（错误码 ${businessError.code ?? '未知'}）`;
+        : `扫码服务不可用（错误码 ${code ?? '未知'}）`;
     } finally {
       this.scanning = false;
     }
@@ -128,11 +142,16 @@ export struct QrScanProbePage {
     this.scanning = true;
     this.status = '正在用 Scan Kit 识别内置测试码图…';
     try {
-      const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      const context = this.getUIContext().getHostContext();
+      if (!(context instanceof common.UIAbilityContext)) {
+        throw new Error('无法获取应用上下文');
+      }
       const fixturePath = writeQrScanFixture(context.cacheDir);
       const results = await detectBarcode.decode({ uri: fixturePath }, {
         scanTypes: [scanCore.ScanType.QR_CODE],
         enableMultiMode: false
+      }).catch((error: BusinessError) => {
+        throw new QrScanServiceFailure(error.code);
       });
       const decodedValue = results.length === 1 ? results[0].originalValue : '';
       const assessment = assessQrScanValue(decodedValue);
@@ -142,8 +161,8 @@ export struct QrScanProbePage {
         ? '内置码图识别通过；登录二维码令牌未显示、未记录'
         : '内置码图识别失败或结果不符合登录 URL 策略';
     } catch (error) {
-      const businessError = error as BusinessError;
-      this.status = `内置码图识别失败（错误码 ${businessError.code ?? '未知'}）`;
+      const code = error instanceof QrScanServiceFailure ? error.code : '未知';
+      this.status = `内置码图识别失败（错误码 ${code}）`;
     } finally {
       this.scanning = false;
     }

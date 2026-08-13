@@ -27,12 +27,11 @@ export class SessionKeyStore {
       }
       const secret = results[0].get(asset.Tag.SECRET);
       return secret instanceof Uint8Array ? secret : undefined;
-    } catch (error) {
-      const businessError = error as BusinessError;
-      if (businessError.code === ASSET_NOT_FOUND) {
+    } catch (error: BusinessError) {
+      if (error.code === ASSET_NOT_FOUND) {
         return undefined;
       }
-      throw new Error(`Asset Store query failed (${businessError.code}): ${businessError.message}`);
+      throw new Error(`Asset Store query failed (${error.code}): ${error.message}`);
     }
   }
 
@@ -51,20 +50,18 @@ export class SessionKeyStore {
     try {
       await asset.add(attributes);
       return keyData;
-    } catch (error) {
+    } catch (error: BusinessError) {
       keyData.fill(0);
-      const businessError = error as BusinessError;
-      throw new Error(`Asset Store add failed (${businessError.code})`);
+      throw new Error(`Asset Store add failed (${error.code})`);
     }
   }
 
   async clear(): Promise<void> {
     try {
       await asset.remove(keyQuery());
-    } catch (error) {
-      const businessError = error as BusinessError;
-      if (businessError.code !== ASSET_NOT_FOUND) {
-        throw new Error(`Asset Store remove failed (${businessError.code}): ${businessError.message}`);
+    } catch (error: BusinessError) {
+      if (error.code !== ASSET_NOT_FOUND) {
+        throw new Error(`Asset Store remove failed (${error.code}): ${error.message}`);
       }
     }
   }

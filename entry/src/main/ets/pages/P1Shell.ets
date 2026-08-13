@@ -2,13 +2,11 @@ import { common } from '@kit.AbilityKit';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import { AppPreferencesStore, AppThemeMode } from 'data';
 import {
-  ContentDestination,
   decodeP1Destination,
   isInfrastructureDestination,
   LatestOperationGuard,
   P1Destination,
   P1DestinationName,
-  SearchDestination,
   shouldReloadAfterAuthentication,
   shouldPushP1Destination,
   startupDestinationChannel,
@@ -18,6 +16,9 @@ import {
 @Component
 export struct P1Shell {
   @BuilderParam homeContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
+  @BuilderParam followingContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
+  @BuilderParam hotContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
+  @BuilderParam dailyContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
   @BuilderParam technicalLabContent: (navigate: (destination: P1Destination) => void) => void =
     this.emptyTechnicalLab;
   @BuilderParam searchContent: (query: string, navigate: (destination: P1Destination) => void) => void =
@@ -28,6 +29,12 @@ export struct P1Shell {
     this.emptyContent;
   @BuilderParam articleContent: (id: string, navigate: (destination: P1Destination) => void) => void =
     this.emptyContent;
+  @BuilderParam peopleContent: (id: string, navigate: (destination: P1Destination) => void) => void =
+    this.emptyContent;
+  @BuilderParam pinContent: (id: string, navigate: (destination: P1Destination) => void) => void =
+    this.emptyContent;
+  @BuilderParam blockingRulesContent: () => void = this.emptyPage;
+  @BuilderParam readHistoryContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
   @BuilderParam loginContent: (onBack: () => void, onAuthenticated: () => void) => void = this.emptyLogin;
   @BuilderParam readerProbeContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam imageProbeContent: (onBack: () => void) => void = this.emptyProbe;
@@ -83,6 +90,11 @@ export struct P1Shell {
   }
 
   @Builder
+  emptyPage() {
+    Blank();
+  }
+
+  @Builder
   emptyProbe(_onBack: () => void) {
     Blank();
   }
@@ -94,25 +106,38 @@ export struct P1Shell {
 
   @Builder
   destinationBuilder(name: string, param: Object) {
-    if (decodeP1Destination(name, param) === undefined) {
+    const destination = decodeP1Destination(name, param);
+    if (destination === undefined) {
       NavDestination() {
         this.invalidDestinationPage();
       }
       .title('无法打开页面')
       .backgroundColor($r('app.color.page_background'))
-    } else if (name === P1DestinationName.SETTINGS) {
+    } else if (destination.name === P1DestinationName.SETTINGS) {
       NavDestination() {
         this.settingsPage();
       }
       .title('显示与阅读')
       .backgroundColor($r('app.color.page_background'))
-    } else if (name === P1DestinationName.TECHNICAL_LAB) {
+    } else if (destination.name === P1DestinationName.BLOCKING_RULES) {
+      NavDestination() {
+        this.blockingRulesContent();
+      }
+      .title('内容屏蔽')
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.READ_HISTORY) {
+      NavDestination() {
+        this.readHistoryContent((destination: P1Destination): void => this.navigate(destination));
+      }
+      .title('已读记录')
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.TECHNICAL_LAB) {
       NavDestination() {
         this.technicalLabContent((destination: P1Destination): void => this.navigate(destination));
       }
       .title('技术实验室')
       .backgroundColor($r('app.color.page_background'))
-    } else if (name === P1DestinationName.LOGIN) {
+    } else if (destination.name === P1DestinationName.LOGIN) {
       NavDestination() {
         this.loginContent((): void => {
           this.pathStack.pop();
@@ -122,85 +147,121 @@ export struct P1Shell {
       }
       .hideTitleBar(true)
       .backgroundColor($r('app.color.page_background'))
-    } else if (name === P1DestinationName.SEARCH) {
+    } else if (destination.name === P1DestinationName.SEARCH) {
       NavDestination() {
         this.searchContent(
-          (decodeP1Destination(name, param) as SearchDestination).query,
+          destination.query,
           (destination: P1Destination): void => this.navigate(destination)
         );
       }
       .title('搜索')
       .backgroundColor($r('app.color.page_background'))
-    } else if (name === P1DestinationName.QUESTION) {
+    } else if (destination.name === P1DestinationName.FOLLOWING) {
+      NavDestination() {
+        this.followingContent((destination: P1Destination): void => this.navigate(destination));
+      }
+      .title('关注')
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.HOT) {
+      NavDestination() {
+        this.hotContent((destination: P1Destination): void => this.navigate(destination));
+      }
+      .title('热榜')
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.DAILY) {
+      NavDestination() {
+        this.dailyContent((destination: P1Destination): void => this.navigate(destination));
+      }
+      .title('知乎日报')
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.QUESTION) {
       NavDestination() {
         this.questionContent(
-          (decodeP1Destination(name, param) as ContentDestination).id,
+          destination.id,
           (destination: P1Destination): void => this.navigate(destination)
         );
       }
       .title('问题')
       .backgroundColor($r('app.color.page_background'))
-    } else if (name === P1DestinationName.ANSWER) {
+    } else if (destination.name === P1DestinationName.ANSWER) {
       NavDestination() {
         this.answerContent(
-          (decodeP1Destination(name, param) as ContentDestination).id,
+          destination.id,
           (destination: P1Destination): void => this.navigate(destination)
         );
       }
       .title('回答')
       .backgroundColor($r('app.color.page_background'))
-    } else if (name === P1DestinationName.ARTICLE) {
+    } else if (destination.name === P1DestinationName.ARTICLE) {
       NavDestination() {
         this.articleContent(
-          (decodeP1Destination(name, param) as ContentDestination).id,
+          destination.id,
           (destination: P1Destination): void => this.navigate(destination)
         );
       }
       .title('文章')
       .backgroundColor($r('app.color.page_background'))
-    } else if (name === P1DestinationName.READER_PROBE) {
+    } else if (destination.name === P1DestinationName.PEOPLE) {
+      NavDestination() {
+        this.peopleContent(
+          destination.id,
+          (destination: P1Destination): void => this.navigate(destination)
+        );
+      }
+      .title('用户主页')
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.PIN) {
+      NavDestination() {
+        this.pinContent(
+          destination.id,
+          (destination: P1Destination): void => this.navigate(destination)
+        );
+      }
+      .title('想法')
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.READER_PROBE) {
       NavDestination() {
         this.readerProbeContent((): void => {
           this.pathStack.pop();
         });
       }
       .backgroundColor($r('app.color.page_background'))
-    } else if (name === P1DestinationName.IMAGE_PROBE) {
+    } else if (destination.name === P1DestinationName.IMAGE_PROBE) {
       NavDestination() {
         this.imageProbeContent((): void => {
           this.pathStack.pop();
         });
       }
       .backgroundColor($r('app.color.page_background'))
-    } else if (name === P1DestinationName.DATABASE_PROBE) {
+    } else if (destination.name === P1DestinationName.DATABASE_PROBE) {
       NavDestination() {
         this.databaseProbeContent((): void => {
           this.pathStack.pop();
         });
       }
       .backgroundColor($r('app.color.page_background'))
-    } else if (name === P1DestinationName.DEEP_LINK_PROBE) {
+    } else if (destination.name === P1DestinationName.DEEP_LINK_PROBE) {
       NavDestination() {
         this.deepLinkProbeContent((): void => {
           this.pathStack.pop();
         });
       }
       .backgroundColor($r('app.color.page_background'))
-    } else if (name === P1DestinationName.QR_SCAN_PROBE) {
+    } else if (destination.name === P1DestinationName.QR_SCAN_PROBE) {
       NavDestination() {
         this.qrScanProbeContent((): void => {
           this.pathStack.pop();
         });
       }
       .backgroundColor($r('app.color.page_background'))
-    } else if (name === P1DestinationName.BACKGROUND_TASK_PROBE) {
+    } else if (destination.name === P1DestinationName.BACKGROUND_TASK_PROBE) {
       NavDestination() {
         this.backgroundTaskProbeContent((): void => {
           this.pathStack.pop();
         });
       }
       .backgroundColor($r('app.color.page_background'))
-    } else if (name === P1DestinationName.DOMAIN_FIXTURE_PROBE) {
+    } else if (destination.name === P1DestinationName.DOMAIN_FIXTURE_PROBE) {
       NavDestination() {
         this.domainFixtureProbeContent((): void => {
           this.pathStack.pop();
@@ -209,7 +270,7 @@ export struct P1Shell {
       .backgroundColor($r('app.color.page_background'))
     } else {
       NavDestination() {
-        this.businessPlaceholder(decodeP1Destination(name, param) as P1Destination);
+        this.businessPlaceholder(destination);
       }
       .title(name)
       .backgroundColor($r('app.color.page_background'))
@@ -307,6 +368,18 @@ export struct P1Shell {
           .width('100%')
           .fontSize($r('app.float.p1_body_font_size'))
           .onClick(() => this.navigate({ name: P1DestinationName.LOGIN }))
+
+        Button('内容屏蔽')
+          .id('p2_open_blocking_rules')
+          .width('100%')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .onClick(() => this.navigate({ name: P1DestinationName.BLOCKING_RULES }))
+
+        Button('已读记录')
+          .id('p2_open_read_history')
+          .width('100%')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .onClick(() => this.navigate({ name: P1DestinationName.READ_HISTORY }))
         }
         .width('100%')
         .padding($r('app.float.p1_page_padding'))
@@ -426,21 +499,32 @@ export struct P1Shell {
   }
 
   private destinationDescription(destination: P1Destination): string {
-    if (destination.name === P1DestinationName.SEARCH) {
-      return `搜索：${destination.query}`;
+    switch (destination.name) {
+      case P1DestinationName.SEARCH:
+        return `搜索：${destination.query}`;
+      case P1DestinationName.COMMENT:
+        return `内容：${destination.contentId}`;
+      case P1DestinationName.NOTIFICATION:
+        return '通知页面将在后续业务迁移阶段接入。';
+      case P1DestinationName.QUESTION:
+      case P1DestinationName.ANSWER:
+      case P1DestinationName.ARTICLE:
+      case P1DestinationName.VIDEO:
+      case P1DestinationName.PIN:
+      case P1DestinationName.PEOPLE:
+      case P1DestinationName.COLLECTION:
+        return `内容 ID：${destination.id}`;
+      default:
+        return destination.name;
     }
-    if (destination.name === P1DestinationName.COMMENT) {
-      return `内容：${destination.contentId}`;
-    }
-    if (destination.name === P1DestinationName.NOTIFICATION) {
-      return '通知页面将在后续业务迁移阶段接入。';
-    }
-    const content = destination as ContentDestination;
-    return `内容 ID：${content.id}`;
   }
 
   private async restoreThemeMode(): Promise<void> {
-    const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const context = this.getAbilityContext();
+    if (context === undefined) {
+      this.themePersistenceStatus = '无法访问应用上下文';
+      return;
+    }
     const generation = this.themeOperationGuard.next();
     try {
       await this.themeSaveQueue.catch((_error: Error): void => {
@@ -466,7 +550,11 @@ export struct P1Shell {
   }
 
   private async selectThemeMode(mode: AppThemeMode): Promise<void> {
-    const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const context = this.getAbilityContext();
+    if (context === undefined) {
+      this.themePersistenceStatus = '无法访问应用上下文';
+      return;
+    }
     const generation = this.themeOperationGuard.next();
     if (!this.applyThemeMode(context, mode)) {
       this.themePersistenceStatus = '主题模式应用失败，请重试';
@@ -507,5 +595,10 @@ export struct P1Shell {
     } catch (_error) {
       return false;
     }
+  }
+
+  private getAbilityContext(): common.UIAbilityContext | undefined {
+    const context = this.getUIContext().getHostContext();
+    return context instanceof common.UIAbilityContext ? context : undefined;
   }
 }

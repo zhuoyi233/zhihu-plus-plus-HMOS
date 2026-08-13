@@ -1,3 +1,12 @@
+import {
+  JsonArrayValue,
+  JsonNumberValue,
+  JsonObjectValue,
+  JsonStringValue,
+  JsonValue,
+  parseStrictJson
+} from 'core';
+
 const COOKIE_ATTRIBUTES: Set<string> = new Set<string>([
   'domain', 'path', 'expires', 'max-age', 'httponly', 'secure', 'samesite'
 ]);
@@ -119,25 +128,42 @@ export function encodeCookieSession(cookies: Array<SessionCookie>, savedAt: numb
 }
 
 export function decodeCookieSession(serialized: string): CookieSessionData {
-  const payload = JSON.parse(serialized) as CookieSessionData;
-  if (payload === null || typeof payload !== 'object' || Array.isArray(payload) || payload.version !== 1 ||
-    typeof payload.savedAt !== 'number' || !Number.isFinite(payload.savedAt) || !Array.isArray(payload.cookies) ||
-    payload.cookies.length > COOKIE_FIELD_MAX_COUNT) {
+  const payload = parseStrictJson(serialized);
+  if (!(payload instanceof JsonObjectValue)) {
     throw new Error('Unsupported cookie session format');
   }
-  payload.cookies.forEach((cookie: SessionCookie): void => {
-    if (cookie === null || typeof cookie !== 'object' || Array.isArray(cookie) ||
-      typeof cookie.name !== 'string' || typeof cookie.value !== 'string' ||
-      !isValidCookieName(cookie.name) || !isSafeCookieValue(cookie.value) ||
-      (cookie.expiresAt !== undefined &&
-        (typeof cookie.expiresAt !== 'number' || !Number.isFinite(cookie.expiresAt)))) {
+  const version = payload.get('version');
+  const savedAt = payload.get('savedAt');
+  const cookieValues = payload.get('cookies');
+  if (!(version instanceof JsonNumberValue) || version.value !== 1 ||
+    !(savedAt instanceof JsonNumberValue) || !Number.isFinite(savedAt.value) ||
+    !(cookieValues instanceof JsonArrayValue) || cookieValues.items.length > COOKIE_FIELD_MAX_COUNT) {
+    throw new Error('Unsupported cookie session format');
+  }
+  const cookies: Array<SessionCookie> = [];
+  cookieValues.items.forEach((value: JsonValue): void => {
+    if (!(value instanceof JsonObjectValue)) {
       throw new Error('Unsupported cookie session format');
     }
+    const name = value.get('name');
+    const cookieValue = value.get('value');
+    const expiresAt = value.get('expiresAt');
+    if (!(name instanceof JsonStringValue) || !(cookieValue instanceof JsonStringValue) ||
+      !isValidCookieName(name.value) || !isSafeCookieValue(cookieValue.value) ||
+      (expiresAt !== undefined &&
+        (!(expiresAt instanceof JsonNumberValue) || !Number.isFinite(expiresAt.value)))) {
+      throw new Error('Unsupported cookie session format');
+    }
+    cookies.push({
+      name: name.value,
+      value: cookieValue.value,
+      expiresAt: expiresAt instanceof JsonNumberValue ? expiresAt.value : undefined
+    });
   });
   return {
     version: 1,
-    savedAt: payload.savedAt,
-    cookies: copySessionCookies(payload.cookies)
+    savedAt: savedAt.value,
+    cookies: cookies
   };
 }
 

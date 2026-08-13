@@ -42,7 +42,9 @@ export default function domainModelTest(): void {
       try {
         decodeQuestion('{"id":9007199254740993,"title":"问题"}');
       } catch (error) {
-        failureKind = (error as DomainDecodeError).kind;
+        if (error instanceof DomainDecodeError) {
+          failureKind = error.kind;
+        }
       }
 
       expect(question.id).assertEqual('9007199254740993');
@@ -88,7 +90,9 @@ export default function domainModelTest(): void {
       try {
         decodeUser('{invalid');
       } catch (error) {
-        failureKind = (error as DomainDecodeError).kind;
+        if (error instanceof DomainDecodeError) {
+          failureKind = error.kind;
+        }
       }
 
       expect(failureKind).assertEqual(DomainDecodeFailureKind.INVALID_JSON);
@@ -99,8 +103,10 @@ export default function domainModelTest(): void {
       try {
         decodeFeedPage('{"error":{"code":10001,"message":"敏感上游文案不应进入异常"}}');
       } catch (error) {
-        failureKind = (error as DomainDecodeError).kind;
-        expect((error as Error).message.includes('敏感上游文案')).assertFalse();
+        if (error instanceof DomainDecodeError) {
+          failureKind = error.kind;
+          expect(error.message.includes('敏感上游文案')).assertFalse();
+        }
       }
 
       expect(failureKind).assertEqual(DomainDecodeFailureKind.UPSTREAM_ERROR);
@@ -111,7 +117,9 @@ export default function domainModelTest(): void {
       try {
         decodeUser('{"id":"","name":""}');
       } catch (error) {
-        missingKind = (error as DomainDecodeError).kind;
+        if (error instanceof DomainDecodeError) {
+          missingKind = error.kind;
+        }
       }
       const page = decodeFeedPage('{"data":[{"type":"tab_list"},{"id":"feed-2",' +
         '"target":{"type":"zvideo","id":"video-1"}},{"id":"feed-3",' +
@@ -138,7 +146,9 @@ export default function domainModelTest(): void {
         try {
           decodeFeedPage(payload);
         } catch (error) {
-          failure = error as DomainDecodeError;
+          if (error instanceof DomainDecodeError) {
+            failure = error;
+          }
         }
         expect(failure instanceof DomainDecodeError).assertTrue();
         expect(failure?.kind).assertEqual(DomainDecodeFailureKind.MISSING_FIELD);

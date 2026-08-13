@@ -1,9 +1,11 @@
 import { feedItemIdentity, FeedItem, FeedPage, PageCursor } from '../domain/DomainModels';
+import { ContentBlockingMatcher, ContentBlockingSession } from '../data/BlockingRuleStore';
 import { decodeFeedPage } from '../domain/ZhihuDomainDecoder';
 import { ZhihuHttpClient, ZhihuHttpResponse } from '../network/ZhihuHttpClient';
 import { FeedRepository } from './FeedRepository';
 
-export const HOME_FEED_INCLUDE = 'data[*].content,excerpt,headline,target.author.badge_v2';
+export const HOME_FEED_INCLUDE =
+  'data[*].content,excerpt,headline,target.author.badge_v2,target.bound_topic_ids,target.question.bound_topic_ids';
 const HOME_FEED_INCLUDE_QUERY = `include=${encodeURIComponent(HOME_FEED_INCLUDE).replace(/\*/g, '%2A')}`;
 export const HOME_FEED_URL =
   `https://api.zhihu.com/topstory/recommend?${HOME_FEED_INCLUDE_QUERY}`;
@@ -96,12 +98,14 @@ function terminalCursor(cursor: PageCursor): PageCursor {
 
 export class DefaultFeedRepository implements FeedRepository {
   private readonly httpClient: ZhihuHttpClient;
+  private readonly blockingMatcher?: ContentBlockingMatcher;
   private requestedCursors: Set<string> = new Set<string>();
   private deliveredItemIdentities: Set<string> = new Set<string>();
   private generation: number = 0;
 
-  constructor(httpClient: ZhihuHttpClient = new ZhihuHttpClient()) {
+  constructor(httpClient: ZhihuHttpClient = new ZhihuHttpClient(), blockingMatcher?: ContentBlockingMatcher) {
     this.httpClient = httpClient;
+    this.blockingMatcher = blockingMatcher;
   }
 
   cancel(): void {
@@ -129,6 +133,26 @@ export class DefaultFeedRepository implements FeedRepository {
       throw new FeedRepositoryFailure(FeedRepositoryFailureKind.CANCELLED);
     }
     const decodedPage = decodeFeedPage(response.body);
+    let visibleItems = decodedPage.items;
+    if (this.blockingMatcher !== undefined) {
+      const blockingSession: ContentBlockingSession = await this.blockingMatcher.createSession();
+      visibleItems = decodedPage.items.filter((item: FeedItem): boolean => {
+        const authorId = item.target.author?.id;
+        return blockingSession.match(authorId === undefined ? {
+          title: item.target.title,
+          excerpt: item.target.excerpt,
+          topicIds: item.target.topicIds
+        } : {
+          title: item.target.title,
+          excerpt: item.target.excerpt,
+          authorId: authorId,
+          topicIds: item.target.topicIds
+        }) === undefined;
+      });
+    }
+    if (requestGeneration !== this.generation) {
+      throw new FeedRepositoryFailure(FeedRepositoryFailureKind.CANCELLED);
+    }
     const next = decodedPage.cursor.next;
     const nextKey = next === undefined ? undefined : canonicalHomeFeedCursorKey(next);
     const nextRequestedCursors = cursor === undefined ? new Set<string>() : cloneStringSet(this.requestedCursors);
@@ -136,7 +160,7 @@ export class DefaultFeedRepository implements FeedRepository {
       ? new Set<string>()
       : cloneStringSet(this.deliveredItemIdentities);
     nextRequestedCursors.add(cursorKey);
-    const items: Array<FeedItem> = decodedPage.items.filter((item: FeedItem): boolean => {
+    const items: Array<FeedItem> = visibleItems.filter((item: FeedItem): boolean => {
       const identity = feedItemIdentity(item);
       if (nextDeliveredIdentities.has(identity)) {
         return false;

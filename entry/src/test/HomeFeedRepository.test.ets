@@ -5,6 +5,11 @@ import {
   DefaultFeedRepository,
   FeedRepositoryFailure,
   FeedRepositoryFailureKind,
+  BlockableContentSummary,
+  BlockingMatch,
+  BlockingRuleKind,
+  ContentBlockingMatcher,
+  ContentBlockingSession,
   HOME_FEED_URL,
   HttpFailure,
   isHomeFeedCursorUrl,
@@ -99,8 +104,32 @@ class CancellationFeedTransportFactory implements ZhihuHttpTransportFactory {
   }
 }
 
+class RecordingFeedBlockingSession implements ContentBlockingSession {
+  readonly summaries: Array<BlockableContentSummary> = [];
+
+  match(content: BlockableContentSummary): BlockingMatch | undefined {
+    this.summaries.push(content);
+    return content.title.includes('屏蔽') ? {
+      kind: BlockingRuleKind.KEYWORD,
+      ruleId: '1',
+      reason: 'test'
+    } : undefined;
+  }
+}
+
+class RecordingFeedBlockingMatcher implements ContentBlockingMatcher {
+  readonly session: RecordingFeedBlockingSession = new RecordingFeedBlockingSession();
+  createCount: number = 0;
+
+  createSession(): Promise<ContentBlockingSession> {
+    this.createCount += 1;
+    return Promise.resolve(this.session);
+  }
+}
+
 const FIRST_PAGE = '{"data":[{"id":"feed-1","target":{"type":"article",' +
-  '"id":"article-1","title":"第一页"}}],"paging":{"is_end":false,"is_start":true,' +
+  '"id":"article-1","title":"第一页","author":{"id":"author-1","name":"作者"},' +
+  '"bound_topic_ids":[19551275]}}],"paging":{"is_end":false,"is_start":true,' +
   '"next":"https://api.zhihu.com/topstory/recommend?include=stale&%6fffset=2"}}';
 const SECOND_PAGE = '{"data":[{"id":"feed-1","target":{"type":"article",' +
   '"id":"article-1","title":"重复项"}},{"id":"feed-2","target":{"type":"question",' +
@@ -114,19 +143,22 @@ export default function homeFeedRepositoryTest(): void {
       expect(buildHomeFeedRequestUrl()).assertEqual(HOME_FEED_URL);
       expect(buildHomeFeedRequestUrl('https://api.zhihu.com/topstory/recommend?offset=2')).assertEqual(
         'https://api.zhihu.com/topstory/recommend?offset=2&' +
-          'include=data%5B%2A%5D.content%2Cexcerpt%2Cheadline%2Ctarget.author.badge_v2'
+          'include=data%5B%2A%5D.content%2Cexcerpt%2Cheadline%2Ctarget.author.badge_v2%2C' +
+            'target.bound_topic_ids%2Ctarget.question.bound_topic_ids'
       );
       expect(buildHomeFeedRequestUrl(
         'https://api.zhihu.com/topstory/recommend?include=stale&offset=3'
       )).assertEqual(
         'https://api.zhihu.com/topstory/recommend?offset=3&' +
-          'include=data%5B%2A%5D.content%2Cexcerpt%2Cheadline%2Ctarget.author.badge_v2'
+          'include=data%5B%2A%5D.content%2Cexcerpt%2Cheadline%2Ctarget.author.badge_v2%2C' +
+            'target.bound_topic_ids%2Ctarget.question.bound_topic_ids'
       );
       expect(buildHomeFeedRequestUrl(
         'https://api.zhihu.com/topstory/recommend?%69nclude=stale&%6fffset=3'
       )).assertEqual(
         'https://api.zhihu.com/topstory/recommend?offset=3&' +
-          'include=data%5B%2A%5D.content%2Cexcerpt%2Cheadline%2Ctarget.author.badge_v2'
+          'include=data%5B%2A%5D.content%2Cexcerpt%2Cheadline%2Ctarget.author.badge_v2%2C' +
+            'target.bound_topic_ids%2Ctarget.question.bound_topic_ids'
       );
       expect(canonicalHomeFeedCursorKey(
         'https://api.zhihu.com/topstory/recommend?offset=3&limit=10'
@@ -159,6 +191,24 @@ export default function homeFeedRepositoryTest(): void {
       expect(provider.readCount).assertEqual(0);
     });
 
+    it('filtersEachPageWithOneSnapshotAndRealAuthorTopicFields', 0, async () => {
+      const factory = new SequenceFeedTransportFactory([{ statusCode: 200, body: '{"data":[' +
+        '{"id":"feed-1","target":{"type":"article","id":"1","title":"保留",' +
+        '"author":{"id":"author-1","name":"作者"},"bound_topic_ids":[19551275]}},' +
+        '{"id":"feed-2","target":{"type":"article","id":"2","title":"屏蔽内容",' +
+        '"bound_topic_ids":[19551276]}}],"paging":{"is_end":true}}' }]);
+      const matcher = new RecordingFeedBlockingMatcher();
+      const repository = new DefaultFeedRepository(new ZhihuHttpClient(undefined, factory), matcher);
+      const page = await repository.loadHomePage();
+
+      expect(matcher.createCount).assertEqual(1);
+      expect(matcher.session.summaries.length).assertEqual(2);
+      expect(matcher.session.summaries[0].authorId).assertEqual('author-1');
+      expect(matcher.session.summaries[0].topicIds[0]).assertEqual('19551275');
+      expect(page.items.length).assertEqual(1);
+      expect(page.items[0].target.id).assertEqual('1');
+    });
+
     it('deduplicatesItemsAcrossPagesAndStopsLoopingCursor', 0, async () => {
       const factory = new SequenceFeedTransportFactory([
         { statusCode: 200, body: FIRST_PAGE },
@@ -176,7 +226,8 @@ export default function homeFeedRepositoryTest(): void {
       expect(second.cursor.next).assertUndefined();
       expect(factory.requests[1].url).assertEqual(
         'https://api.zhihu.com/topstory/recommend?offset=2&' +
-          'include=data%5B%2A%5D.content%2Cexcerpt%2Cheadline%2Ctarget.author.badge_v2'
+          'include=data%5B%2A%5D.content%2Cexcerpt%2Cheadline%2Ctarget.author.badge_v2%2C' +
+            'target.bound_topic_ids%2Ctarget.question.bound_topic_ids'
       );
     });
 
@@ -192,12 +243,14 @@ export default function homeFeedRepositoryTest(): void {
       try {
         await repository.loadHomePage(first.cursor.next);
       } catch (error) {
-        failure = error as HttpFailure;
+        if (error instanceof HttpFailure) {
+          failure = error;
+        }
       }
       const retried = await repository.loadHomePage(first.cursor.next);
 
       expect(failure?.status).assertEqual(503);
-      expect((failure as HttpFailure).message.includes('upstream detail')).assertFalse();
+      expect(failure?.message.includes('upstream detail')).assertFalse();
       expect(retried.items.length).assertEqual(2);
       expect(factory.requests.length).assertEqual(3);
     });
@@ -234,11 +287,13 @@ export default function homeFeedRepositoryTest(): void {
       try {
         await repository.loadHomePage();
       } catch (error) {
-        failure = error as FeedRepositoryFailure;
+        if (error instanceof FeedRepositoryFailure) {
+          failure = error;
+        }
       }
 
       expect(failure?.kind).assertEqual(FeedRepositoryFailureKind.INVALID_CURSOR);
-      expect((failure as FeedRepositoryFailure).message.includes('sensitive')).assertFalse();
+      expect(failure?.message.includes('sensitive')).assertFalse();
     });
   });
 }

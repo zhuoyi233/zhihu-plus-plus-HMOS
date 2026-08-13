@@ -212,7 +212,8 @@ function result(contentId: string, kind: FeedTargetKind = FeedTargetKind.ANSWER,
     title: `${contentId} title`,
     excerpt: `${contentId} excerpt`,
     voteupCount: 1,
-    commentCount: 2
+    commentCount: 2,
+    topicIds: []
   };
 }
 

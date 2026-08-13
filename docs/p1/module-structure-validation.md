@@ -7,11 +7,11 @@
 ```text
 entry (HAP)
   ├── core (HAR)
-  ├── data (HAR)
+  ├── data (HAR) ──> core (HAR)
   └── reader (HAR) ──> core (HAR)
 ```
 
-依赖图不存在回边：`core` 与 `data` 不依赖其他业务模块，`reader` 只依赖 `core`，`entry` 作为组合根依赖三个 HAR。
+依赖图不存在回边：`core` 不依赖其他业务模块，`data` 与 `reader` 只依赖 `core`，`entry` 作为组合根依赖三个 HAR。data 复用 core 的有界名义 JSON AST，以同一套运行时边界校验外部响应和导航参数。
 
 ## 模块职责
 
@@ -29,7 +29,7 @@ entry (HAP)
 - 根 `build-profile.json5` 注册 `entry/core/data/reader` 四个模块，产品继续固定 target/compatible API 24，并保留 `useNormalizedOHMUrl`。
 - 三个库的 `module.json5` 均声明 `type: har`，`hvigorfile.ts` 均使用 `harTasks`。
 - ohpm 包名与依赖 alias 完全一致：`core`、`data`、`reader`。
-- `entry/oh-package.json5` 使用 `file:../core`、`file:../data`、`file:../reader`；`reader` 使用 `core: file:../core`。
+- `entry/oh-package.json5` 使用 `file:../core`、`file:../data`、`file:../reader`；`data` 与 `reader` 使用 `core: file:../core`。
 - 主代码与 Hypium 测试都从 `core`、`data`、`reader` 根包导入，不跨模块引用 `src/main/ets` 深路径。
 - `ohpm install` 成功生成模块锁文件并解析本地依赖。
 

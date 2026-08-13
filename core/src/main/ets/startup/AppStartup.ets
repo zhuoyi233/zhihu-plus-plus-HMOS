@@ -158,7 +158,6 @@ export class AppStartup {
     try {
       this.observer(summary);
     } catch (_error) {
-      // 诊断通道不得改变启动结果。
     }
   }
 

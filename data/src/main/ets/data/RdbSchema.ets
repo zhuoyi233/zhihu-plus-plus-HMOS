@@ -4,7 +4,7 @@ export interface SchemaMigration {
   statements: Array<string>;
 }
 
-export const CURRENT_SCHEMA_VERSION: number = 2;
+export const CURRENT_SCHEMA_VERSION: number = 3;
 
 export function schemaMigrationTo(targetVersion: number): SchemaMigration {
   if (targetVersion === 1) {
@@ -24,6 +24,24 @@ export function schemaMigrationTo(targetVersion: number): SchemaMigration {
       statements: [
         "ALTER TABLE opened_content ADD COLUMN content_type TEXT NOT NULL DEFAULT 'unknown'",
         'CREATE INDEX IF NOT EXISTS index_opened_content_opened_at ON opened_content(opened_at)'
+      ]
+    };
+  }
+  if (targetVersion === 3) {
+    return {
+      fromVersion: 2,
+      toVersion: 3,
+      statements: [
+        'CREATE TABLE IF NOT EXISTS blocked_keywords (' +
+          'id INTEGER PRIMARY KEY AUTOINCREMENT, keyword TEXT NOT NULL, ' +
+          'case_sensitive INTEGER NOT NULL, is_regex INTEGER NOT NULL, created_at INTEGER NOT NULL)',
+        'CREATE INDEX IF NOT EXISTS index_blocked_keywords_created_at ON blocked_keywords(created_at)',
+        'CREATE TABLE IF NOT EXISTS blocked_users (' +
+          'user_id TEXT PRIMARY KEY, user_name TEXT NOT NULL, created_at INTEGER NOT NULL)',
+        'CREATE INDEX IF NOT EXISTS index_blocked_users_created_at ON blocked_users(created_at)',
+        'CREATE TABLE IF NOT EXISTS blocked_topics (' +
+          'topic_id TEXT PRIMARY KEY, topic_name TEXT NOT NULL, created_at INTEGER NOT NULL)',
+        'CREATE INDEX IF NOT EXISTS index_blocked_topics_created_at ON blocked_topics(created_at)'
       ]
     };
   }

@@ -68,15 +68,20 @@ struct ReaderInlineFormulaBlock {
           Span(`「${run.text}」`)
             .fontColor($r('app.color.secondary_text'))
         } else {
-          ImageSpan(this.pixelMaps.get(run.id) as image.PixelMap)
-            .id(`p0_inline_formula_${run.id}`)
-            .width(inlineFormulaWidth(run.text))
-            .height(24)
-            .objectFit(ImageFit.Contain)
-            .verticalAlign(ImageSpanAlignment.CENTER)
-            .onError(() => {
-              this.failFormula(run.id, 'ImageSpan 展示失败');
-            })
+          if (this.pixelMaps.get(run.id) !== undefined) {
+            ImageSpan(this.pixelMaps.get(run.id) ?? run.text)
+              .id(`p0_inline_formula_${run.id}`)
+              .width(inlineFormulaWidth(run.text))
+              .height(24)
+              .objectFit(ImageFit.Contain)
+              .verticalAlign(ImageSpanAlignment.CENTER)
+              .onError(() => {
+                this.failFormula(run.id, 'ImageSpan 展示失败');
+              })
+          } else {
+            Span(`「${run.text}」`)
+              .fontColor($r('app.color.secondary_text'))
+          }
         }
       }, (run: ReaderInlineRun) => run.id)
     }
@@ -335,7 +340,10 @@ export struct ReaderProbe {
 
   private async loadDocument(): Promise<void> {
     try {
-      const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      const context = this.getUIContext().getHostContext();
+      if (!(context instanceof common.UIAbilityContext)) {
+        throw new Error('无法获取应用上下文');
+      }
       const bytes = await context.resourceManager.getRawFileContent('reader_probe.html');
       const html = util.TextDecoder.create('utf-8').decodeToString(bytes);
       const blocks = parseZhihuHtml(html);

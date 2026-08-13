@@ -1,4 +1,5 @@
 import { SessionCookie } from '../session/CookieSession';
+import { JsonObjectValue, JsonStringValue, parseStrictJson } from 'core';
 import { HttpFailure, HttpFailureKind, httpFailureFromStatus, httpFailureFromTransport } from './HttpFailure';
 import {
   sessionCookieValue,
@@ -32,14 +33,6 @@ export interface LoginVerificationResult {
   profile?: ZhihuProfile;
 }
 
-interface ZhihuMeResponse {
-  id?: string;
-  name?: string;
-  url_token?: string;
-  user_type?: string;
-  avatar_url?: string;
-}
-
 class LoginCookieProvider implements SessionCookieProvider {
   private cookies: Array<SessionCookie> = [];
 
@@ -58,17 +51,25 @@ export function hasRequiredLoginCookies(cookies: Array<SessionCookie>): boolean 
 
 export function parseZhihuProfile(responseBody: string): ZhihuProfile | undefined {
   try {
-    const payload = JSON.parse(responseBody) as ZhihuMeResponse;
-    if (typeof payload.id !== 'string' || payload.id.length === 0 ||
-      typeof payload.name !== 'string' || payload.name.length === 0) {
+    const payload = parseStrictJson(responseBody);
+    if (!(payload instanceof JsonObjectValue)) {
+      return undefined;
+    }
+    const id = payload.get('id');
+    const name = payload.get('name');
+    const urlToken = payload.get('url_token');
+    const userType = payload.get('user_type');
+    const avatarUrl = payload.get('avatar_url');
+    if (!(id instanceof JsonStringValue) || id.value.length === 0 ||
+      !(name instanceof JsonStringValue) || name.value.length === 0) {
       return undefined;
     }
     return {
-      id: payload.id,
-      name: payload.name,
-      urlToken: payload.url_token,
-      userType: typeof payload.user_type === 'string' ? payload.user_type : '',
-      avatarUrl: payload.avatar_url
+      id: id.value,
+      name: name.value,
+      urlToken: urlToken instanceof JsonStringValue ? urlToken.value : undefined,
+      userType: userType instanceof JsonStringValue ? userType.value : '',
+      avatarUrl: avatarUrl instanceof JsonStringValue ? avatarUrl.value : undefined
     };
   } catch (_error) {
     return undefined;

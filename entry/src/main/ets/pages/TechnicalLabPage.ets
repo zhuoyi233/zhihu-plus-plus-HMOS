@@ -205,7 +205,11 @@ export struct TechnicalLabPage {
   }
 
   private sessionStore(): CookieSessionStore {
-    return new CookieSessionStore(this.getUIContext().getHostContext() as common.UIAbilityContext);
+    const context = this.getUIContext().getHostContext();
+    if (!(context instanceof common.UIAbilityContext)) {
+      throw new Error('无法获取应用上下文');
+    }
+    return new CookieSessionStore(context);
   }
 
   private async saveSessionProbe(): Promise<void> {

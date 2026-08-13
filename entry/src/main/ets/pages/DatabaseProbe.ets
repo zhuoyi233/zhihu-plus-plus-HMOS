@@ -47,7 +47,10 @@ export struct DatabaseProbePage {
     this.running = true;
     this.status = '正在执行事务迁移与故障回滚…';
     try {
-      const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      const context = this.getUIContext().getHostContext();
+      if (!(context instanceof common.UIAbilityContext)) {
+        throw new Error('无法获取应用上下文');
+      }
       const result: DatabaseProbeResult = await new DatabaseProbe(context).run();
       this.status = `通过：失败迁移回滚到 v${result.rollbackVersion}；` +
         `隔离库升级并重开为 v${result.finalVersion}；保留 ${result.recordCount} 条记录，` +

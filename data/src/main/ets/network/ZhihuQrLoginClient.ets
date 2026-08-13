@@ -1,6 +1,13 @@
 import { BusinessError } from '@kit.BasicServicesKit';
 import { http } from '@kit.NetworkKit';
 import {
+  JsonBooleanValue,
+  JsonNumberValue,
+  JsonObjectValue,
+  JsonStringValue,
+  parseStrictJson
+} from 'core';
+import {
   copySessionCookies,
   parseCookieAssignments,
   SessionCookie,
@@ -102,30 +109,23 @@ export interface QrLoginTransportFactory {
   create(): QrLoginTransport;
 }
 
-interface QrCodePayload {
-  expires_at?: number;
-  link?: string;
-  token?: string;
-  qrcode_token?: string;
-}
+class QrScanPayload {
+  readonly status?: number;
+  readonly userId?: string;
+  readonly accessToken?: string;
+  readonly success?: boolean;
+  readonly loggedIn?: boolean;
+  readonly loginStatus?: string;
 
-interface QrScanErrorPayload {
-  need_login?: boolean;
-  redirect?: string;
-  code?: number;
-}
-
-interface QrScanPayload {
-  status?: number;
-  cookie?: string;
-  cookies?: string;
-  z_c0?: string;
-  user_id?: string;
-  access_token?: string;
-  success?: boolean;
-  logged_in?: boolean;
-  login_status?: string;
-  error?: QrScanErrorPayload;
+  constructor(status?: number, userId?: string, accessToken?: string, success?: boolean,
+    loggedIn?: boolean, loginStatus?: string) {
+    this.status = status;
+    this.userId = userId;
+    this.accessToken = accessToken;
+    this.success = success;
+    this.loggedIn = loggedIn;
+    this.loginStatus = loginStatus;
+  }
 }
 
 interface ParsedQrCode {
@@ -221,16 +221,21 @@ function parseQrCode(statusCode: number, responseBody: string, now: number): Par
     return undefined;
   }
   try {
-    const payload = JSON.parse(responseBody) as QrCodePayload;
-    const token = payload.token ?? payload.qrcode_token;
-    if (token === undefined || !QR_TOKEN_PATTERN.test(token) || payload.link === undefined ||
-      !isTrustedQrChallengeLink(payload.link, token)) {
+    const payload = parseStrictJson(responseBody);
+    if (!(payload instanceof JsonObjectValue)) {
+      return undefined;
+    }
+    const tokenValue = payload.get('token') ?? payload.get('qrcode_token');
+    const linkValue = payload.get('link');
+    const expiresAtValue = payload.get('expires_at');
+    if (!(tokenValue instanceof JsonStringValue) || !QR_TOKEN_PATTERN.test(tokenValue.value) ||
+      !(linkValue instanceof JsonStringValue) || !isTrustedQrChallengeLink(linkValue.value, tokenValue.value)) {
       return undefined;
     }
     return {
-      token: token,
-      link: payload.link,
-      expiresAt: normalizeQrDeadline(payload.expires_at, now)
+      token: tokenValue.value,
+      link: linkValue.value,
+      expiresAt: normalizeQrDeadline(expiresAtValue instanceof JsonNumberValue ? expiresAtValue.value : undefined, now)
     };
   } catch (_error) {
     return undefined;
@@ -251,17 +256,34 @@ function mergeCookies(current: Array<SessionCookie>, incoming: Array<SessionCook
 }
 
 function successfulScanPayload(payload: QrScanPayload): boolean {
-  if (payload.user_id !== undefined || payload.access_token !== undefined || payload.success === true ||
-    payload.logged_in === true) {
+  if (payload.userId !== undefined || payload.accessToken !== undefined || payload.success === true ||
+    payload.loggedIn === true) {
     return true;
   }
-  const status = payload.login_status?.toUpperCase() ?? '';
+  const status = payload.loginStatus?.toUpperCase() ?? '';
   return ['CONFIRMED', 'LOGIN_SUCCESS', 'SUCCESS', 'OK', 'LOGGED_IN'].includes(status);
 }
 
 function expiredScanPayload(payload: QrScanPayload): boolean {
-  const status = payload.login_status?.toUpperCase() ?? '';
+  const status = payload.loginStatus?.toUpperCase() ?? '';
   return payload.status === 2 || ['EXPIRED', 'QR_CODE_EXPIRED', 'LOGIN_EXPIRED'].includes(status);
+}
+
+function qrScanPayload(payload: JsonObjectValue): QrScanPayload {
+  const status = payload.get('status');
+  const userId = payload.get('user_id');
+  const accessToken = payload.get('access_token');
+  const success = payload.get('success');
+  const loggedIn = payload.get('logged_in');
+  const loginStatus = payload.get('login_status');
+  return new QrScanPayload(
+    status instanceof JsonNumberValue ? status.value : undefined,
+    userId instanceof JsonStringValue ? userId.value : undefined,
+    accessToken instanceof JsonStringValue ? accessToken.value : undefined,
+    success instanceof JsonBooleanValue ? success.value : undefined,
+    loggedIn instanceof JsonBooleanValue ? loggedIn.value : undefined,
+    loginStatus instanceof JsonStringValue ? loginStatus.value : undefined
+  );
 }
 
 function safeRiskControlUrl(candidate: string | undefined): string {
@@ -293,11 +315,11 @@ class NetworkKitQrLoginTransport implements QrLoginTransport {
       const response = await this.requestHandle.request(request.url, options);
       return {
         statusCode: Number(response.responseCode),
-        body: response.result as string,
+        body: typeof response.result === 'string' ? response.result : '',
         cookies: parseCookieAssignments(response.cookies, true)
       };
-    } catch (error) {
-      throw httpFailureFromTransport((error as BusinessError).code);
+    } catch (error: BusinessError) {
+      throw httpFailureFromTransport(error.code);
     }
   }
 
@@ -365,7 +387,6 @@ class ActiveQrLoginOperation {
     try {
       transport.destroy();
     } catch (_error) {
-      // NetworkKit 句柄清理失败不能覆盖二维码协议响应、取消或已结构化的请求错误。
     }
   }
 }
@@ -538,7 +559,6 @@ export class ZhihuQrLoginClient implements QrLoginGateway {
       if (this.isCancelled(error)) {
         throw new HttpFailure(HttpFailureKind.CANCELLED);
       }
-      // Android Lite 同样把 UDID/Captcha 预热视为非阻塞；主二维码请求仍决定是否继续。
       return copySessionCookies(cookies);
     }
   }
@@ -560,23 +580,33 @@ export class ZhihuQrLoginClient implements QrLoginGateway {
 
   private classifyPollResponse(response: QrLoginResponse, initialCookies: Array<SessionCookie>,
     expiresAt: number): QrPollResult {
-    let payload: QrScanPayload;
+    let payload: JsonObjectValue;
     try {
-      payload = JSON.parse(response.body) as QrScanPayload;
+      const parsed = parseStrictJson(response.body);
+      if (!(parsed instanceof JsonObjectValue)) {
+        throw new Error('Invalid QR scan response');
+      }
+      payload = parsed;
     } catch (_error) {
       return {
         state: this.stateValue(QrLoginStatus.TEMPORARY_FAILURE, '二维码状态无法识别，可重试', expiresAt),
         cookies: copySessionCookies(initialCookies)
       };
     }
+    const errorValue = payload.get('error');
+    const errorPayload = errorValue instanceof JsonObjectValue ? errorValue : undefined;
+    const errorCode = errorPayload?.get('code');
+    const needLogin = errorPayload?.get('need_login');
+    const redirect = errorPayload?.get('redirect');
     const risk = response.statusCode === 403 &&
-      (payload.error?.code === 40352 || payload.error?.need_login === true);
+      (errorCode instanceof JsonNumberValue && errorCode.value === 40352 ||
+        needLogin instanceof JsonBooleanValue && needLogin.value);
     if (risk) {
       return {
         state: {
           status: QrLoginStatus.RISK_CONTROL,
           message: '知乎要求完成网络环境验证',
-          riskControlUrl: safeRiskControlUrl(payload.error?.redirect)
+          riskControlUrl: safeRiskControlUrl(redirect instanceof JsonStringValue ? redirect.value : undefined)
         },
         cookies: copySessionCookies(initialCookies)
       };
@@ -587,15 +617,24 @@ export class ZhihuQrLoginClient implements QrLoginGateway {
         cookies: copySessionCookies(initialCookies)
       };
     }
-    const bodyCookies = parseCookieAssignments([payload.cookie, payload.cookies]
-      .filter((value: string | undefined): boolean => value !== undefined)
-      .join(';'), true);
+    const cookieValue = payload.get('cookie');
+    const cookiesValue = payload.get('cookies');
+    const cookieFields: Array<string> = [];
+    if (cookieValue instanceof JsonStringValue) {
+      cookieFields.push(cookieValue.value);
+    }
+    if (cookiesValue instanceof JsonStringValue) {
+      cookieFields.push(cookiesValue.value);
+    }
+    const bodyCookies = parseCookieAssignments(cookieFields.join(';'), true);
     let workingCookies = mergeCookies(initialCookies, response.cookies);
     workingCookies = mergeCookies(workingCookies, bodyCookies);
-    if (payload.z_c0 !== undefined && payload.z_c0.length > 0) {
-      workingCookies = upsertCookie(workingCookies, { name: 'z_c0', value: payload.z_c0 });
+    const zC0 = payload.get('z_c0');
+    if (zC0 instanceof JsonStringValue && zC0.value.length > 0) {
+      workingCookies = upsertCookie(workingCookies, { name: 'z_c0', value: zC0.value });
     }
-    if (expiredScanPayload(payload)) {
+    const scanPayload = qrScanPayload(payload);
+    if (expiredScanPayload(scanPayload)) {
       return {
         state: this.stateValue(QrLoginStatus.EXPIRED, '二维码已过期，请刷新', expiresAt),
         cookies: workingCookies
@@ -609,7 +648,7 @@ export class ZhihuQrLoginClient implements QrLoginGateway {
         cookies: workingCookies
       };
     }
-    if (payload.status === 1 || successfulScanPayload(payload)) {
+    if (scanPayload.status === 1 || successfulScanPayload(scanPayload)) {
       return {
         state: this.stateValue(QrLoginStatus.WAITING_CONFIRMATION, '请在知乎 App 中确认登录', expiresAt),
         cookies: workingCookies

@@ -71,8 +71,7 @@ export class DomainFixtureValidator {
 
   async validateAll(): Promise<DomainFixtureValidationReport> {
     const results: Array<DomainFixtureCaseResult> = [];
-    for (let index = 0; index < DOMAIN_FIXTURE_SPECS.length; index += 1) {
-      const spec = DOMAIN_FIXTURE_SPECS[index];
+    for (const spec of DOMAIN_FIXTURE_SPECS) {
       try {
         const bytes = await this.context.resourceManager.getRawFileContent(`fixtures/${spec.fileName}`);
         const json = util.TextDecoder.create('utf-8').decodeToString(bytes);

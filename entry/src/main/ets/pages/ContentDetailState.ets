@@ -56,9 +56,6 @@ export interface ContentDetailViewState {
 
 export type ContentDetailStateObserver = (state: ContentDetailViewState) => void;
 
-/**
- * 三类详情请求与本地打开记录的唯一状态所有者。代次门禁确保离页、重试或目的地切换后的旧结果不能回写。
- */
 export class ContentDetailController {
   private readonly repository: ContentRepository;
   private readonly openedContentStore?: OpenedContentStore;
@@ -180,7 +177,6 @@ export class ContentDetailController {
       }
     } catch (_error) {
       if (this.isCurrent(generation)) {
-        // 打开记录失败不能遮挡已经安全解析的正文；状态保留给诊断与后续重试。
         this.openedRecordPhase = OpenedRecordPhase.FAILED;
         this.emit();
       }

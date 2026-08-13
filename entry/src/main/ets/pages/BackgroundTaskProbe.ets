@@ -6,6 +6,15 @@ import {
   ZhihuWorkload
 } from 'core';
 
+class BackgroundProbeFailure extends Error {
+  readonly code: number;
+
+  constructor(code: number) {
+    super('Background probe failed');
+    this.code = code;
+  }
+}
+
 @Component
 export struct BackgroundTaskProbePage {
   onBack: () => void = () => {};
@@ -87,7 +96,9 @@ export struct BackgroundTaskProbePage {
     this.busy = true;
     this.transientStatus = '正在申请短时任务并读取系统配额…';
     try {
-      const result = await this.probe.probeTransientTask();
+      const result = await this.probe.probeTransientTask().catch((error: BusinessError) => {
+        throw new BackgroundProbeFailure(error.code);
+      });
       this.transientStatus = `通过：本次获批 ${Math.round(result.actualDelayMs / 1000)} 秒，` +
         `读取时剩余 ${Math.round(result.remainingDelayMs / 1000)} 秒，` +
         `当日剩余配额 ${Math.round(result.remainingQuotaMs / 1000)} 秒；请求已主动释放`;
@@ -102,7 +113,9 @@ export struct BackgroundTaskProbePage {
     this.busy = true;
     this.deferredStatus = '正在登记延迟任务…';
     try {
-      const result = await this.probe.probeDeferredTask();
+      const result = await this.probe.probeDeferredTask().catch((error: BusinessError) => {
+        throw new BackgroundProbeFailure(error.code);
+      });
       this.deferredStatus = result.registeredWorkCount === 1 && result.remainingWorkCount === 0
         ? `通过：任务 ${result.workId} 已登记，最早 ${Math.round(result.earliestStartDelayMs / 1000)} 秒后触发；已取消清理`
         : `失败：登记数 ${result.registeredWorkCount}，清理后剩余 ${result.remainingWorkCount}`;
@@ -125,7 +138,7 @@ export struct BackgroundTaskProbePage {
   }
 
   private errorMessage(prefix: string, error: Object): string {
-    const businessError = error as BusinessError;
-    return `${prefix}（错误码 ${businessError.code ?? '未知'}）`;
+    const code = error instanceof BackgroundProbeFailure ? error.code : '未知';
+    return `${prefix}（错误码 ${code}）`;
   }
 }

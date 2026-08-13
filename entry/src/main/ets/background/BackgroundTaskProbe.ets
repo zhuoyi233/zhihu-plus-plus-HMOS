@@ -68,7 +68,6 @@ export class BackgroundTaskProbe {
       try {
         workScheduler.stopWork(work, true);
       } catch (_error) {
-        // The system may have already consumed the one-off probe; preserve the original failure for the caller.
       }
       throw originalError;
     }

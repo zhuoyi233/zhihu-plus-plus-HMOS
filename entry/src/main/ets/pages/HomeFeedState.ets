@@ -19,9 +19,6 @@ export interface HomeFeedViewState {
 
 export type HomeFeedStateObserver = (state: HomeFeedViewState) => void;
 
-/**
- * 首页请求状态的唯一所有者。每次首页刷新都会开启新代次，旧刷新、旧分页和离页后的结果都不能回写 UI。
- */
 export class HomeFeedController {
   private readonly repository: FeedRepository;
   private readonly observer: HomeFeedStateObserver;
@@ -103,7 +100,10 @@ export class HomeFeedController {
       return;
     }
     const generation = this.generation;
-    const cursor = this.nextCursor as string;
+    const cursor = this.nextCursor;
+    if (cursor === undefined) {
+      return;
+    }
     this.loadingMore = true;
     this.errorMessage = undefined;
     this.retryLoadMore = false;

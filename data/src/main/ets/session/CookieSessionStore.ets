@@ -31,8 +31,8 @@ export class CookieSessionStore implements SessionPersistence {
       const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
       await store.put(ENCRYPTED_SESSION_KEY, encrypted);
       await store.flush();
-    } catch (error) {
-      throw this.storeError('Session save', error as BusinessError);
+    } catch (error: BusinessError) {
+      throw this.storeError('Session save', error);
     } finally {
       keyData.fill(0);
     }
@@ -67,8 +67,8 @@ export class CookieSessionStore implements SessionPersistence {
         await this.save(activeCookies, now);
       }
       return activeCookies;
-    } catch (error) {
-      throw this.storeError('Session load', error as BusinessError);
+    } catch (error: BusinessError) {
+      throw this.storeError('Session load', error);
     }
   }
 
@@ -77,8 +77,8 @@ export class CookieSessionStore implements SessionPersistence {
       const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
       await this.removeEncryptedSession(store);
       await this.keyStore.clear();
-    } catch (error) {
-      throw this.storeError('Session clear', error as BusinessError);
+    } catch (error: BusinessError) {
+      throw this.storeError('Session clear', error);
     }
   }
 
@@ -86,8 +86,8 @@ export class CookieSessionStore implements SessionPersistence {
     try {
       await store.delete(ENCRYPTED_SESSION_KEY);
       await store.flush();
-    } catch (error) {
-      throw this.storeError('Encrypted session removal', error as BusinessError);
+    } catch (error: BusinessError) {
+      throw this.storeError('Encrypted session removal', error);
     }
   }
 

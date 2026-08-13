@@ -169,7 +169,6 @@ struct ContentDetailPage {
   }
 }
 
-/** 问题目的地的稳定 ArkUI 入口。 */
 @Component
 export struct QuestionDetailPage {
   contentId: string = '';
@@ -189,7 +188,6 @@ export struct QuestionDetailPage {
   }
 }
 
-/** 回答目的地的稳定 ArkUI 入口。 */
 @Component
 export struct AnswerDetailPage {
   contentId: string = '';
@@ -209,7 +207,6 @@ export struct AnswerDetailPage {
   }
 }
 
-/** 文章目的地的稳定 ArkUI 入口。 */
 @Component
 export struct ArticleDetailPage {
   contentId: string = '';

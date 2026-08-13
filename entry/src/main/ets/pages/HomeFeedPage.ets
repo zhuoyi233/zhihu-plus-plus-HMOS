@@ -61,6 +61,26 @@ export struct HomeFeedPage {
         .id('p2_home_top_actions')
         .width('100%')
 
+        Row({ space: $r('app.float.p1_spacing_small') }) {
+          Button('关注')
+            .id('p2_home_following')
+            .layoutWeight(1)
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .onClick(() => this.navigate({ name: P1DestinationName.FOLLOWING }))
+          Button('热榜')
+            .id('p2_home_hot')
+            .layoutWeight(1)
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .onClick(() => this.navigate({ name: P1DestinationName.HOT }))
+          Button('日报')
+            .id('p2_home_daily')
+            .layoutWeight(1)
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .onClick(() => this.navigate({ name: P1DestinationName.DAILY }))
+        }
+        .id('p2_home_channels')
+        .width('100%')
+
         if (this.phase === HomeFeedPhase.INITIAL_LOADING || this.phase === HomeFeedPhase.IDLE) {
           this.centeredStatus('正在加载首页…', false, 'p2_home_initial_loading');
         } else if (this.phase === HomeFeedPhase.ERROR) {

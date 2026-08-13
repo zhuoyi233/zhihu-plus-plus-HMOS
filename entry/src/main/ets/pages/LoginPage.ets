@@ -39,7 +39,18 @@ export struct LoginPage {
   private applicationStateCallback?: LoginApplicationStateCallback;
 
   aboutToAppear(): void {
-    const context = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const context = this.getUIContext().getHostContext();
+    if (!(context instanceof common.UIAbilityContext)) {
+      this.viewState = {
+        phase: LoginPhase.ERROR,
+        message: '无法获取应用上下文，请重新打开页面',
+        manualLoginEnabled: false,
+        qrStartEnabled: false,
+        qrCancelable: false,
+        logoutEnabled: false
+      };
+      return;
+    }
     this.controller = new LoginController(
       getAppSessionOwner(context).getRepository(),
       new ZhihuQrLoginClient(),
