@@ -13,6 +13,9 @@
     "requestPermissions": [
       {
         "name": "ohos.permission.INTERNET"
+      },
+      {
+        "name": "ohos.permission.WRITE_IMAGEVIDEO"
       }
     ],
     "abilities": [
