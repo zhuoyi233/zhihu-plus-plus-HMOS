@@ -40,6 +40,8 @@ export struct P1Shell {
     this.emptyContent;
   @BuilderParam collectionContentContent: (id: string, navigate: (destination: P1Destination) => void) => void =
     this.emptyContent;
+  @BuilderParam notificationContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
+  @BuilderParam notificationSettingsContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
   @BuilderParam blockingRulesContent: () => void = this.emptyPage;
   @BuilderParam blockedFeedHistoryContent: () => void = this.emptyPage;
   @BuilderParam readHistoryContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
@@ -271,6 +273,18 @@ export struct P1Shell {
       }
       .title('收藏夹内容')
       .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.NOTIFICATION) {
+      NavDestination() {
+        this.notificationContent((destination: P1Destination): void => this.navigate(destination));
+      }
+      .title('通知')
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.NOTIFICATION_SETTINGS) {
+      NavDestination() {
+        this.notificationSettingsContent((destination: P1Destination): void => this.navigate(destination));
+      }
+      .title('通知设置')
+      .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.READER_PROBE) {
       NavDestination() {
         this.readerProbeContent((): void => {
@@ -444,6 +458,18 @@ export struct P1Shell {
           .width('100%')
           .fontSize($r('app.float.p1_body_font_size'))
           .onClick(() => this.openMyCollections())
+
+        Button('通知')
+          .id('p3_open_notifications')
+          .width('100%')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .onClick(() => this.navigate({ name: P1DestinationName.NOTIFICATION }))
+
+        Button('通知设置')
+          .id('p3_open_notification_settings')
+          .width('100%')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .onClick(() => this.navigate({ name: P1DestinationName.NOTIFICATION_SETTINGS }))
         }
         .width('100%')
         .padding($r('app.float.p1_page_padding'))
@@ -582,7 +608,7 @@ export struct P1Shell {
       case P1DestinationName.COMMENT:
         return `内容：${destination.contentId}`;
       case P1DestinationName.NOTIFICATION:
-        return '通知页面将在后续业务迁移阶段接入。';
+        return '查看知乎账号的通知消息';
       case P1DestinationName.QUESTION:
       case P1DestinationName.ANSWER:
       case P1DestinationName.ARTICLE:

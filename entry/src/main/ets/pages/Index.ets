@@ -21,11 +21,14 @@ import {
   DefaultPinRepository,
   DefaultSearchRepository,
   DefaultOnlineHistoryRepository,
+  DefaultNotificationRepository,
   DefaultVoteRepository,
   FeedRepository,
   FollowRepository,
   getAppDatabase,
   getAppSessionOwner,
+  NotificationRepository,
+  NotificationSettingsGateway,
   OpenedContentStore,
   OnlineHistoryRepository,
   PeopleContentRepository,
@@ -58,6 +61,8 @@ import { BlockedFeedHistoryPage } from './BlockedFeedHistoryPage';
 import { ReadHistoryPage } from './ReadHistoryPage';
 import { CollectionPage } from './CollectionPage';
 import { CollectionContentPage } from './CollectionContentPage';
+import { NotificationPage } from './NotificationPage';
+import { NotificationSettingsPage } from './NotificationSettingsPage';
 import { ReadHistoryContentKind, ReadHistoryOpenTarget } from './ReadHistoryState';
 
 @Entry
@@ -87,6 +92,8 @@ struct Index {
   @State private followRepository?: FollowRepository = undefined;
   @State private collectionRepository?: CollectionRepository = undefined;
   @State private commentRepository?: CommentRepository = undefined;
+  @State private notificationRepository?: NotificationRepository = undefined;
+  @State private notificationSettings?: NotificationSettingsGateway = undefined;
 
   aboutToAppear(): void {
     if (this.compositionReady || this.compositionPreparing) {
@@ -128,6 +135,8 @@ struct Index {
       this.followRepository = new DefaultFollowRepository(new ZhihuHttpClient(session));
       this.collectionRepository = new DefaultCollectionRepository(new ZhihuHttpClient(session));
       this.commentRepository = new DefaultCommentRepository(new ZhihuHttpClient(session));
+      this.notificationRepository = new DefaultNotificationRepository(new ZhihuHttpClient(session));
+      this.notificationSettings = new AppPreferencesStore(context);
       this.compositionPreparing = false;
       this.compositionReady = true;
     });
@@ -160,6 +169,10 @@ struct Index {
             this.collectionsContent(id, navigate),
           collectionContentContent: (id: string, navigate: (destination: P1Destination) => void): void =>
             this.collectionContentContent(id, navigate),
+          notificationContent: (navigate: (destination: P1Destination) => void): void =>
+            this.notificationContent(navigate),
+          notificationSettingsContent: (navigate: (destination: P1Destination) => void): void =>
+            this.notificationSettingsContent(navigate),
           blockingRulesContent: (): void => this.blockingRulesContent(),
           blockedFeedHistoryContent: (): void => this.blockedFeedHistoryContent(),
           readHistoryContent: (navigate: (destination: P1Destination) => void): void => this.readHistoryContent(navigate),
@@ -335,6 +348,23 @@ struct Index {
       repository: this.collectionRepository,
       session: this.session,
       navigate: navigate
+    });
+  }
+
+  @Builder
+  notificationContent(navigate: (destination: P1Destination) => void) {
+    NotificationPage({
+      repository: this.notificationRepository,
+      settings: this.notificationSettings,
+      session: this.session,
+      navigate: navigate
+    });
+  }
+
+  @Builder
+  notificationSettingsContent(_navigate: (destination: P1Destination) => void) {
+    NotificationSettingsPage({
+      settings: this.notificationSettings
     });
   }
 

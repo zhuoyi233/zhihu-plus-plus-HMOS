@@ -45,6 +45,8 @@ import collectionContentStateTest from './CollectionContentState.test';
 import collectionFavoriteStateTest from './CollectionFavoriteState.test';
 import commentRepositoryTest from './CommentRepository.test';
 import commentStateTest from './CommentState.test';
+import notificationRepositoryTest from './NotificationRepository.test';
+import notificationStateTest from './NotificationState.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -94,4 +96,6 @@ export default function testsuite(): void {
   collectionFavoriteStateTest();
   commentRepositoryTest();
   commentStateTest();
+  notificationRepositoryTest();
+  notificationStateTest();
 }
