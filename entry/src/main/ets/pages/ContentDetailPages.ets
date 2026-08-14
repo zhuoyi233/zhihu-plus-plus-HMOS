@@ -6,6 +6,7 @@ import {
   BlockedFeedHistoryGateway,
   BlockingRuleGateway,
   CollectionRepository,
+  CommentRepository,
   ContentDetailKind,
   ContentRepository,
   ContentVoteState,
@@ -35,6 +36,7 @@ import {
   FollowViewState
 } from './ContentInteractionState';
 import { CollectionDialogComponent } from './CollectionDialogComponent';
+import { CommentLayer } from './CommentLayer';
 import { NativeContentDocument } from './NativeContentDocument';
 
 @Component
@@ -48,6 +50,7 @@ struct ContentDetailPage {
   voteRepository: VoteRepository | undefined = undefined;
   followRepository: FollowRepository | undefined = undefined;
   collectionRepository: CollectionRepository | undefined = undefined;
+  commentRepository: CommentRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
@@ -71,6 +74,9 @@ struct ContentDetailPage {
   @State private interactionErrorMessage: string = '';
   @State private interactionRequiresLogin: boolean = false;
   @State private favoriteDialogShown: boolean = false;
+  @State private showComments: boolean = false;
+  @State private commentRootDraft: string = '';
+  @State private commentReplyDraft: string = '';
   private controller?: ContentDetailController;
   private blockingAction?: BlockingActionController;
   private voteController?: ContentVoteController;
@@ -104,6 +110,9 @@ struct ContentDetailPage {
     this.keywordBlockInput = '';
     this.voteController = undefined;
     this.followController = undefined;
+    this.showComments = false;
+    this.commentRootDraft = '';
+    this.commentReplyDraft = '';
   }
 
   private createBlockingAction(): void {
@@ -142,6 +151,27 @@ struct ContentDetailPage {
       }
       if (this.keywordBlockVisible) {
         this.keywordBlockDialog()
+      }
+      if (this.kind === ContentDetailKind.ANSWER || this.kind === ContentDetailKind.ARTICLE) {
+        CommentLayer({
+          contentType: this.kind === ContentDetailKind.ARTICLE ? 'article' : 'answer',
+          contentId: this.contentId,
+          repository: this.commentRepository,
+          session: this.session,
+          navigate: this.navigate,
+          showComments: this.showComments,
+          rootDraft: this.commentRootDraft,
+          replyDraft: this.commentReplyDraft,
+          onRootDraftChange: (value: string): void => {
+            this.commentRootDraft = value;
+          },
+          onReplyDraftChange: (value: string): void => {
+            this.commentReplyDraft = value;
+          },
+          onDismiss: (): void => {
+            this.showComments = false;
+          }
+        })
       }
     }
     .width('100%')
@@ -255,6 +285,16 @@ struct ContentDetailPage {
             .onClick((): void => {
               if (this.collectionRepository !== undefined && this.session !== undefined) {
                 this.favoriteDialogShown = true;
+              } else {
+                this.navigate({ name: P1DestinationName.LOGIN });
+              }
+            })
+          Button('评论')
+            .id(`p3_${content.kind}_detail_comment`)
+            .fontSize($r('app.float.p1_body_font_size'))
+            .onClick((): void => {
+              if (this.commentRepository !== undefined && this.session !== undefined) {
+                this.showComments = true;
               } else {
                 this.navigate({ name: P1DestinationName.LOGIN });
               }
@@ -574,6 +614,7 @@ export struct QuestionDetailPage {
   voteRepository: VoteRepository | undefined = undefined;
   followRepository: FollowRepository | undefined = undefined;
   collectionRepository: CollectionRepository | undefined = undefined;
+  commentRepository: CommentRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
@@ -589,6 +630,7 @@ export struct QuestionDetailPage {
       voteRepository: this.voteRepository,
       followRepository: this.followRepository,
       collectionRepository: this.collectionRepository,
+      commentRepository: this.commentRepository,
       session: this.session,
       navigate: this.navigate
     })
@@ -605,6 +647,7 @@ export struct AnswerDetailPage {
   voteRepository: VoteRepository | undefined = undefined;
   followRepository: FollowRepository | undefined = undefined;
   collectionRepository: CollectionRepository | undefined = undefined;
+  commentRepository: CommentRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
@@ -620,6 +663,7 @@ export struct AnswerDetailPage {
       voteRepository: this.voteRepository,
       followRepository: this.followRepository,
       collectionRepository: this.collectionRepository,
+      commentRepository: this.commentRepository,
       session: this.session,
       navigate: this.navigate
     })
@@ -636,6 +680,7 @@ export struct ArticleDetailPage {
   voteRepository: VoteRepository | undefined = undefined;
   followRepository: FollowRepository | undefined = undefined;
   collectionRepository: CollectionRepository | undefined = undefined;
+  commentRepository: CommentRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
@@ -651,6 +696,7 @@ export struct ArticleDetailPage {
       voteRepository: this.voteRepository,
       followRepository: this.followRepository,
       collectionRepository: this.collectionRepository,
+      commentRepository: this.commentRepository,
       session: this.session,
       navigate: this.navigate
     })

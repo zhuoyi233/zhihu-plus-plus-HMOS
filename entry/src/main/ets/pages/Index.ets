@@ -7,9 +7,11 @@ import {
   ChannelFeedRepository,
   ChannelFeedSource,
   CollectionRepository,
+  CommentRepository,
   ContentRepository,
   DefaultChannelFeedRepository,
   DefaultCollectionRepository,
+  DefaultCommentRepository,
   DefaultContentRepository,
   DefaultDailyStoryRepository,
   DefaultFeedRepository,
@@ -84,6 +86,7 @@ struct Index {
   @State private voteRepository?: VoteRepository = undefined;
   @State private followRepository?: FollowRepository = undefined;
   @State private collectionRepository?: CollectionRepository = undefined;
+  @State private commentRepository?: CommentRepository = undefined;
 
   aboutToAppear(): void {
     if (this.compositionReady || this.compositionPreparing) {
@@ -124,6 +127,7 @@ struct Index {
       this.voteRepository = new DefaultVoteRepository(new ZhihuHttpClient(session));
       this.followRepository = new DefaultFollowRepository(new ZhihuHttpClient(session));
       this.collectionRepository = new DefaultCollectionRepository(new ZhihuHttpClient(session));
+      this.commentRepository = new DefaultCommentRepository(new ZhihuHttpClient(session));
       this.compositionPreparing = false;
       this.compositionReady = true;
     });
@@ -265,6 +269,7 @@ struct Index {
       voteRepository: this.voteRepository,
       followRepository: this.followRepository,
       collectionRepository: this.collectionRepository,
+      commentRepository: this.commentRepository,
       session: this.session
     });
   }
@@ -281,6 +286,7 @@ struct Index {
       voteRepository: this.voteRepository,
       followRepository: this.followRepository,
       collectionRepository: this.collectionRepository,
+      commentRepository: this.commentRepository,
       session: this.session
     });
   }
