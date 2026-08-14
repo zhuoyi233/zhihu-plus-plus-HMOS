@@ -523,41 +523,56 @@ struct ContentDetailPage {
           Blank()
             .layoutWeight(1)
 
-          // 右组：收藏 + 评论 + 更多（对齐上游 bottomBar 右侧）。
-          Button(this.favoriteDialogShown ? '收藏' : '收藏', { type: ButtonType.Normal })
-            .id(`p3_${this.kind}_detail_favorite_bar`)
-            .fontSize($r('app.float.p1_body_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .backgroundColor(Color.Transparent)
-            .onClick((): void => {
-              if (this.collectionRepository !== undefined && this.session !== undefined) {
-                this.favoriteDialogShown = true;
-              } else {
-                this.navigate({ name: P1DestinationName.LOGIN });
-              }
-            })
+          // 右组：收藏 + 评论 + 更多（对齐上游 bottomBar 右侧图标按钮）。
+          Button({ type: ButtonType.Normal }) {
+            SymbolGlyph($r('sys.symbol.bookmark'))
+              .fontSize(18)
+              .fontColor([$r('app.color.secondary_text')])
+          }
+          .id(`p3_${this.kind}_detail_favorite_bar`)
+          .width(44)
+          .height(44)
+          .backgroundColor(Color.Transparent)
+          .onClick((): void => {
+            if (this.collectionRepository !== undefined && this.session !== undefined) {
+              this.favoriteDialogShown = true;
+            } else {
+              this.navigate({ name: P1DestinationName.LOGIN });
+            }
+          })
 
-          Button(`评论 ${this.content?.value.commentCount ?? 0}`, { type: ButtonType.Normal })
-            .id(`p3_${this.kind}_detail_comment_bar`)
-            .fontSize($r('app.float.p1_body_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .backgroundColor(Color.Transparent)
-            .onClick((): void => {
-              if (this.commentRepository !== undefined && this.session !== undefined) {
-                this.showComments = true;
-              } else {
-                this.navigate({ name: P1DestinationName.LOGIN });
-              }
-            })
+          Button({ type: ButtonType.Normal }) {
+            Row({ space: 4 }) {
+              SymbolGlyph($r('sys.symbol.message'))
+                .fontSize(18)
+                .fontColor([$r('app.color.secondary_text')])
+              Text(`${this.content?.value.commentCount ?? 0}`)
+                .fontSize($r('app.float.p1_body_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+            }
+          }
+          .id(`p3_${this.kind}_detail_comment_bar`)
+          .backgroundColor(Color.Transparent)
+          .onClick((): void => {
+            if (this.commentRepository !== undefined && this.session !== undefined) {
+              this.showComments = true;
+            } else {
+              this.navigate({ name: P1DestinationName.LOGIN });
+            }
+          })
 
-          Button('更多', { type: ButtonType.Normal })
-            .id(`p3_${this.kind}_detail_more`)
-            .fontSize($r('app.float.p1_body_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .backgroundColor(Color.Transparent)
-            .onClick((): void => {
-              this.actionMenuShown = true;
-            })
+          Button({ type: ButtonType.Normal }) {
+            SymbolGlyph($r('sys.symbol.more'))
+              .fontSize(18)
+              .fontColor([$r('app.color.secondary_text')])
+          }
+          .id(`p3_${this.kind}_detail_more`)
+          .width(44)
+          .height(44)
+          .backgroundColor(Color.Transparent)
+          .onClick((): void => {
+            this.actionMenuShown = true;
+          })
         }
       }
       .width('100%')
@@ -796,33 +811,50 @@ struct ContentDetailPage {
 
   @Builder
   private voteUpAction() {
-    Button(this.voteState === ContentVoteState.UP ? `已赞同 ${this.voteupCount}` : `赞同 ${this.voteupCount}`,
-      { type: ButtonType.Normal })
-      .id(`p3_${this.kind}_vote_up`)
-      .fontSize($r('app.float.p1_body_font_size'))
-      .fontColor(this.voteState === ContentVoteState.UP
-        ? $r('app.color.on_brand')
-        : $r('app.color.brand_primary'))
-      .backgroundColor(Color.Transparent)
-      .enabled(!this.interactionPending)
-      .onClick((): void => {
-        this.voteController?.toggleVote(true);
-      })
+    Button({ type: ButtonType.Normal }) {
+      Row({ space: 4 }) {
+        SymbolGlyph($r('sys.symbol.arrow_up'))
+          .fontSize(16)
+          .fontColor([this.voteState === ContentVoteState.UP
+            ? $r('app.color.on_brand')
+            : $r('app.color.brand_primary')])
+        Text(this.voteState === ContentVoteState.UP ? `已赞同 ${this.voteupCount}` : `${this.voteupCount}`)
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor(this.voteState === ContentVoteState.UP
+            ? $r('app.color.on_brand')
+            : $r('app.color.brand_primary'))
+      }
+    }
+    .id(`p3_${this.kind}_vote_up`)
+    .backgroundColor(Color.Transparent)
+    .enabled(!this.interactionPending)
+    .onClick((): void => {
+      this.voteController?.toggleVote(true);
+    })
   }
 
   @Builder
   private voteDownAction() {
-    Button(this.voteState === ContentVoteState.DOWN ? '已反对' : '反对', { type: ButtonType.Normal })
-      .id(`p3_${this.kind}_vote_down`)
-      .fontSize($r('app.float.p1_body_font_size'))
-      .fontColor(this.voteState === ContentVoteState.DOWN
-        ? $r('app.color.on_brand')
-        : $r('app.color.brand_primary'))
-      .backgroundColor(Color.Transparent)
-      .enabled(!this.interactionPending)
-      .onClick((): void => {
-        this.voteController?.toggleVote(false);
-      })
+    Button({ type: ButtonType.Normal }) {
+      Row({ space: 4 }) {
+        SymbolGlyph($r('sys.symbol.arrow_down'))
+          .fontSize(16)
+          .fontColor([this.voteState === ContentVoteState.DOWN
+            ? $r('app.color.on_brand')
+            : $r('app.color.brand_primary')])
+        if (this.voteState === ContentVoteState.DOWN) {
+          Text('已反对')
+            .fontSize($r('app.float.p1_body_font_size'))
+            .fontColor($r('app.color.on_brand'))
+        }
+      }
+    }
+    .id(`p3_${this.kind}_vote_down`)
+    .backgroundColor(Color.Transparent)
+    .enabled(!this.interactionPending)
+    .onClick((): void => {
+      this.voteController?.toggleVote(false);
+    })
   }
 
   @Builder
