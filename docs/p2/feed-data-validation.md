@@ -6,18 +6,18 @@
 
 ## Android-master 证据
 
-- `shared/src/commonMain/kotlin/com/github/zly2006/zhihu/viewmodel/feed/HomeFeedViewModel.kt`：`initialUrl` 为 `https://api.zhihu.com/topstory/recommend`，并显式允许游客访问。
+- `shared/src/commonMain/kotlin/com/github/zly2006/zhihu/viewmodel/feed/HomeFeedViewModel.kt`：历史 `initialUrl` 为 `https://api.zhihu.com/topstory/recommend`，并显式允许游客访问。
 - `shared/src/commonMain/kotlin/com/github/zly2006/zhihu/viewmodel/PaginationViewModel.kt`：请求追加 `include=data[*].content,excerpt,headline,target.author.badge_v2`，后续页使用响应的 `paging.next`。
 - `app/src/androidTest/java/com/github/zly2006/zhihu/test/ZhihuMockApi.kt`：Mock 首页端点为 `https://api.zhihu.com/topstory/recommend`，响应沿用 `data` 与 `paging` 信封。
 - Android 分页实现跳过不能识别的单项，而不是让整页失败。HarmonyOS 同步跳过 Android 已列明的 `invited_answer`、`tab_list`、`feed_item_index_group` 外壳和不支持的 target；其他缺少 ID、标题或 target 等结构损坏仍返回结构化解码错误。
 
 ## HarmonyOS 合同
 
-- 首次请求固定为：
-  `https://api.zhihu.com/topstory/recommend?include=data%5B%2A%5D.content%2Cexcerpt%2Cheadline%2Ctarget.author.badge_v2`。
-- 后续游标只接受 HTTPS、精确主机 `api.zhihu.com`、精确路径 `/topstory/recommend`；拒绝用户信息、端口、片段、Unicode/控制字符、其他路径和 evil-suffix 主机。
+- 当前知乎已对历史游客端点返回 HTTP 403，因此首页切换为已登录网页接口：
+  `https://www.zhihu.com/api/v3/feed/topstory/recommend?desktop=true&page_number=1&limit=10&action=down`，附加统一 `include`。
+- 后续游标只接受 HTTPS、精确主机 `www.zhihu.com`、精确路径 `/api/v3/feed/topstory/recommend`；拒绝用户信息、端口、片段、Unicode/控制字符、其他路径和 evil-suffix 主机。
 - 每次请求都由本地 URL builder 覆盖 `include`，不信任上游游标携带的旧值。
-- 首页游客请求不设置 `useSession` 或 `signWithZse`，因此不会读取 Cookie provider，也不会生成 Cookie/ZSE 请求头。HTTP 主机能力同时限制 `api.zhihu.com` 只能发送游客无签名请求；只有精确 `www.zhihu.com` 可启用 Cookie/ZSE，拒绝发生在读取 Cookie provider 之前。
+- 首页请求使用已验证的 Cookie 与 ZSE。HTTP 主机能力继续限制 `api.zhihu.com` 只能发送游客无签名请求；会话仅能发送到精确 `www.zhihu.com`，拒绝发生在读取 Cookie provider 之前。
 - HTTP 状态、传输异常和解码异常沿用 P1 结构化失败；错误消息不包含响应 body 或被拒绝的游标。
 - Repository 仅在成功解码并验证下一游标后记录当前游标，网络失败允许原游标重试。
 - Repository 的 `cancel()` 会开启新 generation 并终止 HTTP；页面离开会调用该入口，旧响应不能写回分页状态。Controller 同时禁止加载中刷新，避免同一个单请求客户端进入 BUSY。页间条目按 `target.kind:target.id` 去重，与 Android Lite 的稳定展示键一致。

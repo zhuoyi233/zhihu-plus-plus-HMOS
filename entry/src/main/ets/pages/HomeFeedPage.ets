@@ -5,6 +5,7 @@ import { HomeFeedController, HomeFeedPhase, HomeFeedViewState } from './HomeFeed
 @Component
 export struct HomeFeedPage {
   repository: FeedRepository | undefined = new DefaultFeedRepository();
+  @Prop @Watch('reloadAfterAuthentication') reloadToken: number = 0;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
   @State private phase: HomeFeedPhase = HomeFeedPhase.IDLE;
@@ -13,6 +14,7 @@ export struct HomeFeedPage {
   @State private loadingMore: boolean = false;
   @State private canLoadMore: boolean = false;
   @State private errorMessage: string = '';
+  @State private requiresLogin: boolean = false;
   private controller: HomeFeedController | undefined = undefined;
 
   aboutToAppear(): void {
@@ -32,6 +34,10 @@ export struct HomeFeedPage {
   aboutToDisappear(): void {
     this.controller?.deactivate();
     this.controller = undefined;
+  }
+
+  private reloadAfterAuthentication(): void {
+    this.controller?.refresh();
   }
 
   build() {
@@ -85,6 +91,12 @@ export struct HomeFeedPage {
           this.centeredStatus('正在加载首页…', false, 'p2_home_initial_loading');
         } else if (this.phase === HomeFeedPhase.ERROR) {
           this.centeredStatus(this.errorMessage, true, 'p2_home_error');
+          if (this.requiresLogin) {
+            Button('去登录')
+              .id('p2_home_error_login')
+              .fontSize($r('app.float.p1_body_font_size'))
+              .onClick(() => this.navigate({ name: P1DestinationName.LOGIN }))
+          }
         } else if (this.phase === HomeFeedPhase.EMPTY) {
           this.centeredStatus('暂时没有可显示的内容', true, 'p2_home_empty');
         } else {
@@ -242,6 +254,7 @@ export struct HomeFeedPage {
     this.loadingMore = state.loadingMore;
     this.canLoadMore = state.canLoadMore;
     this.errorMessage = state.errorMessage ?? '';
+    this.requiresLogin = state.requiresLogin;
   }
 }
 

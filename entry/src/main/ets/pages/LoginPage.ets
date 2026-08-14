@@ -32,7 +32,8 @@ export struct LoginPage {
     manualLoginEnabled: true,
     qrStartEnabled: true,
     qrCancelable: false,
-    logoutEnabled: false
+    logoutEnabled: false,
+    retainedSessionRetryEnabled: false
   };
   private controller?: LoginController;
   private applicationContext?: common.ApplicationContext;
@@ -47,7 +48,8 @@ export struct LoginPage {
         manualLoginEnabled: false,
         qrStartEnabled: false,
         qrCancelable: false,
-        logoutEnabled: false
+        logoutEnabled: false,
+        retainedSessionRetryEnabled: false
       };
       return;
     }
@@ -125,6 +127,13 @@ export struct LoginPage {
           .padding($r('app.float.p1_card_padding'))
           .borderRadius($r('app.float.p1_card_radius'))
           .backgroundColor($r('app.color.surface_background'))
+
+          if (this.viewState.retainedSessionRetryEnabled) {
+            Button('重试验证已保留会话')
+              .id('p2_login_retry_retained_session')
+              .width('100%')
+              .onClick(() => this.controller?.retryRetainedSession())
+          }
 
           Column({ space: $r('app.float.p1_spacing_medium') }) {
             Text('手动 Cookie 登录')

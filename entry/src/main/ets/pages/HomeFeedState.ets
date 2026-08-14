@@ -1,4 +1,4 @@
-import { feedItemIdentity, FeedItem, FeedPage, FeedRepository } from 'data';
+import { feedItemIdentity, FeedItem, FeedPage, FeedRepository, HttpFailure, HttpFailureKind } from 'data';
 
 export enum HomeFeedPhase {
   IDLE = 'idle',
@@ -15,9 +15,35 @@ export interface HomeFeedViewState {
   readonly loadingMore: boolean;
   readonly canLoadMore: boolean;
   readonly errorMessage?: string;
+  readonly requiresLogin: boolean;
 }
 
 export type HomeFeedStateObserver = (state: HomeFeedViewState) => void;
+
+function homeFeedErrorMessage(error: Error): string {
+  if (!(error instanceof HttpFailure)) {
+    return '首页加载失败，请检查网络后重试';
+  }
+  if (error.kind === HttpFailureKind.AUTHENTICATION) {
+    return error.status === 403
+      ? '首页请求被知乎拒绝，可能需要完成风控验证'
+      : '登录状态不可用，请重新登录后刷新';
+  }
+  if (error.kind === HttpFailureKind.RATE_LIMITED) {
+    return '首页请求过于频繁，请稍后重试';
+  }
+  if (error.kind === HttpFailureKind.SERVER) {
+    return '知乎首页暂时不可用，请稍后重试';
+  }
+  if (error.kind === HttpFailureKind.TIMEOUT) {
+    return '首页请求超时，请稍后重试';
+  }
+  return '首页加载失败，请检查网络后重试';
+}
+
+function homeFeedRequiresLogin(error: Error): boolean {
+  return error instanceof HttpFailure && error.kind === HttpFailureKind.AUTHENTICATION && error.status !== 403;
+}
 
 export class HomeFeedController {
   private readonly repository: FeedRepository;
@@ -31,6 +57,7 @@ export class HomeFeedController {
   private nextCursor: string | undefined = undefined;
   private reachedEnd: boolean = false;
   private errorMessage: string | undefined = undefined;
+  private requiresLogin: boolean = false;
   private retryLoadMore: boolean = false;
   private paginationRetryRequired: boolean = false;
 
@@ -69,7 +96,8 @@ export class HomeFeedController {
       refreshing: this.refreshing,
       loadingMore: this.loadingMore,
       canLoadMore: this.canLoadMore(),
-      errorMessage: this.errorMessage
+      errorMessage: this.errorMessage,
+      requiresLogin: this.requiresLogin
     };
   }
 
@@ -106,6 +134,7 @@ export class HomeFeedController {
     }
     this.loadingMore = true;
     this.errorMessage = undefined;
+    this.requiresLogin = false;
     this.retryLoadMore = false;
     this.paginationRetryRequired = false;
     this.emit();
@@ -119,11 +148,12 @@ export class HomeFeedController {
       this.phase = this.items.length > 0 ? HomeFeedPhase.READY : HomeFeedPhase.EMPTY;
       this.retryLoadMore = this.items.length === 0 && this.hasNextPage();
       this.paginationRetryRequired = false;
-    } catch (_error) {
+    } catch (error) {
       if (!this.isCurrent(generation)) {
         return;
       }
-      this.errorMessage = '加载更多失败，请重试';
+      this.errorMessage = homeFeedErrorMessage(error);
+      this.requiresLogin = homeFeedRequiresLogin(error);
       this.phase = this.items.length > 0 ? HomeFeedPhase.READY : HomeFeedPhase.ERROR;
       this.retryLoadMore = true;
       this.paginationRetryRequired = true;
@@ -140,6 +170,7 @@ export class HomeFeedController {
     this.refreshing = keepVisibleItems;
     this.loadingMore = false;
     this.errorMessage = undefined;
+    this.requiresLogin = false;
     this.retryLoadMore = false;
     this.paginationRetryRequired = false;
     if (!keepVisibleItems) {
@@ -156,11 +187,12 @@ export class HomeFeedController {
       this.phase = this.items.length > 0 ? HomeFeedPhase.READY : HomeFeedPhase.EMPTY;
       this.retryLoadMore = this.items.length === 0 && this.hasNextPage();
       this.paginationRetryRequired = false;
-    } catch (_error) {
+    } catch (error) {
       if (!this.isCurrent(generation)) {
         return;
       }
-      this.errorMessage = '首页加载失败，请检查网络后重试';
+      this.errorMessage = homeFeedErrorMessage(error);
+      this.requiresLogin = homeFeedRequiresLogin(error);
       this.phase = this.items.length > 0 ? HomeFeedPhase.READY : HomeFeedPhase.ERROR;
       this.retryLoadMore = false;
     } finally {

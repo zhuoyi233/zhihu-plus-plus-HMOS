@@ -1,6 +1,8 @@
 import {
   HttpFailure,
   HttpFailureKind,
+  SearchDecodeError,
+  SearchDecodeFailureKind,
   SearchRepository,
   SearchResultItem,
   SearchResultPage,
@@ -164,11 +166,7 @@ export class SearchController {
       }
       this.requiresLogin = authenticationFailure &&
         (authenticationStatus === undefined || authenticationStatus === 401);
-      this.errorMessage = authenticationFailure && authenticationStatus === 403
-        ? '请求被拒绝，可能需要稍后重试或完成风控'
-        : this.requiresLogin
-          ? '登录状态已失效，请重新登录后重试'
-          : '加载更多搜索结果失败，请重试';
+      this.errorMessage = searchErrorMessage(error, this.requiresLogin, authenticationStatus, true);
       this.phase = this.items.length > 0 ? SearchPhase.READY : SearchPhase.ERROR;
       this.retryLoadMore = true;
       this.paginationBlocked = true;
@@ -203,11 +201,7 @@ export class SearchController {
       }
       this.requiresLogin = authenticationFailure &&
         (authenticationStatus === undefined || authenticationStatus === 401);
-      this.errorMessage = authenticationFailure && authenticationStatus === 403
-        ? '请求被拒绝，可能需要稍后重试或完成风控'
-        : this.requiresLogin
-          ? '搜索需要登录，请登录后重试'
-          : '搜索失败，请检查网络后重试';
+      this.errorMessage = searchErrorMessage(error, this.requiresLogin, authenticationStatus, false);
     } finally {
       if (this.isCurrent(generation)) {
         this.emit();
@@ -234,6 +228,37 @@ export class SearchController {
       this.observer(this.snapshot());
     }
   }
+}
+
+function searchErrorMessage(error: Error, requiresLogin: boolean, authenticationStatus: number | undefined,
+  loadingMore: boolean): string {
+  const action = loadingMore ? '加载更多搜索结果' : '搜索';
+  if (authenticationStatus === 403) {
+    return '请求被拒绝，可能需要稍后重试或完成风控';
+  }
+  if (requiresLogin) {
+    return loadingMore ? '登录状态已失效，请重新登录后重试' : '搜索需要登录，请登录后重试';
+  }
+  if (error instanceof SearchDecodeError) {
+    return error.kind === SearchDecodeFailureKind.UPSTREAM_ERROR
+      ? '知乎搜索服务返回了错误，请稍后重试'
+      : '知乎搜索服务返回了无法解析的响应，请稍后重试';
+  }
+  if (error instanceof HttpFailure) {
+    if (error.kind === HttpFailureKind.RATE_LIMITED) {
+      return '搜索请求过于频繁，请稍后重试';
+    }
+    if (error.kind === HttpFailureKind.SERVER) {
+      return '知乎搜索服务暂时不可用，请稍后重试';
+    }
+    if (error.kind === HttpFailureKind.TIMEOUT) {
+      return '搜索请求超时，请稍后重试';
+    }
+    if (error.kind === HttpFailureKind.CLIENT) {
+      return '知乎拒绝了搜索请求，请稍后重试或完成风控';
+    }
+  }
+  return `${action}失败，请检查网络后重试`;
 }
 
 export function mergeSearchResults(current: Array<SearchResultItem>, incoming: Array<SearchResultItem>):

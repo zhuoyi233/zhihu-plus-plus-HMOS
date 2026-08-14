@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@ohos/hypium';
-import { FeedItem, FeedPage, FeedRepository, FeedTargetKind } from 'data';
+import { FeedItem, FeedPage, FeedRepository, FeedTargetKind, HttpFailure, HttpFailureKind } from 'data';
 import {
   HomeFeedController,
   HomeFeedPhase,
@@ -34,8 +34,31 @@ class ControlledFeedRepository implements FeedRepository {
   }
 
   fail(index: number): void {
+    this.failWith(index, new Error('network details must not reach UI'));
+  }
+
+  failWith(index: number, error: Error): void {
     const request = this.pending.find((_request: PendingRequest, currentIndex: number): boolean => currentIndex === index);
-    request?.reject(new Error('network details must not reach UI'));
+    request?.reject(error);
+  }
+
+}
+
+class RejectedHomeFeedRepository implements FeedRepository {
+  async loadHomePage(_cursor?: string): Promise<FeedPage> {
+    throw new HttpFailure(HttpFailureKind.AUTHENTICATION, 403);
+  }
+
+  cancel(): void {
+  }
+}
+
+class MissingSessionHomeFeedRepository implements FeedRepository {
+  async loadHomePage(_cursor?: string): Promise<FeedPage> {
+    throw new HttpFailure(HttpFailureKind.AUTHENTICATION);
+  }
+
+  cancel(): void {
   }
 }
 
@@ -120,6 +143,27 @@ export default function homeFeedStateTest(): void {
       await continueAfterFilteredPage;
       expect(controller.snapshot().phase).assertEqual(HomeFeedPhase.EMPTY);
       expect(controller.snapshot().canLoadMore).assertFalse();
+    });
+
+    it('showsZhihuRejectionWithoutExposingResponseContent', 0, async () => {
+      const repository = new RejectedHomeFeedRepository();
+      const controller = new HomeFeedController(repository);
+      controller.activate();
+
+      await controller.loadInitial();
+
+      expect(controller.snapshot().errorMessage).assertEqual('首页请求被知乎拒绝，可能需要完成风控验证');
+      expect(controller.snapshot().requiresLogin).assertFalse();
+    });
+
+    it('marksMissingSessionAsLoginRecoverable', 0, async () => {
+      const controller = new HomeFeedController(new MissingSessionHomeFeedRepository());
+      controller.activate();
+
+      await controller.loadInitial();
+
+      expect(controller.snapshot().errorMessage).assertEqual('登录状态不可用，请重新登录后刷新');
+      expect(controller.snapshot().requiresLogin).assertTrue();
     });
 
     it('serializesRefreshAndIgnoresResultsAcrossLeave', 0, async () => {

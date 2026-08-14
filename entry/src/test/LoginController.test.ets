@@ -92,12 +92,20 @@ class FakeSessionRepository implements LoginSessionGateway {
   manualDeferred?: Deferred<SessionState>;
   qrResult: SessionState = authenticatedState('qr-user');
   logoutResult: SessionState = guestState('已退出登录');
+  retryResult: SessionState = guestState();
   lastCookieHeader: string = '';
   lastQrCookies: Array<SessionCookie> = [];
   cancelCount: number = 0;
+  retryCount: number = 0;
 
   getState(): SessionState {
     return this.copyState(this.state);
+  }
+
+  retryRetainedSession(): Promise<SessionState> {
+    this.retryCount += 1;
+    this.state = this.copyState(this.retryResult);
+    return Promise.resolve(this.copyState(this.state));
   }
 
   beginLoginWithCookieHeader(rawCookie: string): SessionLoginOperation {
@@ -180,13 +188,19 @@ export default function loginControllerTest(): void {
     it('reflectsAuthenticatedSessionAndLogsOut', 0, async () => {
       const session = new FakeSessionRepository();
       session.state = authenticatedState('existing-user');
-      const controller = new LoginController(session, new FakeQrClient());
+      const qr = new FakeQrClient();
+      const controller = new LoginController(session, qr);
 
       controller.activate();
       expect(controller.snapshot().phase).assertEqual(LoginPhase.AUTHENTICATED);
       expect(completesUserAuthentication(LoginPhase.GUEST, controller.snapshot().phase)).assertFalse();
       expect(controller.snapshot().profileName).assertEqual('existing-user');
       expect(controller.snapshot().logoutEnabled).assertTrue();
+      expect(controller.snapshot().qrStartEnabled).assertFalse();
+
+      await controller.startQrLogin();
+      expect(qr.startCount).assertEqual(0);
+      expect(controller.snapshot().phase).assertEqual(LoginPhase.AUTHENTICATED);
 
       await controller.logout();
       expect(controller.snapshot().phase).assertEqual(LoginPhase.GUEST);
@@ -207,6 +221,26 @@ export default function loginControllerTest(): void {
       expect(session.lastCookieHeader).assertEqual(secret);
       expect(controller.snapshot().phase).assertEqual(LoginPhase.AUTHENTICATED);
       expect(completesUserAuthentication(LoginPhase.VERIFYING_COOKIE, controller.snapshot().phase)).assertTrue();
+    });
+
+    it('retriesRetainedSessionWithoutRequiringCookieInput', 0, async () => {
+      const session = new FakeSessionRepository();
+      session.state = {
+        status: SessionStatus.ERROR,
+        message: '网络请求超时；本地会话已保留',
+        hasRetainedCredentials: true
+      };
+      session.retryResult = authenticatedState('restored-user');
+      const controller = new LoginController(session, new FakeQrClient());
+
+      controller.activate();
+      expect(controller.snapshot().phase).assertEqual(LoginPhase.ERROR);
+      expect(controller.snapshot().retainedSessionRetryEnabled).assertTrue();
+      await controller.retryRetainedSession();
+
+      expect(session.retryCount).assertEqual(1);
+      expect(controller.snapshot().phase).assertEqual(LoginPhase.AUTHENTICATED);
+      expect(controller.snapshot().profileName).assertEqual('restored-user');
     });
 
     it('pollsQrAtFixedIntervalAndKeepsQrVisibleWhileWaiting', 0, async () => {

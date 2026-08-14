@@ -39,6 +39,7 @@ export interface SessionLoginOperation {
 
 export interface LoginSessionGateway {
   getState(): SessionState;
+  retryRetainedSession(): Promise<SessionState>;
   beginLoginWithCookieHeader(rawCookie: string): SessionLoginOperation;
   beginLoginWithCookies(cookies: Array<SessionCookie>): SessionLoginOperation;
   logout(): Promise<SessionState>;
@@ -122,6 +123,13 @@ export class SessionRepository implements SessionCookieProvider, LoginSessionGat
         });
       }
     });
+  }
+
+  retryRetainedSession(): Promise<SessionState> {
+    if (!this.state.hasRetainedCredentials) {
+      return Promise.resolve(this.getState());
+    }
+    return this.load();
   }
 
   loginWithCookieHeader(rawCookie: string): Promise<SessionState> {

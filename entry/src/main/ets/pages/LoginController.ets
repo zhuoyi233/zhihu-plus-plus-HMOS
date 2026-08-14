@@ -38,6 +38,7 @@ export interface LoginViewState {
   readonly qrStartEnabled: boolean;
   readonly qrCancelable: boolean;
   readonly logoutEnabled: boolean;
+  readonly retainedSessionRetryEnabled: boolean;
 }
 
 export interface LoginPollScheduler {
@@ -146,8 +147,32 @@ export class LoginController {
     }
   }
 
+  async retryRetainedSession(): Promise<void> {
+    if (!this.canStartUserAction() || !this.state.retainedSessionRetryEnabled) {
+      return;
+    }
+    const generation = this.beginUserAction();
+    this.update(this.viewState(LoginPhase.VERIFYING_COOKIE, '正在验证已保留会话'));
+    try {
+      const result = await this.session.retryRetainedSession();
+      if (this.isCurrent(generation)) {
+        this.update(this.sessionViewState(result));
+      }
+    } catch (_error) {
+      if (this.isCurrent(generation)) {
+        this.update(this.viewState(LoginPhase.ERROR, '已保留会话验证失败，请稍后重试', undefined,
+          undefined, undefined, undefined, true));
+      }
+    }
+  }
+
   async startQrLogin(): Promise<void> {
     if (!this.canStartUserAction()) {
+      return;
+    }
+    const sessionState = this.session.getState();
+    if (sessionState.status === SessionStatus.AUTHENTICATED) {
+      this.update(this.sessionViewState(sessionState));
       return;
     }
     const generation = this.beginUserAction();
@@ -346,15 +371,16 @@ export class LoginController {
     }
     if (session.status === SessionStatus.ERROR) {
       return this.viewState(LoginPhase.ERROR, session.message, undefined, undefined, undefined,
-        session.profile?.name);
+        session.profile?.name, session.hasRetainedCredentials);
     }
     return this.viewState(LoginPhase.GUEST, session.message);
   }
 
   private viewState(phase: LoginPhase, message: string, qrLink?: string, qrExpiresAt?: number,
-    riskControlUrl?: string, profileName?: string): LoginViewState {
+    riskControlUrl?: string, profileName?: string, retainedSessionRetryEnabled: boolean = false): LoginViewState {
     const busy = this.isBusyPhase(phase);
     const interactive = this.active && this.foreground;
+    const authenticated = this.session.getState().status === SessionStatus.AUTHENTICATED;
     const qrCancelable = phase === LoginPhase.QR_READY || phase === LoginPhase.QR_WAITING_CONFIRMATION ||
       phase === LoginPhase.QR_STARTING;
     return {
@@ -365,9 +391,10 @@ export class LoginController {
       qrExpiresAt: qrExpiresAt,
       riskControlUrl: riskControlUrl,
       manualLoginEnabled: interactive && !busy,
-      qrStartEnabled: interactive && !busy && !qrCancelable,
+      qrStartEnabled: interactive && !busy && !qrCancelable && !authenticated,
       qrCancelable: interactive && qrCancelable,
-      logoutEnabled: interactive && !busy && this.session.getState().hasRetainedCredentials
+      logoutEnabled: interactive && !busy && this.session.getState().hasRetainedCredentials,
+      retainedSessionRetryEnabled: interactive && !busy && retainedSessionRetryEnabled
     };
   }
 
@@ -389,7 +416,8 @@ export class LoginController {
       manualLoginEnabled: state.manualLoginEnabled,
       qrStartEnabled: state.qrStartEnabled,
       qrCancelable: state.qrCancelable,
-      logoutEnabled: state.logoutEnabled
+      logoutEnabled: state.logoutEnabled,
+      retainedSessionRetryEnabled: state.retainedSessionRetryEnabled
     };
   }
 }

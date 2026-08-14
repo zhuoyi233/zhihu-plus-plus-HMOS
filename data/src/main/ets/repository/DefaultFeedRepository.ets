@@ -8,7 +8,8 @@ export const HOME_FEED_INCLUDE =
   'data[*].content,excerpt,headline,target.author.badge_v2,target.bound_topic_ids,target.question.bound_topic_ids';
 const HOME_FEED_INCLUDE_QUERY = `include=${encodeURIComponent(HOME_FEED_INCLUDE).replace(/\*/g, '%2A')}`;
 export const HOME_FEED_URL =
-  `https://api.zhihu.com/topstory/recommend?${HOME_FEED_INCLUDE_QUERY}`;
+  `https://www.zhihu.com/api/v3/feed/topstory/recommend?desktop=true&page_number=1&limit=10&action=down&` +
+    HOME_FEED_INCLUDE_QUERY;
 
 export enum FeedRepositoryFailureKind {
   INVALID_CURSOR = 'invalid_cursor',
@@ -36,7 +37,7 @@ export function isHomeFeedCursorUrl(url: string): boolean {
   if (/[\u0000-\u0020\u007F-\uFFFF]/.test(url)) {
     return false;
   }
-  return /^https:\/\/api\.zhihu\.com\/topstory\/recommend(?:\?[^#]*)?$/.test(url);
+  return /^https:\/\/www\.zhihu\.com\/api\/v3\/feed\/topstory\/recommend(?:\?[^#]*)?$/.test(url);
 }
 
 export function buildHomeFeedRequestUrl(cursor?: string): string {
@@ -127,7 +128,9 @@ export class DefaultFeedRepository implements FeedRepository {
 
     const response: ZhihuHttpResponse = await this.httpClient.execute({
       url: requestUrl,
-      accept: 'application/json'
+      accept: 'application/json',
+      useSession: true,
+      signWithZse: true
     });
     if (requestGeneration !== this.generation) {
       throw new FeedRepositoryFailure(FeedRepositoryFailureKind.CANCELLED);

@@ -15,7 +15,8 @@ import {
 
 @Component
 export struct P1Shell {
-  @BuilderParam homeContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
+  @BuilderParam homeContent: (reloadToken: number, navigate: (destination: P1Destination) => void) => void =
+    this.emptyReloadableHome;
   @BuilderParam followingContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
   @BuilderParam hotContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
   @BuilderParam dailyContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
@@ -47,6 +48,7 @@ export struct P1Shell {
   @BuilderParam domainFixtureProbeContent: (onBack: () => void) => void = this.emptyProbe;
   @State private themeMode: AppThemeMode = AppThemeMode.SYSTEM;
   @State private themePersistenceStatus: string = '正在读取主题设置…';
+  @State private homeReloadToken: number = 0;
   @Provide('p1PathStack') pathStack: NavPathStack = new NavPathStack();
   private unsubscribeStartupDestination: (() => void) | undefined = undefined;
   private readonly themeOperationGuard: LatestOperationGuard = new LatestOperationGuard();
@@ -73,6 +75,11 @@ export struct P1Shell {
 
   @Builder
   emptyHome(_navigate: (destination: P1Destination) => void) {
+    Blank();
+  }
+
+  @Builder
+  emptyReloadableHome(_reloadToken: number, _navigate: (destination: P1Destination) => void) {
     Blank();
   }
 
@@ -295,7 +302,7 @@ export struct P1Shell {
   build() {
     Navigation(this.pathStack) {
       Stack({ alignContent: Alignment.TopStart }) {
-        this.homeContent((destination: P1Destination): void => this.navigate(destination));
+        this.homeContent(this.homeReloadToken, (destination: P1Destination): void => this.navigate(destination));
       }
       .id('p1_home_top_start_container')
       .width('100%')
@@ -499,6 +506,7 @@ export struct P1Shell {
     this.pathStack.pop();
     const paths: Array<NavPathInfo> | undefined = this.pathStack.getPathStack();
     if (paths === undefined || paths.length === 0) {
+      this.homeReloadToken += 1;
       return;
     }
     const current = paths[paths.length - 1];

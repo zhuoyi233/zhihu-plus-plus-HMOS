@@ -55,6 +55,10 @@ class FixedSessionGateway implements LoginSessionGateway {
     };
   }
 
+  retryRetainedSession(): Promise<SessionState> {
+    return Promise.resolve(this.getState());
+  }
+
   setStatus(status: SessionStatus): void {
     this.state = {
       status: status,
