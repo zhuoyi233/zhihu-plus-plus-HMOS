@@ -116,5 +116,9 @@ pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall -SkipBui
 - [ ] 评论点赞/取消即时生效，失败回滚；
 - [ ] 断网/403 场景显示可重试错误，不泄露请求体或 Cookie。
 
-> 说明：以上写接口（发表/回复/删除/点赞）与真实登录态依赖设备实测；
-> 本轮仅完成编译与 Hypium 自动化验证（27 个新增用例全绿）。
+> 说明：以上写接口（发表/回复/删除/点赞）与真实登录态依赖设备实测。
+> 本轮已实测编译 + Hypium 自动化：`verify-harmony.ps1 -SkipDependencyInstall -SkipBuild`
+> 通过，**354/354 用例全绿**（基线 327 + 本切片新增 27）。
+> 环境说明：worktree 的根 `oh_modules` 原为指向主 checkout 的 junction，导致测试运行时
+> `@ohos/hypium` 模块解析为工作区外路径而崩溃；已改为在 worktree 内 `ohpm install --all`
+> 生成本地 `oh_modules`（含内部 junction）后恢复正常。
