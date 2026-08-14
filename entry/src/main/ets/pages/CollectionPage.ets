@@ -92,7 +92,7 @@ export struct CollectionPage {
             } else {
               Button('重试')
                 .id('p3_collections_retry_more')
-                .onClick((): void => this.controller?.retry())
+                .onClick(() => this.controller?.retry())
             }
           }
           .width('100%')
@@ -101,7 +101,7 @@ export struct CollectionPage {
           .backgroundColor($r('app.color.surface_background'))
         }
 
-        List({ space: $r('app.float.p1_spacing_medium') }) {
+        List({ space: 10 }) {
           ForEach(this.items, (collection: CollectionSummary) => {
             ListItem() {
               this.collectionCard(collection)
@@ -115,7 +115,7 @@ export struct CollectionPage {
                 .width('100%')
                 .fontSize($r('app.float.p1_secondary_font_size'))
                 .enabled(!this.loadingMore && !this.busy)
-                .onClick((): void => this.controller?.loadMore())
+                .onClick(() => this.controller?.loadMore())
             }
           }
         }
@@ -123,7 +123,7 @@ export struct CollectionPage {
         .width('100%')
         .layoutWeight(1)
         .edgeEffect(EdgeEffect.Spring)
-        .onReachEnd((): void => this.controller?.loadMore())
+        .onReachEnd(() => this.controller?.loadMore())
       }
 
       if (this.showCreateDialog) {
@@ -224,7 +224,7 @@ export struct CollectionPage {
           Button('重新加载')
             .id(`${testId}_retry`)
             .fontSize($r('app.float.p1_body_font_size'))
-            .onClick((): void => this.controller?.retry())
+            .onClick(() => this.controller?.retry())
         }
       }
     }

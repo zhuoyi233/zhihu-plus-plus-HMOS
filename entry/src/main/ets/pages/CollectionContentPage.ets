@@ -74,7 +74,7 @@ export struct CollectionContentPage {
             } else {
               Button('重试')
                 .id('p3_collection_content_retry_more')
-                .onClick((): void => this.controller?.retry())
+                .onClick(() => this.controller?.retry())
             }
           }
           .width('100%')
@@ -83,7 +83,7 @@ export struct CollectionContentPage {
           .backgroundColor($r('app.color.surface_background'))
         }
 
-        List({ space: $r('app.float.p1_spacing_medium') }) {
+        List({ space: 10 }) {
           ForEach(this.items, (item: CollectionContentItem) => {
             ListItem() {
               this.contentCard(item)
@@ -97,7 +97,7 @@ export struct CollectionContentPage {
                 .width('100%')
                 .fontSize($r('app.float.p1_secondary_font_size'))
                 .enabled(!this.loadingMore)
-                .onClick((): void => this.controller?.loadMore())
+                .onClick(() => this.controller?.loadMore())
             }
           }
         }
@@ -105,7 +105,7 @@ export struct CollectionContentPage {
         .width('100%')
         .layoutWeight(1)
         .edgeEffect(EdgeEffect.Spring)
-        .onReachEnd((): void => this.controller?.loadMore())
+        .onReachEnd(() => this.controller?.loadMore())
       }
     }
     .id('p3_collection_content_page')
@@ -218,7 +218,7 @@ export struct CollectionContentPage {
           Button('重新加载')
             .id(`${testId}_retry`)
             .fontSize($r('app.float.p1_body_font_size'))
-            .onClick((): void => this.controller?.retry())
+            .onClick(() => this.controller?.retry())
         }
       }
     }
