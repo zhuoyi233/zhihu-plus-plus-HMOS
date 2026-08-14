@@ -50,6 +50,18 @@ function id(value: JsonValue | undefined, field: string): string {
   throw invalid(`${field} 缺少有效 ID`);
 }
 
+/** 评论作者 ID 与知乎 people ID 一致，可能是 32 位十六进制串或数字；仅接受安全字符。 */
+function authorId(value: JsonValue | undefined, field: string): string {
+  if (value instanceof JsonStringValue && /^[A-Za-z0-9_-]{1,200}$/.test(value.value)) {
+    return value.value;
+  }
+  const integerLiteral = jsonIntegerLiteral(value);
+  if (integerLiteral !== undefined && /^[A-Za-z0-9_-]{1,200}$/.test(integerLiteral)) {
+    return integerLiteral;
+  }
+  throw invalid(`${field} 缺少有效 ID`);
+}
+
 function text(value: JsonValue | undefined, field: string): string {
   if (value === undefined || value instanceof JsonNullValue) {
     return '';
@@ -127,7 +139,7 @@ function author(value: JsonValue | undefined, field: string): CommentAuthor {
     throw invalid(`${field}.author 结构无效`);
   }
   return {
-    id: id(object.get('id'), `${field}.author.id`),
+    id: authorId(object.get('id'), `${field}.author.id`),
     urlToken: text(object.get('url_token'), `${field}.author.url_token`),
     name: requiredText(object.get('name'), `${field}.author.name`),
     avatarUrl: text(object.get('avatar_url'), `${field}.author.avatar_url`),

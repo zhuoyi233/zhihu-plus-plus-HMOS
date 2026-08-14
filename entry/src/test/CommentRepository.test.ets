@@ -263,6 +263,21 @@ export default function commentRepositoryTest(): void {
       expect(page.cursor.next).assertUndefined();
     });
 
+    it('decodesAuthorIdAsHexLikeUpstreamPeopleId', 0, () => {
+      const page = decodeRootCommentPage(
+        '{"data":[{"id":"1001","content":"<p>hex 作者</p>","created_time":1700000000,' +
+        '"is_delete":false,"collapsed":false,"reviewing":false,"liked":false,"like_count":0,' +
+        '"is_author":false,"is_author_top":false,"author":{"id":"7984d572517b489e42f418a63eae0b09",' +
+        '"url_token":"dan-guo-feng-97","name":"快乐奔跑","avatar_url":"","headline":""},' +
+        '"author_tag":[],"comment_tag":[],"child_comment_count":0,"child_comments":[]}],' +
+        '"paging":{"is_end":true,"next":null,"previous":""}}'
+      );
+      expect(page.items.length).assertEqual(1);
+      expect(page.items[0].author.id).assertEqual('7984d572517b489e42f418a63eae0b09');
+      expect(page.items[0].author.urlToken).assertEqual('dan-guo-feng-97');
+      expect(page.items[0].author.name).assertEqual('快乐奔跑');
+    });
+
     it('rejectsUpstreamErrorAndInvalidRootStructure', 0, () => {
       let upstreamError: DomainDecodeError | undefined = undefined;
       try {

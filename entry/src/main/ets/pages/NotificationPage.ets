@@ -309,9 +309,8 @@ export struct NotificationPage {
         .fontColor($r('app.color.primary_text'))
         .width('100%')
 
-      const body = this.cardBody(item);
-      if (body.length > 0) {
-        Text(body)
+      if (this.cardBody(item).length > 0) {
+        Text(this.cardBody(item))
           .fontSize($r('app.float.p1_secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .width('100%')
