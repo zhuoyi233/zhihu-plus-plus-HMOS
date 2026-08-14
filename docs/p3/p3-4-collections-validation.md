@@ -89,9 +89,9 @@ powershell -Command "& '.\scripts\verify-harmony.ps1' -SkipDependencyInstall -Sk
 
 ### 设备验收清单（API 24 虚拟机 + 登录态）
 
-- [ ] 设置页「我的收藏夹」进入列表，未登录显示「去登录」；
+- [x] 设置页「我的收藏夹」进入列表，未登录显示「去登录」；
 - [ ] 收藏夹列表分页加载、新建/删除即时生效，删除失败回滚；
-- [ ] 打开收藏夹看到标题、统计与内容列表，分页无重复，点击跳转详情；
+- [x] 打开收藏夹看到标题、统计与内容列表，分页无重复，点击跳转详情；
 - [ ] 回答/文章详情「收藏」弹窗列出收藏夹与收藏状态，切换即时生效，失败回滚；
 - [ ] 用户主页「收藏夹」入口显示该用户收藏夹；
 - [ ] 断网/403 场景显示可重试错误，不泄露请求体或 Cookie。
@@ -100,3 +100,22 @@ powershell -Command "& '.\scripts\verify-harmony.ps1' -SkipDependencyInstall -Sk
 > `ArticleViewModel.toggleFavorite` 一致使用 **PUT** + `add_collections`/`remove_collections` 表单语义。
 > 真实登录态探测确认：PUT 返回 `{"favlists_count":0,"success":true}` 有执行确认，而 POST/DELETE 虽返回
 > 200 但响应为空、无实际效果，故必须使用 PUT。
+
+### 设备实测记录（2026-08-15，ZhihuPlus_API26 模拟器 127.0.0.1:5555）
+
+已安装 `entry-default-signed.hap`（bundle `com.github.zhuoyi233.zhplus`，API 26 编译 / 24 兼容）并实测：
+
+1. **登录门禁**：未登录点设置页「我的收藏夹」→ 跳转登录页（游客/手动 Cookie/二维码三入口齐全），
+   与代码中 `openMyCollections` 的 `AUTHENTICATED` 判定一致；
+2. **Cookie 登录**：手动 Cookie 登录（使用用户 `ZHIHU_COOKIE`）成功，自动返回设置页；
+3. **收藏夹列表**：登录后点「我的收藏夹」→ 拉到真实收藏夹：
+   - 「我的收藏」（私密，869 篇内容）、「业余无线电」（公开，2 篇）、「学无止境」（私密，9 篇）；
+   - 每项卡片含标题、公开/私密、篇数与关注数、「打开」「删除」按钮；右上角「新建收藏夹」；
+4. **收藏夹内容**：打开「业余无线电」→ 标题、统计「2 条收藏」、内容列表正确：
+   - 文章《[原创]DMR入门_1.ID申请》（作者 Jesse BD7LLY，含完整 HTML 正文与图片 URL）；
+   - 回答《为何日本的地方广播电台都有发行QSL卡？》（作者 temu，含摘要与赞同/评论统计）；
+5. **编译修复**：HAP 全量编译暴露收藏夹两个页面 4 类类型错误（`List({ space: Resource })` 不接受
+   Resource、箭头函数返回 Promise 不能标注 `: void`），已修复为与项目其他页面一致的
+   `List({ space: 10 })` 与 `() => this.controller?.xxx()` 写法，随后构建、签名、安装、启动全部成功。
+
+未覆盖：新建/删除收藏夹写操作、收藏弹窗切换（依赖写接口，需登录态下继续实测）、用户主页入口、断网/403。
