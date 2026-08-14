@@ -5,6 +5,7 @@ import {
 import {
   BlockedFeedHistoryGateway,
   BlockingRuleGateway,
+  CollectionRepository,
   ContentDetailKind,
   ContentRepository,
   ContentVoteState,
@@ -33,6 +34,7 @@ import {
   FollowController,
   FollowViewState
 } from './ContentInteractionState';
+import { CollectionDialogComponent } from './CollectionDialogComponent';
 import { NativeContentDocument } from './NativeContentDocument';
 
 @Component
@@ -45,6 +47,7 @@ struct ContentDetailPage {
   history: BlockedFeedHistoryGateway | undefined = undefined;
   voteRepository: VoteRepository | undefined = undefined;
   followRepository: FollowRepository | undefined = undefined;
+  collectionRepository: CollectionRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
@@ -67,6 +70,7 @@ struct ContentDetailPage {
   @State private interactionPending: boolean = false;
   @State private interactionErrorMessage: string = '';
   @State private interactionRequiresLogin: boolean = false;
+  @State private favoriteDialogShown: boolean = false;
   private controller?: ContentDetailController;
   private blockingAction?: BlockingActionController;
   private voteController?: ContentVoteController;
@@ -115,13 +119,23 @@ struct ContentDetailPage {
   }
 
   build() {
-    Column() {
-      if (this.phase === ContentDetailPhase.LOADING || this.phase === ContentDetailPhase.IDLE) {
-        this.statusPanel('正在加载内容…', false)
-      } else if (this.phase === ContentDetailPhase.ERROR) {
-        this.statusPanel(this.errorMessage, true)
-      } else if (this.content !== undefined) {
-        this.loadedContent(this.content)
+    Stack({ alignContent: Alignment.TopStart }) {
+      Column() {
+        if (this.phase === ContentDetailPhase.LOADING || this.phase === ContentDetailPhase.IDLE) {
+          this.statusPanel('正在加载内容…', false)
+        } else if (this.phase === ContentDetailPhase.ERROR) {
+          this.statusPanel(this.errorMessage, true)
+        } else if (this.content !== undefined) {
+          this.loadedContent(this.content)
+        }
+      }
+      .id(`p2_${this.kind}_detail_page`)
+      .width('100%')
+      .height('100%')
+      .backgroundColor($r('app.color.page_background'))
+
+      if (this.favoriteDialogShown && this.collectionRepository !== undefined && this.session !== undefined) {
+        this.favoriteDialog()
       }
       if (this.pendingUserBlock !== undefined) {
         this.userBlockDialog()
@@ -130,10 +144,32 @@ struct ContentDetailPage {
         this.keywordBlockDialog()
       }
     }
-    .id(`p2_${this.kind}_detail_page`)
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.page_background'))
+  }
+
+  @Builder
+  private favoriteDialog() {
+    Column() {
+      Blank()
+        .onClick((): void => {
+          this.favoriteDialogShown = false;
+        })
+      CollectionDialogComponent({
+        contentType: this.kind === ContentDetailKind.ARTICLE ? 'article' : 'answer',
+        contentId: this.contentId,
+        repository: this.collectionRepository,
+        session: this.session,
+        navigate: this.navigate,
+        onDismiss: (): void => {
+          this.favoriteDialogShown = false;
+        }
+      })
+        .height('70%')
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('#66000000')
   }
 
   @Builder
@@ -209,6 +245,18 @@ struct ContentDetailPage {
               const author = content.value.author;
               if (author !== undefined) {
                 this.pendingUserBlock = { userId: author.id, userName: author.name };
+              }
+            })
+        }
+        if (content.kind === ContentDetailKind.ANSWER || content.kind === ContentDetailKind.ARTICLE) {
+          Button('收藏')
+            .id(`p2_${content.kind}_detail_favorite`)
+            .fontSize($r('app.float.p1_body_font_size'))
+            .onClick((): void => {
+              if (this.collectionRepository !== undefined && this.session !== undefined) {
+                this.favoriteDialogShown = true;
+              } else {
+                this.navigate({ name: P1DestinationName.LOGIN });
               }
             })
         }
@@ -522,6 +570,7 @@ export struct QuestionDetailPage {
   history: BlockedFeedHistoryGateway | undefined = undefined;
   voteRepository: VoteRepository | undefined = undefined;
   followRepository: FollowRepository | undefined = undefined;
+  collectionRepository: CollectionRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
@@ -536,6 +585,7 @@ export struct QuestionDetailPage {
       history: this.history,
       voteRepository: this.voteRepository,
       followRepository: this.followRepository,
+      collectionRepository: this.collectionRepository,
       session: this.session,
       navigate: this.navigate
     })
@@ -551,6 +601,7 @@ export struct AnswerDetailPage {
   history: BlockedFeedHistoryGateway | undefined = undefined;
   voteRepository: VoteRepository | undefined = undefined;
   followRepository: FollowRepository | undefined = undefined;
+  collectionRepository: CollectionRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
@@ -565,6 +616,7 @@ export struct AnswerDetailPage {
       history: this.history,
       voteRepository: this.voteRepository,
       followRepository: this.followRepository,
+      collectionRepository: this.collectionRepository,
       session: this.session,
       navigate: this.navigate
     })
@@ -580,6 +632,7 @@ export struct ArticleDetailPage {
   history: BlockedFeedHistoryGateway | undefined = undefined;
   voteRepository: VoteRepository | undefined = undefined;
   followRepository: FollowRepository | undefined = undefined;
+  collectionRepository: CollectionRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
@@ -594,6 +647,7 @@ export struct ArticleDetailPage {
       history: this.history,
       voteRepository: this.voteRepository,
       followRepository: this.followRepository,
+      collectionRepository: this.collectionRepository,
       session: this.session,
       navigate: this.navigate
     })

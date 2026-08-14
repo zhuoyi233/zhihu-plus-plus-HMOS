@@ -15,6 +15,7 @@ export enum P1DestinationName {
   COMMENT = 'Comment',
   SEARCH = 'Search',
   COLLECTION = 'Collection',
+  COLLECTIONS = 'Collections',
   NOTIFICATION = 'Notification',
   LOGIN = 'Login',
   SETTINGS = 'Settings',
@@ -48,7 +49,8 @@ export interface InfrastructureDestination {
 export interface ContentDestination {
   readonly name: P1DestinationName.QUESTION | P1DestinationName.ANSWER |
     P1DestinationName.ARTICLE | P1DestinationName.VIDEO | P1DestinationName.PIN |
-    P1DestinationName.PEOPLE | P1DestinationName.COLLECTION | P1DestinationName.DAILY_STORY;
+    P1DestinationName.PEOPLE | P1DestinationName.COLLECTION | P1DestinationName.COLLECTIONS |
+    P1DestinationName.DAILY_STORY;
   readonly id: string;
 }
 
@@ -103,6 +105,7 @@ export function isP1DestinationName(name: string): boolean {
     case P1DestinationName.COMMENT:
     case P1DestinationName.SEARCH:
     case P1DestinationName.COLLECTION:
+    case P1DestinationName.COLLECTIONS:
     case P1DestinationName.NOTIFICATION:
     case P1DestinationName.LOGIN:
     case P1DestinationName.SETTINGS:
@@ -195,6 +198,8 @@ export function decodeP1Destination(name: string, param: Object): P1Destination 
       return decodeContent(wire, P1DestinationName.PEOPLE);
     case P1DestinationName.COLLECTION:
       return decodeContent(wire, P1DestinationName.COLLECTION);
+    case P1DestinationName.COLLECTIONS:
+      return decodeContent(wire, P1DestinationName.COLLECTIONS);
     case P1DestinationName.COMMENT:
       const contentId = readString(wire, 'contentId');
       const commentId = readString(wire, 'commentId');
@@ -255,6 +260,8 @@ export function shouldReloadAfterAuthentication(destination: P1Destination): boo
     case P1DestinationName.PIN:
     case P1DestinationName.PEOPLE:
     case P1DestinationName.READ_HISTORY:
+    case P1DestinationName.COLLECTION:
+    case P1DestinationName.COLLECTIONS:
       return true;
     default:
       return false;
@@ -263,7 +270,8 @@ export function shouldReloadAfterAuthentication(destination: P1Destination): boo
 
 function decodeContent(wire: JsonObjectValue, name: P1DestinationName.QUESTION | P1DestinationName.ANSWER |
   P1DestinationName.ARTICLE | P1DestinationName.VIDEO | P1DestinationName.PIN |
-  P1DestinationName.PEOPLE | P1DestinationName.COLLECTION | P1DestinationName.DAILY_STORY): ContentDestination | undefined {
+  P1DestinationName.PEOPLE | P1DestinationName.COLLECTION | P1DestinationName.COLLECTIONS |
+  P1DestinationName.DAILY_STORY): ContentDestination | undefined {
   const id = readString(wire, 'id');
   if (id === undefined || !hasText(id) ||
     readString(wire, 'contentId') !== undefined || readString(wire, 'commentId') !== undefined ||
@@ -274,10 +282,10 @@ function decodeContent(wire: JsonObjectValue, name: P1DestinationName.QUESTION |
   let validId = true;
   if (name === P1DestinationName.PIN || name === P1DestinationName.DAILY_STORY) {
     validId = isSafePinContentId(id);
-  } else if (name === P1DestinationName.PEOPLE) {
+  } else if (name === P1DestinationName.PEOPLE || name === P1DestinationName.COLLECTIONS) {
     validId = isSafePeopleIdentifier(id);
   } else if (name === P1DestinationName.QUESTION || name === P1DestinationName.ANSWER ||
-    name === P1DestinationName.ARTICLE) {
+    name === P1DestinationName.ARTICLE || name === P1DestinationName.COLLECTION) {
     validId = isSafeDecimalContentId(id);
   }
   return validId ? { name: name, id: id } : undefined;

@@ -69,6 +69,7 @@ export function p1DestinationIdentity(destination: P1Destination): string {
     case P1DestinationName.PIN:
     case P1DestinationName.PEOPLE:
     case P1DestinationName.COLLECTION:
+    case P1DestinationName.COLLECTIONS:
       return `${destination.name}:${encodeURIComponent(destination.id)}`;
     case P1DestinationName.COMMENT:
       return `${destination.name}:${encodeURIComponent(destination.contentId)}:` +

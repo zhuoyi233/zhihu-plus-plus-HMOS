@@ -1,4 +1,4 @@
-import { AppPreferencesStore, AppThemeMode } from 'data';
+import { AppPreferencesStore, AppThemeMode, LoginSessionGateway, SessionStatus } from 'data';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import {
@@ -36,6 +36,10 @@ export struct P1Shell {
     this.emptyContent;
   @BuilderParam pinContent: (id: string, navigate: (destination: P1Destination) => void) => void =
     this.emptyContent;
+  @BuilderParam collectionsContent: (id: string, navigate: (destination: P1Destination) => void) => void =
+    this.emptyContent;
+  @BuilderParam collectionContentContent: (id: string, navigate: (destination: P1Destination) => void) => void =
+    this.emptyContent;
   @BuilderParam blockingRulesContent: () => void = this.emptyPage;
   @BuilderParam blockedFeedHistoryContent: () => void = this.emptyPage;
   @BuilderParam readHistoryContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
@@ -47,6 +51,7 @@ export struct P1Shell {
   @BuilderParam qrScanProbeContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam backgroundTaskProbeContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam domainFixtureProbeContent: (onBack: () => void) => void = this.emptyProbe;
+  session: LoginSessionGateway | undefined = undefined;
   @State private themeMode: AppThemeMode = AppThemeMode.SYSTEM;
   @State private themePersistenceStatus: string = '正在读取主题设置…';
   @State private homeReloadToken: number = 0;
@@ -248,6 +253,24 @@ export struct P1Shell {
       }
       .title('想法')
       .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.COLLECTIONS) {
+      NavDestination() {
+        this.collectionsContent(
+          destination.id,
+          (destination: P1Destination): void => this.navigate(destination)
+        );
+      }
+      .title('收藏夹')
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.COLLECTION) {
+      NavDestination() {
+        this.collectionContentContent(
+          destination.id,
+          (destination: P1Destination): void => this.navigate(destination)
+        );
+      }
+      .title('收藏夹内容')
+      .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.READER_PROBE) {
       NavDestination() {
         this.readerProbeContent((): void => {
@@ -415,6 +438,12 @@ export struct P1Shell {
           .width('100%')
           .fontSize($r('app.float.p1_body_font_size'))
           .onClick(() => this.navigate({ name: P1DestinationName.READ_HISTORY }))
+
+        Button('我的收藏夹')
+          .id('p3_open_my_collections')
+          .width('100%')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .onClick(() => this.openMyCollections())
         }
         .width('100%')
         .padding($r('app.float.p1_page_padding'))
@@ -513,6 +542,18 @@ export struct P1Shell {
     } else {
       this.pathStack.pushPath(path);
     }
+  }
+
+  private openMyCollections(): void {
+    const session = this.session;
+    const state = session?.getState();
+    const profile = state?.profile;
+    const identifier = profile?.urlToken ?? profile?.id;
+    if (session === undefined || state?.status !== SessionStatus.AUTHENTICATED || identifier === undefined) {
+      this.navigate({ name: P1DestinationName.LOGIN });
+      return;
+    }
+    this.navigate({ name: P1DestinationName.COLLECTIONS, id: identifier });
   }
 
   private returnFromSuccessfulLogin(): void {

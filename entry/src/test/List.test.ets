@@ -39,6 +39,10 @@ import dailyStoryDetailStateTest from './DailyStoryDetailState.test';
 import voteRepositoryTest from './VoteRepository.test';
 import followRepositoryTest from './FollowRepository.test';
 import contentInteractionStateTest from './ContentInteractionState.test';
+import collectionRepositoryTest from './CollectionRepository.test';
+import collectionStateTest from './CollectionState.test';
+import collectionContentStateTest from './CollectionContentState.test';
+import collectionFavoriteStateTest from './CollectionFavoriteState.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -82,4 +86,8 @@ export default function testsuite(): void {
   voteRepositoryTest();
   followRepositoryTest();
   contentInteractionStateTest();
+  collectionRepositoryTest();
+  collectionStateTest();
+  collectionContentStateTest();
+  collectionFavoriteStateTest();
 }

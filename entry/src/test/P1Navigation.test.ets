@@ -41,6 +41,7 @@ export default function p1NavigationTest(): void {
         P1DestinationName.COMMENT,
         P1DestinationName.SEARCH,
         P1DestinationName.COLLECTION,
+        P1DestinationName.COLLECTIONS,
         P1DestinationName.NOTIFICATION,
         P1DestinationName.LOGIN,
         P1DestinationName.SETTINGS,
@@ -199,6 +200,9 @@ export default function p1NavigationTest(): void {
       const peopleParam: TestDestinationParam = { name: P1DestinationName.PEOPLE, id: 'member_token-1' };
       const malformedPeopleParam: TestDestinationParam = { name: P1DestinationName.PEOPLE, id: '../member' };
       const oversizedPeopleParam: TestDestinationParam = { name: P1DestinationName.PEOPLE, id: 'a'.repeat(201) };
+      const collectionsParam: TestDestinationParam = { name: P1DestinationName.COLLECTIONS, id: 'member_token-1' };
+      const malformedCollectionsParam: TestDestinationParam = { name: P1DestinationName.COLLECTIONS, id: '../member' };
+      const oversizedCollectionsParam: TestDestinationParam = { name: P1DestinationName.COLLECTIONS, id: 'a'.repeat(201) };
       const decodedMaxQuery = decodeP1Destination(P1DestinationName.SEARCH, maxQuery);
       expect(decodedMaxQuery?.name).assertEqual(P1DestinationName.SEARCH);
       if (decodedMaxQuery?.name === P1DestinationName.SEARCH) {
@@ -224,6 +228,10 @@ export default function p1NavigationTest(): void {
       expect(decodeP1Destination(P1DestinationName.PEOPLE, peopleParam)?.name).assertEqual(P1DestinationName.PEOPLE);
       expect(decodeP1Destination(P1DestinationName.PEOPLE, malformedPeopleParam)).assertUndefined();
       expect(decodeP1Destination(P1DestinationName.PEOPLE, oversizedPeopleParam)).assertUndefined();
+      expect(decodeP1Destination(P1DestinationName.COLLECTIONS, collectionsParam)?.name)
+        .assertEqual(P1DestinationName.COLLECTIONS);
+      expect(decodeP1Destination(P1DestinationName.COLLECTIONS, malformedCollectionsParam)).assertUndefined();
+      expect(decodeP1Destination(P1DestinationName.COLLECTIONS, oversizedCollectionsParam)).assertUndefined();
       [P1DestinationName.FOLLOWING, P1DestinationName.HOT, P1DestinationName.DAILY,
         P1DestinationName.BLOCKING_RULES, P1DestinationName.BLOCKED_FEED_HISTORY,
         P1DestinationName.READ_HISTORY]
