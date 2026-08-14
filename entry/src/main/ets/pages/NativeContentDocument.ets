@@ -389,6 +389,8 @@ struct ContentBlockFormula {
 export struct NativeContentDocument {
   html: string = '';
   emptyMessage: string = '正文为空';
+  /** P3-9-B：正文滚动偏移回调（用于详情页顶栏折叠联动）。 */
+  onScrollOffset?: (offset: number) => void;
   @State private previewUrl: string = '';
   @State private empty: boolean = true;
   private readonly dataSource: ReaderBlockDataSource = new ReaderBlockDataSource();
@@ -432,6 +434,12 @@ export struct NativeContentDocument {
         })
         .cachedCount(6)
         .edgeEffect(EdgeEffect.Spring)
+        .onScrollIndex((firstIndex: number): void => {
+          const callback = this.onScrollOffset;
+          if (callback !== undefined) {
+            callback(firstIndex > 0 ? firstIndex : 0);
+          }
+        })
       }
 
       if (this.previewUrl.length > 0) {

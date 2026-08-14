@@ -77,6 +77,8 @@ struct ContentDetailPage {
   @State private showComments: boolean = false;
   @State private commentRootDraft: string = '';
   @State private commentReplyDraft: string = '';
+  /** P3-9-B：顶栏折叠状态——false 收起（标题行）、true 展开（作者行），滚动后收为标题行。 */
+  @State private topBarScrolled: boolean = false;
   private controller?: ContentDetailController;
   private blockingAction?: BlockingActionController;
   private voteController?: ContentVoteController;
@@ -149,6 +151,9 @@ struct ContentDetailPage {
       .height('100%')
       .backgroundColor($r('app.color.page_background'))
 
+      if (this.phase === ContentDetailPhase.READY && this.content !== undefined) {
+        this.detailTopBar(this.content)
+      }
       if (this.kind === ContentDetailKind.ANSWER || this.kind === ContentDetailKind.ARTICLE) {
         if (this.phase === ContentDetailPhase.READY && this.content !== undefined) {
           this.bottomActionBar()
@@ -327,7 +332,10 @@ struct ContentDetailPage {
 
       NativeContentDocument({
         html: contentHtml(content),
-        emptyMessage: contentEmptyMessage(content)
+        emptyMessage: contentEmptyMessage(content),
+        onScrollOffset: (offset: number): void => {
+          this.topBarScrolled = offset > 0;
+        }
       })
         .layoutWeight(1)
     }
@@ -498,6 +506,98 @@ struct ContentDetailPage {
     .width('100%')
     .backgroundColor($r('app.color.surface_background'))
     .border({ width: { top: 0.5 }, color: $r('app.color.divider_color') })
+  }
+
+  @Builder
+  private detailTopBar(content: LoadedContentDetail) {
+    // P3-9-B：顶部折叠作者栏——未滚动展开显示作者行（头像/名字/简介），滚动后收起为标题行。
+    // 返回键由 NavDestination 系统提供，此处不重复。
+    Row() {
+      if (!this.topBarScrolled) {
+        if (contentAuthorName(content).length > 0) {
+          Row({ space: $r('app.float.p1_spacing_small') }) {
+            Stack({ alignContent: Alignment.Center }) {
+              Circle()
+                .width(36)
+                .height(36)
+                .fill($r('app.color.control_background'))
+              Text(contentAuthorName(content).substring(0, 1))
+                .fontSize($r('app.float.p1_caption_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+            }
+            .width(36)
+            .height(36)
+            .clip(true)
+
+            Column({ space: 2 }) {
+              Text(contentAuthorName(content))
+                .id(`p3_${content.kind}_detail_top_author`)
+                .fontSize($r('app.float.p1_body_font_size'))
+                .fontColor($r('app.color.primary_text'))
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+              if (contentAuthorHeadline(content).length > 0) {
+                Text(contentAuthorHeadline(content))
+                  .fontSize($r('app.float.p1_caption_font_size'))
+                  .fontColor($r('app.color.secondary_text'))
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+              }
+            }
+            .layoutWeight(1)
+            .alignItems(HorizontalAlign.Start)
+          }
+          .id(`p3_${content.kind}_detail_top_author_row`)
+          .layoutWeight(1)
+          .padding({
+            left: $r('app.float.p1_page_padding'),
+            right: $r('app.float.p1_page_padding'),
+            top: $r('app.float.p1_spacing_small'),
+            bottom: $r('app.float.p1_spacing_small')
+          })
+          .onClick((): void => {
+            const author = content.value.author;
+            if (author !== undefined && author.id.trim().length > 0) {
+              const urlToken = author.urlToken ?? author.id;
+              this.navigate({ name: P1DestinationName.PEOPLE, id: urlToken });
+            }
+          })
+        } else {
+          Text(contentTitle(content))
+            .id(`p3_${content.kind}_detail_top_title`)
+            .fontSize($r('app.float.p1_body_font_size'))
+            .fontColor($r('app.color.primary_text'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+            .padding({
+              left: $r('app.float.p1_page_padding'),
+              right: $r('app.float.p1_page_padding'),
+              top: $r('app.float.p1_spacing_small'),
+              bottom: $r('app.float.p1_spacing_small')
+            })
+        }
+      } else {
+        Text(contentTitle(content))
+          .id(`p3_${content.kind}_detail_top_title`)
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor($r('app.color.primary_text'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+          .padding({
+            left: $r('app.float.p1_page_padding'),
+            right: $r('app.float.p1_page_padding'),
+            top: $r('app.float.p1_spacing_small'),
+            bottom: $r('app.float.p1_spacing_small')
+          })
+      }
+    }
+    .width('100%')
+    .backgroundColor($r('app.color.surface_background'))
+    .border({ width: { bottom: 0.5 }, color: $r('app.color.divider_color') })
+    .zIndex(2)
+    .hitTestBehavior(HitTestMode.Default)
   }
 
   @Builder
@@ -756,6 +856,10 @@ export function contentEmptyMessage(content: LoadedContentDetail): string {
 
 export function contentAuthorName(content: LoadedContentDetail): string {
   return content.value.author?.name ?? '';
+}
+
+export function contentAuthorHeadline(content: LoadedContentDetail): string {
+  return content.value.author?.headline?.trim() ?? '';
 }
 
 export function contentBlockingTitle(content: LoadedContentDetail): string {
