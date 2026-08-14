@@ -92,7 +92,7 @@ struct Index {
       this.homeRepository = new DefaultFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.searchRepository = new DefaultSearchRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.followingRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
-      this.hotRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(), blockingMatcher);
+      this.hotRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.dailyRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(), blockingMatcher);
       this.dailyStoryRepository = new DefaultDailyStoryRepository(new ZhihuHttpClient());
       this.questionRepository = new DefaultContentRepository(new ZhihuHttpClient(session));

@@ -161,7 +161,8 @@ const FOLLOW_PAGE = '{"data":[{"type":"moments_feed","id":"follow-wrapper","mome
   '"author":{"id":"author-1","name":"张三"}}}],"paging":{"is_end":false,' +
   '"next":"https://www.zhihu.com/api/v3/moments?desktop=true&limit=10&offset=10"}}';
 const HOT_PAGE = '{"data":[{"type":"hot_list_feed","id":"hot-wrapper","detail_text":"1234 万热度",' +
-  '"target":{"type":"question","id":"202","title":"热榜问题","bound_topic_ids":[1,"2",1]}}],' +
+  '"target":{"type":"question","id":1993016651038364760,"title":"热榜问题",' +
+  '"bound_topic_ids":[1,"2",1]}}],' +
   '"paging":{"is_end":true}}';
 const FILTER_PAGE = '{"data":[{"id":"blocked","target":{"type":"question","id":"202",' +
   '"title":"热榜问题","bound_topic_ids":[1,"2",1]}},{"id":"visible",' +
@@ -176,10 +177,10 @@ export default function channelFeedRepositoryTest(): void {
       expect(buildChannelFeedRequestUrl(ChannelFeedSource.FOLLOWING).startsWith(FOLLOWING_FEED_BASE_URL)).assertTrue();
       expect(buildChannelFeedRequestUrl(ChannelFeedSource.HOT).startsWith(HOT_FEED_BASE_URL)).assertTrue();
       expect(buildChannelFeedRequestUrl(ChannelFeedSource.DAILY)).assertEqual(
-        'https://news-at.zhihu.com/api/4/stories/latest'
+        'https://daily.zhihu.com/api/4/stories/latest'
       );
       expect(buildChannelFeedRequestUrl(ChannelFeedSource.DAILY, '20260810')).assertEqual(
-        'https://news-at.zhihu.com/api/4/stories/before/20260810'
+        'https://daily.zhihu.com/api/4/stories/before/20260810'
       );
       expect(canonicalChannelFeedCursorKey(
         ChannelFeedSource.FOLLOWING,
@@ -217,7 +218,7 @@ export default function channelFeedRepositoryTest(): void {
       );
     });
 
-    it('usesSignedSessionOnlyForFollowing', 0, async () => {
+    it('usesSignedSessionForFollowingAndHot', 0, async () => {
       const provider = new ChannelCookieProvider();
       const factory = new SequenceChannelTransportFactory([
         new ChannelOutcome(new TestHttpResponse(200, FOLLOW_PAGE)),
@@ -230,9 +231,9 @@ export default function channelFeedRepositoryTest(): void {
       expect(following.items[0].kind).assertEqual(ChannelFeedItemKind.CONTENT);
       expect(factory.requests[0].headers.Cookie).assertEqual('z_c0=session-token; d_c0=device-token');
       expect(JSON.stringify(factory.requests[0].headers).includes('x-zse-96')).assertTrue();
-      expect(factory.requests[1].headers.Cookie).assertUndefined();
-      expect(JSON.stringify(factory.requests[1].headers).includes('x-zse-')).assertFalse();
-      expect(provider.readCount).assertEqual(1);
+      expect(factory.requests[1].headers.Cookie).assertEqual('z_c0=session-token; d_c0=device-token');
+      expect(JSON.stringify(factory.requests[1].headers).includes('x-zse-96')).assertTrue();
+      expect(provider.readCount).assertEqual(2);
     });
 
     it('preservesFollowingAndHotDisplayLabelsAndTopicIds', 0, async () => {
@@ -244,13 +245,14 @@ export default function channelFeedRepositoryTest(): void {
         new ZhihuHttpClient(new ChannelCookieProvider(), factory)
       ).loadPage(ChannelFeedSource.FOLLOWING);
       const hot = await new DefaultChannelFeedRepository(
-        new ZhihuHttpClient(undefined, factory)
+        new ZhihuHttpClient(new ChannelCookieProvider(), factory)
       ).loadPage(ChannelFeedSource.HOT);
 
       if (following.items[0].kind === ChannelFeedItemKind.CONTENT &&
         hot.items[0].kind === ChannelFeedItemKind.CONTENT) {
         expect(following.items[0].feedItem.actionText).assertEqual('张三赞同了回答');
         expect(hot.items[0].feedItem.actionText).assertEqual('1234 万热度');
+        expect(hot.items[0].feedItem.target.id).assertEqual('1993016651038364760');
         expect(hot.items[0].topicIds.join(',')).assertEqual('1,2');
       } else {
         expect(false).assertTrue();
@@ -263,7 +265,7 @@ export default function channelFeedRepositoryTest(): void {
         new ChannelOutcome(new TestHttpResponse(200, FILTER_PAGE))
       ]);
       const page = await new DefaultChannelFeedRepository(
-        new ZhihuHttpClient(undefined, factory),
+        new ZhihuHttpClient(new ChannelCookieProvider(), factory),
         matcher
       ).loadPage(ChannelFeedSource.HOT);
 
@@ -304,6 +306,9 @@ export default function channelFeedRepositoryTest(): void {
 
       expect(latest.items[0].kind).assertEqual(ChannelFeedItemKind.DAILY_STORY);
       expect(latest.cursor.next).assertEqual('20260811');
+      expect(factory.requests[0].url).assertEqual('https://daily.zhihu.com/api/4/stories/latest');
+      expect(factory.requests[0].headers.Cookie).assertUndefined();
+      expect(JSON.stringify(factory.requests[0].headers).includes('x-zse-')).assertFalse();
       expect(older.items.length).assertEqual(0);
       expect(older.cursor.isEnd).assertTrue();
       expect(older.cursor.next).assertUndefined();

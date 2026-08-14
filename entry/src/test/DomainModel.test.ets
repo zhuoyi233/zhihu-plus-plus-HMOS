@@ -36,18 +36,20 @@ export default function domainModelTest(): void {
       expect(answer.author?.id).assertEqual('5');
     });
 
-    it('rejectsUnsafeNumericIdsButKeepsTheirStringForm', 0, () => {
-      const question = decodeQuestion('{"id":"9007199254740993","title":"问题"}');
+    it('preservesLongNumericIdLiteralsAndRejectsNonDecimalForms', 0, () => {
+      const stringQuestion = decodeQuestion('{"id":"9007199254740993","title":"问题"}');
+      const numericQuestion = decodeQuestion('{"id":1993016651038364760,"title":"热榜问题"}');
       let failureKind: DomainDecodeFailureKind | undefined = undefined;
       try {
-        decodeQuestion('{"id":9007199254740993,"title":"问题"}');
+        decodeQuestion('{"id":1e20,"title":"问题"}');
       } catch (error) {
         if (error instanceof DomainDecodeError) {
           failureKind = error.kind;
         }
       }
 
-      expect(question.id).assertEqual('9007199254740993');
+      expect(stringQuestion.id).assertEqual('9007199254740993');
+      expect(numericQuestion.id).assertEqual('1993016651038364760');
       expect(failureKind).assertEqual(DomainDecodeFailureKind.MISSING_FIELD);
     });
 

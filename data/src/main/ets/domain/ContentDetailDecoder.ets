@@ -1,4 +1,5 @@
 import {
+  jsonIntegerLiteral,
   JsonBooleanValue,
   JsonNullValue,
   JsonNumberValue,
@@ -50,8 +51,9 @@ function checkedExpectedId(value: JsonValue | undefined, expectedId: string, fie
     }
     return expectedId;
   }
-  if (value instanceof JsonNumberValue && Number.isInteger(value.value) && value.value > 0) {
-    if (Number.isSafeInteger(value.value) && value.value.toString() !== expectedId) {
+  const integerLiteral = jsonIntegerLiteral(value);
+  if (integerLiteral !== undefined && /^[1-9][0-9]{0,29}$/.test(integerLiteral)) {
+    if (integerLiteral !== expectedId) {
       throw invalid(`${field} 与请求不一致`);
     }
     return expectedId;
@@ -63,8 +65,9 @@ function requiredRelatedId(value: JsonValue | undefined, field: string): string 
   if (value instanceof JsonStringValue && /^[1-9][0-9]{0,29}$/.test(value.value)) {
     return value.value;
   }
-  if (value instanceof JsonNumberValue && Number.isSafeInteger(value.value) && value.value > 0) {
-    return value.value.toString();
+  const integerLiteral = jsonIntegerLiteral(value);
+  if (integerLiteral !== undefined && /^[1-9][0-9]{0,29}$/.test(integerLiteral)) {
+    return integerLiteral;
   }
   throw invalid(`${field} 缺少有效 ID`);
 }
@@ -128,10 +131,12 @@ function authorFromWire(wire: JsonObjectValue | undefined): UserProfile | undefi
   let id: string;
   if (idValue instanceof JsonStringValue && idValue.value.trim().length > 0 && idValue.value.length <= 200) {
     id = idValue.value;
-  } else if (idValue instanceof JsonNumberValue && Number.isSafeInteger(idValue.value) && idValue.value >= 0) {
-    id = idValue.value.toString();
   } else {
-    throw invalid('author.id 缺少有效 ID');
+    const integerLiteral = jsonIntegerLiteral(idValue);
+    if (integerLiteral === undefined || integerLiteral.length > 30) {
+      throw invalid('author.id 缺少有效 ID');
+    }
+    id = integerLiteral;
   }
   return {
     id: id,

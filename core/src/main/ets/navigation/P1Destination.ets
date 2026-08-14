@@ -246,6 +246,7 @@ export function shouldReloadAfterAuthentication(destination: P1Destination): boo
     case P1DestinationName.ARTICLE:
     case P1DestinationName.SEARCH:
     case P1DestinationName.FOLLOWING:
+    case P1DestinationName.HOT:
     case P1DestinationName.PIN:
     case P1DestinationName.PEOPLE:
       return true;

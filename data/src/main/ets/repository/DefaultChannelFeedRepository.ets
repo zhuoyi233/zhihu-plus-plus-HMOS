@@ -22,8 +22,8 @@ const CHANNEL_INCLUDE_QUERY = `include=${encodeURIComponent(HOME_FEED_INCLUDE).r
 export const FOLLOWING_FEED_BASE_URL = 'https://www.zhihu.com/api/v3/moments?limit=10&desktop=true';
 export const HOT_FEED_BASE_URL =
   'https://www.zhihu.com/api/v3/feed/topstory/hot-lists/total?limit=50&mobile=true';
-export const DAILY_PRIMARY_BASE_URL = 'https://news-at.zhihu.com/api/4/stories';
-export const DAILY_FALLBACK_BASE_URL = 'https://daily.zhihu.com/api/4/stories';
+export const DAILY_PRIMARY_BASE_URL = 'https://daily.zhihu.com/api/4/stories';
+export const DAILY_FALLBACK_BASE_URL = 'https://news-at.zhihu.com/api/4/stories';
 export const DAILY_HOST_RESOLUTION_ERROR_CODE = 2300006;
 
 export enum ChannelFeedRepositoryFailureKind {
@@ -174,8 +174,8 @@ export class DefaultChannelFeedRepository implements ChannelFeedRepository {
       : await this.httpClient.execute({
         url: requestUrl,
         accept: 'application/json',
-        useSession: source === ChannelFeedSource.FOLLOWING,
-        signWithZse: source === ChannelFeedSource.FOLLOWING
+        useSession: true,
+        signWithZse: true
       });
     if (requestGeneration !== this.generation) {
       throw new ChannelFeedRepositoryFailure(ChannelFeedRepositoryFailureKind.CANCELLED);

@@ -203,12 +203,13 @@ export class ChannelFeedController {
       authenticationFailure = true;
       authenticationStatus = error.status;
     }
-    this.requiresLogin = this.source === ChannelFeedSource.FOLLOWING && authenticationFailure &&
+    const sessionRequired = this.source === ChannelFeedSource.FOLLOWING || this.source === ChannelFeedSource.HOT;
+    this.requiresLogin = sessionRequired && authenticationFailure &&
       (authenticationStatus === undefined || authenticationStatus === 401);
     if (authenticationFailure && authenticationStatus === 403) {
       this.errorMessage = '请求被拒绝，可能需要稍后重试或完成风控';
     } else if (this.requiresLogin) {
-      this.errorMessage = '关注动态需要登录，请登录后重试';
+      this.errorMessage = `${channelFeedTitle(this.source)}需要登录，请登录后重试`;
     } else {
       this.errorMessage = loadingMore ? '加载更多失败，请重试' : `${channelFeedTitle(this.source)}加载失败，请检查网络后重试`;
     }

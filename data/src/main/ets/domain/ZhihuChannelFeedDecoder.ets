@@ -10,6 +10,7 @@ import {
 import { FeedItem, FeedPage, PageCursor } from './DomainModels';
 import {
   JsonArrayValue,
+  jsonIntegerLiteral,
   jsonNumber,
   JsonNumberValue,
   jsonObject,
@@ -48,8 +49,9 @@ function wireId(value: JsonValue | undefined, field: string): string {
   if (value instanceof JsonStringValue && /^\d{1,30}$/.test(value.value)) {
     return value.value;
   }
-  if (value instanceof JsonNumberValue && Number.isSafeInteger(value.value) && value.value > 0) {
-    return value.value.toString();
+  const integerLiteral = jsonIntegerLiteral(value);
+  if (integerLiteral !== undefined && /^[1-9][0-9]{0,29}$/.test(integerLiteral)) {
+    return integerLiteral;
   }
   throw invalid(`${field} 缺少有效 ID`);
 }
@@ -120,8 +122,11 @@ export function decodeChannelContentPage(json: string): ChannelFeedPage {
     let key: string | undefined;
     if (keyValue instanceof JsonStringValue && keyValue.value.trim().length > 0) {
       key = keyValue.value;
-    } else if (keyValue instanceof JsonNumberValue && Number.isSafeInteger(keyValue.value) && keyValue.value >= 0) {
-      key = keyValue.value.toString();
+    } else {
+      const integerLiteral = jsonIntegerLiteral(keyValue);
+      if (integerLiteral !== undefined && integerLiteral.length <= 30) {
+        key = integerLiteral;
+      }
     }
     if (key !== undefined && target !== undefined) {
       targetsByItemId.set(key, target);

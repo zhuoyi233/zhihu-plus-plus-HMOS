@@ -11,9 +11,11 @@ export class JsonStringValue {
 
 export class JsonNumberValue {
   readonly value: number;
+  readonly literal: string;
 
-  constructor(value: number) {
+  constructor(value: number, literal: string) {
     this.value = value;
+    this.literal = literal;
   }
 }
 
@@ -87,6 +89,13 @@ export function jsonNumber(value: JsonValue | undefined): number | undefined {
   return value instanceof JsonNumberValue ? value.value : undefined;
 }
 
+export function jsonIntegerLiteral(value: JsonValue | undefined): string | undefined {
+  if (value instanceof JsonNumberValue && /^(?:0|[1-9][0-9]*)$/.test(value.literal)) {
+    return value.literal;
+  }
+  return undefined;
+}
+
 export function jsonBoolean(value: JsonValue | undefined): boolean | undefined {
   return value instanceof JsonBooleanValue ? value.value : undefined;
 }
@@ -137,7 +146,7 @@ class StrictJsonParser {
       this.readLiteral('null');
       return new JsonNullValue();
     }
-    return new JsonNumberValue(this.readNumber());
+    return this.readNumber();
   }
 
   private readObject(depth: number): JsonObjectValue {
@@ -260,7 +269,7 @@ class StrictJsonParser {
     return Number.parseInt(text, 16);
   }
 
-  private readNumber(): number {
+  private readNumber(): JsonNumberValue {
     const remaining = this.source.substring(this.offset);
     const match = remaining.match(/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/);
     let matchedText: string | undefined;
@@ -279,7 +288,7 @@ class StrictJsonParser {
     if (!Number.isFinite(value)) {
       throw new StrictJsonError();
     }
-    return value;
+    return new JsonNumberValue(value, matchedText);
   }
 
   private readLiteral(expected: string): void {

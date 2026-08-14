@@ -2,6 +2,7 @@ import { FeedTargetKind, PageCursor } from './DomainModels';
 import { SearchResultItem, SearchResultPage } from './SearchModels';
 import {
   JsonArrayValue,
+  jsonIntegerLiteral,
   jsonBoolean,
   JsonNullValue,
   jsonNumber,
@@ -140,8 +141,9 @@ function authorId(author: JsonObjectValue | undefined): string | undefined {
     return undefined;
   }
   const value = author.get('id');
-  if (value instanceof JsonNumberValue && Number.isSafeInteger(value.value) && value.value >= 0) {
-    return value.value.toString();
+  const integerLiteral = jsonIntegerLiteral(value);
+  if (integerLiteral !== undefined && integerLiteral.length <= 30) {
+    return integerLiteral;
   }
   if (value instanceof JsonStringValue && /^[A-Za-z0-9_-]{1,128}$/.test(value.value)) {
     return value.value;
@@ -177,8 +179,9 @@ function searchTopicIds(object: JsonObjectValue): Array<string> {
   const result: Array<string> = [];
   values.forEach((value: JsonValue): void => {
     let id: string | undefined;
-    if (value instanceof JsonNumberValue && Number.isSafeInteger(value.value) && value.value > 0) {
-      id = value.value.toString();
+    const integerLiteral = jsonIntegerLiteral(value);
+    if (integerLiteral !== undefined && /^[1-9][0-9]{0,29}$/.test(integerLiteral)) {
+      id = integerLiteral;
     } else if (value instanceof JsonStringValue && /^[1-9][0-9]{0,29}$/.test(value.value)) {
       id = value.value;
     }
@@ -204,8 +207,9 @@ function requiredId(value: JsonValue | undefined, field: string): string {
   if (value instanceof JsonStringValue && value.value.trim().length > 0) {
     return value.value;
   }
-  if (value instanceof JsonNumberValue && Number.isSafeInteger(value.value) && value.value >= 0) {
-    return value.value.toString();
+  const integerLiteral = jsonIntegerLiteral(value);
+  if (integerLiteral !== undefined && integerLiteral.length <= 30) {
+    return integerLiteral;
   }
   throw malformed(`${field} 缺少有效 ID`);
 }

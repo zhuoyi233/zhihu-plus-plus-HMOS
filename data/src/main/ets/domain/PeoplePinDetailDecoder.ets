@@ -1,5 +1,6 @@
 import { PeopleProfile, PinDetail, PinTopic, UserProfile } from './DomainModels';
 import {
+  jsonIntegerLiteral,
   JsonArrayValue,
   JsonBooleanValue,
   JsonNullValue,
@@ -124,8 +125,8 @@ function decimalId(value: JsonValue | undefined, expectedId: string, field: stri
   if (value instanceof JsonStringValue && value.value === expectedId) {
     return expectedId;
   }
-  if (value instanceof JsonNumberValue && Number.isInteger(value.value) && value.value > 0 &&
-    (!Number.isSafeInteger(value.value) || value.value.toString() === expectedId)) {
+  const integerLiteral = jsonIntegerLiteral(value);
+  if (integerLiteral !== undefined && /^[1-9][0-9]{0,29}$/.test(integerLiteral) && integerLiteral === expectedId) {
     return expectedId;
   }
   throw invalid(`${field} 缺少有效 ID 或与请求不一致`);
@@ -135,8 +136,9 @@ function topicId(value: JsonValue | undefined): string {
   if (value instanceof JsonStringValue && /^[1-9][0-9]{0,29}$/.test(value.value)) {
     return value.value;
   }
-  if (value instanceof JsonNumberValue && Number.isSafeInteger(value.value) && value.value > 0) {
-    return value.value.toString();
+  const integerLiteral = jsonIntegerLiteral(value);
+  if (integerLiteral !== undefined && /^[1-9][0-9]{0,29}$/.test(integerLiteral)) {
+    return integerLiteral;
   }
   throw invalid('topic.id 缺少有效 ID');
 }

@@ -1,6 +1,7 @@
 import {
   JsonArrayValue,
   JsonBooleanValue,
+  jsonIntegerLiteral,
   jsonNumber,
   jsonObject,
   jsonString,
@@ -43,8 +44,9 @@ function id(value: JsonValue | undefined, field: string): string {
   if (value instanceof JsonStringValue && /^[1-9][0-9]{0,29}$/.test(value.value)) {
     return value.value;
   }
-  if (value instanceof JsonNumberValue && Number.isSafeInteger(value.value) && value.value > 0) {
-    return value.value.toString();
+  const integerLiteral = jsonIntegerLiteral(value);
+  if (integerLiteral !== undefined && /^[1-9][0-9]{0,29}$/.test(integerLiteral)) {
+    return integerLiteral;
   }
   throw invalid(`${field} 缺少有效 ID`);
 }

@@ -12,6 +12,7 @@ import {
 import {
   JsonArrayValue,
   jsonBoolean,
+  jsonIntegerLiteral,
   JsonNullValue,
   jsonNumber,
   JsonNumberValue,
@@ -59,8 +60,9 @@ function requiredId(value: JsonValue | undefined, field: string): string {
   if (value instanceof JsonStringValue && value.value.trim().length > 0) {
     return value.value;
   }
-  if (value instanceof JsonNumberValue && Number.isSafeInteger(value.value) && value.value >= 0) {
-    return value.value.toString();
+  const integerLiteral = jsonIntegerLiteral(value);
+  if (integerLiteral !== undefined && integerLiteral.length <= 30) {
+    return integerLiteral;
   }
   throw invalid(`${field} 缺少有效 ID`);
 }
@@ -157,8 +159,9 @@ function topicIdsFromObject(target: JsonObjectValue): Array<string> {
   const result: Array<string> = [];
   values.forEach((value: JsonValue): void => {
     let id: string | undefined;
-    if (value instanceof JsonNumberValue && Number.isSafeInteger(value.value) && value.value > 0) {
-      id = value.value.toString();
+    const integerLiteral = jsonIntegerLiteral(value);
+    if (integerLiteral !== undefined && /^[1-9][0-9]{0,29}$/.test(integerLiteral)) {
+      id = integerLiteral;
     } else if (value instanceof JsonStringValue && /^[1-9][0-9]{0,29}$/.test(value.value)) {
       id = value.value;
     }

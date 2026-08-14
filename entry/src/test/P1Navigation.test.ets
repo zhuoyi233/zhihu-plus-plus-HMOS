@@ -139,6 +139,7 @@ export default function p1NavigationTest(): void {
       const dailyStory = decodeP1Destination(P1DestinationName.DAILY_STORY, dailyStoryParam);
       const search: SearchDestination = { name: P1DestinationName.SEARCH, query: 'ArkTS' };
       const following: StatelessDestination = { name: P1DestinationName.FOLLOWING };
+      const hot: StatelessDestination = { name: P1DestinationName.HOT };
       const pin: ContentDestination = { name: P1DestinationName.PIN, id: '1' };
       const people: ContentDestination = { name: P1DestinationName.PEOPLE, id: 'member-token' };
 
@@ -153,6 +154,7 @@ export default function p1NavigationTest(): void {
       }
       expect(shouldReloadAfterAuthentication(search)).assertTrue();
       expect(shouldReloadAfterAuthentication(following)).assertTrue();
+      expect(shouldReloadAfterAuthentication(hot)).assertTrue();
       expect(shouldReloadAfterAuthentication(pin)).assertTrue();
       expect(shouldReloadAfterAuthentication(people)).assertTrue();
       if (login?.name === P1DestinationName.LOGIN) {

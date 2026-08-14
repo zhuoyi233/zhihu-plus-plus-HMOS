@@ -110,7 +110,7 @@ export default function channelFeedStateTest(): void {
       expect(controller.snapshot().phase).assertEqual(ChannelFeedPhase.READY);
     });
 
-    it('offersLoginOnlyForFollowing401OrMissingSession', 0, async () => {
+    it('offersLoginForSignedChannelsOn401OrMissingSession', 0, async () => {
       const repository = new ControlledChannelRepository();
       const controller = new ChannelFeedController(ChannelFeedSource.FOLLOWING, repository);
       controller.activate();
@@ -123,6 +123,15 @@ export default function channelFeedStateTest(): void {
       repository.fail(1, new HttpFailure(HttpFailureKind.AUTHENTICATION, 401));
       await retry;
       expect(controller.snapshot().requiresLogin).assertTrue();
+
+      const hotRepository = new ControlledChannelRepository();
+      const hotController = new ChannelFeedController(ChannelFeedSource.HOT, hotRepository);
+      hotController.activate();
+      const hotMissing = hotController.loadInitial();
+      hotRepository.fail(0, new HttpFailure(HttpFailureKind.AUTHENTICATION));
+      await hotMissing;
+      expect(hotController.snapshot().requiresLogin).assertTrue();
+      expect(hotController.snapshot().errorMessage).assertEqual('热榜需要登录，请登录后重试');
     });
 
     it('treats403AsRiskControlWithoutLoginCtaOnFirstOrNextPage', 0, async () => {
