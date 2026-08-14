@@ -1,5 +1,7 @@
 export * from './src/main/ets/data/DatabaseProbe';
 export * from './src/main/ets/data/BlockingRuleStore';
+export * from './src/main/ets/data/BlockedFeedHistoryStore';
+export * from './src/main/ets/data/BlocklistBackup';
 export * from './src/main/ets/data/RdbSchema';
 export * from './src/main/ets/domain/DomainModels';
 export * from './src/main/ets/domain/ContentDetailDecoder';

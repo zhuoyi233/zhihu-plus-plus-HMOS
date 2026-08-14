@@ -1,6 +1,7 @@
 import { P1Destination, P1DestinationName } from 'core';
 import {
   AppPreferencesStore,
+  BlockedFeedHistoryStore,
   BlockingRuleMatcher,
   BlockingRuleStore,
   ChannelFeedRepository,
@@ -43,6 +44,7 @@ import { ChannelFeedPage } from './ChannelFeedPage';
 import { DailyStoryDetailPage } from './DailyStoryDetailPage';
 import { PeopleDetailPage, PinDetailPage } from './PeoplePinDetailPages';
 import { BlockingRulesPage } from './BlockingRulesPage';
+import { BlockedFeedHistoryPage } from './BlockedFeedHistoryPage';
 import { ReadHistoryPage } from './ReadHistoryPage';
 import { ReadHistoryContentKind, ReadHistoryOpenTarget } from './ReadHistoryState';
 
@@ -54,6 +56,7 @@ struct Index {
   @State private session?: SessionRepository = undefined;
   @State private openedContentStore?: OpenedContentStore = undefined;
   @State private blockingRuleStore?: BlockingRuleStore = undefined;
+  @State private blockedFeedHistoryStore?: BlockedFeedHistoryStore = undefined;
   @State private preferencesStore?: AppPreferencesStore = undefined;
   @State private homeRepository?: FeedRepository = undefined;
   @State private searchRepository?: SearchRepository = undefined;
@@ -81,6 +84,7 @@ struct Index {
     const session = sessionOwner.getRepository();
     const openedContentStore = new OpenedContentStore(getAppDatabase(context));
     const blockingRuleStore = new BlockingRuleStore(getAppDatabase(context));
+    const blockedFeedHistoryStore = new BlockedFeedHistoryStore(getAppDatabase(context));
     const preferencesStore = new AppPreferencesStore(context);
     const blockingMatcher = new BlockingRuleMatcher(blockingRuleStore, preferencesStore);
     sessionOwner.restoreDeferred().catch((_error: Error): void => {
@@ -88,6 +92,7 @@ struct Index {
       this.session = session;
       this.openedContentStore = openedContentStore;
       this.blockingRuleStore = blockingRuleStore;
+      this.blockedFeedHistoryStore = blockedFeedHistoryStore;
       this.preferencesStore = preferencesStore;
       this.homeRepository = new DefaultFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.searchRepository = new DefaultSearchRepository(new ZhihuHttpClient(session), blockingMatcher);
@@ -129,6 +134,7 @@ struct Index {
             this.peopleContent(id, navigate),
           pinContent: (id: string, navigate: (destination: P1Destination) => void): void => this.pinContent(id, navigate),
           blockingRulesContent: (): void => this.blockingRulesContent(),
+          blockedFeedHistoryContent: (): void => this.blockedFeedHistoryContent(),
           readHistoryContent: (navigate: (destination: P1Destination) => void): void => this.readHistoryContent(navigate),
           loginContent: (onBack: () => void, onAuthenticated: () => void): void =>
             this.loginContent(onBack, onAuthenticated),
@@ -152,7 +158,13 @@ struct Index {
 
   @Builder
   homeContent(reloadToken: number, navigate: (destination: P1Destination) => void) {
-    HomeFeedPage({ repository: this.homeRepository, reloadToken: reloadToken, navigate: navigate });
+    HomeFeedPage({
+      repository: this.homeRepository,
+      reloadToken: reloadToken,
+      navigate: navigate,
+      rules: this.blockingRuleStore,
+      history: this.blockedFeedHistoryStore
+    });
   }
 
   @Builder
@@ -160,18 +172,32 @@ struct Index {
     ChannelFeedPage({
       source: ChannelFeedSource.FOLLOWING,
       repository: this.followingRepository,
-      navigate: navigate
+      navigate: navigate,
+      rules: this.blockingRuleStore,
+      history: this.blockedFeedHistoryStore
     });
   }
 
   @Builder
   hotContent(navigate: (destination: P1Destination) => void) {
-    ChannelFeedPage({ source: ChannelFeedSource.HOT, repository: this.hotRepository, navigate: navigate });
+    ChannelFeedPage({
+      source: ChannelFeedSource.HOT,
+      repository: this.hotRepository,
+      navigate: navigate,
+      rules: this.blockingRuleStore,
+      history: this.blockedFeedHistoryStore
+    });
   }
 
   @Builder
   dailyContent(navigate: (destination: P1Destination) => void) {
-    ChannelFeedPage({ source: ChannelFeedSource.DAILY, repository: this.dailyRepository, navigate: navigate });
+    ChannelFeedPage({
+      source: ChannelFeedSource.DAILY,
+      repository: this.dailyRepository,
+      navigate: navigate,
+      rules: this.blockingRuleStore,
+      history: this.blockedFeedHistoryStore
+    });
   }
 
   @Builder
@@ -194,7 +220,9 @@ struct Index {
       contentId: id,
       repository: this.questionRepository,
       openedContentStore: this.openedContentStore,
-      navigate: navigate
+      navigate: navigate,
+      rules: this.blockingRuleStore,
+      history: this.blockedFeedHistoryStore
     });
   }
 
@@ -204,7 +232,9 @@ struct Index {
       contentId: id,
       repository: this.answerRepository,
       openedContentStore: this.openedContentStore,
-      navigate: navigate
+      navigate: navigate,
+      rules: this.blockingRuleStore,
+      history: this.blockedFeedHistoryStore
     });
   }
 
@@ -214,7 +244,9 @@ struct Index {
       contentId: id,
       repository: this.articleRepository,
       openedContentStore: this.openedContentStore,
-      navigate: navigate
+      navigate: navigate,
+      rules: this.blockingRuleStore,
+      history: this.blockedFeedHistoryStore
     });
   }
 
@@ -225,7 +257,9 @@ struct Index {
       repository: this.peopleRepository,
       contentRepository: this.peopleContentRepository,
       session: this.session,
-      navigate: navigate
+      navigate: navigate,
+      rules: this.blockingRuleStore,
+      history: this.blockedFeedHistoryStore
     });
   }
 
@@ -236,13 +270,20 @@ struct Index {
       repository: this.pinRepository,
       session: this.session,
       openedContentStore: this.openedContentStore,
-      navigate: navigate
+      navigate: navigate,
+      rules: this.blockingRuleStore,
+      history: this.blockedFeedHistoryStore
     });
   }
 
   @Builder
   blockingRulesContent() {
     BlockingRulesPage({ rules: this.blockingRuleStore, preferences: this.preferencesStore });
+  }
+
+  @Builder
+  blockedFeedHistoryContent() {
+    BlockedFeedHistoryPage({ history: this.blockedFeedHistoryStore });
   }
 
   @Builder

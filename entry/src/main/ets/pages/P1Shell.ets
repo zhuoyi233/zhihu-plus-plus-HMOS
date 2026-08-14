@@ -37,6 +37,7 @@ export struct P1Shell {
   @BuilderParam pinContent: (id: string, navigate: (destination: P1Destination) => void) => void =
     this.emptyContent;
   @BuilderParam blockingRulesContent: () => void = this.emptyPage;
+  @BuilderParam blockedFeedHistoryContent: () => void = this.emptyPage;
   @BuilderParam readHistoryContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
   @BuilderParam loginContent: (onBack: () => void, onAuthenticated: () => void) => void = this.emptyLogin;
   @BuilderParam readerProbeContent: (onBack: () => void) => void = this.emptyProbe;
@@ -137,6 +138,12 @@ export struct P1Shell {
         this.blockingRulesContent();
       }
       .title('内容屏蔽')
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.BLOCKED_FEED_HISTORY) {
+      NavDestination() {
+        this.blockedFeedHistoryContent();
+      }
+      .title('屏蔽记录')
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.READ_HISTORY) {
       NavDestination() {
@@ -396,6 +403,12 @@ export struct P1Shell {
           .width('100%')
           .fontSize($r('app.float.p1_body_font_size'))
           .onClick(() => this.navigate({ name: P1DestinationName.BLOCKING_RULES }))
+
+        Button('屏蔽记录')
+          .id('p3_open_blocked_feed_history')
+          .width('100%')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .onClick(() => this.navigate({ name: P1DestinationName.BLOCKED_FEED_HISTORY }))
 
         Button('已读记录')
           .id('p2_open_read_history')

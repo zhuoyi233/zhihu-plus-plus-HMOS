@@ -22,15 +22,16 @@ export default function p1PersistenceTest(): void {
     });
 
     it('plansOnlyContiguousPendingMigrations', 0, () => {
-      expect(pendingSchemaVersions(0).join(',')).assertEqual('1,2,3');
-      expect(pendingSchemaVersions(1).join(',')).assertEqual('2,3');
-      expect(pendingSchemaVersions(2).join(',')).assertEqual('3');
-      expect(pendingSchemaVersions(3).length).assertEqual(0);
+      expect(pendingSchemaVersions(0).join(',')).assertEqual('1,2,3,4');
+      expect(pendingSchemaVersions(1).join(',')).assertEqual('2,3,4');
+      expect(pendingSchemaVersions(2).join(',')).assertEqual('3,4');
+      expect(pendingSchemaVersions(3).join(',')).assertEqual('4');
+      expect(pendingSchemaVersions(4).length).assertEqual(0);
     });
 
     it('rejectsInvalidDatabaseVersions', 0, () => {
       expect(() => pendingSchemaVersions(-1)).assertThrowError('Unsupported schema version: -1');
-      expect(() => pendingSchemaVersions(4)).assertThrowError('Unsupported schema version: 4');
+      expect(() => pendingSchemaVersions(5)).assertThrowError('Unsupported schema version: 5');
       expect(() => pendingSchemaVersions(1.5)).assertThrowError('Unsupported schema version: 1.5');
     });
 

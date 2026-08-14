@@ -6,7 +6,10 @@ import {
   BlockingPreferencesGateway,
   BlockingRuleGateway,
   BlockingRuleKind,
+  BlocklistBackupImportSummary,
   defaultBlockingPreferences,
+  encodeBlocklistBackup,
+  importBlocklistBackup,
   normalizeBlockingPreferences
 } from 'data';
 
@@ -143,6 +146,103 @@ export class BlockingRulesController {
     const normalized = normalizeBlockingPreferences(value);
     return this.mutate((): Promise<void> => this.preferences.saveBlockingPreferences(normalized),
       '屏蔽开关已保存', '屏蔽开关保存失败');
+  }
+
+  exportBackup(): Promise<string | undefined> {
+    if (!this.active || this.state.busy) {
+      return Promise.resolve(undefined);
+    }
+    const generation = ++this.generation;
+    this.publish({
+      phase: this.state.phase,
+      selectedKind: this.state.selectedKind,
+      keywords: this.state.keywords,
+      users: this.state.users,
+      topics: this.state.topics,
+      preferences: this.state.preferences,
+      busy: true,
+      message: '正在导出屏蔽规则'
+    });
+    return this.loadSnapshotAndEncode(generation);
+  }
+
+  importBackup(text: string): Promise<BlocklistBackupImportSummary | undefined> {
+    if (!this.active || this.state.busy) {
+      return Promise.resolve(undefined);
+    }
+    const generation = ++this.generation;
+    this.publish({
+      phase: this.state.phase,
+      selectedKind: this.state.selectedKind,
+      keywords: this.state.keywords,
+      users: this.state.users,
+      topics: this.state.topics,
+      preferences: this.state.preferences,
+      busy: true,
+      message: '正在导入屏蔽规则'
+    });
+    return this.importIntoState(text, generation);
+  }
+
+  private async loadSnapshotAndEncode(generation: number): Promise<string | undefined> {
+    try {
+      const snapshot = await this.rules.loadSnapshot();
+      const text = encodeBlocklistBackup(snapshot);
+      if (this.isCurrent(generation)) {
+        const total = snapshot.keywords.length + snapshot.users.length + snapshot.topics.length;
+        this.publish({
+          phase: BlockingRulesPhase.READY,
+          selectedKind: this.state.selectedKind,
+          keywords: this.state.keywords,
+          users: this.state.users,
+          topics: this.state.topics,
+          preferences: this.state.preferences,
+          busy: false,
+          message: `已导出 ${total} 条规则`
+        });
+      }
+      return text;
+    } catch (_error) {
+      if (this.isCurrent(generation)) {
+        this.publish({
+          phase: BlockingRulesPhase.ERROR,
+          selectedKind: this.state.selectedKind,
+          keywords: this.state.keywords,
+          users: this.state.users,
+          topics: this.state.topics,
+          preferences: this.state.preferences,
+          busy: false,
+          message: '导出失败，请重试'
+        });
+      }
+      return undefined;
+    }
+  }
+
+  private async importIntoState(text: string, generation: number):
+    Promise<BlocklistBackupImportSummary | undefined> {
+    try {
+      const summary = await importBlocklistBackup(text, this.rules);
+      if (this.isCurrent(generation)) {
+        await this.loadIntoState(generation,
+          `导入完成：关键词 ${summary.keywords} · 用户 ${summary.users} · 话题 ${summary.topics}`);
+      }
+      return summary;
+    } catch (_error) {
+      if (this.isCurrent(generation)) {
+        this.publish({
+          phase: BlockingRulesPhase.ERROR,
+          selectedKind: this.state.selectedKind,
+          keywords: this.state.keywords,
+          users: this.state.users,
+          topics: this.state.topics,
+          preferences: this.state.preferences,
+          busy: false,
+          message: '导入失败，请检查文本格式'
+        });
+      }
+      return undefined;
+    }
   }
 
   private async mutate(operation: () => Promise<void>, successMessage: string, failureMessage: string): Promise<void> {

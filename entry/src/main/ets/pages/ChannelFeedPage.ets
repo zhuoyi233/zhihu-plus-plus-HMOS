@@ -1,5 +1,7 @@
 import { isSafeDecimalContentId, P1Destination, P1DestinationName } from 'core';
 import {
+  BlockedFeedHistoryGateway,
+  BlockingRuleGateway,
   ChannelContentItem,
   ChannelDailyStoryItem,
   ChannelFeedItem,
@@ -12,6 +14,13 @@ import {
   FeedTargetKind
 } from 'data';
 import {
+  BlockingActionContext,
+  BlockingActionController,
+  BlockingActionPhase,
+  BlockingActionViewState,
+  BlockingUserCandidate
+} from './BlockingActionState';
+import {
   ChannelFeedController,
   ChannelFeedPhase,
   channelFeedTitle,
@@ -22,6 +31,8 @@ import {
 export struct ChannelFeedPage {
   source: ChannelFeedSource = ChannelFeedSource.HOT;
   repository: ChannelFeedRepository | undefined = new DefaultChannelFeedRepository();
+  rules: BlockingRuleGateway | undefined = undefined;
+  history: BlockedFeedHistoryGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
   @State private phase: ChannelFeedPhase = ChannelFeedPhase.IDLE;
@@ -31,7 +42,14 @@ export struct ChannelFeedPage {
   @State private canLoadMore: boolean = false;
   @State private requiresLogin: boolean = false;
   @State private errorMessage: string = '';
+  @State private pendingUserBlock?: BlockingUserCandidate = undefined;
+  @State private keywordBlockVisible: boolean = false;
+  @State private keywordBlockInput: string = '';
+  @State private blockingMessage: string = '';
+  @State private blockingBusy: boolean = false;
   private controller?: ChannelFeedController;
+  private blockingAction?: BlockingActionController;
+  private pendingBlockItem?: ChannelContentItem = undefined;
 
   aboutToAppear(): void {
     const repository = this.repository;
@@ -45,11 +63,28 @@ export struct ChannelFeedPage {
     });
     this.controller.activate();
     this.controller.loadInitial();
+    this.createBlockingAction();
   }
 
   aboutToDisappear(): void {
     this.controller?.deactivate();
     this.controller = undefined;
+    this.blockingAction = undefined;
+    this.pendingUserBlock = undefined;
+    this.keywordBlockVisible = false;
+    this.keywordBlockInput = '';
+  }
+
+  private createBlockingAction(): void {
+    const rules = this.rules;
+    const history = this.history;
+    if (rules === undefined || history === undefined) {
+      return;
+    }
+    this.blockingAction = new BlockingActionController(rules, history, (state: BlockingActionViewState): void => {
+      this.blockingMessage = state.message;
+      this.blockingBusy = state.busy;
+    });
   }
 
   build() {
@@ -126,6 +161,20 @@ export struct ChannelFeedPage {
         .edgeEffect(EdgeEffect.Spring)
         .onReachEnd(() => this.controller?.loadMore())
       }
+
+      if (this.blockingMessage.length > 0) {
+        Text(this.blockingMessage)
+          .id(`p3_channel_${this.source}_blocking_status`)
+          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .width('100%')
+      }
+      if (this.pendingUserBlock !== undefined) {
+        this.userBlockDialog()
+      }
+      if (this.keywordBlockVisible) {
+        this.keywordBlockDialog()
+      }
     }
     .alignItems(HorizontalAlign.Start)
     .width('100%')
@@ -174,62 +223,71 @@ export struct ChannelFeedPage {
 
   @Builder
   private contentCard(item: ChannelContentItem) {
-    Button({ type: ButtonType.Normal, stateEffect: true }) {
-      Column({ space: $r('app.float.p1_spacing_small') }) {
-        Row({ space: $r('app.float.p1_spacing_xsmall') }) {
-          Text(channelActionLabel(item.feedItem, this.source))
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .layoutWeight(1)
-          Text(channelKindLabel(item.feedItem.target.kind))
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .fontColor($r('app.color.brand_primary'))
-        }
-        .width('100%')
-        Text(item.feedItem.target.title)
-          .fontSize($r('app.float.p1_heading_font_size'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.primary_text'))
-          .width('100%')
-        if (item.feedItem.target.excerpt.trim().length > 0) {
-          Text(item.feedItem.target.excerpt)
-            .fontSize($r('app.float.p1_body_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .width('100%')
-        }
-        Row({ space: $r('app.float.p1_spacing_medium') }) {
-          if (item.feedItem.target.author !== undefined) {
-            Text(item.feedItem.target.author.name)
+    Row({ space: $r('app.float.p1_spacing_xsmall') }) {
+      Button({ type: ButtonType.Normal, stateEffect: true }) {
+        Column({ space: $r('app.float.p1_spacing_small') }) {
+          Row({ space: $r('app.float.p1_spacing_xsmall') }) {
+            Text(channelActionLabel(item.feedItem, this.source))
               .fontSize($r('app.float.p1_secondary_font_size'))
               .fontColor($r('app.color.secondary_text'))
               .layoutWeight(1)
-          } else {
-            Blank().layoutWeight(1)
+            Text(channelKindLabel(item.feedItem.target.kind))
+              .fontSize($r('app.float.p1_secondary_font_size'))
+              .fontColor($r('app.color.brand_primary'))
           }
-          Text(`${item.feedItem.target.voteupCount} 赞同`)
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-          Text(`${item.feedItem.target.commentCount} 评论`)
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
+          .width('100%')
+          Text(item.feedItem.target.title)
+            .fontSize($r('app.float.p1_heading_font_size'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.primary_text'))
+            .width('100%')
+          if (item.feedItem.target.excerpt.trim().length > 0) {
+            Text(item.feedItem.target.excerpt)
+              .fontSize($r('app.float.p1_body_font_size'))
+              .fontColor($r('app.color.secondary_text'))
+              .width('100%')
+          }
+          Row({ space: $r('app.float.p1_spacing_medium') }) {
+            if (item.feedItem.target.author !== undefined) {
+              Text(item.feedItem.target.author.name)
+                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+                .layoutWeight(1)
+            } else {
+              Blank().layoutWeight(1)
+            }
+            Text(`${item.feedItem.target.voteupCount} 赞同`)
+              .fontSize($r('app.float.p1_secondary_font_size'))
+              .fontColor($r('app.color.secondary_text'))
+            Text(`${item.feedItem.target.commentCount} 评论`)
+              .fontSize($r('app.float.p1_secondary_font_size'))
+              .fontColor($r('app.color.secondary_text'))
+          }
+          .width('100%')
         }
+        .alignItems(HorizontalAlign.Start)
         .width('100%')
       }
-      .alignItems(HorizontalAlign.Start)
-      .width('100%')
+      .id(`p2_channel_content_${item.feedItem.target.kind}_${item.feedItem.target.id}`)
+      .layoutWeight(1)
+      .padding($r('app.float.p1_card_padding'))
+      .borderRadius($r('app.float.p1_card_radius'))
+      .backgroundColor($r('app.color.surface_background'))
+      .accessibilityText(`打开${channelKindLabel(item.feedItem.target.kind)}：${item.feedItem.target.title}`)
+      .onClick(() => {
+        const destination = channelFeedDestination(item);
+        if (destination !== undefined) {
+          this.navigate(destination);
+        }
+      })
+
+      Button('屏蔽')
+        .id(`p3_channel_${this.source}_block_${item.feedItem.target.kind}_${item.feedItem.target.id}`)
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .enabled(!this.blockingBusy && this.blockingAction !== undefined)
+        .bindMenu(this.contentBlockMenu(item))
     }
-    .id(`p2_channel_content_${item.feedItem.target.kind}_${item.feedItem.target.id}`)
     .width('100%')
-    .padding($r('app.float.p1_card_padding'))
-    .borderRadius($r('app.float.p1_card_radius'))
-    .backgroundColor($r('app.color.surface_background'))
-    .accessibilityText(`打开${channelKindLabel(item.feedItem.target.kind)}：${item.feedItem.target.title}`)
-    .onClick(() => {
-      const destination = channelFeedDestination(item);
-      if (destination !== undefined) {
-        this.navigate(destination);
-      }
-    })
   }
 
   @Builder
@@ -270,6 +328,137 @@ export struct ChannelFeedPage {
     .onClick((): void => {
       this.navigate({ name: P1DestinationName.DAILY_STORY, id: item.story.id });
     })
+  }
+
+  private contentBlockMenu(item: ChannelContentItem): Array<MenuElement> {
+    const menu: Array<MenuElement> = [];
+    const author = item.feedItem.target.author;
+    if (author !== undefined) {
+      menu.push({
+        value: '屏蔽作者',
+        action: (): void => {
+          this.pendingBlockItem = item;
+          this.pendingUserBlock = { userId: author.id, userName: author.name };
+        }
+      });
+    }
+    menu.push({
+      value: '屏蔽关键词',
+      action: (): void => {
+        this.pendingBlockItem = item;
+        this.keywordBlockInput = '';
+        this.keywordBlockVisible = true;
+      }
+    });
+    return menu;
+  }
+
+  private blockContext(item: ChannelContentItem): BlockingActionContext {
+    return {
+      contentTitle: item.feedItem.target.title,
+      contentKind: item.feedItem.target.kind,
+      contentId: item.feedItem.target.id
+    };
+  }
+
+  private confirmUserBlock(): void {
+    const pending = this.pendingUserBlock;
+    const action = this.blockingAction;
+    const item = this.pendingBlockItem;
+    if (pending === undefined || action === undefined || item === undefined) {
+      return;
+    }
+    this.pendingUserBlock = undefined;
+    this.pendingBlockItem = undefined;
+    const identity = channelFeedItemIdentity(item);
+    action.blockUser(pending.userId, pending.userName, this.blockContext(item)).then((): void => {
+      if (action.snapshot().phase === BlockingActionPhase.SUCCESS) {
+        this.controller?.removeItem(identity);
+      }
+    });
+  }
+
+  private confirmKeywordBlock(): void {
+    const action = this.blockingAction;
+    const input = this.keywordBlockInput;
+    const item = this.pendingBlockItem;
+    this.keywordBlockVisible = false;
+    this.keywordBlockInput = '';
+    this.pendingBlockItem = undefined;
+    if (action === undefined || input.trim().length === 0 || item === undefined) {
+      return;
+    }
+    const identity = channelFeedItemIdentity(item);
+    action.blockKeyword(input, this.blockContext(item)).then((): void => {
+      if (action.snapshot().phase === BlockingActionPhase.SUCCESS) {
+        this.controller?.removeItem(identity);
+      }
+    });
+  }
+
+  @Builder
+  private userBlockDialog() {
+    Column({ space: $r('app.float.p1_spacing_small') }) {
+      Text(`确定要屏蔽用户「${this.pendingUserBlock?.userName ?? ''}」吗？`)
+        .fontSize($r('app.float.p1_body_font_size'))
+        .width('100%')
+      Text('屏蔽后，该作者的内容将不再显示。')
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Button('取消')
+          .layoutWeight(1)
+          .enabled(!this.blockingBusy)
+          .onClick((): void => {
+            this.pendingUserBlock = undefined;
+          })
+        Button('确定屏蔽')
+          .id(`p3_channel_${this.source}_confirm_block_user`)
+          .layoutWeight(1)
+          .enabled(!this.blockingBusy)
+          .onClick((): void => this.confirmUserBlock())
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding($r('app.float.p1_spacing_medium'))
+    .backgroundColor($r('app.color.card_background'))
+    .borderRadius($r('app.float.p1_card_radius'))
+  }
+
+  @Builder
+  private keywordBlockDialog() {
+    Column({ space: $r('app.float.p1_spacing_small') }) {
+      Text('输入要屏蔽的关键词（普通文本，不区分大小写）')
+        .fontSize($r('app.float.p1_body_font_size'))
+        .width('100%')
+      TextInput({ text: this.keywordBlockInput, placeholder: '输入关键词' })
+        .id(`p3_channel_${this.source}_keyword_block_input`)
+        .maxLength(200)
+        .onChange((value: string): void => {
+          this.keywordBlockInput = value;
+        })
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Button('取消')
+          .layoutWeight(1)
+          .enabled(!this.blockingBusy)
+          .onClick((): void => {
+            this.keywordBlockVisible = false;
+            this.keywordBlockInput = '';
+          })
+        Button('确认屏蔽')
+          .id(`p3_channel_${this.source}_confirm_block_keyword`)
+          .layoutWeight(1)
+          .enabled(!this.blockingBusy && this.keywordBlockInput.trim().length > 0)
+          .onClick((): void => this.confirmKeywordBlock())
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding($r('app.float.p1_spacing_medium'))
+    .backgroundColor($r('app.color.card_background'))
+    .borderRadius($r('app.float.p1_card_radius'))
   }
 
   private applyState(state: ChannelFeedViewState): void {

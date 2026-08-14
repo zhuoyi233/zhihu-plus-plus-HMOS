@@ -45,6 +45,7 @@ export default function p1NavigationTest(): void {
         P1DestinationName.LOGIN,
         P1DestinationName.SETTINGS,
         P1DestinationName.BLOCKING_RULES,
+        P1DestinationName.BLOCKED_FEED_HISTORY,
         P1DestinationName.READ_HISTORY,
         P1DestinationName.TECHNICAL_LAB,
         P1DestinationName.READER_PROBE,
@@ -224,7 +225,8 @@ export default function p1NavigationTest(): void {
       expect(decodeP1Destination(P1DestinationName.PEOPLE, malformedPeopleParam)).assertUndefined();
       expect(decodeP1Destination(P1DestinationName.PEOPLE, oversizedPeopleParam)).assertUndefined();
       [P1DestinationName.FOLLOWING, P1DestinationName.HOT, P1DestinationName.DAILY,
-        P1DestinationName.BLOCKING_RULES, P1DestinationName.READ_HISTORY]
+        P1DestinationName.BLOCKING_RULES, P1DestinationName.BLOCKED_FEED_HISTORY,
+        P1DestinationName.READ_HISTORY]
         .forEach((name: P1DestinationName): void => {
           const validParam: TestDestinationParam = { name: name };
           const invalidParam: TestDestinationParam = { name: name, id: 'unexpected' };

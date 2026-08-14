@@ -1,3 +1,4 @@
+import { pasteboard, BusinessError } from '@kit.BasicServicesKit';
 import {
   BlockedKeywordRule,
   BlockedTopicRule,
@@ -36,6 +37,9 @@ export struct BlockingRulesPage {
   @State private identifierInput: string = '';
   @State private nameInput: string = '';
   @State private confirmClear: boolean = false;
+  @State private backupInput: string = '';
+  @State private exportedText: string = '';
+  @State private backupStatus: string = '';
   private controller?: BlockingRulesController;
 
   aboutToAppear(): void {
@@ -68,6 +72,9 @@ export struct BlockingRulesPage {
     this.identifierInput = '';
     this.nameInput = '';
     this.confirmClear = false;
+    this.backupInput = '';
+    this.exportedText = '';
+    this.backupStatus = '';
   }
 
   build() {
@@ -90,8 +97,12 @@ export struct BlockingRulesPage {
           .width('100%')
         this.ruleList()
       }
+      this.backupPanel()
       if (this.confirmClear) {
         this.clearConfirmation()
+      }
+      if (this.exportedText.length > 0) {
+        this.exportDialog()
       }
     }
     .id('p2_blocking_rules_page')
@@ -401,6 +412,110 @@ export struct BlockingRulesPage {
     .padding($r('app.float.p1_spacing_medium'))
     .backgroundColor($r('app.color.card_background'))
     .borderRadius($r('app.float.p1_card_radius'))
+  }
+
+  @Builder
+  private backupPanel() {
+    Column({ space: $r('app.float.p1_spacing_small') }) {
+      Text('屏蔽词导入导出')
+        .fontSize($r('app.float.p1_body_font_size'))
+        .fontWeight(FontWeight.Medium)
+        .width('100%')
+      Text('导出为 JSON 文本；导入支持本应用导出的格式，无效条目会被跳过。')
+        .fontSize($r('app.float.p1_caption_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
+      TextArea({ text: this.backupInput, placeholder: '在此粘贴要导入的屏蔽词文本' })
+        .id('p3_blocking_backup_input')
+        .height(80)
+        .maxLength(1048576)
+        .onChange((value: string): void => {
+          this.backupInput = value;
+        })
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Button('导入')
+          .id('p3_blocking_import')
+          .layoutWeight(1)
+          .enabled(!this.viewState.busy && this.backupInput.trim().length > 0)
+          .onClick((): void => this.importBackup())
+        Button('导出')
+          .id('p3_blocking_export')
+          .layoutWeight(1)
+          .enabled(!this.viewState.busy)
+          .onClick((): void => this.exportBackup())
+      }
+      .width('100%')
+      if (this.backupStatus.length > 0) {
+        Text(this.backupStatus)
+          .id('p3_blocking_backup_status')
+          .fontSize($r('app.float.p1_caption_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .width('100%')
+      }
+    }
+    .width('100%')
+    .padding($r('app.float.p1_spacing_medium'))
+    .backgroundColor($r('app.color.card_background'))
+    .borderRadius($r('app.float.p1_card_radius'))
+  }
+
+  @Builder
+  private exportDialog() {
+    Column({ space: $r('app.float.p1_spacing_small') }) {
+      Text('导出的屏蔽词文本')
+        .fontSize($r('app.float.p1_body_font_size'))
+        .fontWeight(FontWeight.Medium)
+        .width('100%')
+      TextArea({ text: this.exportedText })
+        .id('p3_blocking_export_text')
+        .height(160)
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Button('关闭')
+          .layoutWeight(1)
+          .onClick((): void => {
+            this.exportedText = '';
+          })
+        Button('复制到剪贴板')
+          .id('p3_blocking_export_copy')
+          .layoutWeight(1)
+          .onClick((): void => this.copyExportedText())
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding($r('app.float.p1_spacing_medium'))
+    .backgroundColor($r('app.color.card_background'))
+    .borderRadius($r('app.float.p1_card_radius'))
+  }
+
+  private exportBackup(): void {
+    this.backupStatus = '';
+    this.controller?.exportBackup().then((text: string | undefined): void => {
+      if (text !== undefined) {
+        this.exportedText = text;
+      }
+    });
+  }
+
+  private copyExportedText(): void {
+    const text = this.exportedText;
+    if (text.length === 0) {
+      return;
+    }
+    pasteboard.getSystemPasteboard().setData(pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text))
+      .then((): void => {
+        this.backupStatus = '已复制到剪贴板';
+      })
+      .catch((_error: BusinessError): void => {
+        this.backupStatus = '复制失败，请长按文本手动复制';
+      });
+  }
+
+  private importBackup(): void {
+    const text = this.backupInput;
+    this.backupInput = '';
+    this.backupStatus = '';
+    this.controller?.importBackup(text);
   }
 
   private currentRuleCount(): number {

@@ -19,6 +19,7 @@ export enum P1DestinationName {
   LOGIN = 'Login',
   SETTINGS = 'Settings',
   BLOCKING_RULES = 'BlockingRules',
+  BLOCKED_FEED_HISTORY = 'BlockedFeedHistory',
   READ_HISTORY = 'ReadHistory',
   TECHNICAL_LAB = 'TechnicalLab',
   READER_PROBE = 'ReaderProbe',
@@ -37,7 +38,7 @@ export interface StatelessDestination {
 
 export interface InfrastructureDestination {
   readonly name: P1DestinationName.LOGIN | P1DestinationName.SETTINGS | P1DestinationName.BLOCKING_RULES |
-    P1DestinationName.READ_HISTORY | P1DestinationName.TECHNICAL_LAB |
+    P1DestinationName.BLOCKED_FEED_HISTORY | P1DestinationName.READ_HISTORY | P1DestinationName.TECHNICAL_LAB |
     P1DestinationName.READER_PROBE | P1DestinationName.IMAGE_PROBE |
     P1DestinationName.DATABASE_PROBE | P1DestinationName.DEEP_LINK_PROBE |
     P1DestinationName.QR_SCAN_PROBE | P1DestinationName.BACKGROUND_TASK_PROBE |
@@ -106,6 +107,7 @@ export function isP1DestinationName(name: string): boolean {
     case P1DestinationName.LOGIN:
     case P1DestinationName.SETTINGS:
     case P1DestinationName.BLOCKING_RULES:
+    case P1DestinationName.BLOCKED_FEED_HISTORY:
     case P1DestinationName.READ_HISTORY:
     case P1DestinationName.TECHNICAL_LAB:
     case P1DestinationName.READER_PROBE:
@@ -159,6 +161,8 @@ export function decodeP1Destination(name: string, param: Object): P1Destination 
       return hasNoParameters(wire) ? { name: P1DestinationName.SETTINGS } : undefined;
     case P1DestinationName.BLOCKING_RULES:
       return hasNoParameters(wire) ? { name: P1DestinationName.BLOCKING_RULES } : undefined;
+    case P1DestinationName.BLOCKED_FEED_HISTORY:
+      return hasNoParameters(wire) ? { name: P1DestinationName.BLOCKED_FEED_HISTORY } : undefined;
     case P1DestinationName.READ_HISTORY:
       return hasNoParameters(wire) ? { name: P1DestinationName.READ_HISTORY } : undefined;
     case P1DestinationName.TECHNICAL_LAB:
@@ -224,6 +228,7 @@ export function isInfrastructureDestination(destination: P1Destination): boolean
     case P1DestinationName.LOGIN:
     case P1DestinationName.SETTINGS:
     case P1DestinationName.BLOCKING_RULES:
+    case P1DestinationName.BLOCKED_FEED_HISTORY:
     case P1DestinationName.READ_HISTORY:
     case P1DestinationName.TECHNICAL_LAB:
     case P1DestinationName.READER_PROBE:

@@ -115,6 +115,16 @@ export class ChannelFeedController {
     return this.refresh();
   }
 
+  removeItem(identity: string): void {
+    if (!this.active) {
+      return;
+    }
+    this.items = this.items.filter((item: ChannelFeedItem): boolean =>
+      channelFeedItemIdentity(item) !== identity);
+    this.phase = this.items.length > 0 ? ChannelFeedPhase.READY : ChannelFeedPhase.EMPTY;
+    this.emit();
+  }
+
   async loadMore(): Promise<void> {
     if (!this.active || this.refreshing || this.loadingMore || this.paginationBlocked || !this.hasNextPage()) {
       return;

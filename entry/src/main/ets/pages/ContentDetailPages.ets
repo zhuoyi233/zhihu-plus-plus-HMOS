@@ -3,10 +3,18 @@ import {
   P1DestinationName
 } from 'core';
 import {
+  BlockedFeedHistoryGateway,
+  BlockingRuleGateway,
   ContentDetailKind,
   ContentRepository,
   OpenedContentStore
 } from 'data';
+import {
+  BlockingActionContext,
+  BlockingActionController,
+  BlockingActionViewState,
+  BlockingUserCandidate
+} from './BlockingActionState';
 import {
   ContentDetailController,
   ContentDetailPhase,
@@ -22,6 +30,8 @@ struct ContentDetailPage {
   contentId: string = '';
   repository: ContentRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
+  rules: BlockingRuleGateway | undefined = undefined;
+  history: BlockedFeedHistoryGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
   @State private phase: ContentDetailPhase = ContentDetailPhase.IDLE;
@@ -29,7 +39,13 @@ struct ContentDetailPage {
   @State private errorMessage: string = '';
   @State private requiresLogin: boolean = false;
   @State private openedRecordPhase: OpenedRecordPhase = OpenedRecordPhase.NOT_CONFIGURED;
+  @State private pendingUserBlock?: BlockingUserCandidate = undefined;
+  @State private keywordBlockVisible: boolean = false;
+  @State private keywordBlockInput: string = '';
+  @State private blockingMessage: string = '';
+  @State private blockingBusy: boolean = false;
   private controller?: ContentDetailController;
+  private blockingAction?: BlockingActionController;
 
   aboutToAppear(): void {
     const repository = this.repository;
@@ -45,11 +61,28 @@ struct ContentDetailPage {
     );
     this.controller.activate();
     this.controller.load(this.kind, this.contentId);
+    this.createBlockingAction();
   }
 
   aboutToDisappear(): void {
     this.controller?.deactivate();
     this.controller = undefined;
+    this.blockingAction = undefined;
+    this.pendingUserBlock = undefined;
+    this.keywordBlockVisible = false;
+    this.keywordBlockInput = '';
+  }
+
+  private createBlockingAction(): void {
+    const rules = this.rules;
+    const history = this.history;
+    if (rules === undefined || history === undefined) {
+      return;
+    }
+    this.blockingAction = new BlockingActionController(rules, history, (state: BlockingActionViewState): void => {
+      this.blockingMessage = state.message;
+      this.blockingBusy = state.busy;
+    });
   }
 
   build() {
@@ -60,6 +93,12 @@ struct ContentDetailPage {
         this.statusPanel(this.errorMessage, true)
       } else if (this.content !== undefined) {
         this.loadedContent(this.content)
+      }
+      if (this.pendingUserBlock !== undefined) {
+        this.userBlockDialog()
+      }
+      if (this.keywordBlockVisible) {
+        this.keywordBlockDialog()
       }
     }
     .id(`p2_${this.kind}_detail_page`)
@@ -132,6 +171,36 @@ struct ContentDetailPage {
           .fontColor($r('app.color.secondary_text'))
           .width('100%')
 
+        if (contentAuthorName(content).length > 0) {
+          Button('屏蔽作者')
+            .id(`p3_${content.kind}_block_author`)
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .enabled(!this.blockingBusy && this.blockingAction !== undefined)
+            .onClick((): void => {
+              const author = content.value.author;
+              if (author !== undefined) {
+                this.pendingUserBlock = { userId: author.id, userName: author.name };
+              }
+            })
+        }
+
+        Button('屏蔽关键词')
+          .id(`p3_${content.kind}_block_keyword`)
+          .fontSize($r('app.float.p1_secondary_font_size'))
+          .enabled(!this.blockingBusy && this.blockingAction !== undefined)
+          .onClick((): void => {
+            this.keywordBlockInput = '';
+            this.keywordBlockVisible = true;
+          })
+
+        if (this.blockingMessage.length > 0) {
+          Text(this.blockingMessage)
+            .id(`p3_${content.kind}_blocking_status`)
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
+        }
+
         if (this.openedRecordPhase === OpenedRecordPhase.FAILED) {
           Text('本次打开记录未能保存，阅读不受影响')
             .id(`p2_${content.kind}_opened_record_failed`)
@@ -160,6 +229,102 @@ struct ContentDetailPage {
     .height('100%')
   }
 
+  @Builder
+  private userBlockDialog() {
+    Column({ space: $r('app.float.p1_spacing_small') }) {
+      Text(`确定要屏蔽用户「${this.pendingUserBlock?.userName ?? ''}」吗？`)
+        .fontSize($r('app.float.p1_body_font_size'))
+        .width('100%')
+      Text('屏蔽后，该作者的内容将不再显示。')
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Button('取消')
+          .layoutWeight(1)
+          .enabled(!this.blockingBusy)
+          .onClick((): void => {
+            this.pendingUserBlock = undefined;
+          })
+        Button('确定屏蔽')
+          .id(`p3_${this.kind}_confirm_block_user`)
+          .layoutWeight(1)
+          .enabled(!this.blockingBusy)
+          .onClick((): void => this.confirmUserBlock())
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding($r('app.float.p1_spacing_medium'))
+    .backgroundColor($r('app.color.card_background'))
+    .borderRadius($r('app.float.p1_card_radius'))
+  }
+
+  @Builder
+  private keywordBlockDialog() {
+    Column({ space: $r('app.float.p1_spacing_small') }) {
+      Text('输入要屏蔽的关键词（普通文本，不区分大小写）')
+        .fontSize($r('app.float.p1_body_font_size'))
+        .width('100%')
+      TextInput({ text: this.keywordBlockInput, placeholder: '输入关键词' })
+        .id(`p3_${this.kind}_keyword_block_input`)
+        .maxLength(200)
+        .onChange((value: string): void => {
+          this.keywordBlockInput = value;
+        })
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Button('取消')
+          .layoutWeight(1)
+          .enabled(!this.blockingBusy)
+          .onClick((): void => {
+            this.keywordBlockVisible = false;
+            this.keywordBlockInput = '';
+          })
+        Button('确认屏蔽')
+          .id(`p3_${this.kind}_confirm_block_keyword`)
+          .layoutWeight(1)
+          .enabled(!this.blockingBusy && this.keywordBlockInput.trim().length > 0)
+          .onClick((): void => this.confirmKeywordBlock())
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding($r('app.float.p1_spacing_medium'))
+    .backgroundColor($r('app.color.card_background'))
+    .borderRadius($r('app.float.p1_card_radius'))
+  }
+
+  private confirmUserBlock(): void {
+    const pending = this.pendingUserBlock;
+    const action = this.blockingAction;
+    const content = this.content;
+    if (pending === undefined || action === undefined || content === undefined) {
+      return;
+    }
+    this.pendingUserBlock = undefined;
+    action.blockUser(pending.userId, pending.userName, this.blockContext(content));
+  }
+
+  private confirmKeywordBlock(): void {
+    const action = this.blockingAction;
+    const input = this.keywordBlockInput;
+    const content = this.content;
+    this.keywordBlockVisible = false;
+    this.keywordBlockInput = '';
+    if (action === undefined || input.trim().length === 0 || content === undefined) {
+      return;
+    }
+    action.blockKeyword(input, this.blockContext(content));
+  }
+
+  private blockContext(content: LoadedContentDetail): BlockingActionContext {
+    return {
+      contentTitle: contentBlockingTitle(content),
+      contentKind: content.kind,
+      contentId: content.value.id
+    };
+  }
+
   private applyState(state: ContentDetailViewState): void {
     this.phase = state.phase;
     this.content = state.content;
@@ -174,6 +339,8 @@ export struct QuestionDetailPage {
   contentId: string = '';
   repository: ContentRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
+  rules: BlockingRuleGateway | undefined = undefined;
+  history: BlockedFeedHistoryGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
 
@@ -183,6 +350,8 @@ export struct QuestionDetailPage {
       contentId: this.contentId,
       repository: this.repository,
       openedContentStore: this.openedContentStore,
+      rules: this.rules,
+      history: this.history,
       navigate: this.navigate
     })
   }
@@ -193,6 +362,8 @@ export struct AnswerDetailPage {
   contentId: string = '';
   repository: ContentRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
+  rules: BlockingRuleGateway | undefined = undefined;
+  history: BlockedFeedHistoryGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
 
@@ -202,6 +373,8 @@ export struct AnswerDetailPage {
       contentId: this.contentId,
       repository: this.repository,
       openedContentStore: this.openedContentStore,
+      rules: this.rules,
+      history: this.history,
       navigate: this.navigate
     })
   }
@@ -212,6 +385,8 @@ export struct ArticleDetailPage {
   contentId: string = '';
   repository: ContentRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
+  rules: BlockingRuleGateway | undefined = undefined;
+  history: BlockedFeedHistoryGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
 
@@ -221,6 +396,8 @@ export struct ArticleDetailPage {
       contentId: this.contentId,
       repository: this.repository,
       openedContentStore: this.openedContentStore,
+      rules: this.rules,
+      history: this.history,
       navigate: this.navigate
     })
   }
@@ -257,6 +434,14 @@ export function contentEmptyMessage(content: LoadedContentDetail): string {
 
 export function contentAuthorName(content: LoadedContentDetail): string {
   return content.value.author?.name ?? '';
+}
+
+export function contentBlockingTitle(content: LoadedContentDetail): string {
+  if (content.kind === ContentDetailKind.QUESTION || content.kind === ContentDetailKind.ARTICLE) {
+    return content.value.title;
+  }
+  const excerpt = content.value.excerpt.trim();
+  return excerpt.length > 0 ? excerpt : '回答';
 }
 
 export function contentAuthorLine(content: LoadedContentDetail): string {

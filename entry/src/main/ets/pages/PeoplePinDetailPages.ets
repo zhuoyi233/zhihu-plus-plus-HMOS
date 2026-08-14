@@ -1,5 +1,7 @@
 import { P1Destination, P1DestinationName } from 'core';
 import {
+  BlockedFeedHistoryGateway,
+  BlockingRuleGateway,
   LoginSessionGateway,
   OpenedContentStore,
   PeopleContentItem,
@@ -21,6 +23,11 @@ import {
 } from './PeoplePinDetailState';
 import { PeopleContentController, PeopleContentPhase, PeopleContentViewState } from './PeopleContentState';
 import { NativeContentDocument } from './NativeContentDocument';
+import {
+  BlockingActionController,
+  BlockingActionViewState,
+  BlockingUserCandidate
+} from './BlockingActionState';
 
 @Component
 struct ReadOnlyDetailStatusPanel {
@@ -74,6 +81,8 @@ export struct PeopleDetailPage {
   repository: PeopleDetailRepository | undefined = undefined;
   contentRepository: PeopleContentRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
+  rules: BlockingRuleGateway | undefined = undefined;
+  history: BlockedFeedHistoryGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
   @State private phase: ReadOnlyDetailPhase = ReadOnlyDetailPhase.IDLE;
@@ -87,8 +96,12 @@ export struct PeopleDetailPage {
   @State private contentCanLoadMore: boolean = false;
   @State private contentRequiresLogin: boolean = false;
   @State private contentErrorMessage: string = '';
+  @State private pendingUserBlock?: BlockingUserCandidate = undefined;
+  @State private blockingMessage: string = '';
+  @State private blockingBusy: boolean = false;
   private controller?: PeopleDetailController;
   private contentController?: PeopleContentController;
+  private blockingAction?: BlockingActionController;
 
   aboutToAppear(): void {
     if (this.repository === undefined || this.session === undefined) {
@@ -103,6 +116,7 @@ export struct PeopleDetailPage {
     );
     this.controller.activate();
     this.controller.load(this.identifier);
+    this.createBlockingAction();
   }
 
   aboutToDisappear(): void {
@@ -110,6 +124,20 @@ export struct PeopleDetailPage {
     this.contentController?.deactivate();
     this.controller = undefined;
     this.contentController = undefined;
+    this.blockingAction = undefined;
+    this.pendingUserBlock = undefined;
+  }
+
+  private createBlockingAction(): void {
+    const rules = this.rules;
+    const history = this.history;
+    if (rules === undefined || history === undefined) {
+      return;
+    }
+    this.blockingAction = new BlockingActionController(rules, history, (state: BlockingActionViewState): void => {
+      this.blockingMessage = state.message;
+      this.blockingBusy = state.busy;
+    });
   }
 
   build() {
@@ -133,6 +161,9 @@ export struct PeopleDetailPage {
         })
       } else if (this.profile !== undefined) {
         this.loadedProfile(this.profile)
+      }
+      if (this.pendingUserBlock !== undefined) {
+        this.userBlockDialog()
       }
     }
     .id('p2_people_detail_page')
@@ -206,6 +237,22 @@ export struct PeopleDetailPage {
           .id('p2_people_detail_relationship')
           .fontSize($r('app.float.p1_secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
+
+        Button('屏蔽该用户')
+          .id('p3_people_detail_block_user')
+          .fontSize($r('app.float.p1_secondary_font_size'))
+          .enabled(!this.blockingBusy && this.blockingAction !== undefined)
+          .onClick((): void => {
+            this.pendingUserBlock = { userId: profile.id, userName: profile.name };
+          })
+
+        if (this.blockingMessage.length > 0) {
+          Text(this.blockingMessage)
+            .id('p3_people_detail_blocking_status')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
+        }
 
         this.contentSectionTabs()
         this.contentList()
@@ -398,6 +445,52 @@ export struct PeopleDetailPage {
     this.contentRequiresLogin = state.requiresLogin;
     this.contentErrorMessage = state.errorMessage ?? '';
   }
+
+  @Builder
+  private userBlockDialog() {
+    Column({ space: $r('app.float.p1_spacing_small') }) {
+      Text(`确定要屏蔽用户「${this.pendingUserBlock?.userName ?? ''}」吗？`)
+        .fontSize($r('app.float.p1_body_font_size'))
+        .width('100%')
+      Text('屏蔽后，该作者的内容将不再显示。')
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Button('取消')
+          .layoutWeight(1)
+          .enabled(!this.blockingBusy)
+          .onClick((): void => {
+            this.pendingUserBlock = undefined;
+          })
+        Button('确定屏蔽')
+          .id('p3_people_detail_confirm_block_user')
+          .layoutWeight(1)
+          .enabled(!this.blockingBusy)
+          .onClick((): void => this.confirmUserBlock())
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding($r('app.float.p1_spacing_medium'))
+    .backgroundColor($r('app.color.card_background'))
+    .borderRadius($r('app.float.p1_card_radius'))
+  }
+
+  private confirmUserBlock(): void {
+    const pending = this.pendingUserBlock;
+    const action = this.blockingAction;
+    const profile = this.profile;
+    if (pending === undefined || action === undefined || profile === undefined) {
+      return;
+    }
+    this.pendingUserBlock = undefined;
+    action.blockUser(pending.userId, pending.userName, {
+      contentTitle: `${profile.name}的主页`,
+      contentKind: 'people',
+      contentId: profile.id
+    });
+  }
 }
 
 function peopleContentKindLabel(kind: PeopleContentKind): string {
@@ -426,6 +519,8 @@ export struct PinDetailPage {
   repository: PinRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
+  rules: BlockingRuleGateway | undefined = undefined;
+  history: BlockedFeedHistoryGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
   @State private phase: ReadOnlyDetailPhase = ReadOnlyDetailPhase.IDLE;
@@ -433,7 +528,13 @@ export struct PinDetailPage {
   @State private errorMessage: string = '';
   @State private requiresLogin: boolean = false;
   @State private openedRecordFailed: boolean = false;
+  @State private pendingUserBlock?: BlockingUserCandidate = undefined;
+  @State private keywordBlockVisible: boolean = false;
+  @State private keywordBlockInput: string = '';
+  @State private blockingMessage: string = '';
+  @State private blockingBusy: boolean = false;
   private controller?: PinDetailController;
+  private blockingAction?: BlockingActionController;
 
   aboutToAppear(): void {
     if (this.repository === undefined || this.session === undefined) {
@@ -449,11 +550,28 @@ export struct PinDetailPage {
     );
     this.controller.activate();
     this.controller.load(this.contentId);
+    this.createBlockingAction();
   }
 
   aboutToDisappear(): void {
     this.controller?.deactivate();
     this.controller = undefined;
+    this.blockingAction = undefined;
+    this.pendingUserBlock = undefined;
+    this.keywordBlockVisible = false;
+    this.keywordBlockInput = '';
+  }
+
+  private createBlockingAction(): void {
+    const rules = this.rules;
+    const history = this.history;
+    if (rules === undefined || history === undefined) {
+      return;
+    }
+    this.blockingAction = new BlockingActionController(rules, history, (state: BlockingActionViewState): void => {
+      this.blockingMessage = state.message;
+      this.blockingBusy = state.busy;
+    });
   }
 
   build() {
@@ -477,6 +595,12 @@ export struct PinDetailPage {
         })
       } else if (this.pin !== undefined) {
         this.loadedPin(this.pin)
+      }
+      if (this.pendingUserBlock !== undefined) {
+        this.userBlockDialog()
+      }
+      if (this.keywordBlockVisible) {
+        this.keywordBlockDialog()
       }
     }
     .id('p2_pin_detail_page')
@@ -529,6 +653,36 @@ export struct PinDetailPage {
           }
           .width('100%')
         }
+        Row({ space: $r('app.float.p1_spacing_small') }) {
+          Button('屏蔽作者')
+            .id('p3_pin_detail_block_author')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .enabled(!this.blockingBusy && this.blockingAction !== undefined)
+            .onClick((): void => {
+              this.pendingUserBlock = { userId: pin.author.id, userName: pin.author.name };
+            })
+          Button('屏蔽关键词')
+            .id('p3_pin_detail_block_keyword')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .enabled(!this.blockingBusy && this.blockingAction !== undefined)
+            .onClick((): void => {
+              this.keywordBlockInput = '';
+              this.keywordBlockVisible = true;
+            })
+          Button('屏蔽话题')
+            .id('p3_pin_detail_block_topic')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .enabled(!this.blockingBusy && this.blockingAction !== undefined && pin.topics.length > 0)
+            .bindMenu(this.pinTopicMenu(pin))
+        }
+        .width('100%')
+        if (this.blockingMessage.length > 0) {
+          Text(this.blockingMessage)
+            .id('p3_pin_detail_blocking_status')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
+        }
         if (this.openedRecordFailed) {
           Text('本次打开记录未能保存，阅读不受影响')
             .id('p2_pin_detail_opened_record_failed')
@@ -557,6 +711,119 @@ export struct PinDetailPage {
     this.errorMessage = state.errorMessage ?? '';
     this.requiresLogin = state.requiresLogin;
     this.openedRecordFailed = state.openedRecordFailed;
+  }
+
+  private pinTopicMenu(pin: PinDetail): Array<MenuElement> {
+    const menu: Array<MenuElement> = [];
+    pin.topics.forEach((topic: PinTopic): void => {
+      menu.push({
+        value: `屏蔽话题：${topic.name}`,
+        action: (): void => {
+          this.blockingAction?.blockTopic(topic.id, topic.name, {
+            contentTitle: `${pin.author.name}的想法`,
+            contentKind: 'pin',
+            contentId: pin.id
+          });
+        }
+      });
+    });
+    return menu;
+  }
+
+  @Builder
+  private userBlockDialog() {
+    Column({ space: $r('app.float.p1_spacing_small') }) {
+      Text(`确定要屏蔽用户「${this.pendingUserBlock?.userName ?? ''}」吗？`)
+        .fontSize($r('app.float.p1_body_font_size'))
+        .width('100%')
+      Text('屏蔽后，该作者的内容将不再显示。')
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Button('取消')
+          .layoutWeight(1)
+          .enabled(!this.blockingBusy)
+          .onClick((): void => {
+            this.pendingUserBlock = undefined;
+          })
+        Button('确定屏蔽')
+          .id('p3_pin_detail_confirm_block_user')
+          .layoutWeight(1)
+          .enabled(!this.blockingBusy)
+          .onClick((): void => this.confirmUserBlock())
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding($r('app.float.p1_spacing_medium'))
+    .backgroundColor($r('app.color.card_background'))
+    .borderRadius($r('app.float.p1_card_radius'))
+  }
+
+  @Builder
+  private keywordBlockDialog() {
+    Column({ space: $r('app.float.p1_spacing_small') }) {
+      Text('输入要屏蔽的关键词（普通文本，不区分大小写）')
+        .fontSize($r('app.float.p1_body_font_size'))
+        .width('100%')
+      TextInput({ text: this.keywordBlockInput, placeholder: '输入关键词' })
+        .id('p3_pin_detail_keyword_block_input')
+        .maxLength(200)
+        .onChange((value: string): void => {
+          this.keywordBlockInput = value;
+        })
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Button('取消')
+          .layoutWeight(1)
+          .enabled(!this.blockingBusy)
+          .onClick((): void => {
+            this.keywordBlockVisible = false;
+            this.keywordBlockInput = '';
+          })
+        Button('确认屏蔽')
+          .id('p3_pin_detail_confirm_block_keyword')
+          .layoutWeight(1)
+          .enabled(!this.blockingBusy && this.keywordBlockInput.trim().length > 0)
+          .onClick((): void => this.confirmKeywordBlock())
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding($r('app.float.p1_spacing_medium'))
+    .backgroundColor($r('app.color.card_background'))
+    .borderRadius($r('app.float.p1_card_radius'))
+  }
+
+  private confirmUserBlock(): void {
+    const pending = this.pendingUserBlock;
+    const action = this.blockingAction;
+    const pin = this.pin;
+    if (pending === undefined || action === undefined || pin === undefined) {
+      return;
+    }
+    this.pendingUserBlock = undefined;
+    action.blockUser(pending.userId, pending.userName, {
+      contentTitle: `${pin.author.name}的想法`,
+      contentKind: 'pin',
+      contentId: pin.id
+    });
+  }
+
+  private confirmKeywordBlock(): void {
+    const action = this.blockingAction;
+    const input = this.keywordBlockInput;
+    const pin = this.pin;
+    this.keywordBlockVisible = false;
+    this.keywordBlockInput = '';
+    if (action === undefined || input.trim().length === 0 || pin === undefined) {
+      return;
+    }
+    action.blockKeyword(input, {
+      contentTitle: `${pin.author.name}的想法`,
+      contentKind: 'pin',
+      contentId: pin.id
+    });
   }
 }
 

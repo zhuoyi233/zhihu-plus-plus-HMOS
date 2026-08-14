@@ -123,6 +123,15 @@ export class HomeFeedController {
     return this.refresh();
   }
 
+  removeItem(identity: string): void {
+    if (!this.active) {
+      return;
+    }
+    this.items = this.items.filter((item: FeedItem): boolean => feedItemIdentity(item) !== identity);
+    this.phase = this.items.length > 0 ? HomeFeedPhase.READY : HomeFeedPhase.EMPTY;
+    this.emit();
+  }
+
   async loadMore(): Promise<void> {
     if (!this.active || this.refreshing || this.loadingMore || !this.canLoadMore()) {
       return;
