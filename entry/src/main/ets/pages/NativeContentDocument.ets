@@ -389,10 +389,8 @@ struct ContentBlockFormula {
 export struct NativeContentDocument {
   html: string = '';
   emptyMessage: string = '正文为空';
-  /** P3-9-B/D：正文滚动回调（偏移量；用于顶栏折叠与阅读进度条联动）。 */
+  /** P3-9-B：正文滚动偏移回调（用于详情页顶栏折叠联动）。 */
   onScrollOffset?: (offset: number) => void;
-  /** P3-9-D：阅读进度比例回调（0..1；用于右侧阅读进度条）。 */
-  onScrollPercent?: (percent: number) => void;
   @State private previewUrl: string = '';
   @State private empty: boolean = true;
   private readonly dataSource: ReaderBlockDataSource = new ReaderBlockDataSource();
@@ -440,11 +438,6 @@ export struct NativeContentDocument {
           const callback = this.onScrollOffset;
           if (callback !== undefined) {
             callback(firstIndex > 0 ? firstIndex : 0);
-          }
-          const percentCallback = this.onScrollPercent;
-          if (percentCallback !== undefined) {
-            const total = this.dataSource.totalCount();
-            percentCallback(total > 1 ? Math.min(1, Math.max(0, firstIndex / (total - 1))) : 0);
           }
         })
       }

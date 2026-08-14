@@ -85,8 +85,6 @@ struct ContentDetailPage {
   @State private actionMenuShown: boolean = false;
   /** P3-9-C：菜单操作反馈（复制链接结果等）。 */
   @State private menuStatus: string = '';
-  /** P3-9-D：阅读进度（0..1），驱动右侧阅读进度条。 */
-  @State private readingPercent: number = 0;
   private controller?: ContentDetailController;
   private blockingAction?: BlockingActionController;
   private voteController?: ContentVoteController;
@@ -152,6 +150,8 @@ struct ContentDetailPage {
           this.statusPanel(this.errorMessage, true)
         } else if (this.content !== undefined) {
           Column() {
+            // P3-9-B：顶栏作为占位（非覆盖），正文在其下方，避免作者行与标题/统计重叠。
+            this.detailTopBar(this.content)
             Column() {
               this.loadedContent(this.content)
             }
@@ -170,28 +170,6 @@ struct ContentDetailPage {
       .height('100%')
       .backgroundColor($r('app.color.page_background'))
 
-      if (this.phase === ContentDetailPhase.READY && this.content !== undefined) {
-        this.detailTopBar(this.content)
-      }
-      // P3-9-D：右侧阅读进度条（正文加载完成且已滚动时显示）。
-      if (this.phase === ContentDetailPhase.READY && this.readingPercent > 0 && this.readingPercent < 1) {
-        Column() {
-          Column()
-            .width(3)
-            .layoutWeight(this.readingPercent)
-            .backgroundColor($r('app.color.brand_primary'))
-          Column()
-            .width(3)
-            .layoutWeight(1 - this.readingPercent)
-            .backgroundColor($r('app.color.control_background'))
-        }
-        .id('p3_detail_reading_progress')
-        .width(3)
-        .height('80%')
-        .borderRadius(2)
-        .align(Alignment.Center)
-        .margin({ left: '96%' })
-      }
       if (this.favoriteDialogShown && this.collectionRepository !== undefined && this.session !== undefined) {
         this.favoriteDialog()
       }
@@ -297,12 +275,7 @@ struct ContentDetailPage {
   private loadedContent(content: LoadedContentDetail) {
     Column() {
       Column({ space: $r('app.float.p1_spacing_small') }) {
-        Text(contentTitle(content))
-          .id(`p2_${content.kind}_detail_title`)
-          .fontSize($r('app.float.p1_heading_font_size'))
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.primary_text'))
-          .width('100%')
+        // 标题由 NavDestination 系统栏 + 顶栏折叠标题行提供，正文头部不再重复显示。
 
         // 作者行仅问题页保留（回答/文章的顶栏折叠作者行已含头像+名字+签名，避免重复）。
         if (content.kind === ContentDetailKind.QUESTION && contentAuthorName(content).length > 0) {
@@ -384,9 +357,6 @@ struct ContentDetailPage {
         emptyMessage: contentEmptyMessage(content),
         onScrollOffset: (offset: number): void => {
           this.topBarScrolled = offset > 0;
-        },
-        onScrollPercent: (percent: number): void => {
-          this.readingPercent = percent;
         }
       })
         .layoutWeight(1)
