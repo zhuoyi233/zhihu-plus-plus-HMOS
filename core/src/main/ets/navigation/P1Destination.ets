@@ -17,6 +17,7 @@ export enum P1DestinationName {
   COLLECTION = 'Collection',
   COLLECTIONS = 'Collections',
   NOTIFICATION = 'Notification',
+  NOTIFICATION_SETTINGS = 'NotificationSettings',
   LOGIN = 'Login',
   SETTINGS = 'Settings',
   BLOCKING_RULES = 'BlockingRules',
@@ -40,6 +41,7 @@ export interface StatelessDestination {
 export interface InfrastructureDestination {
   readonly name: P1DestinationName.LOGIN | P1DestinationName.SETTINGS | P1DestinationName.BLOCKING_RULES |
     P1DestinationName.BLOCKED_FEED_HISTORY | P1DestinationName.READ_HISTORY | P1DestinationName.TECHNICAL_LAB |
+    P1DestinationName.NOTIFICATION_SETTINGS |
     P1DestinationName.READER_PROBE | P1DestinationName.IMAGE_PROBE |
     P1DestinationName.DATABASE_PROBE | P1DestinationName.DEEP_LINK_PROBE |
     P1DestinationName.QR_SCAN_PROBE | P1DestinationName.BACKGROUND_TASK_PROBE |
@@ -107,6 +109,7 @@ export function isP1DestinationName(name: string): boolean {
     case P1DestinationName.COLLECTION:
     case P1DestinationName.COLLECTIONS:
     case P1DestinationName.NOTIFICATION:
+    case P1DestinationName.NOTIFICATION_SETTINGS:
     case P1DestinationName.LOGIN:
     case P1DestinationName.SETTINGS:
     case P1DestinationName.BLOCKING_RULES:
@@ -158,6 +161,8 @@ export function decodeP1Destination(name: string, param: Object): P1Destination 
       return decodeContent(wire, P1DestinationName.DAILY_STORY);
     case P1DestinationName.NOTIFICATION:
       return hasNoParameters(wire) ? { name: P1DestinationName.NOTIFICATION } : undefined;
+    case P1DestinationName.NOTIFICATION_SETTINGS:
+      return hasNoParameters(wire) ? { name: P1DestinationName.NOTIFICATION_SETTINGS } : undefined;
     case P1DestinationName.LOGIN:
       return hasNoParameters(wire) ? { name: P1DestinationName.LOGIN } : undefined;
     case P1DestinationName.SETTINGS:
@@ -236,6 +241,7 @@ export function isInfrastructureDestination(destination: P1Destination): boolean
     case P1DestinationName.BLOCKED_FEED_HISTORY:
     case P1DestinationName.READ_HISTORY:
     case P1DestinationName.TECHNICAL_LAB:
+    case P1DestinationName.NOTIFICATION_SETTINGS:
     case P1DestinationName.READER_PROBE:
     case P1DestinationName.IMAGE_PROBE:
     case P1DestinationName.DATABASE_PROBE:
@@ -262,6 +268,7 @@ export function shouldReloadAfterAuthentication(destination: P1Destination): boo
     case P1DestinationName.READ_HISTORY:
     case P1DestinationName.COLLECTION:
     case P1DestinationName.COLLECTIONS:
+    case P1DestinationName.NOTIFICATION:
       return true;
     default:
       return false;
