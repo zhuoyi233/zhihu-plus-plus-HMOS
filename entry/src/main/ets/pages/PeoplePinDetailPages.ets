@@ -114,6 +114,12 @@ export struct PeopleDetailPage {
   private followController?: FollowController;
 
   aboutToAppear(): void {
+    // P3-7：返回栈重显（页面实例与状态保留）时 aboutToAppear 可能再次触发；
+    // 控制器仍存活时直接复用，避免重建控制器并重载内容导致滚动位置丢失。
+    if (this.controller !== undefined) {
+      this.controller.activate();
+      return;
+    }
     if (this.repository === undefined || this.session === undefined) {
       this.phase = ReadOnlyDetailPhase.ERROR;
       this.errorMessage = '用户主页数据源未配置';
@@ -619,6 +625,12 @@ export struct PinDetailPage {
   private blockingAction?: BlockingActionController;
 
   aboutToAppear(): void {
+    // P3-7：返回栈重显（页面实例与状态保留）时 aboutToAppear 可能再次触发；
+    // 控制器仍存活时直接复用，避免重建控制器并重载正文导致滚动位置丢失。
+    if (this.controller !== undefined) {
+      this.controller.activate();
+      return;
+    }
     if (this.repository === undefined || this.session === undefined) {
       this.phase = ReadOnlyDetailPhase.ERROR;
       this.errorMessage = '想法详情数据源未配置';
