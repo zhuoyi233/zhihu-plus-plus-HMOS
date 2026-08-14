@@ -514,7 +514,7 @@ struct ContentDetailPage {
               this.voteDownAction()
             }
           }
-          .borderRadius(22)
+          .borderRadius(24)
           .backgroundColor(this.voteState === ContentVoteState.NEUTRAL
             ? $r('app.color.brand_primary_container')
             : $r('app.color.brand_primary'))
@@ -526,12 +526,12 @@ struct ContentDetailPage {
           // 右组：收藏 + 评论 + 更多（对齐上游 bottomBar 右侧图标按钮）。
           Button({ type: ButtonType.Normal }) {
             SymbolGlyph($r('sys.symbol.bookmark'))
-              .fontSize(18)
+              .fontSize(22)
               .fontColor([$r('app.color.secondary_text')])
           }
           .id(`p3_${this.kind}_detail_favorite_bar`)
-          .width(44)
-          .height(44)
+          .width(50)
+          .height(50)
           .backgroundColor(Color.Transparent)
           .onClick((): void => {
             if (this.collectionRepository !== undefined && this.session !== undefined) {
@@ -542,14 +542,16 @@ struct ContentDetailPage {
           })
 
           Button({ type: ButtonType.Normal }) {
-            Row({ space: 4 }) {
+            Row({ space: 5 }) {
               SymbolGlyph($r('sys.symbol.message'))
-                .fontSize(18)
+                .fontSize(22)
                 .fontColor([$r('app.color.secondary_text')])
               Text(`${this.content?.value.commentCount ?? 0}`)
                 .fontSize($r('app.float.p1_body_font_size'))
+                .fontWeight(FontWeight.Medium)
                 .fontColor($r('app.color.secondary_text'))
             }
+            .padding({ left: 8, right: 8, top: 6, bottom: 6 })
           }
           .id(`p3_${this.kind}_detail_comment_bar`)
           .backgroundColor(Color.Transparent)
@@ -563,12 +565,12 @@ struct ContentDetailPage {
 
           Button({ type: ButtonType.Normal }) {
             SymbolGlyph($r('sys.symbol.more'))
-              .fontSize(18)
+              .fontSize(22)
               .fontColor([$r('app.color.secondary_text')])
           }
           .id(`p3_${this.kind}_detail_more`)
-          .width(44)
-          .height(44)
+          .width(50)
+          .height(50)
           .backgroundColor(Color.Transparent)
           .onClick((): void => {
             this.actionMenuShown = true;
@@ -812,18 +814,20 @@ struct ContentDetailPage {
   @Builder
   private voteUpAction() {
     Button({ type: ButtonType.Normal }) {
-      Row({ space: 4 }) {
+      Row({ space: 6 }) {
         SymbolGlyph($r('sys.symbol.arrow_up'))
-          .fontSize(16)
+          .fontSize(22)
           .fontColor([this.voteState === ContentVoteState.UP
             ? $r('app.color.on_brand')
             : $r('app.color.brand_primary')])
-        Text(this.voteState === ContentVoteState.UP ? `已赞同 ${this.voteupCount}` : `${this.voteupCount}`)
+        Text(`${this.voteupCount}`)
           .fontSize($r('app.float.p1_body_font_size'))
+          .fontWeight(FontWeight.Medium)
           .fontColor(this.voteState === ContentVoteState.UP
             ? $r('app.color.on_brand')
             : $r('app.color.brand_primary'))
       }
+      .padding({ left: 14, right: 14, top: 10, bottom: 10 })
     }
     .id(`p3_${this.kind}_vote_up`)
     .backgroundColor(Color.Transparent)
@@ -836,18 +840,14 @@ struct ContentDetailPage {
   @Builder
   private voteDownAction() {
     Button({ type: ButtonType.Normal }) {
-      Row({ space: 4 }) {
+      Row({ space: 6 }) {
         SymbolGlyph($r('sys.symbol.arrow_down'))
-          .fontSize(16)
+          .fontSize(22)
           .fontColor([this.voteState === ContentVoteState.DOWN
             ? $r('app.color.on_brand')
             : $r('app.color.brand_primary')])
-        if (this.voteState === ContentVoteState.DOWN) {
-          Text('已反对')
-            .fontSize($r('app.float.p1_body_font_size'))
-            .fontColor($r('app.color.on_brand'))
-        }
       }
+      .padding({ left: 14, right: 14, top: 10, bottom: 10 })
     }
     .id(`p3_${this.kind}_vote_down`)
     .backgroundColor(Color.Transparent)
