@@ -304,7 +304,8 @@ struct ContentDetailPage {
           .fontColor($r('app.color.primary_text'))
           .width('100%')
 
-        if (contentAuthorName(content).length > 0) {
+        // 作者行仅问题页保留（回答/文章的顶栏折叠作者行已含头像+名字+签名，避免重复）。
+        if (content.kind === ContentDetailKind.QUESTION && contentAuthorName(content).length > 0) {
           Text(contentAuthorLine(content))
             .id(`p2_${content.kind}_detail_author`)
             .fontSize($r('app.float.p1_body_font_size'))
