@@ -7,6 +7,7 @@ import {
   encodeCookieSession,
   parseCookieAssignments,
   parseCookieJarEntries,
+  parseWebCookieHeader,
   redactSensitiveText,
   removeExpiredCookies,
   safeSessionSummary,
@@ -127,6 +128,27 @@ export default function cookieSessionTest(): void {
       const summary = safeSessionSummary('restored', [{ name: 'd_c0', value: 'hidden' }]);
       expect(summary).assertEqual('restored: count=1, names=[d_c0]');
       expect(summary.includes('hidden')).assertFalse();
+    });
+
+    it('parsesWebCookieHeaderFormat', 0, () => {
+      // ArkWeb WebCookieManager.getCookie 返回 name=value; name2=value2 格式（对齐上游 readWebViewCookies）。
+      const cookies = parseWebCookieHeader('z_c0=abc123; d_c0=device-token; _xsrf=csrf');
+      expect(cookies.length).assertEqual(3);
+      expect(cookies[0].name).assertEqual('z_c0');
+      expect(cookies[0].value).assertEqual('abc123');
+      expect(cookies[1].name).assertEqual('d_c0');
+      expect(cookies[2].name).assertEqual('_xsrf');
+    });
+
+    it('usesLastWebCookieValueAndSkipsInvalidParts', 0, () => {
+      const cookies = parseWebCookieHeader(
+        'z_c0=old; bad; =novalue; z_c0=new; x=bad value\r\nInjected'
+      );
+      expect(cookies.length).assertEqual(1);
+      expect(cookies[0].name).assertEqual('z_c0');
+      expect(cookies[0].value).assertEqual('new');
+      expect(parseWebCookieHeader('').length).assertEqual(0);
+      expect(parseWebCookieHeader(`z_c0=${'x'.repeat(COOKIE_HEADER_MAX_LENGTH)}`).length).assertEqual(0);
     });
   });
 }

@@ -1,6 +1,19 @@
 import { ApplicationStateChangeCallback, common } from '@kit.AbilityKit';
-import { COOKIE_HEADER_MAX_LENGTH, getAppSessionOwner, ZhihuQrLoginClient } from 'data';
+import {
+  COOKIE_HEADER_MAX_LENGTH,
+  getAppSessionOwner,
+  SessionCookie,
+  ZhihuQrLoginClient
+} from 'data';
 import { completesUserAuthentication, LoginController, LoginPhase, LoginViewState } from './LoginController';
+import { PhoneLoginPage } from './PhoneLoginPage';
+import { RiskControlWebPage } from './RiskControlWebPage';
+import { WebLoginPage } from './WebLoginPage';
+
+/** 登录模式（对齐上游 LOGIN_MODE_PHONE=2 / LOGIN_MODE_QR=1 / LOGIN_MODE_WEB=0）。 */
+const LOGIN_MODE_PHONE = 0;
+const LOGIN_MODE_QR = 1;
+const LOGIN_MODE_WEB = 2;
 
 class LoginApplicationStateCallback extends ApplicationStateChangeCallback {
   private readonly controller: LoginController;
@@ -35,6 +48,9 @@ export struct LoginPage {
     logoutEnabled: false,
     retainedSessionRetryEnabled: false
   };
+  @State private selectedMode: number = LOGIN_MODE_PHONE;
+  @State private showWebLogin: boolean = false;
+  @State private riskCookies: Array<SessionCookie> = [];
   private controller?: LoginController;
   private applicationContext?: common.ApplicationContext;
   private applicationStateCallback?: LoginApplicationStateCallback;
@@ -92,6 +108,8 @@ export struct LoginPage {
     this.controller?.deactivate();
     this.controller = undefined;
     this.cookieInput = '';
+    this.showWebLogin = false;
+    this.riskCookies = [];
   }
 
   build() {
@@ -135,8 +153,97 @@ export struct LoginPage {
               .onClick(() => this.controller?.retryRetainedSession())
           }
 
+          Row({ space: $r('app.float.p1_spacing_small') }) {
+            this.modeTab(LOGIN_MODE_PHONE, '手机号')
+            this.modeTab(LOGIN_MODE_QR, '扫码')
+            this.modeTab(LOGIN_MODE_WEB, '网页')
+          }
+          .width('100%')
+          .padding(4)
+          .borderRadius($r('app.float.p1_card_radius'))
+          .backgroundColor($r('app.color.surface_background'))
+
+          if (this.selectedMode === LOGIN_MODE_PHONE) {
+            Column({ space: $r('app.float.p1_spacing_medium') }) {
+              PhoneLoginPage({
+                onCookiesCaptured: (cookies: Array<SessionCookie>): void => {
+                  this.controller?.loginWithCookies(cookies);
+                }
+              })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .width('100%')
+            .padding($r('app.float.p1_card_padding'))
+            .borderRadius($r('app.float.p1_card_radius'))
+            .backgroundColor($r('app.color.surface_background'))
+          }
+
+          if (this.selectedMode === LOGIN_MODE_QR) {
+            Column({ space: $r('app.float.p1_spacing_medium') }) {
+              Text('二维码登录')
+                .fontSize($r('app.float.p1_heading_font_size'))
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('app.color.primary_text'))
+              Text('请使用另一台已登录知乎的设备扫码。本机 Scan Kit 识码结果不会被当作登录完成。')
+                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+
+              if (this.viewState.qrLink !== undefined) {
+                QRCode(this.viewState.qrLink)
+                  .id('p2_login_qr_code')
+                  .width(220)
+                  .height(220)
+                  .color(Color.Black)
+                  .backgroundColor(Color.White)
+                  .accessibilityText('知乎登录二维码')
+              }
+
+              if (this.viewState.qrCancelable) {
+                Button('取消二维码登录')
+                  .id('p2_login_qr_cancel')
+                  .width('100%')
+                  .onClick(() => this.controller?.cancelQrLogin())
+              } else {
+                Button(this.viewState.phase === LoginPhase.QR_EXPIRED ? '刷新二维码' : '获取登录二维码')
+                  .id('p2_login_qr_start')
+                  .width('100%')
+                  .enabled(this.viewState.qrStartEnabled)
+                  .onClick(() => this.controller?.startQrLogin())
+              }
+            }
+            .alignItems(HorizontalAlign.Center)
+            .width('100%')
+            .padding($r('app.float.p1_card_padding'))
+            .borderRadius($r('app.float.p1_card_radius'))
+            .backgroundColor($r('app.color.surface_background'))
+          }
+
+          if (this.selectedMode === LOGIN_MODE_WEB) {
+            Column({ space: $r('app.float.p1_spacing_medium') }) {
+              Text('网页登录（备用）')
+                .fontSize($r('app.float.p1_heading_font_size'))
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('app.color.primary_text'))
+              Text('在应用内打开知乎网页版登录页，支持手机号/密码/邮箱等所有登录方式；登录成功后自动读回会话。')
+                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+              Button('打开网页登录')
+                .id('p3_web_login_open')
+                .width('100%')
+                .enabled(this.viewState.manualLoginEnabled)
+                .onClick((): void => {
+                  this.showWebLogin = true;
+                })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .width('100%')
+            .padding($r('app.float.p1_card_padding'))
+            .borderRadius($r('app.float.p1_card_radius'))
+            .backgroundColor($r('app.color.surface_background'))
+          }
+
           Column({ space: $r('app.float.p1_spacing_medium') }) {
-            Text('手动 Cookie 登录')
+            Text('手动 Cookie 登录（高级）')
               .fontSize($r('app.float.p1_heading_font_size'))
               .fontWeight(FontWeight.Medium)
               .fontColor($r('app.color.primary_text'))
@@ -167,54 +274,6 @@ export struct LoginPage {
           .borderRadius($r('app.float.p1_card_radius'))
           .backgroundColor($r('app.color.surface_background'))
 
-          Column({ space: $r('app.float.p1_spacing_medium') }) {
-            Text('二维码登录')
-              .fontSize($r('app.float.p1_heading_font_size'))
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.primary_text'))
-            Text('请使用另一台已登录知乎的设备扫码。本机 Scan Kit 识码结果不会被当作登录完成。')
-              .fontSize($r('app.float.p1_secondary_font_size'))
-              .fontColor($r('app.color.secondary_text'))
-
-            if (this.viewState.qrLink !== undefined) {
-              QRCode(this.viewState.qrLink)
-                .id('p2_login_qr_code')
-                .width(220)
-                .height(220)
-                .color(Color.Black)
-                .backgroundColor(Color.White)
-                .accessibilityText('知乎登录二维码')
-            }
-
-            if (this.viewState.riskControlUrl !== undefined) {
-              Text('需要完成知乎网络环境验证，当前页面不会自动打开网页：')
-                .fontSize($r('app.float.p1_secondary_font_size'))
-                .fontColor($r('app.color.secondary_text'))
-              Text(this.viewState.riskControlUrl)
-                .id('p2_login_risk_url')
-                .fontSize($r('app.float.p1_secondary_font_size'))
-                .fontColor($r('app.color.brand_primary'))
-            }
-
-            if (this.viewState.qrCancelable) {
-              Button('取消二维码登录')
-                .id('p2_login_qr_cancel')
-                .width('100%')
-                .onClick(() => this.controller?.cancelQrLogin())
-            } else {
-              Button(this.viewState.phase === LoginPhase.QR_EXPIRED ? '刷新二维码' : '获取登录二维码')
-                .id('p2_login_qr_start')
-                .width('100%')
-                .enabled(this.viewState.qrStartEnabled)
-                .onClick(() => this.controller?.startQrLogin())
-            }
-          }
-          .alignItems(HorizontalAlign.Center)
-          .width('100%')
-          .padding($r('app.float.p1_card_padding'))
-          .borderRadius($r('app.float.p1_card_radius'))
-          .backgroundColor($r('app.color.surface_background'))
-
           if (this.viewState.logoutEnabled) {
             Button('退出登录')
               .id('p2_login_logout')
@@ -230,11 +289,77 @@ export struct LoginPage {
       .height('100%')
       .align(Alignment.TopStart)
       .backgroundColor($r('app.color.page_background'))
+
+      if (this.showWebLogin) {
+        WebLoginPage({
+          onCookiesCaptured: (cookies: Array<SessionCookie>): void => {
+            this.showWebLogin = false;
+            this.controller?.loginWithCookies(cookies);
+          },
+          onBack: (): void => {
+            this.showWebLogin = false;
+          }
+        })
+          .width('100%')
+          .height('100%')
+      }
+
+      if (this.viewState.phase === LoginPhase.RISK_CONTROL) {
+        Column() {
+          RiskControlWebPage({
+            url: this.viewState.riskControlUrl ?? '',
+            onCookiesChanged: (cookies: Array<SessionCookie>): void => {
+              this.riskCookies = cookies;
+            },
+            onDismiss: (): void => {
+              this.controller?.cancelQrLogin();
+            }
+          })
+            .layoutWeight(1)
+            .width('100%')
+
+          Row({ space: $r('app.float.p1_spacing_medium') }) {
+            Button('完成验证后继续扫码')
+              .id('p3_risk_continue')
+              .layoutWeight(1)
+              .onClick((): void => {
+                this.controller?.continueQrAfterRiskControl(this.riskCookies);
+              })
+            Button('取消')
+              .id('p3_risk_abort')
+              .onClick((): void => {
+                this.controller?.cancelQrLogin();
+              })
+          }
+          .width('100%')
+          .padding($r('app.float.p1_card_padding'))
+          .backgroundColor($r('app.color.surface_background'))
+        }
+        .width('100%')
+        .height('100%')
+      }
     }
     .id('p2_login_top_start_container')
     .width('100%')
     .height('100%')
     .alignContent(Alignment.TopStart)
     .backgroundColor($r('app.color.page_background'))
+  }
+
+  @Builder
+  modeTab(index: number, label: string) {
+    Text(label)
+      .id(index === LOGIN_MODE_PHONE ? 'p3_login_mode_phone' :
+        index === LOGIN_MODE_QR ? 'p3_login_mode_qr' : 'p3_login_mode_web')
+      .fontSize($r('app.float.p1_body_font_size'))
+      .fontColor(this.selectedMode === index ? Color.White : $r('app.color.secondary_text'))
+      .textAlign(TextAlign.Center)
+      .layoutWeight(1)
+      .padding({ top: 8, bottom: 8 })
+      .borderRadius(18)
+      .backgroundColor(this.selectedMode === index ? $r('app.color.brand_primary') : Color.Transparent)
+      .onClick((): void => {
+        this.selectedMode = index;
+      })
   }
 }

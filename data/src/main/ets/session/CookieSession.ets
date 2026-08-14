@@ -125,6 +125,40 @@ export function parseCookieJarEntries(rawJar: string): Array<SessionCookie> {
   return cookies;
 }
 
+/**
+ * 解析 WebView/ArkWeb 返回的 cookie 头（`name=value; name2=value2`），
+ * 对齐上游 readWebViewCookies（Android CookieManager.getCookie 的格式）。
+ */
+export function parseWebCookieHeader(rawHeader: string): Array<SessionCookie> {
+  if (rawHeader.length === 0 || rawHeader.length > COOKIE_HEADER_MAX_LENGTH) {
+    return [];
+  }
+  const cookies: Array<SessionCookie> = [];
+  const parts = rawHeader.split(';');
+  if (parts.length > COOKIE_FIELD_MAX_COUNT) {
+    return [];
+  }
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index].trim();
+    const separator = part.indexOf('=');
+    if (separator <= 0) {
+      continue;
+    }
+    const name = part.substring(0, separator).trim();
+    const value = part.substring(separator + 1).trim();
+    if (!isValidCookieName(name) || !isSafeCookieValue(value)) {
+      continue;
+    }
+    const existingIndex = cookies.findIndex((cookie: SessionCookie) => cookie.name === name);
+    if (existingIndex >= 0) {
+      cookies[existingIndex] = { name: name, value: value };
+    } else {
+      cookies.push({ name: name, value: value });
+    }
+  }
+  return cookies;
+}
+
 export function removeExpiredCookies(cookies: Array<SessionCookie>, now: number): Array<SessionCookie> {
   return cookies.filter((cookie: SessionCookie) => cookie.expiresAt === undefined || cookie.expiresAt > now);
 }

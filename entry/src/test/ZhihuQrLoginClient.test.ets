@@ -157,6 +157,32 @@ export default function zhihuQrLoginClientTest(): void {
       expect(JSON.stringify(serverFactory.requests[5].headers).includes('must-not-publish')).assertFalse();
     });
 
+    it('mergesRiskControlCookiesAndResumesPollingWithSameToken', 0, async () => {
+      const factory = new ScriptedQrTransportFactory();
+      queueSuccessfulStart(factory);
+      factory.responses.push(response(403, '{"error":{"code":40352,"need_login":true}}'));
+      const client = new ZhihuQrLoginClient(factory);
+      await client.start([], 1000000);
+      const risk = await client.pollOnce(1000500);
+      expect(risk.status).assertEqual(QrLoginStatus.RISK_CONTROL);
+      // 风控状态保留二维码与有效期，验证完成后继续轮询同一 token（对齐上游）。
+      expect(risk.qrLink).assertEqual(
+        'https://www.zhihu.com/account/scan/login/test-token?/api/login/qrcode');
+
+      client.mergeCookiesAfterRiskControl([
+        { name: '_xsrf', value: 'risk-xsrf' },
+        { name: 'd_c0', value: 'risk-device' }
+      ]);
+      expect(client.getState().status).assertEqual(QrLoginStatus.READY);
+
+      factory.responses.push(response(200, '{"status":1,"success":true}'));
+      const resumed = await client.pollOnce(1001000);
+      expect(resumed.status).assertEqual(QrLoginStatus.WAITING_CONFIRMATION);
+      expect(factory.requests[5].url).assertEqual(`${ZHIHU_QR_CODE_URL}/test-token/scan_info`);
+      expect(factory.requests[5].headers.Cookie?.includes('_xsrf=risk-xsrf')).assertTrue();
+      expect(factory.requests[5].headers.Cookie?.includes('d_c0=risk-device')).assertTrue();
+    });
+
     it('normalizesTtlAndAbsoluteDeadlines', 0, () => {
       expect(normalizeQrDeadline(undefined, 1000000)).assertEqual(1120000);
       expect(normalizeQrDeadline(600, 2000000000000)).assertEqual(2000000600000);

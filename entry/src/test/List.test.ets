@@ -48,6 +48,7 @@ import commentStateTest from './CommentState.test';
 import notificationRepositoryTest from './NotificationRepository.test';
 import notificationStateTest from './NotificationState.test';
 import backStackStateTest from './BackStackState.test';
+import phoneLoginCryptoTest from './PhoneLoginCrypto.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -100,4 +101,5 @@ export default function testsuite(): void {
   notificationRepositoryTest();
   notificationStateTest();
   backStackStateTest();
+  phoneLoginCryptoTest();
 }

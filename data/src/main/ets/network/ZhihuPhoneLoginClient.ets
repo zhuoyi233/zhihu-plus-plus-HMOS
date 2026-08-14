@@ -488,6 +488,11 @@ export class ZhihuPhoneLoginClient {
     if (useMobileHeaders) {
       headers['User-Agent'] = ZHIHU_ANDROID_PHONE_LOGIN_USER_AGENT;
       headers['Authorization'] = this.authorization;
+      // 对齐上游 applyMobileHeaders 的 accept + setEncryptedForm 的 form-urlencoded：
+      // 不设 Content-Type 时 NetworkKit 默认 text/plain，服务端会把密文当原始表单解析，
+      // 导致 auth/digits 返回 "miss arg username"（未走解密分支）。
+      headers['Accept'] = 'application/json';
+      headers['Content-Type'] = 'application/x-www-form-urlencoded';
       const cookieHeader = this.cookiesToHeader();
       if (cookieHeader.length > 0) {
         headers['Cookie'] = cookieHeader;

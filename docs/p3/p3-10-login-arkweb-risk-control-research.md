@@ -3,7 +3,7 @@
 > 研究日期：2026-08-15
 > 依据：Android 上游 `shared/.../login/QrLogin.kt`、`app/.../LoginActivity.kt`、
 > `app/.../WebviewActivity.kt`；HarmonyOS `@ohos.web.webview` / `web.d.ts` API
-> 状态：研究完成（未实现）
+> 状态：已实现（2026-08-15 设备实测通过）
 
 ## 一、上游登录实现（Android Zhihu++）
 
@@ -232,3 +232,43 @@ struct RiskControlWebPage {
 5. `data` 新增 `parseWebCookieHeader`（`name=value;` → SessionCookie）；
 6. Hypium 测试：加密器向量、HMAC、手机号状态机、cookie 头解析、风控状态机；
 7. 设备实测：三模式登录 + 风控时 ArkWeb 完成滑块验证后成功。
+
+## 五、实现记录（2026-08-15，commit 待写）
+
+已完成清单 1-7，设备实测（ZhihuPlus_API26 模拟器）结果：
+
+| 项 | 结果 |
+| --- | --- |
+| 登录页三模式切换（手机号/扫码/网页） | ✅ 标签栏切换正常，手机号卡片默认展示 |
+| 手机号登录协议（加密器 + HMAC + 四步请求） | ✅ `/udid` → `udid_guest`(200) → `/captcha`(200) → `auth/digits`；本 IP 触发服务端短信风控（`ERR_SEND_SMS_VERIFY_DIGITS`，环境问题），协议链路本身正确 |
+| 扫码 → 风控 → ArkWeb 验证页 | ✅ 40352 → `RISK_CONTROL` → ArkWeb 加载真实 `www.zhihu.com/account/unhuman?...` 验证页（含"开始验证"按钮）+ cookie 回传 + "完成验证后继续扫码" |
+| 网页登录（ArkWeb signin） | ✅ `https://www.zhihu.com/signin?next=%2F` 加载成功（本 IP 显示 unhuman 横幅，环境问题） |
+| 手动 Cookie 登录回归 | ✅ 登录后首页推荐流正常加载 |
+
+### 设备实测发现并修复的问题
+
+1. **HMAC 平台限制**：`cryptoFramework` 的 `createSymKeyGenerator('HMAC|SHA1')` 要求密钥
+   长度**必须等于哈希长度（20 字节）**，而上游 secret（36/32 字节）不满足；
+   不带哈希的 `'HMAC'` 生成器又无法配合 `createMac('HMAC|SHA1')`（报
+   `Failed to get mac params`）。→ **改为纯 ArkTS 实现 RFC 2104 HMAC-SHA1**
+   （`data/.../ZhihuHmacSha1.ets`），密钥任意长度（≤64 直接用，>64 先 SHA1），
+   单测环境可运行（RFC 2202 向量通过）。
+2. **Content-Type 缺失**：`http.request` 的字符串 `extraData` 默认 `text/plain`，
+   服务端把密文当原始表单解析 → `auth/digits` 返回 `miss arg username`；
+   udid_guest 端点不受影响。→ 补 `Content-Type: application/x-www-form-urlencoded`
+   + `Accept: application/json`（对齐上游 `setEncryptedForm`/`applyMobileHeaders`）。
+3. **风控状态丢失二维码**：`classifyPollResponse` 风控分支未保留 `qrLink`/`expiresAt`，
+   风控验证完成后恢复轮询会丢失二维码 → 保留并新增 `mergeCookiesAfterRiskControl`。
+4. **`setUserAgentForHosts` 是静态方法**（`webview.WebviewController.setUserAgentForHosts`），
+   不能挂在实例上；`toCookieHeader` 的 `now` 参数必填。
+5. **ArkWeb API 名**：清 cookie 用 `WebCookieManager.clearAllCookiesSync()`（无
+   `removeAllCookiesSync`）。
+6. **`@Builder` 内浮层**：风控页/网页登录页用全屏 Stack 覆盖 + 顶部浮动返回按钮。
+
+### 已知环境限制（非代码问题）
+
+- 当前模拟器 IP 触发知乎风控：手机号短信（`ERR_SEND_SMS_VERIFY_DIGITS`）、扫码轮询
+  （40352）、网页登录（unhuman 横幅）都受影响；风控页 ArkWeb 内可完成"开始验证"
+  滑块（未实测完成，验证后点"完成验证后继续扫码"恢复轮询）。
+- host 侧 UnitTestArkTS 的 `util.Base64Helper` 是空桩（`encodeToStringSync` 返回空），
+  加密器向量测试在设备/`aa test` 运行时才执行真实断言（`hostBase64Capable` 守卫）。

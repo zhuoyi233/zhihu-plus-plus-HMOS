@@ -65,7 +65,10 @@ export interface QrLoginGateway {
   start(initialCookies?: Array<SessionCookie>, now?: number): Promise<QrLoginState>;
   pollOnce(now?: number): Promise<QrLoginState>;
   cancel(): void;
+  getState(): QrLoginState;
   getCandidateCookies(): Array<SessionCookie>;
+  /** 风控验证完成后合并 ArkWeb 回传的 cookie 并恢复轮询（仅 RISK_CONTROL 状态生效）。 */
+  mergeCookiesAfterRiskControl(cookies: Array<SessionCookie>): void;
 }
 
 export interface QrLoginHeaders {
@@ -529,6 +532,24 @@ export class ZhihuQrLoginClient implements QrLoginGateway {
     return this.state.status === QrLoginStatus.CREDENTIAL_READY ? copySessionCookies(this.cookies) : [];
   }
 
+  /**
+   * 风控验证完成后合并 ArkWeb 风控页回传的 cookie，并恢复轮询（保留 token/有效期）。
+   * 仅当当前处于 RISK_CONTROL 状态时生效；其余状态直接忽略（对齐上游
+   * SharedQrLoginPane 风控完成后 refreshKey += 1 继续轮询同一 token）。
+   */
+  mergeCookiesAfterRiskControl(cookies: Array<SessionCookie>): void {
+    if (this.state.status !== QrLoginStatus.RISK_CONTROL || this.token === undefined || this.expiresAt === undefined) {
+      return;
+    }
+    this.cookies = mergeCookies(this.cookies, cookies);
+    this.state = {
+      status: QrLoginStatus.READY,
+      message: '验证完成，等待扫码',
+      qrLink: this.state.qrLink,
+      expiresAt: this.expiresAt
+    };
+  }
+
   getState(): QrLoginState {
     return {
       status: this.state.status,
@@ -618,6 +639,9 @@ export class ZhihuQrLoginClient implements QrLoginGateway {
         state: {
           status: QrLoginStatus.RISK_CONTROL,
           message: '知乎要求完成网络环境验证',
+          // 保留二维码与有效期，风控验证完成后继续轮询同一 token（对齐上游）。
+          qrLink: this.state.qrLink,
+          expiresAt: this.state.expiresAt,
           riskControlUrl: safeRiskControlUrl(redirect instanceof JsonStringValue ? redirect.value : undefined)
         },
         cookies: copySessionCookies(initialCookies)

@@ -166,6 +166,46 @@ export class LoginController {
     }
   }
 
+  /** 手机号/网页登录捕获到会话 cookie 后统一验证入口（对齐上游 finalizeLoginFromCookies）。 */
+  async loginWithCookies(cookies: Array<SessionCookie>): Promise<void> {
+    if (!this.canStartUserAction() || cookies.length === 0) {
+      return;
+    }
+    const generation = this.beginUserAction();
+    this.update(this.viewState(LoginPhase.VERIFYING_COOKIE, '正在验证登录会话'));
+    const operation = this.session.beginLoginWithCookies(cookies);
+    this.activeSessionOperation = operation;
+    try {
+      const result = await operation.result;
+      if (this.isCurrent(generation)) {
+        this.update(this.sessionViewState(result));
+      }
+    } catch (_error) {
+      if (this.isCurrent(generation)) {
+        this.update(this.viewState(LoginPhase.ERROR, '登录会话验证失败，请稍后重试'));
+      }
+    } finally {
+      this.finishSessionOperation(operation);
+    }
+  }
+
+  /** 风控验证完成后继续扫码（不取消二维码客户端，仅合并回传 cookie 后恢复轮询）。 */
+  async continueQrAfterRiskControl(cookies: Array<SessionCookie>): Promise<void> {
+    if (!this.active || this.foreground === false || this.state.phase !== LoginPhase.RISK_CONTROL) {
+      return;
+    }
+    const generation = this.generation + 1;
+    this.generation = generation;
+    this.cancelScheduledPoll();
+    this.cancelOwnedSessionVerification();
+    this.qrClient.mergeCookiesAfterRiskControl(cookies);
+    if (!this.isCurrent(generation)) {
+      return;
+    }
+    const qrState = this.qrClient.getState();
+    await this.applyQrState(qrState, generation);
+  }
+
   async startQrLogin(): Promise<void> {
     if (!this.canStartUserAction()) {
       return;

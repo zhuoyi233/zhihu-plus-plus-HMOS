@@ -156,15 +156,18 @@ class FakeSessionRepository implements LoginSessionGateway {
 
 class FakeQrClient implements QrLoginGateway {
   startState: QrLoginState = qrState(QrLoginStatus.READY, '请扫码', 'https://www.zhihu.com/qr');
+  currentState: QrLoginState = qrState(QrLoginStatus.IDLE, '未开始');
   startDeferred?: Deferred<QrLoginState>;
   readonly pollStates: Array<QrLoginState> = [];
   candidateCookies: Array<SessionCookie> = [];
   startCount: number = 0;
   pollCount: number = 0;
   cancelCount: number = 0;
+  mergedRiskCookies: number = 0;
 
   start(_initialCookies?: Array<SessionCookie>, _now?: number): Promise<QrLoginState> {
     this.startCount += 1;
+    this.currentState = this.startState;
     return this.startDeferred?.promise ?? Promise.resolve(this.startState);
   }
 
@@ -178,8 +181,24 @@ class FakeQrClient implements QrLoginGateway {
     this.cancelCount += 1;
   }
 
+  getState(): QrLoginState {
+    return this.currentState;
+  }
+
   getCandidateCookies(): Array<SessionCookie> {
     return this.candidateCookies.slice();
+  }
+
+  mergeCookiesAfterRiskControl(cookies: Array<SessionCookie>): void {
+    this.mergedRiskCookies += cookies.length;
+    if (this.currentState.status === QrLoginStatus.RISK_CONTROL) {
+      this.currentState = {
+        status: QrLoginStatus.READY,
+        message: '验证完成，等待扫码',
+        qrLink: this.currentState.qrLink,
+        expiresAt: this.currentState.expiresAt
+      };
+    }
   }
 }
 
@@ -324,6 +343,50 @@ export default function loginControllerTest(): void {
       expect(risk.snapshot().phase).assertEqual(LoginPhase.RISK_CONTROL);
       expect(risk.snapshot().riskControlUrl).assertEqual('https://www.zhihu.com/account/risk_control/');
       expect(riskScheduler.tasks.length).assertEqual(0);
+    });
+
+    it('continuesQrAfterRiskControlMergesCookiesAndResumesPolling', 0, async () => {
+      const scheduler = new FakePollScheduler();
+      const qr = new FakeQrClient();
+      qr.startState = {
+        status: QrLoginStatus.RISK_CONTROL,
+        message: '需要验证网络环境',
+        qrLink: 'https://www.zhihu.com/qr',
+        riskControlUrl: 'https://www.zhihu.com/account/risk_control/'
+      };
+      const controller = new LoginController(new FakeSessionRepository(), qr, undefined, scheduler);
+      controller.activate();
+      await controller.startQrLogin();
+      expect(controller.snapshot().phase).assertEqual(LoginPhase.RISK_CONTROL);
+
+      await controller.continueQrAfterRiskControl([
+        { name: 'z_c0', value: 'verified-token' },
+        { name: 'd_c0', value: 'device-token' }
+      ]);
+      expect(qr.mergedRiskCookies).assertEqual(2);
+      expect(controller.snapshot().phase).assertEqual(LoginPhase.QR_READY);
+      expect(controller.snapshot().qrLink).assertEqual('https://www.zhihu.com/qr');
+      expect(scheduler.tasks.length).assertEqual(1);
+    });
+
+    it('verifiesCapturedLoginCookiesThroughController', 0, async () => {
+      const session = new FakeSessionRepository();
+      const controller = new LoginController(session, new FakeQrClient());
+      controller.activate();
+
+      const cookies: Array<SessionCookie> = [
+        { name: 'z_c0', value: 'web-token' },
+        { name: 'd_c0', value: 'device-token' }
+      ];
+      const login = controller.loginWithCookies(cookies);
+      expect(controller.snapshot().phase).assertEqual(LoginPhase.VERIFYING_COOKIE);
+      await login;
+
+      expect(session.lastQrCookies.length).assertEqual(2);
+      expect(session.lastQrCookies[0].name).assertEqual('z_c0');
+      expect(session.lastQrCookies[0].value).assertEqual('web-token');
+      expect(controller.snapshot().phase).assertEqual(LoginPhase.AUTHENTICATED);
+      expect(completesUserAuthentication(LoginPhase.VERIFYING_COOKIE, controller.snapshot().phase)).assertTrue();
     });
 
     it('cancelsNetworkAndRejectsLateQrResultWhenBackgroundedOrLeft', 0, async () => {
