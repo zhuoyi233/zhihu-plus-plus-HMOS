@@ -7,12 +7,54 @@
 
 ## 一、上游登录实现（Android Zhihu++）
 
-### 1.1 登录方式
+> 已拉取最新上游（`zly2006/zhihu-plus-plus@0023163d`，2026-08-15）核对：
+> 登录入口 `LoginActivity.kt` 提供**三种模式**（`LoginModeScreen` 切换，
+> `LOGIN_MODE_PHONE = 2` 默认 / `LOGIN_MODE_QR = 1` / `LOGIN_MODE_WEB = 0`）：
+> **手机号登录（独立协议）、扫码登录、网页登录**。
 
-上游登录入口 `LoginActivity.kt` 提供三种模式（`LoginModeScreen`）：
-**二维码登录（主）、手动 Cookie 登录、游客模式**。
+| 模式 | 实现 | 说明 |
+| --- | --- | --- |
+| **手机号登录**（默认） | `PhoneLoginPane` + `ZhihuPhoneLoginClient`（原生协议） | 见 1.2 |
+| **扫码登录** | 二维码轮询（`SharedQrLoginPane`） | 见 1.3 |
+| **网页登录** | WebView 加载 `https://www.zhihu.com/signin` | 见 1.4 |
 
-二维码登录由 `shared/QrLogin.kt` 的 `SharedQrLoginPane` 驱动，流程：
+### 1.2 手机号登录（最新上游新增，独立协议）
+
+`PhoneLoginPane.kt`（UI）+ `ZhihuPhoneLoginClient.kt`（协议，`api.zhihu.com`）：
+
+1. **设备信息**：`ZhihuPhoneLoginDeviceInfo`（时区偏移、安装时间、通知/蓝牙开关、
+   CPU/内存/存储、机型等 24 项）→ `formParameters()`。
+2. **ensureGuestToken**（初始化访客凭证）：
+   - 若缺 `d_c0`：`POST https://www.zhihu.com/udid` 获取网页设备 cookie；
+   - `POST https://api.zhihu.com/api/account/prod/init/udid_guest`：body 为
+     `ZhihuMessageBodyEncryptor.encrypt(form)`（**自定义分组加密**：swapPairs +
+     XOR mask + IV + 多轮置换表），headers 带 `x-app-id`/`x-sign-version`/`x-req-ts`/
+     `x-req-signature`（HMAC-SHA1：`sha1(CLOUD_APP_SECRET, CLOUD_APP_ID + "2" + form + ts)`）。
+   - 返回 `{udid, guest:{access_token, cookie}}` → 设置 `authorization` 与 cookies。
+3. **requestDigits**（发送短信验证码）：
+   - `GET /captcha` 查是否需图形验证码；需要 → 返回 `CaptchaRequired(imgBase64)`；
+   - 否则 `POST /api/account/prod/auth/digits`（加密 form：`username`/`client_id`）；
+     错误码 `120001/120002` → 验证码无效；`120005` → 重新查 captcha 后重试。
+4. **图形验证码**：`PUT /captcha` 获取图片（base64）；`POST /captcha` 验证
+   `{input_text}`。
+5. **signIn**：`POST /api/account/prod/sign_in`（加密 form：`client_id`/`digits`/
+   `grant_type=digits`/`signature`/`source`/`timestamp`/`username`），signature =
+   `hmacSha1Hex(MOBILE_CLIENT_SECRET, "digits8d5227e0aaaa4797a763ac64e0c3b8com.zhihu.android{ts}")`；
+   返回 `{access_token, refresh_token, expires_in, cookie}` → 合并 cookies。
+6. **headers**：Android 知乎 UA（`com.zhihu.android/Futureve/11.4.0 ...`）、
+   `Authorization: oauth 8d5227e0aaaa4797a763ac64e0c3b8`、`x-udid`、`x-api-version=3.0.93`、
+   `x-app-*` 系列、`x-zse-93=101_1_1.0`。
+
+> 常量：`MOBILE_CLIENT_ID=8d5227e0aaaa4797a763ac64e0c3b8`、
+> `MOBILE_CLIENT_SECRET=ecbefbf6b17e47ecb9035107866380`、`CLOUD_APP_ID=1355`、
+> `CLOUD_APP_SECRET=dd49a835-56e7-4a0f-95b5-efd51ea5397f`。
+
+**HMAC-SHA1** 为 expect/actual（Android 平台实现）；ArkTS 可用
+`@ohos.security.cryptoFramework` 的 HMAC 等价实现。
+
+### 1.3 扫码登录
+
+二维码登录由 `shared/account/QrLogin.kt` 的 `SharedQrLoginPane` 驱动，流程：
 
 1. **prefetchQrLoginContext**：预热登录上下文——
    - `GET https://www.zhihu.com/signin`（带桌面 headers）
@@ -34,7 +76,20 @@
 `x-requested-with: fetch`、`Origin`、`x-xsrftoken`（来自 `_xsrf` cookie）、轮询时带
 `x-zse-93`。
 
-### 1.2 风控处理（核心：WebView 完成非人类验证）
+### 1.4 网页登录（备用）
+
+`configureWebLogin`（LoginActivity.kt:150）——WebView 加载 `https://www.zhihu.com/signin`，
+知乎登录页内含手机号+验证码、手机号+密码、邮箱等所有方式，作为手机号/扫码的备用：
+
+1. `javaScriptEnabled = true`，`setAcceptThirdPartyCookies(webView, true)`
+2. **清空 WebView cookie**（`removeAllCookies`，避免残留态）→ `loadUrl(ZHIHU_SIGNIN_URL)`
+3. `shouldOverrideUrlLoading`：到达 `https://www.zhihu.com/` 时切换 UA 为
+   `AccountData.ANDROID_USER_AGENT`；拦截 `zhihu://` scheme
+4. **`onPageFinished` 且 url == 首页**：`CookieManager.getCookie(HOME_URL)`
+   → `parseCookieAssignments` → `finalizeLoginFromCookies`（校验+持久化）
+5. 登录成功标志 = 页面跳回知乎首页（登录后知乎自动跳首页）
+
+### 1.5 风控处理（核心：WebView 完成非人类验证）
 
 `SharedQrLoginPane` 检测到风控（403/40352）后，切换到 `riskControlContent`
 （平台注入的 Composable）。Android 实现（`LoginActivity.kt:338`）：
@@ -148,19 +203,32 @@ struct RiskControlWebPage {
 5. **模块依赖**：`@kit.ArkWeb` 需在 entry `module.json5` 或 oh-package 声明；
    模拟器 API 26 支持 ArkWeb（Web 组件自 API 9 起）。
 
-## 三、结论
+## 三、结论（三种模式落地可行性）
 
-- **上游登录** = 二维码轮询（HTTP）+ 风控时**系统 WebView 加载风控页 + cookie 注入回传**。
-- **HarmonyOS ArkWeb 完全具备**实现同样方案的能力（WebCookieManager/runJavaScript/
-  UA/onPageEnd），可直接按 2.2 方案落地，解决当前环境「QR 轮询 40352 unhuman 风控」
-  无法完成的非人类验证问题。
+| 模式 | 上游实现 | 鸿蒙落地 | 可行性 | 主要工作 |
+| --- | --- | --- | --- | --- |
+| **手机号登录** | `ZhihuPhoneLoginClient` 原生协议（`api.zhihu.com`） | 纯 ArkTS HTTP 即可，无需 WebView | ✅ **完全可落地** | 移植协议：自定义分组加密 `ZhihuMessageBodyEncryptor`（纯字节运算）、HMAC-SHA1（`cryptoFramework`）、访客初始化/短信/验证码/sign_in 四步、设备信息采集 |
+| **扫码登录** | `SharedQrLoginPane` 二维码轮询 | 鸿蒙已有 `ZhihuQrLoginClient`（P2 已实现） | ✅ **已落地**（风控待接） | 已有：取码/轮询/过期/成功；待接：风控 → ArkWeb 验证页 |
+| **网页登录** | WebView 加载 signin 页，`onPageFinished` 读 cookie | ArkWeb 组件 + `WebCookieManager` | ✅ **完全可落地** | 新增 `WebLoginPage`（ArkWeb 全屏 + cookie 读回 + 跳首页判定） |
+
+**风控验证（三种模式共用）**：`RISK_CONTROL` 状态 → `RiskControlWebPage`（ArkWeb 加载
+风控页，cookie 注入/回传）→ 「完成验证后继续」→ 重试原流程。
+
+- **上游登录** = 手机号原生协议 + 二维码轮询 + WebView 网页登录三选一；
+  风控时**系统 WebView 加载风控页 + cookie 注入回传**。
+- **HarmonyOS 完全具备**三模式落地能力：
+  - 手机号：ArkTS 可实现自定义加密 + HMAC（`cryptoFramework`）；
+  - 扫码：`ZhihuQrLoginClient` 已实现；
+  - 网页：ArkWeb（`WebCookieManager`/`onPageEnd`/UA）可复刻；
+  - 风控：ArkWeb 验证页解决当前环境「40352 unhuman」无法完成非人类验证的问题。
 
 ## 四、待实施清单（如获批准）
 
-1. `entry` 新增 `RiskControlWebPage`（ArkWeb 风控验证页，cookie 注入/回传）；
-2. `LoginPage.ets` 接入 `RISK_CONTROL` 状态 → 渲染风控页 → 「完成验证后继续扫码」；
-3. `data` 新增 `parseWebCookieHeader`（`name=value;` 格式 → SessionCookie，对齐
-   `parseCookieJarEntries` 的 jar 格式分支）；
-4. 可选：通用 `WebPage`（App 内嵌浏览，对齐 `WebviewActivity.kt`）；
-5. Hypium 测试：cookie 头解析、白名单校验、状态机（RISK_CONTROL → 继续扫码）；
-6. 设备实测：QR 风控时用 ArkWeb 完成滑块验证后扫码登录成功。
+1. `data` 移植 `ZhihuPhoneLoginClient` 协议（加密器/HMAC/设备信息/四步请求）
+   + `PhoneLoginPage`（手机号/验证码/图形验证码/协议勾选）；
+2. `entry` 新增 `RiskControlWebPage`（ArkWeb 风控验证页，cookie 注入/回传）；
+3. `entry` 新增 `WebLoginPage`（ArkWeb 网页登录，对齐 `configureWebLogin`）；
+4. `LoginPage.ets` 接入三模式切换（手机号/扫码/网页）+ `RISK_CONTROL` 状态 → 风控页；
+5. `data` 新增 `parseWebCookieHeader`（`name=value;` → SessionCookie）；
+6. Hypium 测试：加密器向量、HMAC、手机号状态机、cookie 头解析、风控状态机；
+7. 设备实测：三模式登录 + 风控时 ArkWeb 完成滑块验证后成功。
