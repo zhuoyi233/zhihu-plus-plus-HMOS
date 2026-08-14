@@ -125,6 +125,16 @@ export default function notificationRepositoryTest(): void {
       expect(isNotificationCursorUrl(NotificationCategory.DEFAULT, longCursor)).assertFalse();
     });
 
+    it('acceptsAndNormalizesUpstreamHttpCursor', 0, () => {
+      const httpCursor = 'http://www.zhihu.com/api/v4/notifications/v2/default?limit=20&offset=20';
+      expect(isNotificationCursorUrl(NotificationCategory.DEFAULT, httpCursor)).assertTrue();
+      const followHttp = 'http://www.zhihu.com/api/v4/notifications/v2/follow?limit=20&offset=0';
+      expect(isNotificationCursorUrl(NotificationCategory.FOLLOW, followHttp)).assertTrue();
+      expect(isNotificationCursorUrl(NotificationCategory.DEFAULT, followHttp)).assertFalse();
+      const normalized = buildNotificationListUrl(NotificationCategory.DEFAULT, httpCursor);
+      expect(normalized).assertEqual('https://www.zhihu.com/api/v4/notifications/v2/default?limit=20&offset=20');
+    });
+
     it('loadsNotificationPageWithSessionAndZseAndDeduplicates', 0, async () => {
       const factory = new NotificationTransportFactory([{ statusCode: 200, body: NOTIFICATION_PAGE_JSON }]);
       const repository = new DefaultNotificationRepository(

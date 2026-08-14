@@ -45,7 +45,8 @@ export function buildNotificationListUrl(category: NotificationCategory, cursor?
   if (!isNotificationCursorUrl(category, cursor)) {
     throw new NotificationRepositoryFailure(NotificationRepositoryFailureKind.INVALID_CURSOR);
   }
-  return cursor;
+  // 上游 zhihu 返回的游标可能是 http://，统一规范化为 https:// 再请求（对齐上游 .replace("http://", "https://")）。
+  return cursor.startsWith('http://') ? `https://${cursor.substring('http://'.length)}` : cursor;
 }
 
 export function isNotificationCursorUrl(category: NotificationCategory, cursor: string): boolean {
@@ -53,8 +54,9 @@ export function isNotificationCursorUrl(category: NotificationCategory, cursor: 
     /[\u0000-\u0020\u007F-\uFFFF]/.test(cursor)) {
     return false;
   }
+  const normalized = cursor.startsWith('http://') ? `https://${cursor.substring('http://'.length)}` : cursor;
   const prefix = `${NOTIFICATION_ENTRY_BASE_URL}/${notificationCategoryInfo(category).entryName}?`;
-  return cursor.startsWith(prefix) && !cursor.includes('#');
+  return normalized.startsWith(prefix) && !normalized.includes('#');
 }
 
 export function buildNotificationUnreadUrl(): string {
@@ -118,28 +120,7 @@ export class DefaultNotificationRepository implements NotificationRepository {
       throw new NotificationRepositoryFailure(NotificationRepositoryFailureKind.CANCELLED);
     }
     const page = decodeNotificationPage(response.body, category);
-    const requested = cursor === undefined ? new Set<string>() : cloneStringSet(this.requestedCursors);
-    const delivered = cursor === undefined
-      ? new Set<string>()
-      : cloneStringSet(this.deliveredIdentities);
-    requested.add(requestUrl);
-    const items = page.items.filter((item: NotificationItem): boolean => {
-      const identity = notificationItemIdentity(item);
-      if (delivered.has(identity)) {
-        return false;
-      }
-      delivered.add(identity);
-      return true;
-    });
-    const next = page.cursor.next;
-    const cursorLoops = (next === undefined && !page.cursor.isEnd) || next === requestUrl ||
-      (next !== undefined && requested.has(next));
-    this.requestedCursors = requested;
-    this.deliveredIdentities = delivered;
-    return {
-      items: items,
-      cursor: cursorLoops ? terminalCursor(page.cursor) : page.cursor
-    };
+    return this.postDecode(page, cursor, requestUrl);
   }
 
   async getUnreadCounts(): Promise<NotificationUnreadCounts> {
@@ -170,5 +151,31 @@ export class DefaultNotificationRepository implements NotificationRepository {
       useSession: true,
       signWithZse: true
     });
+  }
+
+  private postDecode(page: NotificationPage, cursor: string | undefined,
+    requestUrl: string): NotificationPage {
+    const requested = cursor === undefined ? new Set<string>() : cloneStringSet(this.requestedCursors);
+    const delivered = cursor === undefined
+      ? new Set<string>()
+      : cloneStringSet(this.deliveredIdentities);
+    requested.add(requestUrl);
+    const items = page.items.filter((item: NotificationItem): boolean => {
+      const identity = notificationItemIdentity(item);
+      if (delivered.has(identity)) {
+        return false;
+      }
+      delivered.add(identity);
+      return true;
+    });
+    const next = page.cursor.next;
+    const cursorLoops = (next === undefined && !page.cursor.isEnd) || next === requestUrl ||
+      (next !== undefined && requested.has(next));
+    this.requestedCursors = requested;
+    this.deliveredIdentities = delivered;
+    return {
+      items: items,
+      cursor: cursorLoops ? terminalCursor(page.cursor) : page.cursor
+    };
   }
 }
