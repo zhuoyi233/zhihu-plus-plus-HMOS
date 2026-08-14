@@ -24,7 +24,7 @@ Scan Kit 的 `generateBarcode.createBarcode()` 也存在于本机 HMS SDK，但�
 ## 二维码状态机
 
 1. 用户主动请求二维码，控制器调用独立的 `ZhihuQrLoginClient.start()`；不会把已有应用会话 Cookie 注入二维码临时容器。
-   服务端返回的挑战链接还必须有界、严格匹配 `https://www.zhihu.com/account/scan/login/{token}`，且末段与本次 token 完全一致，否则不进入状态或 `QRCode`。
+   服务端返回的挑战链接还必须有界、严格匹配 `https://www.zhihu.com/account/scan/login/{token}`，且路径末段与本次 token 完全一致，否则不进入状态或 `QRCode`。知乎实际会在 link 末尾追加查询串 `?/api/login/qrcode`，因此校验在保持精确 host 与路径前缀的前提下，允许 token 后跟可选 `?` 查询串（`isTrustedQrChallengeLink`）。
 2. 只有 `READY` 和 `WAITING_CONFIRMATION` 会安排下一次轮询，间隔固定使用协议常量 `500 ms`；同一时刻至多有一个 timer 和一个协议请求。
 3. `EXPIRED`、`RISK_CONTROL`、`TEMPORARY_FAILURE`、取消和账号验证阶段都会停止轮询。临时失败由用户重新获取二维码，不进行无限自动重试。
 4. `CREDENTIAL_READY` 只表示临时容器取得候选 Cookie。控制器必须把副本交给全局 `SessionRepository.loginWithCookies()`；仅仓库返回 `AUTHENTICATED` 才显示登录成功。

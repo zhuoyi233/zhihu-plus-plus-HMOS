@@ -9,6 +9,7 @@ import {
 import {
   copySessionCookies,
   parseCookieAssignments,
+  parseCookieJarEntries,
   SessionCookie,
   toCookieHeader,
   upsertCookie
@@ -161,8 +162,14 @@ export function isTrustedQrLoginUrl(url: string): boolean {
 }
 
 export function isTrustedQrChallengeLink(url: string, token: string): boolean {
-  return url.length <= QR_CHALLENGE_LINK_MAX_LENGTH && QR_TOKEN_PATTERN.test(token) &&
-    url === `${QR_CHALLENGE_LINK_PREFIX}${token}`;
+  if (url.length > QR_CHALLENGE_LINK_MAX_LENGTH || !QR_TOKEN_PATTERN.test(token)) {
+    return false;
+  }
+  const prefix = `${QR_CHALLENGE_LINK_PREFIX}${token}`;
+  if (!url.startsWith(prefix)) {
+    return false;
+  }
+  return url.length === prefix.length || url.charAt(prefix.length) === '?';
 }
 
 export function createQrLoginHeaders(
@@ -306,7 +313,10 @@ class NetworkKitQrLoginTransport implements QrLoginTransport {
       expectDataType: http.HttpDataType.STRING,
       connectTimeout: QR_REQUEST_TIMEOUT_MS,
       readTimeout: QR_REQUEST_TIMEOUT_MS,
-      maxRedirects: 0,
+      // 知乎对未登录访问 /signin 返回 302（跳转登录页），上游 Ktor 默认跟随重定向。
+      // maxRedirects: 0 会让 NetworkKit 对 302 报错（curl_code 47 / 2300047），导致 prefetch 直接失败。
+      // 跟随少量同域重定向才能拿到 d_c0 等游客 Cookie；二维码/轮询接口本身不返回重定向，不受影响。
+      maxRedirects: 3,
       maxLimit: QR_RESPONSE_LIMIT_BYTES,
       usingCache: false
     };
@@ -315,7 +325,10 @@ class NetworkKitQrLoginTransport implements QrLoginTransport {
       return {
         statusCode: Number(response.responseCode),
         body: typeof response.result === 'string' ? response.result : '',
-        cookies: parseCookieAssignments(response.cookies, true)
+        // NetworkKit 返回的 cookies 是 Netscape cookie-jar 文本（tab 分隔的
+        // domain/flag/path/secure/expiry/name/value），不是 name=value 列表，必须用
+        // parseCookieJarEntries 解析，否则 Set-Cookie（含 /udid 下发的 d_c0）会全部丢失。
+        cookies: parseCookieJarEntries(response.cookies)
       };
     } catch (_error) {
       throw httpFailureFromTransport();

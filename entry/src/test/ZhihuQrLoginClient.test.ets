@@ -72,7 +72,7 @@ function queueSuccessfulStart(factory: ScriptedQrTransportFactory): void {
   factory.responses.push(response(200, '{}', [{ name: 'd_c0', value: 'device-token' }]));
   factory.responses.push(response(200, '{}'));
   factory.responses.push(response(200,
-    '{"expires_at":600,"link":"https://www.zhihu.com/account/scan/login/test-token","token":"test-token"}'));
+    '{"expires_at":600,"link":"https://www.zhihu.com/account/scan/login/test-token?/api/login/qrcode","token":"test-token"}'));
 }
 
 export default function zhihuQrLoginClientTest(): void {
@@ -246,13 +246,17 @@ export default function zhihuQrLoginClientTest(): void {
       expect(state.message.includes('evil.example')).assertFalse();
     });
 
-    it('requiresExactBoundedChallengePathForTheReturnedToken', 0, async () => {
+    it('acceptsBoundedChallengePathWithOptionalQueryForTheReturnedToken', 0, async () => {
       expect(isTrustedQrChallengeLink(
         'https://www.zhihu.com/account/scan/login/exact-token', 'exact-token')).assertTrue();
+      expect(isTrustedQrChallengeLink(
+        'https://www.zhihu.com/account/scan/login/exact-token?/api/login/qrcode', 'exact-token')).assertTrue();
       expect(isTrustedQrChallengeLink(
         'https://www.zhihu.com/account/scan/login/other-token', 'exact-token')).assertFalse();
       expect(isTrustedQrChallengeLink(
         'https://www.zhihu.com/account/risk_control/exact-token', 'exact-token')).assertFalse();
+      expect(isTrustedQrChallengeLink(
+        'https://www.zhihu.com/account/scan/login/exact-token/extra', 'exact-token')).assertFalse();
 
       const factory = new ScriptedQrTransportFactory();
       factory.responses.push(response(200, ''));

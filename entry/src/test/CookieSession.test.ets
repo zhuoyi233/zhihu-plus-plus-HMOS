@@ -6,6 +6,7 @@ import {
   decodeCookieSession,
   encodeCookieSession,
   parseCookieAssignments,
+  parseCookieJarEntries,
   redactSensitiveText,
   removeExpiredCookies,
   safeSessionSummary,
@@ -62,6 +63,23 @@ export default function cookieSessionTest(): void {
         fields.push(`c${index}=v`);
       }
       expect(parseCookieAssignments(fields.join(';')).length).assertEqual(0);
+    });
+
+    it('parsesNetworkKitCookieJarFormat', 0, () => {
+      const jar =
+        '# Netscape HTTP Cookie File\n' +
+        '#HttpOnly_.zhihu.com\tTRUE\t/\tTRUE\t1786690765\tsec_token\tsec-value\n' +
+        '.zhihu.com\tTRUE\t/\tFALSE\t1881384565\td_c0\tdevice-token|1786690165\n' +
+        'www.zhihu.com\tFALSE\t/\tFALSE\t1786693765\tBEC\tbec-value\n';
+      const cookies = parseCookieJarEntries(jar);
+      expect(cookies.length).assertEqual(3);
+      expect(cookies[0].name).assertEqual('sec_token');
+      expect(cookies[0].value).assertEqual('sec-value');
+      const dc0 = cookies.find((cookie: SessionCookie): boolean => cookie.name === 'd_c0');
+      expect(dc0?.value).assertEqual('device-token|1786690165');
+      expect(cookies.find((cookie: SessionCookie): boolean => cookie.name === 'BEC')?.value)
+        .assertEqual('bec-value');
+      expect(parseCookieJarEntries('z_c0=a; d_c0=b').length).assertEqual(0);
     });
 
     it('roundTripsSessionPayload', 0, () => {

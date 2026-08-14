@@ -92,6 +92,39 @@ export function parseCookieAssignments(rawCookie: string, includeEmptyValues: bo
   return cookies;
 }
 
+export function parseCookieJarEntries(rawJar: string): Array<SessionCookie> {
+  if (rawJar.length === 0 || rawJar.length > COOKIE_HEADER_MAX_LENGTH) {
+    return [];
+  }
+  const lines = rawJar.split('\n');
+  if (lines.length > COOKIE_FIELD_MAX_COUNT) {
+    return [];
+  }
+  const cookies: Array<SessionCookie> = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].trim();
+    if (line.length === 0 || line.startsWith('# ')) {
+      continue;
+    }
+    const fields = line.split('\t');
+    if (fields.length !== 7) {
+      continue;
+    }
+    const name = fields[5].trim();
+    const value = fields[6].trim();
+    if (!isValidCookieName(name) || !isSafeCookieValue(value)) {
+      continue;
+    }
+    const existingIndex = cookies.findIndex((cookie: SessionCookie) => cookie.name === name);
+    if (existingIndex >= 0) {
+      cookies[existingIndex] = { name: name, value: value };
+    } else {
+      cookies.push({ name: name, value: value });
+    }
+  }
+  return cookies;
+}
+
 export function removeExpiredCookies(cookies: Array<SessionCookie>, now: number): Array<SessionCookie> {
   return cookies.filter((cookie: SessionCookie) => cookie.expiresAt === undefined || cookie.expiresAt > now);
 }
