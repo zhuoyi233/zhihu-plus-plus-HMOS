@@ -14,10 +14,12 @@ import {
   DefaultPeopleRepository,
   DefaultPinRepository,
   DefaultSearchRepository,
+  DefaultOnlineHistoryRepository,
   FeedRepository,
   getAppDatabase,
   getAppSessionOwner,
   OpenedContentStore,
+  OnlineHistoryRepository,
   PeopleContentRepository,
   PeopleDetailRepository,
   PinRepository,
@@ -67,6 +69,7 @@ struct Index {
   @State private peopleRepository?: PeopleDetailRepository = undefined;
   @State private peopleContentRepository?: PeopleContentRepository = undefined;
   @State private pinRepository?: PinRepository = undefined;
+  @State private onlineHistoryRepository?: OnlineHistoryRepository = undefined;
 
   aboutToAppear(): void {
     if (this.compositionReady || this.compositionPreparing) {
@@ -101,6 +104,7 @@ struct Index {
       this.peopleRepository = new DefaultPeopleRepository(new ZhihuHttpClient(session));
       this.peopleContentRepository = new DefaultPeopleContentRepository(new ZhihuHttpClient(session));
       this.pinRepository = new DefaultPinRepository(new ZhihuHttpClient(session));
+      this.onlineHistoryRepository = new DefaultOnlineHistoryRepository(new ZhihuHttpClient(session));
       this.compositionPreparing = false;
       this.compositionReady = true;
     });
@@ -249,6 +253,8 @@ struct Index {
   readHistoryContent(navigate: (destination: P1Destination) => void) {
     ReadHistoryPage({
       history: this.openedContentStore,
+      onlineHistory: this.onlineHistoryRepository,
+      session: this.session,
       onOpen: (target: ReadHistoryOpenTarget): void => {
         if (target.kind === ReadHistoryContentKind.QUESTION) {
           navigate({ name: P1DestinationName.QUESTION, id: target.id });
@@ -259,6 +265,9 @@ struct Index {
         } else {
           navigate({ name: P1DestinationName.PIN, id: target.id });
         }
+      },
+      onGoLogin: (): void => {
+        navigate({ name: P1DestinationName.LOGIN });
       }
     });
   }
