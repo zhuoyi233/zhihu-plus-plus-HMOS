@@ -282,7 +282,7 @@ export class DefaultCollectionRepository implements CollectionRepository {
     const requestGeneration = this.generation;
     const collection = normalizeCollectionId(collectionId);
     const body = `add_collections=${collection}`;
-    await this.execute(buildContentCollectionToggleUrl(contentType, contentId), ZhihuHttpMethod.POST, body);
+    await this.execute(buildContentCollectionToggleUrl(contentType, contentId), ZhihuHttpMethod.PUT, body);
     if (requestGeneration !== this.generation) {
       throw new CollectionRepositoryFailure(CollectionRepositoryFailureKind.CANCELLED);
     }
@@ -292,7 +292,7 @@ export class DefaultCollectionRepository implements CollectionRepository {
     const requestGeneration = this.generation;
     const collection = normalizeCollectionId(collectionId);
     const body = `remove_collections=${collection}`;
-    await this.execute(buildContentCollectionToggleUrl(contentType, contentId), ZhihuHttpMethod.DELETE, body);
+    await this.execute(buildContentCollectionToggleUrl(contentType, contentId), ZhihuHttpMethod.PUT, body);
     if (requestGeneration !== this.generation) {
       throw new CollectionRepositoryFailure(CollectionRepositoryFailureKind.CANCELLED);
     }

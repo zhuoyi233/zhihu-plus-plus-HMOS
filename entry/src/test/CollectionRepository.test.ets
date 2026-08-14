@@ -251,14 +251,14 @@ export default function collectionRepositoryTest(): void {
       expect(factory.requests.length).assertEqual(2);
       const add = factory.requests[0];
       expect(add.url).assertEqual('https://www.zhihu.com/api/v4/collections/contents/answer/456');
-      expect(add.method).assertEqual(ZhihuHttpMethod.POST);
+      expect(add.method).assertEqual(ZhihuHttpMethod.PUT);
       expect(add.body).assertEqual('add_collections=100');
       expect(JSON.stringify(add.headers).includes('"Content-Type":"application/x-www-form-urlencoded"')).assertTrue();
       expect(JSON.stringify(add.headers).includes('"x-zse-96":"2.0_')).assertTrue();
 
       const remove = factory.requests[1];
       expect(remove.url).assertEqual('https://www.zhihu.com/api/v4/collections/contents/article/789');
-      expect(remove.method).assertEqual(ZhihuHttpMethod.DELETE);
+      expect(remove.method).assertEqual(ZhihuHttpMethod.PUT);
       expect(remove.body).assertEqual('remove_collections=100');
       expect(JSON.stringify(remove.headers).includes('"Content-Type":"application/x-www-form-urlencoded"')).assertTrue();
     });

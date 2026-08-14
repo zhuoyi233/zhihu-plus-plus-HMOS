@@ -28,16 +28,16 @@
 | 内容所属收藏夹 | `GET /api/v4/collections/contents/{contentType}/{contentId}?limit=50`（带 `is_favorited`） |
 | 新建收藏夹 | `POST /api/v4/collections`（JSON `{title, description, is_public}`） |
 | 删除收藏夹 | `DELETE /api/v4/collections/{id}` |
-| 加入收藏夹 | `POST /api/v4/collections/contents/{contentType}/{contentId}`（表单 `add_collections={id}`） |
-| 移出收藏夹 | `DELETE /api/v4/collections/contents/{contentType}/{contentId}`（表单 `remove_collections={id}`） |
+| 加入收藏夹 | `PUT /api/v4/collections/contents/{contentType}/{contentId}`（表单 `add_collections={id}`） |
+| 移出收藏夹 | `PUT /api/v4/collections/contents/{contentType}/{contentId}`（表单 `remove_collections={id}`） |
 
 `contentType` 只接受 `answer` 与 `article`，与上游 `ArticleViewModel` 的
 `ArticleType.Answer/Article` 一一对应；收藏夹内容项支持回答/文章/问题/想法四类跳转，其余类型（如
 `zvideo`）在解码阶段跳过，不进入列表。
 
-加入/移出收藏夹端点沿用上游 `ArticleViewModel.toggleFavorite` 的
-`collections/contents/$contentType/${article.id}` 路径与 `add_collections`/`remove_collections`
-表单语义；`ZhihuHttpClient` 增加可选 `contentType` 字段以发送
+加入/移出收藏夹端点对齐上游 `ArticleViewModel.toggleFavorite` 的
+`collections/contents/$contentType/${article.id}` 路径、**PUT 方法**与
+`add_collections`/`remove_collections` 表单语义；`ZhihuHttpClient` 增加可选 `contentType` 字段以发送
 `application/x-www-form-urlencoded`，默认仍为 `application/json`。
 
 ## 安全与正确性边界
@@ -96,6 +96,7 @@ powershell -Command "& '.\scripts\verify-harmony.ps1' -SkipDependencyInstall -Sk
 - [ ] 用户主页「收藏夹」入口显示该用户收藏夹；
 - [ ] 断网/403 场景显示可重试错误，不泄露请求体或 Cookie。
 
-> 说明：收藏/取消收藏端点（`collections/contents/{contentType}/{contentId}` 的 POST/DELETE）沿用上游
-> `ArticleViewModel` 的路径与 `add_collections`/`remove_collections` 表单语义，但方法按任务要求使用
-> POST/DELETE 而非上游的 PUT；若服务端校验方法，需在设备验收时以真实登录态确认，必要时切回 PUT。
+> 说明：收藏/取消收藏端点（`collections/contents/{contentType}/{contentId}`）与上游
+> `ArticleViewModel.toggleFavorite` 一致使用 **PUT** + `add_collections`/`remove_collections` 表单语义。
+> 真实登录态探测确认：PUT 返回 `{"favlists_count":0,"success":true}` 有执行确认，而 POST/DELETE 虽返回
+> 200 但响应为空、无实际效果，故必须使用 PUT。
