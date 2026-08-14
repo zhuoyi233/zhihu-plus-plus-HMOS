@@ -304,27 +304,31 @@ struct ContentDetailPage {
             .width('100%')
         }
 
-        if (contentAuthorName(content).length > 0) {
-          Button('屏蔽作者')
-            .id(`p3_${content.kind}_block_author`)
+        Row({ space: $r('app.float.p1_spacing_small') }) {
+          if (contentAuthorName(content).length > 0) {
+            Button('屏蔽作者')
+              .id(`p3_${content.kind}_block_author`)
+              .fontSize($r('app.float.p1_secondary_font_size'))
+              .enabled(!this.blockingBusy && this.blockingAction !== undefined)
+              .onClick((): void => {
+                const author = content.value.author;
+                if (author !== undefined) {
+                  this.pendingUserBlock = { userId: author.id, userName: author.name };
+                }
+              })
+          }
+
+          Button('屏蔽关键词')
+            .id(`p3_${content.kind}_block_keyword`)
             .fontSize($r('app.float.p1_secondary_font_size'))
             .enabled(!this.blockingBusy && this.blockingAction !== undefined)
             .onClick((): void => {
-              const author = content.value.author;
-              if (author !== undefined) {
-                this.pendingUserBlock = { userId: author.id, userName: author.name };
-              }
+              this.keywordBlockInput = '';
+              this.keywordBlockVisible = true;
             })
         }
-
-        Button('屏蔽关键词')
-          .id(`p3_${content.kind}_block_keyword`)
-          .fontSize($r('app.float.p1_secondary_font_size'))
-          .enabled(!this.blockingBusy && this.blockingAction !== undefined)
-          .onClick((): void => {
-            this.keywordBlockInput = '';
-            this.keywordBlockVisible = true;
-          })
+        .width('100%')
+        .justifyContent(FlexAlign.Start)
 
         if (this.blockingMessage.length > 0) {
           Text(this.blockingMessage)
@@ -618,6 +622,31 @@ struct ContentDetailPage {
             }
           })
         } else {
+          // 无作者时：回答/文章不显示「回答」文字（系统栏已有），问题页显示标题。
+          if (content.kind === ContentDetailKind.QUESTION) {
+            Text(contentTitle(content))
+              .id(`p3_${content.kind}_detail_top_title`)
+              .fontSize($r('app.float.p1_body_font_size'))
+              .fontColor($r('app.color.primary_text'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .layoutWeight(1)
+              .padding({
+                left: $r('app.float.p1_page_padding'),
+                right: $r('app.float.p1_page_padding'),
+                top: $r('app.float.p1_spacing_small'),
+                bottom: $r('app.float.p1_spacing_small')
+              })
+          } else {
+            Column()
+              .width('100%')
+              .height(48)
+          }
+        }
+      } else {
+        // 收起态：回答/文章不显示标题文字（NavDestination 系统栏「返回」旁已有）；
+        // 问题页保留标题（系统栏无对应完整标题）。
+        if (content.kind === ContentDetailKind.QUESTION) {
           Text(contentTitle(content))
             .id(`p3_${content.kind}_detail_top_title`)
             .fontSize($r('app.float.p1_body_font_size'))
@@ -631,21 +660,12 @@ struct ContentDetailPage {
               top: $r('app.float.p1_spacing_small'),
               bottom: $r('app.float.p1_spacing_small')
             })
+        } else {
+          // 仅保留占位高度（与展开态一致避免正文跳动），不渲染重复标题文字。
+          Column()
+            .width('100%')
+            .height(48)
         }
-      } else {
-        Text(contentTitle(content))
-          .id(`p3_${content.kind}_detail_top_title`)
-          .fontSize($r('app.float.p1_body_font_size'))
-          .fontColor($r('app.color.primary_text'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .layoutWeight(1)
-          .padding({
-            left: $r('app.float.p1_page_padding'),
-            right: $r('app.float.p1_page_padding'),
-            top: $r('app.float.p1_spacing_small'),
-            bottom: $r('app.float.p1_spacing_small')
-          })
       }
     }
     .width('100%')
