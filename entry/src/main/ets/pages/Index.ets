@@ -11,12 +11,15 @@ import {
   DefaultContentRepository,
   DefaultDailyStoryRepository,
   DefaultFeedRepository,
+  DefaultFollowRepository,
   DefaultPeopleContentRepository,
   DefaultPeopleRepository,
   DefaultPinRepository,
   DefaultSearchRepository,
   DefaultOnlineHistoryRepository,
+  DefaultVoteRepository,
   FeedRepository,
+  FollowRepository,
   getAppDatabase,
   getAppSessionOwner,
   OpenedContentStore,
@@ -27,6 +30,7 @@ import {
   SearchRepository,
   SessionRepository,
   DailyStoryRepository,
+  VoteRepository,
   ZhihuHttpClient
 } from 'data';
 import { BackgroundTaskProbePage } from './BackgroundTaskProbe';
@@ -73,6 +77,8 @@ struct Index {
   @State private peopleContentRepository?: PeopleContentRepository = undefined;
   @State private pinRepository?: PinRepository = undefined;
   @State private onlineHistoryRepository?: OnlineHistoryRepository = undefined;
+  @State private voteRepository?: VoteRepository = undefined;
+  @State private followRepository?: FollowRepository = undefined;
 
   aboutToAppear(): void {
     if (this.compositionReady || this.compositionPreparing) {
@@ -110,6 +116,8 @@ struct Index {
       this.peopleContentRepository = new DefaultPeopleContentRepository(new ZhihuHttpClient(session));
       this.pinRepository = new DefaultPinRepository(new ZhihuHttpClient(session));
       this.onlineHistoryRepository = new DefaultOnlineHistoryRepository(new ZhihuHttpClient(session));
+      this.voteRepository = new DefaultVoteRepository(new ZhihuHttpClient(session));
+      this.followRepository = new DefaultFollowRepository(new ZhihuHttpClient(session));
       this.compositionPreparing = false;
       this.compositionReady = true;
     });
@@ -226,7 +234,10 @@ struct Index {
       openedContentStore: this.openedContentStore,
       navigate: navigate,
       rules: this.blockingRuleStore,
-      history: this.blockedFeedHistoryStore
+      history: this.blockedFeedHistoryStore,
+      voteRepository: this.voteRepository,
+      followRepository: this.followRepository,
+      session: this.session
     });
   }
 
@@ -238,7 +249,10 @@ struct Index {
       openedContentStore: this.openedContentStore,
       navigate: navigate,
       rules: this.blockingRuleStore,
-      history: this.blockedFeedHistoryStore
+      history: this.blockedFeedHistoryStore,
+      voteRepository: this.voteRepository,
+      followRepository: this.followRepository,
+      session: this.session
     });
   }
 
@@ -250,7 +264,10 @@ struct Index {
       openedContentStore: this.openedContentStore,
       navigate: navigate,
       rules: this.blockingRuleStore,
-      history: this.blockedFeedHistoryStore
+      history: this.blockedFeedHistoryStore,
+      voteRepository: this.voteRepository,
+      followRepository: this.followRepository,
+      session: this.session
     });
   }
 
@@ -260,6 +277,7 @@ struct Index {
       identifier: id,
       repository: this.peopleRepository,
       contentRepository: this.peopleContentRepository,
+      followRepository: this.followRepository,
       session: this.session,
       navigate: navigate,
       rules: this.blockingRuleStore,

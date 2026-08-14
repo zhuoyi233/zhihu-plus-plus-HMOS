@@ -7,7 +7,12 @@ import {
   BlockingRuleGateway,
   ContentDetailKind,
   ContentRepository,
-  OpenedContentStore
+  ContentVoteState,
+  FollowMutationResult,
+  FollowRepository,
+  LoginSessionGateway,
+  OpenedContentStore,
+  VoteRepository
 } from 'data';
 import {
   BlockingActionContext,
@@ -22,6 +27,12 @@ import {
   LoadedContentDetail,
   OpenedRecordPhase
 } from './ContentDetailState';
+import {
+  ContentVoteController,
+  ContentVoteViewState,
+  FollowController,
+  FollowViewState
+} from './ContentInteractionState';
 import { NativeContentDocument } from './NativeContentDocument';
 
 @Component
@@ -32,6 +43,9 @@ struct ContentDetailPage {
   openedContentStore: OpenedContentStore | undefined = undefined;
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
+  voteRepository: VoteRepository | undefined = undefined;
+  followRepository: FollowRepository | undefined = undefined;
+  session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
   @State private phase: ContentDetailPhase = ContentDetailPhase.IDLE;
@@ -44,8 +58,19 @@ struct ContentDetailPage {
   @State private keywordBlockInput: string = '';
   @State private blockingMessage: string = '';
   @State private blockingBusy: boolean = false;
+  @State private voteState: ContentVoteState = ContentVoteState.NEUTRAL;
+  @State private voteupCount: number = 0;
+  @State private thanked: boolean = false;
+  @State private thanksCount: number = 0;
+  @State private following: boolean = false;
+  @State private followerCount: number = 0;
+  @State private interactionPending: boolean = false;
+  @State private interactionErrorMessage: string = '';
+  @State private interactionRequiresLogin: boolean = false;
   private controller?: ContentDetailController;
   private blockingAction?: BlockingActionController;
+  private voteController?: ContentVoteController;
+  private followController?: FollowController;
 
   aboutToAppear(): void {
     const repository = this.repository;
@@ -66,11 +91,15 @@ struct ContentDetailPage {
 
   aboutToDisappear(): void {
     this.controller?.deactivate();
+    this.voteController?.deactivate();
+    this.followController?.deactivate();
     this.controller = undefined;
     this.blockingAction = undefined;
     this.pendingUserBlock = undefined;
     this.keywordBlockVisible = false;
     this.keywordBlockInput = '';
+    this.voteController = undefined;
+    this.followController = undefined;
   }
 
   private createBlockingAction(): void {
@@ -208,6 +237,8 @@ struct ContentDetailPage {
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
         }
+
+        this.interactionBar()
       }
       .alignItems(HorizontalAlign.Start)
       .width('100%')
@@ -323,6 +354,101 @@ struct ContentDetailPage {
       contentKind: content.kind,
       contentId: content.value.id
     };
+  private interactionBar() {
+    Column({ space: $r('app.float.p1_spacing_small') }) {
+      if (this.kind === ContentDetailKind.QUESTION) {
+        if (this.followController !== undefined) {
+          this.followQuestionAction()
+        }
+      } else if (this.voteController !== undefined) {
+        Row({ space: $r('app.float.p1_spacing_medium') }) {
+          this.voteUpAction()
+          this.voteDownAction()
+          if (this.kind === ContentDetailKind.ANSWER) {
+            this.thankAction()
+          }
+        }
+        .width('100%')
+      }
+      if (this.interactionErrorMessage.length > 0) {
+        this.interactionStatusRow()
+      }
+    }
+    .width('100%')
+  }
+
+  @Builder
+  private voteUpAction() {
+    Button(this.voteState === ContentVoteState.UP ? `已赞同 ${this.voteupCount}` : `赞同 ${this.voteupCount}`,
+      { type: ButtonType.Normal })
+      .id(`p3_${this.kind}_vote_up`)
+      .fontSize($r('app.float.p1_body_font_size'))
+      .fontColor(this.voteState === ContentVoteState.UP
+        ? $r('app.color.brand_primary')
+        : $r('app.color.secondary_text'))
+      .enabled(!this.interactionPending)
+      .onClick((): void => {
+        this.voteController?.toggleVote(true);
+      })
+  }
+
+  @Builder
+  private voteDownAction() {
+    Button(this.voteState === ContentVoteState.DOWN ? '已反对' : '反对', { type: ButtonType.Normal })
+      .id(`p3_${this.kind}_vote_down`)
+      .fontSize($r('app.float.p1_body_font_size'))
+      .fontColor(this.voteState === ContentVoteState.DOWN
+        ? $r('app.color.brand_primary')
+        : $r('app.color.secondary_text'))
+      .enabled(!this.interactionPending)
+      .onClick((): void => {
+        this.voteController?.toggleVote(false);
+      })
+  }
+
+  @Builder
+  private thankAction() {
+    Button(this.thanked ? `已感谢 ${this.thanksCount}` : `感谢 ${this.thanksCount}`, { type: ButtonType.Normal })
+      .id(`p3_${this.kind}_thank`)
+      .fontSize($r('app.float.p1_body_font_size'))
+      .fontColor(this.thanked ? $r('app.color.brand_primary') : $r('app.color.secondary_text'))
+      .enabled(!this.interactionPending)
+      .onClick((): void => {
+        this.voteController?.toggleThanks();
+      })
+  }
+
+  @Builder
+  private followQuestionAction() {
+    Button(this.following ? `已关注 ${this.followerCount}` : `关注问题 ${this.followerCount}`,
+      { type: ButtonType.Normal })
+      .id('p3_question_follow')
+      .fontSize($r('app.float.p1_body_font_size'))
+      .fontColor(this.following ? $r('app.color.brand_primary') : $r('app.color.secondary_text'))
+      .enabled(!this.interactionPending)
+      .onClick((): void => {
+        this.followController?.toggleFollow();
+      })
+  }
+
+  @Builder
+  private interactionStatusRow() {
+    Row({ space: $r('app.float.p1_spacing_small') }) {
+      Text(this.interactionErrorMessage)
+        .id(`p3_${this.kind}_interaction_status`)
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontColor($r('app.color.error_text'))
+        .layoutWeight(1)
+      if (this.interactionRequiresLogin) {
+        Button('去登录')
+          .id(`p3_${this.kind}_interaction_login`)
+          .fontSize($r('app.float.p1_secondary_font_size'))
+          .onClick((): void => {
+            this.navigate({ name: P1DestinationName.LOGIN });
+          })
+      }
+    }
+    .width('100%')
   }
 
   private applyState(state: ContentDetailViewState): void {
@@ -331,6 +457,59 @@ struct ContentDetailPage {
     this.errorMessage = state.errorMessage ?? '';
     this.requiresLogin = state.requiresLogin;
     this.openedRecordPhase = state.openedRecordPhase;
+    if (state.phase === ContentDetailPhase.READY && state.content !== undefined) {
+      this.activateInteraction(state.content);
+    }
+  }
+
+  private activateInteraction(content: LoadedContentDetail): void {
+    if (content.kind === ContentDetailKind.QUESTION) {
+      if (this.followController !== undefined || this.followRepository === undefined || this.session === undefined) {
+        return;
+      }
+      const repository = this.followRepository;
+      const session = this.session;
+      const contentId = this.contentId;
+      this.followController = new FollowController(
+        repository,
+        session,
+        (follow: boolean): Promise<FollowMutationResult> => repository.followQuestion(contentId, follow),
+        (state: FollowViewState): void => this.applyFollowState(state)
+      );
+      this.followController.activate();
+      this.followController.applyInitial(content.value.isFollowing ?? false, content.value.followerCount);
+    } else {
+      if (this.voteController !== undefined || this.voteRepository === undefined || this.session === undefined) {
+        return;
+      }
+      this.voteController = new ContentVoteController(
+        this.voteRepository,
+        this.session,
+        this.kind,
+        this.contentId,
+        (state: ContentVoteViewState): void => this.applyVoteState(state)
+      );
+      this.voteController.activate();
+      this.voteController.applyInitial(content);
+    }
+  }
+
+  private applyVoteState(state: ContentVoteViewState): void {
+    this.voteState = state.voteState;
+    this.voteupCount = state.voteupCount;
+    this.thanked = state.thanked;
+    this.thanksCount = state.thanksCount;
+    this.interactionPending = state.pending;
+    this.interactionErrorMessage = state.errorMessage ?? '';
+    this.interactionRequiresLogin = state.requiresLogin;
+  }
+
+  private applyFollowState(state: FollowViewState): void {
+    this.following = state.following;
+    this.followerCount = state.followerCount;
+    this.interactionPending = state.pending;
+    this.interactionErrorMessage = state.errorMessage ?? '';
+    this.interactionRequiresLogin = state.requiresLogin;
   }
 }
 
@@ -341,6 +520,9 @@ export struct QuestionDetailPage {
   openedContentStore: OpenedContentStore | undefined = undefined;
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
+  voteRepository: VoteRepository | undefined = undefined;
+  followRepository: FollowRepository | undefined = undefined;
+  session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
 
@@ -352,6 +534,9 @@ export struct QuestionDetailPage {
       openedContentStore: this.openedContentStore,
       rules: this.rules,
       history: this.history,
+      voteRepository: this.voteRepository,
+      followRepository: this.followRepository,
+      session: this.session,
       navigate: this.navigate
     })
   }
@@ -364,6 +549,9 @@ export struct AnswerDetailPage {
   openedContentStore: OpenedContentStore | undefined = undefined;
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
+  voteRepository: VoteRepository | undefined = undefined;
+  followRepository: FollowRepository | undefined = undefined;
+  session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
 
@@ -375,6 +563,9 @@ export struct AnswerDetailPage {
       openedContentStore: this.openedContentStore,
       rules: this.rules,
       history: this.history,
+      voteRepository: this.voteRepository,
+      followRepository: this.followRepository,
+      session: this.session,
       navigate: this.navigate
     })
   }
@@ -387,6 +578,9 @@ export struct ArticleDetailPage {
   openedContentStore: OpenedContentStore | undefined = undefined;
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
+  voteRepository: VoteRepository | undefined = undefined;
+  followRepository: FollowRepository | undefined = undefined;
+  session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
 
@@ -398,6 +592,9 @@ export struct ArticleDetailPage {
       openedContentStore: this.openedContentStore,
       rules: this.rules,
       history: this.history,
+      voteRepository: this.voteRepository,
+      followRepository: this.followRepository,
+      session: this.session,
       navigate: this.navigate
     })
   }

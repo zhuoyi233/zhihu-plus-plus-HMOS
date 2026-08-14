@@ -36,6 +36,9 @@ import readHistoryStateTest from './ReadHistoryState.test';
 import onlineHistoryRepositoryTest from './OnlineHistoryRepository.test';
 import dailyStoryRepositoryTest from './DailyStoryRepository.test';
 import dailyStoryDetailStateTest from './DailyStoryDetailState.test';
+import voteRepositoryTest from './VoteRepository.test';
+import followRepositoryTest from './FollowRepository.test';
+import contentInteractionStateTest from './ContentInteractionState.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -76,4 +79,7 @@ export default function testsuite(): void {
   onlineHistoryRepositoryTest();
   dailyStoryRepositoryTest();
   dailyStoryDetailStateTest();
+  voteRepositoryTest();
+  followRepositoryTest();
+  contentInteractionStateTest();
 }
