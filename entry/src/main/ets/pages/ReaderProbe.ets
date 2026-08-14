@@ -1,6 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { util } from '@kit.ArkTS';
 import { image } from '@kit.ImageKit';
+import { getAppSessionOwner, toCookieHeader } from 'data';
 import {
   clearFormulaByteCache,
   loadFormulaPixelMap,
@@ -93,7 +94,7 @@ struct ReaderInlineFormulaBlock {
 
   private async loadFormula(run: ReaderInlineRun, generation: number): Promise<void> {
     try {
-      const pixelMap = await loadFormulaPixelMap(run.sourceUrl);
+      const pixelMap = await loadFormulaPixelMap(run.sourceUrl, this.formulaCookieHeader());
       if (!this.active || this.loadGeneration !== generation) {
         await pixelMap.release();
         return;
@@ -111,6 +112,15 @@ struct ReaderInlineFormulaBlock {
         this.failFormula(run.id, reason);
       }
     }
+  }
+
+  private formulaCookieHeader(): string {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return '';
+    }
+    const repository = getAppSessionOwner(context).getRepository();
+    return toCookieHeader(repository.getCookies(), Date.now());
   }
 
   private failFormula(id: string, reason: string): void {
@@ -183,7 +193,7 @@ struct ReaderBlockFormulaBlock {
 
   private async loadFormula(generation: number): Promise<void> {
     try {
-      const pixelMap = await loadFormulaPixelMap(this.item.sourceUrl);
+      const pixelMap = await loadFormulaPixelMap(this.item.sourceUrl, this.formulaCookieHeader());
       if (!this.active || this.loadGeneration !== generation) {
         await pixelMap.release();
         return;
@@ -200,6 +210,15 @@ struct ReaderBlockFormulaBlock {
         this.onFormulaFailed(this.item.id, reason);
       }
     }
+  }
+
+  private formulaCookieHeader(): string {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return '';
+    }
+    const repository = getAppSessionOwner(context).getRepository();
+    return toCookieHeader(repository.getCookies(), Date.now());
   }
 
   private releasePixelMap(): void {

@@ -3,6 +3,7 @@ import { http } from '@kit.NetworkKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { abilityAccessCtrl, Want } from '@kit.AbilityKit';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
+import { getAppSessionOwner, toCookieHeader } from 'data';
 import {
   clearFormulaByteCache,
   loadFormulaPixelMap,
@@ -255,7 +256,7 @@ struct ContentInlineFormula {
 
   private async loadFormula(run: ReaderInlineRun, generation: number): Promise<void> {
     try {
-      const pixelMap = await loadFormulaPixelMap(run.sourceUrl);
+      const pixelMap = await loadFormulaPixelMap(run.sourceUrl, this.formulaCookieHeader());
       if (!this.active || this.loadGeneration !== generation) {
         await pixelMap.release();
         return;
@@ -271,6 +272,15 @@ struct ContentInlineFormula {
         this.failFormula(run.id);
       }
     }
+  }
+
+  private formulaCookieHeader(): string {
+    const context = getAbilityContext();
+    if (context === undefined) {
+      return '';
+    }
+    const repository = getAppSessionOwner(context).getRepository();
+    return toCookieHeader(repository.getCookies(), Date.now());
   }
 
   private failFormula(id: string): void {
@@ -335,7 +345,7 @@ struct ContentBlockFormula {
 
   private async loadFormula(generation: number): Promise<void> {
     try {
-      const pixelMap = await loadFormulaPixelMap(this.item.sourceUrl);
+      const pixelMap = await loadFormulaPixelMap(this.item.sourceUrl, this.formulaCookieHeader());
       if (!this.active || this.loadGeneration !== generation) {
         await pixelMap.release();
         return;
@@ -350,6 +360,15 @@ struct ContentBlockFormula {
         this.failed = true;
       }
     }
+  }
+
+  private formulaCookieHeader(): string {
+    const context = getAbilityContext();
+    if (context === undefined) {
+      return '';
+    }
+    const repository = getAppSessionOwner(context).getRepository();
+    return toCookieHeader(repository.getCookies(), Date.now());
   }
 
   private releasePixelMap(): void {

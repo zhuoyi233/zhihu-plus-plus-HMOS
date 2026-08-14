@@ -8,6 +8,11 @@ const MAX_CACHE_ENTRIES = 64;
 const MAX_CACHE_BYTES = 4 * 1024 * 1024;
 const CONNECT_TIMEOUT_MS = 10000;
 const READ_TIMEOUT_MS = 15000;
+// 知乎 equation 端点会按请求指纹做风控：无 UA 或纯游客请求可能被 302 重定向到
+// unhuman 验证页。与登录请求保持一致地携带桌面 UA，并在应用已登录时带上会话
+// Cookie（含 z_c0），才能稳定取回公式 SVG。
+const FORMULA_USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
 const svgBytesCache: Map<string, ArrayBuffer> = new Map();
 const inFlightDownloads: Map<string, Promise<ArrayBuffer>> = new Map();
 let cachedByteCount: number = 0;
@@ -55,23 +60,30 @@ function cacheSvg(url: string, bytes: ArrayBuffer): void {
   }
 }
 
-async function downloadSvg(url: string): Promise<ArrayBuffer> {
+async function downloadSvg(url: string, cookieHeader?: string): Promise<ArrayBuffer> {
   if (!isTrustedFormulaUrl(url)) {
     throw new Error('公式地址不在允许列表中');
   }
 
+  const headers: Record<string, string> = {
+    'Accept': 'image/svg+xml',
+    'User-Agent': FORMULA_USER_AGENT
+  };
+  if (cookieHeader !== undefined && cookieHeader.length > 0) {
+    headers['Cookie'] = cookieHeader;
+  }
   let request: http.HttpRequest | undefined = undefined;
   try {
     request = http.createHttp();
     const response = await request.request(url, {
       method: http.RequestMethod.GET,
-      header: { 'Accept': 'image/svg+xml' },
+      header: headers,
       expectDataType: http.HttpDataType.ARRAY_BUFFER,
       connectTimeout: CONNECT_TIMEOUT_MS,
       readTimeout: READ_TIMEOUT_MS,
       usingCache: false,
       maxLimit: MAX_SVG_BYTES,
-      maxRedirects: 0
+      maxRedirects: 3
     });
     if (Number(response.responseCode) !== 200) {
       throw new Error(`公式请求失败：HTTP ${response.responseCode}`);
@@ -89,13 +101,19 @@ async function downloadSvg(url: string): Promise<ArrayBuffer> {
     }
     return response.result;
   } catch (error) {
-    throw error instanceof Error ? error : new Error('公式下载失败');
+    if (error instanceof Error) {
+      throw error;
+    }
+    const details = JSON.stringify(error);
+    throw new Error(details === undefined || details.length === 0
+      ? '公式下载失败'
+      : `公式下载失败（${details.slice(0, 120)}）`);
   } finally {
     request?.destroy();
   }
 }
 
-async function cachedSvg(url: string): Promise<ArrayBuffer> {
+async function cachedSvg(url: string, cookieHeader?: string): Promise<ArrayBuffer> {
   const cached = svgBytesCache.get(url);
   if (cached !== undefined) {
     svgBytesCache.delete(url);
@@ -106,7 +124,7 @@ async function cachedSvg(url: string): Promise<ArrayBuffer> {
   if (existing !== undefined) {
     return (await existing).slice(0);
   }
-  const pending = downloadSvg(url);
+  const pending = downloadSvg(url, cookieHeader);
   const generation = cacheGeneration;
   inFlightDownloads.set(url, pending);
   try {
@@ -128,8 +146,8 @@ export function clearFormulaByteCache(): void {
   cachedByteCount = 0;
 }
 
-export async function loadFormulaPixelMap(url: string): Promise<image.PixelMap> {
-  const bytes = await cachedSvg(url);
+export async function loadFormulaPixelMap(url: string, cookieHeader?: string): Promise<image.PixelMap> {
+  const bytes = await cachedSvg(url, cookieHeader);
   const normalizedBytes = normalizeZhihuSvg(bytes);
   let source: image.ImageSource | undefined = undefined;
   try {
