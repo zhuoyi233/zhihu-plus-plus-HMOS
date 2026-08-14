@@ -5,8 +5,10 @@ import {
   BlockingRuleStore,
   ChannelFeedRepository,
   ChannelFeedSource,
+  CollectionRepository,
   ContentRepository,
   DefaultChannelFeedRepository,
+  DefaultCollectionRepository,
   DefaultContentRepository,
   DefaultDailyStoryRepository,
   DefaultFeedRepository,
@@ -44,6 +46,8 @@ import { DailyStoryDetailPage } from './DailyStoryDetailPage';
 import { PeopleDetailPage, PinDetailPage } from './PeoplePinDetailPages';
 import { BlockingRulesPage } from './BlockingRulesPage';
 import { ReadHistoryPage } from './ReadHistoryPage';
+import { CollectionPage } from './CollectionPage';
+import { CollectionContentPage } from './CollectionContentPage';
 import { ReadHistoryContentKind, ReadHistoryOpenTarget } from './ReadHistoryState';
 
 @Entry
@@ -67,6 +71,7 @@ struct Index {
   @State private peopleRepository?: PeopleDetailRepository = undefined;
   @State private peopleContentRepository?: PeopleContentRepository = undefined;
   @State private pinRepository?: PinRepository = undefined;
+  @State private collectionRepository?: CollectionRepository = undefined;
 
   aboutToAppear(): void {
     if (this.compositionReady || this.compositionPreparing) {
@@ -101,6 +106,7 @@ struct Index {
       this.peopleRepository = new DefaultPeopleRepository(new ZhihuHttpClient(session));
       this.peopleContentRepository = new DefaultPeopleContentRepository(new ZhihuHttpClient(session));
       this.pinRepository = new DefaultPinRepository(new ZhihuHttpClient(session));
+      this.collectionRepository = new DefaultCollectionRepository(new ZhihuHttpClient(session));
       this.compositionPreparing = false;
       this.compositionReady = true;
     });
@@ -110,6 +116,7 @@ struct Index {
     Stack() {
       if (this.compositionReady) {
         P1Shell({
+          session: this.session,
           homeContent: (reloadToken: number, navigate: (destination: P1Destination) => void): void =>
             this.homeContent(reloadToken, navigate),
           followingContent: (navigate: (destination: P1Destination) => void): void => this.followingContent(navigate),
@@ -128,6 +135,10 @@ struct Index {
           peopleContent: (id: string, navigate: (destination: P1Destination) => void): void =>
             this.peopleContent(id, navigate),
           pinContent: (id: string, navigate: (destination: P1Destination) => void): void => this.pinContent(id, navigate),
+          collectionsContent: (id: string, navigate: (destination: P1Destination) => void): void =>
+            this.collectionsContent(id, navigate),
+          collectionContentContent: (id: string, navigate: (destination: P1Destination) => void): void =>
+            this.collectionContentContent(id, navigate),
           blockingRulesContent: (): void => this.blockingRulesContent(),
           readHistoryContent: (navigate: (destination: P1Destination) => void): void => this.readHistoryContent(navigate),
           loginContent: (onBack: () => void, onAuthenticated: () => void): void =>
@@ -194,6 +205,8 @@ struct Index {
       contentId: id,
       repository: this.questionRepository,
       openedContentStore: this.openedContentStore,
+      collectionRepository: this.collectionRepository,
+      session: this.session,
       navigate: navigate
     });
   }
@@ -204,6 +217,8 @@ struct Index {
       contentId: id,
       repository: this.answerRepository,
       openedContentStore: this.openedContentStore,
+      collectionRepository: this.collectionRepository,
+      session: this.session,
       navigate: navigate
     });
   }
@@ -214,6 +229,8 @@ struct Index {
       contentId: id,
       repository: this.articleRepository,
       openedContentStore: this.openedContentStore,
+      collectionRepository: this.collectionRepository,
+      session: this.session,
       navigate: navigate
     });
   }
@@ -236,6 +253,26 @@ struct Index {
       repository: this.pinRepository,
       session: this.session,
       openedContentStore: this.openedContentStore,
+      navigate: navigate
+    });
+  }
+
+  @Builder
+  collectionsContent(id: string, navigate: (destination: P1Destination) => void) {
+    CollectionPage({
+      identifier: id,
+      repository: this.collectionRepository,
+      session: this.session,
+      navigate: navigate
+    });
+  }
+
+  @Builder
+  collectionContentContent(id: string, navigate: (destination: P1Destination) => void) {
+    CollectionContentPage({
+      collectionId: id,
+      repository: this.collectionRepository,
+      session: this.session,
       navigate: navigate
     });
   }

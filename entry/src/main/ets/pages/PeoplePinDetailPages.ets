@@ -207,6 +207,14 @@ export struct PeopleDetailPage {
           .fontSize($r('app.float.p1_secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
 
+        Button('收藏夹')
+          .id('p3_people_detail_collections')
+          .width('100%')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .onClick((): void => {
+            this.navigate({ name: P1DestinationName.COLLECTIONS, id: this.identifier });
+          })
+
         this.contentSectionTabs()
         this.contentList()
       }

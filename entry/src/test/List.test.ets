@@ -32,6 +32,10 @@ import blockingRulesStateTest from './BlockingRulesState.test';
 import readHistoryStateTest from './ReadHistoryState.test';
 import dailyStoryRepositoryTest from './DailyStoryRepository.test';
 import dailyStoryDetailStateTest from './DailyStoryDetailState.test';
+import collectionRepositoryTest from './CollectionRepository.test';
+import collectionStateTest from './CollectionState.test';
+import collectionContentStateTest from './CollectionContentState.test';
+import collectionFavoriteStateTest from './CollectionFavoriteState.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -68,4 +72,8 @@ export default function testsuite(): void {
   readHistoryStateTest();
   dailyStoryRepositoryTest();
   dailyStoryDetailStateTest();
+  collectionRepositoryTest();
+  collectionStateTest();
+  collectionContentStateTest();
+  collectionFavoriteStateTest();
 }

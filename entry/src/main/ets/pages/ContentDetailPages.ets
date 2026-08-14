@@ -3,8 +3,10 @@ import {
   P1DestinationName
 } from 'core';
 import {
+  CollectionRepository,
   ContentDetailKind,
   ContentRepository,
+  LoginSessionGateway,
   OpenedContentStore
 } from 'data';
 import {
@@ -14,6 +16,7 @@ import {
   LoadedContentDetail,
   OpenedRecordPhase
 } from './ContentDetailState';
+import { CollectionDialogComponent } from './CollectionDialogComponent';
 import { NativeContentDocument } from './NativeContentDocument';
 
 @Component
@@ -22,6 +25,8 @@ struct ContentDetailPage {
   contentId: string = '';
   repository: ContentRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
+  collectionRepository: CollectionRepository | undefined = undefined;
+  session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
   @State private phase: ContentDetailPhase = ContentDetailPhase.IDLE;
@@ -29,6 +34,7 @@ struct ContentDetailPage {
   @State private errorMessage: string = '';
   @State private requiresLogin: boolean = false;
   @State private openedRecordPhase: OpenedRecordPhase = OpenedRecordPhase.NOT_CONFIGURED;
+  @State private favoriteDialogShown: boolean = false;
   private controller?: ContentDetailController;
 
   aboutToAppear(): void {
@@ -53,19 +59,51 @@ struct ContentDetailPage {
   }
 
   build() {
-    Column() {
-      if (this.phase === ContentDetailPhase.LOADING || this.phase === ContentDetailPhase.IDLE) {
-        this.statusPanel('正在加载内容…', false)
-      } else if (this.phase === ContentDetailPhase.ERROR) {
-        this.statusPanel(this.errorMessage, true)
-      } else if (this.content !== undefined) {
-        this.loadedContent(this.content)
+    Stack({ alignContent: Alignment.TopStart }) {
+      Column() {
+        if (this.phase === ContentDetailPhase.LOADING || this.phase === ContentDetailPhase.IDLE) {
+          this.statusPanel('正在加载内容…', false)
+        } else if (this.phase === ContentDetailPhase.ERROR) {
+          this.statusPanel(this.errorMessage, true)
+        } else if (this.content !== undefined) {
+          this.loadedContent(this.content)
+        }
+      }
+      .id(`p2_${this.kind}_detail_page`)
+      .width('100%')
+      .height('100%')
+      .backgroundColor($r('app.color.page_background'))
+
+      if (this.favoriteDialogShown && this.collectionRepository !== undefined && this.session !== undefined) {
+        this.favoriteDialog()
       }
     }
-    .id(`p2_${this.kind}_detail_page`)
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.page_background'))
+  }
+
+  @Builder
+  private favoriteDialog() {
+    Column() {
+      Blank()
+        .onClick((): void => {
+          this.favoriteDialogShown = false;
+        })
+      CollectionDialogComponent({
+        contentType: this.kind === ContentDetailKind.ARTICLE ? 'article' : 'answer',
+        contentId: this.contentId,
+        repository: this.collectionRepository,
+        session: this.session,
+        navigate: this.navigate,
+        onDismiss: (): void => {
+          this.favoriteDialogShown = false;
+        }
+      })
+        .height('70%')
+    }
+    .width('100%')
+    .height('100%')
+    .backgroundColor('#66000000')
   }
 
   @Builder
@@ -132,6 +170,19 @@ struct ContentDetailPage {
           .fontColor($r('app.color.secondary_text'))
           .width('100%')
 
+        if (content.kind === ContentDetailKind.ANSWER || content.kind === ContentDetailKind.ARTICLE) {
+          Button('收藏')
+            .id(`p2_${content.kind}_detail_favorite`)
+            .fontSize($r('app.float.p1_body_font_size'))
+            .onClick((): void => {
+              if (this.collectionRepository !== undefined && this.session !== undefined) {
+                this.favoriteDialogShown = true;
+              } else {
+                this.navigate({ name: P1DestinationName.LOGIN });
+              }
+            })
+        }
+
         if (this.openedRecordPhase === OpenedRecordPhase.FAILED) {
           Text('本次打开记录未能保存，阅读不受影响')
             .id(`p2_${content.kind}_opened_record_failed`)
@@ -174,6 +225,8 @@ export struct QuestionDetailPage {
   contentId: string = '';
   repository: ContentRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
+  collectionRepository: CollectionRepository | undefined = undefined;
+  session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
 
@@ -183,6 +236,8 @@ export struct QuestionDetailPage {
       contentId: this.contentId,
       repository: this.repository,
       openedContentStore: this.openedContentStore,
+      collectionRepository: this.collectionRepository,
+      session: this.session,
       navigate: this.navigate
     })
   }
@@ -193,6 +248,8 @@ export struct AnswerDetailPage {
   contentId: string = '';
   repository: ContentRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
+  collectionRepository: CollectionRepository | undefined = undefined;
+  session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
 
@@ -202,6 +259,8 @@ export struct AnswerDetailPage {
       contentId: this.contentId,
       repository: this.repository,
       openedContentStore: this.openedContentStore,
+      collectionRepository: this.collectionRepository,
+      session: this.session,
       navigate: this.navigate
     })
   }
@@ -212,6 +271,8 @@ export struct ArticleDetailPage {
   contentId: string = '';
   repository: ContentRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
+  collectionRepository: CollectionRepository | undefined = undefined;
+  session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
 
@@ -221,6 +282,8 @@ export struct ArticleDetailPage {
       contentId: this.contentId,
       repository: this.repository,
       openedContentStore: this.openedContentStore,
+      collectionRepository: this.collectionRepository,
+      session: this.session,
       navigate: this.navigate
     })
   }

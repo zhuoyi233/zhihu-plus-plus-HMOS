@@ -40,6 +40,7 @@ export interface ZhihuHttpRequest {
   accept?: string;
   useSession?: boolean;
   signWithZse?: boolean;
+  contentType?: string;
 }
 
 export interface PreparedZhihuHttpRequest {
@@ -129,6 +130,7 @@ export function prepareZhihuHttpRequest(
     zse96 = createZse96Header(request.url, dc0, request.body);
   }
   const accept = request.accept ?? 'application/json, text/plain, */*';
+  const bodyContentType = request.contentType ?? 'application/json';
   let headers: ZhihuRequestHeaders;
   if (zse96 !== undefined && request.body !== undefined) {
     headers = {
@@ -139,7 +141,7 @@ export function prepareZhihuHttpRequest(
       'x-requested-with': 'fetch',
       'x-zse-93': ZHIHU_WEB_ZSE93,
       'x-zse-96': zse96,
-      'Content-Type': 'application/json'
+      'Content-Type': bodyContentType
     };
   } else if (zse96 !== undefined) {
     headers = {
@@ -158,7 +160,7 @@ export function prepareZhihuHttpRequest(
       'Cookie': cookieHeader,
       'Referer': 'https://www.zhihu.com/',
       'x-requested-with': 'fetch',
-      'Content-Type': 'application/json'
+      'Content-Type': bodyContentType
     };
   } else if (cookieHeader !== undefined) {
     headers = {
@@ -172,7 +174,7 @@ export function prepareZhihuHttpRequest(
     headers = {
       'Accept': accept,
       'User-Agent': ZHIHU_USER_AGENT,
-      'Content-Type': 'application/json'
+      'Content-Type': bodyContentType
     };
   } else {
     headers = {
