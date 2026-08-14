@@ -83,7 +83,10 @@ async function downloadSvg(url: string, cookieHeader?: string): Promise<ArrayBuf
       readTimeout: READ_TIMEOUT_MS,
       usingCache: false,
       maxLimit: MAX_SVG_BYTES,
-      maxRedirects: 3
+      // 知乎 /equation 正常返回 200 image/svg+xml，不重定向；风控时 302 到 unhuman 也是 HTML 而非 SVG。
+      // 手动 Cookie 头 + 跟随重定向会把 Cookie 原样转发到重定向目标，因此保持 0 关闭重定向，
+      // 让 Cookie 只发往 isTrustedFormulaUrl 锁定的 www.zhihu.com/equation 这一跳。
+      maxRedirects: 0
     });
     if (Number(response.responseCode) !== 200) {
       throw new Error(`公式请求失败：HTTP ${response.responseCode}`);
