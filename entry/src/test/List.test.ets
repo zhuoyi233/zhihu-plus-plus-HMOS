@@ -33,6 +33,7 @@ import blockingActionStateTest from './BlockingActionState.test';
 import blockedFeedHistoryStateTest from './BlockedFeedHistoryState.test';
 import blocklistBackupTest from './BlocklistBackup.test';
 import readHistoryStateTest from './ReadHistoryState.test';
+import onlineHistoryRepositoryTest from './OnlineHistoryRepository.test';
 import dailyStoryRepositoryTest from './DailyStoryRepository.test';
 import dailyStoryDetailStateTest from './DailyStoryDetailState.test';
 
@@ -72,6 +73,7 @@ export default function testsuite(): void {
   blockedFeedHistoryStateTest();
   blocklistBackupTest();
   readHistoryStateTest();
+  onlineHistoryRepositoryTest();
   dailyStoryRepositoryTest();
   dailyStoryDetailStateTest();
 }

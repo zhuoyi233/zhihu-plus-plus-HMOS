@@ -1,13 +1,19 @@
 import {
-  ReadHistoryGateway
+  LoginSessionGateway,
+  OnlineHistoryRepository,
+  ReadHistoryGateway,
+  SessionStatus
 } from 'data';
 import {
+  groupReadHistoryItems,
   ReadHistoryController,
+  ReadHistoryGroup,
   ReadHistoryItem,
   readHistoryKindLabel,
   readHistoryOpenTarget,
   ReadHistoryOpenTarget,
   ReadHistoryPhase,
+  readHistorySourceLabel,
   ReadHistoryViewState
 } from './ReadHistoryState';
 
@@ -16,12 +22,19 @@ export type OpenReadHistoryItem = (target: ReadHistoryOpenTarget) => void;
 @Component
 export struct ReadHistoryPage {
   history: ReadHistoryGateway | undefined = undefined;
+  onlineHistory: OnlineHistoryRepository | undefined = undefined;
+  session: LoginSessionGateway | undefined = undefined;
   onOpen: OpenReadHistoryItem = (_target: ReadHistoryOpenTarget): void => {};
+  onGoLogin: () => void = (): void => {};
   @State private viewState: ReadHistoryViewState = {
     phase: ReadHistoryPhase.LOADING,
     items: [],
     busy: false,
-    message: '正在读取本地已读记录'
+    message: '正在读取本地已读记录',
+    requiresLogin: false,
+    onlineEnabled: false,
+    loadingMore: false,
+    canLoadMore: false
   };
   @State private confirmClear: boolean = false;
   private controller?: ReadHistoryController;
@@ -33,13 +46,21 @@ export struct ReadHistoryPage {
         phase: ReadHistoryPhase.ERROR,
         items: [],
         busy: false,
-        message: '已读记录数据源未配置'
+        message: '已读记录数据源未配置',
+        requiresLogin: false,
+        onlineEnabled: false,
+        loadingMore: false,
+        canLoadMore: false
       };
       return;
     }
-    this.controller = new ReadHistoryController(history, (state: ReadHistoryViewState): void => {
-      this.viewState = state;
-    });
+    const session = this.session;
+    const onlineEnabled = session !== undefined &&
+      session.getState().status === SessionStatus.AUTHENTICATED;
+    this.controller = new ReadHistoryController(history, this.onlineHistory, onlineEnabled,
+      (state: ReadHistoryViewState): void => {
+        this.viewState = state;
+      });
     this.controller.activate();
   }
 
@@ -65,12 +86,15 @@ export struct ReadHistoryPage {
           .layoutWeight(1)
         Button('清空')
           .id('p2_read_history_clear')
-          .enabled(!this.viewState.busy && this.viewState.items.length > 0)
+          .enabled(!this.viewState.busy && this.viewState.items.some((item: ReadHistoryItem): boolean => item.deletable))
           .onClick((): void => {
             this.confirmClear = true;
           })
       }
       .width('100%')
+      if (this.viewState.requiresLogin) {
+        this.loginBanner()
+      }
       if (this.viewState.phase === ReadHistoryPhase.LOADING && this.viewState.items.length === 0) {
         LoadingProgress()
           .id('p2_read_history_loading')
@@ -79,7 +103,7 @@ export struct ReadHistoryPage {
           .color($r('app.color.brand_primary'))
       } else if (this.viewState.items.length === 0) {
         Column({ space: $r('app.float.p1_spacing_medium') }) {
-          Text(this.viewState.phase === ReadHistoryPhase.EMPTY ? '暂无本地已读记录' : this.viewState.message)
+          Text(this.viewState.message)
             .fontSize($r('app.float.p1_body_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .textAlign(TextAlign.Center)
@@ -98,11 +122,23 @@ export struct ReadHistoryPage {
         .width('100%')
       } else {
         List({ space: 10 }) {
-          ForEach(this.viewState.items, (item: ReadHistoryItem) => {
+          ForEach(groupReadHistoryItems(this.viewState.items), (group: ReadHistoryGroup) => {
             ListItem() {
-              this.historyRow(item)
+              this.groupSection(group)
             }
-          }, (item: ReadHistoryItem): string => item.contentKey)
+          }, (group: ReadHistoryGroup): string => group.kind)
+          if (this.viewState.canLoadMore || this.viewState.loadingMore) {
+            ListItem() {
+              Button(this.viewState.loadingMore ? '正在加载更多…' : '加载更多在线历史')
+                .id('p3_read_history_load_more')
+                .width('100%')
+                .fontSize($r('app.float.p1_secondary_font_size'))
+                .enabled(!this.viewState.loadingMore && !this.viewState.busy)
+                .onClick((): void => {
+                  this.controller?.loadMore();
+                })
+            }
+          }
         }
         .id('p2_read_history_list')
         .layoutWeight(1)
@@ -120,13 +156,47 @@ export struct ReadHistoryPage {
   }
 
   @Builder
+  private loginBanner() {
+    Row({ space: $r('app.float.p1_spacing_small') }) {
+      Text('登录后可同步查看知乎账号的在线浏览历史')
+        .id('p3_read_history_online_notice')
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .layoutWeight(1)
+      Button('去登录')
+        .id('p3_read_history_go_login')
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .onClick((): void => this.onGoLogin())
+    }
+    .width('100%')
+    .padding($r('app.float.p1_spacing_medium'))
+    .borderRadius($r('app.float.p1_card_radius'))
+    .backgroundColor($r('app.color.surface_background'))
+  }
+
+  @Builder
+  private groupSection(group: ReadHistoryGroup) {
+    Column({ space: $r('app.float.p1_spacing_small') }) {
+      Text(readHistoryKindLabel(group.kind))
+        .id(`p3_read_history_group_${group.kind}`)
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontColor($r('app.color.brand_primary'))
+        .width('100%')
+      ForEach(group.items, (item: ReadHistoryItem) => {
+        this.historyRow(item)
+      }, (item: ReadHistoryItem): string => item.contentKey)
+    }
+    .width('100%')
+  }
+
+  @Builder
   private historyRow(item: ReadHistoryItem) {
     Row({ space: $r('app.float.p1_spacing_small') }) {
       Column({ space: 2 }) {
-        Text(`${readHistoryKindLabel(item.kind)} #${item.id}`)
+        Text(this.itemTitle(item))
           .fontSize($r('app.float.p1_body_font_size'))
           .width('100%')
-        Text(this.displayTime(item.openedAt))
+        Text(`${this.displayTime(item.openedAt)} · ${readHistorySourceLabel(item)}`)
           .fontSize($r('app.float.p1_caption_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .width('100%')
@@ -136,12 +206,14 @@ export struct ReadHistoryPage {
         .id(`p2_read_history_open_${item.contentKey}`)
         .enabled(!this.viewState.busy)
         .onClick((): void => this.onOpen(readHistoryOpenTarget(item)))
-      Button('删除')
-        .id(`p2_read_history_delete_${item.contentKey}`)
-        .enabled(!this.viewState.busy)
-        .onClick((): void => {
-          this.controller?.delete(item.contentKey);
-        })
+      if (item.deletable) {
+        Button('删除')
+          .id(`p2_read_history_delete_${item.contentKey}`)
+          .enabled(!this.viewState.busy)
+          .onClick((): void => {
+            this.controller?.delete(item.contentKey);
+          })
+      }
     }
     .width('100%')
     .padding($r('app.float.p1_spacing_medium'))
@@ -152,7 +224,8 @@ export struct ReadHistoryPage {
   @Builder
   private clearConfirmation() {
     Column({ space: $r('app.float.p1_spacing_small') }) {
-      Text('确认清空全部本地已读记录？此操作无法撤销。')
+      Text(this.viewState.onlineEnabled ?
+        '确认清空全部本地已读记录？在线历史不会被清除。' : '确认清空全部本地已读记录？此操作无法撤销。')
         .fontSize($r('app.float.p1_body_font_size'))
         .width('100%')
       Row({ space: $r('app.float.p1_spacing_small') }) {
@@ -176,6 +249,11 @@ export struct ReadHistoryPage {
     .padding($r('app.float.p1_spacing_medium'))
     .backgroundColor($r('app.color.card_background'))
     .borderRadius($r('app.float.p1_card_radius'))
+  }
+
+  private itemTitle(item: ReadHistoryItem): string {
+    const title = item.title?.trim() ?? '';
+    return title.length > 0 ? title : `${readHistoryKindLabel(item.kind)} #${item.id}`;
   }
 
   private displayTime(openedAt: number): string {
