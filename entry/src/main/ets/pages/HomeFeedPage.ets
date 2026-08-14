@@ -42,6 +42,12 @@ export struct HomeFeedPage {
   private pendingBlockItem?: FeedItem = undefined;
 
   aboutToAppear(): void {
+    // P3-7：返回栈重显（页面实例与状态保留）时 aboutToAppear 可能再次触发；
+    // 控制器仍存活时直接复用，避免重建控制器并重载列表导致滚动位置丢失。
+    if (this.controller !== undefined) {
+      this.controller.activate();
+      return;
+    }
     const repository = this.repository;
     if (repository === undefined) {
       this.phase = HomeFeedPhase.ERROR;

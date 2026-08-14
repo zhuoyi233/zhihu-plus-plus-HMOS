@@ -47,6 +47,7 @@ import commentRepositoryTest from './CommentRepository.test';
 import commentStateTest from './CommentState.test';
 import notificationRepositoryTest from './NotificationRepository.test';
 import notificationStateTest from './NotificationState.test';
+import backStackStateTest from './BackStackState.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -98,4 +99,5 @@ export default function testsuite(): void {
   commentStateTest();
   notificationRepositoryTest();
   notificationStateTest();
+  backStackStateTest();
 }

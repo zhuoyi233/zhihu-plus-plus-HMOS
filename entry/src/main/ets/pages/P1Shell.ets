@@ -3,12 +3,12 @@ import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import {
   decodeP1Destination,
+  findP1DestinationStackIndex,
   isInfrastructureDestination,
   LatestOperationGuard,
   P1Destination,
   P1DestinationName,
   shouldReloadAfterAuthentication,
-  shouldPushP1Destination,
   startupDestinationChannel,
   StartupDestinationListener
 } from 'core';
@@ -554,12 +554,11 @@ export struct P1Shell {
     }
     const paths: Array<NavPathInfo> | undefined = this.pathStack.getPathStack();
     if (paths !== undefined && paths.length > 0) {
-      const current = paths[paths.length - 1];
-      if (current.param instanceof Object) {
-        const currentDestination = decodeP1Destination(current.name, current.param);
-        if (!shouldPushP1Destination(currentDestination, destination)) {
-          return;
-        }
+      // P3-7：同一目标（name+参数）已在返回栈任何位置时不再重复入栈，
+      // 防止「返回时只是露出前一个重复页面」（CLAUDE.md 返回栈教训）。
+      // 参数化页面不能使用按 name 匹配的 MOVE_TO_TOP_SINGLETON，必须按身份查重。
+      if (findP1DestinationStackIndex(paths, destination) >= 0) {
+        return;
       }
     }
     const path: NavPathInfo = { name: destination.name, param: destination };

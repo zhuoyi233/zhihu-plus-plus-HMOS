@@ -32,6 +32,12 @@ export struct CollectionPage {
   private controller?: CollectionController;
 
   aboutToAppear(): void {
+    // P3-7：返回栈重显（页面实例与状态保留）时 aboutToAppear 可能再次触发；
+    // 控制器仍存活时直接复用，避免 loadInitial 清空列表并重载导致滚动位置丢失。
+    if (this.controller !== undefined) {
+      this.controller.activate();
+      return;
+    }
     const repository = this.repository;
     const session = this.session;
     if (repository === undefined || session === undefined) {
