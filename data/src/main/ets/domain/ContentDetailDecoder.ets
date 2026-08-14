@@ -1,5 +1,6 @@
 import {
   jsonIntegerLiteral,
+  JsonArrayValue,
   JsonBooleanValue,
   JsonNullValue,
   JsonNumberValue,
@@ -9,7 +10,7 @@ import {
   parseStrictJson,
   StrictJsonError
 } from 'core';
-import { Answer, Article, ContentVoteState, Question, UserProfile } from './DomainModels';
+import { Answer, AnswerEndorsementDisplay, Article, ContentVoteState, Question, UserProfile } from './DomainModels';
 import { DomainDecodeError, DomainDecodeFailureKind } from './ZhihuDomainDecoder';
 
 function parseRoot(json: string, contentName: string): JsonObjectValue {
@@ -121,6 +122,80 @@ function optionalObject(value: JsonValue | undefined, field: string): JsonObject
     throw invalid(`${field} 结构无效`);
   }
   return value;
+}
+
+/** 安全 alpha：0..1 内有限值，否则回退 1。 */
+function safeAlpha(value: JsonValue | undefined): number {
+  if (!(value instanceof JsonNumberValue) || !Number.isFinite(value.value)) {
+    return 1;
+  }
+  return Math.min(1, Math.max(0, value.value));
+}
+
+/** 安全 token 组：仅接受已知前缀（GBK/GBL/GRD/GYL），未知返回 undefined 由 UI 回退主题色。 */
+function safeTokenGroup(value: JsonValue | undefined): string | undefined {
+  if (value instanceof JsonStringValue && /^(?:GBK|GBL|GRD|GYL)[0-9]{2}[A-Z]?$/.test(value.value)) {
+    return value.value;
+  }
+  return undefined;
+}
+
+/**
+ * 解码回答认可徽章流（对齐上游 Answer.endorsements 的 display 精简模型）。
+ * 单个徽章无法展示时跳过，不因徽章数据异常拒绝详情加载。
+ */
+function endorsementsFromWire(value: JsonValue | undefined): Array<AnswerEndorsementDisplay> {
+  if (value === undefined || value instanceof JsonNullValue) {
+    return [];
+  }
+  if (!(value instanceof JsonArrayValue)) {
+    return [];
+  }
+  const result: Array<AnswerEndorsementDisplay> = [];
+  value.items.forEach((entry: JsonValue): void => {
+    const endorsement = optionalObject(entry, 'endorsement');
+    if (endorsement === undefined) {
+      return;
+    }
+    const elements = endorsement.get('elements');
+    if (!(elements instanceof JsonArrayValue)) {
+      return;
+    }
+    const textParts: Array<string> = [];
+    let textColorGroup: string | undefined = undefined;
+    let textColorAlpha = 1;
+    elements.items.forEach((elementValue: JsonValue): void => {
+      const element = optionalObject(elementValue, 'endorsement.element');
+      if (element === undefined) {
+        return;
+      }
+      const type = element.get('type');
+      const content = element.get('content');
+      if (type instanceof JsonStringValue && type.value === 'TEXT' &&
+        content instanceof JsonStringValue && content.value.trim().length > 0) {
+        textParts.push(content.value.trim());
+        textColorGroup = safeTokenGroup(element.get('fontColor') instanceof JsonObjectValue
+          ? (element.get('fontColor') as JsonObjectValue).get('group')
+          : undefined) ?? textColorGroup;
+        textColorAlpha = element.get('fontColor') instanceof JsonObjectValue
+          ? safeAlpha((element.get('fontColor') as JsonObjectValue).get('alpha'))
+          : textColorAlpha;
+      }
+    });
+    const text = textParts.join(' ').trim();
+    if (text.length === 0) {
+      return;
+    }
+    const background = optionalObject(endorsement.get('backgroundColor'), 'endorsement.backgroundColor');
+    result.push({
+      text: text,
+      backgroundColorGroup: background === undefined ? undefined : safeTokenGroup(background.get('group')),
+      backgroundColorAlpha: background === undefined ? 1 : safeAlpha(background.get('alpha')),
+      textColorGroup: textColorGroup,
+      textColorAlpha: textColorAlpha
+    });
+  });
+  return result;
 }
 
 /**
@@ -242,7 +317,9 @@ export function decodeAnswerDetail(json: string, expectedId: string): Answer {
     author: authorFromWire(optionalObject(wire.get('author'), 'author')),
     voteState: voteStateFromWire(wire),
     thanksCount: nonNegativeInteger(wire.get('thanks_count'), 'answer.thanks_count'),
-    isThanked: optionalBoolean(wire.get('is_thanked'), 'answer.is_thanked')
+    isThanked: optionalBoolean(wire.get('is_thanked'), 'answer.is_thanked'),
+    endorsements: endorsementsFromWire(wire.get('endorsements')),
+    ipInfo: optionalText(wire.get('ip_info'))
   };
 }
 
@@ -263,7 +340,9 @@ export function decodeArticleDetail(json: string, expectedId: string): Article {
     author: authorFromWire(optionalObject(wire.get('author'), 'author')),
     voteState: voteStateFromWire(wire),
     thanksCount: nonNegativeInteger(wire.get('thanks_count'), 'article.thanks_count'),
-    isThanked: optionalBoolean(wire.get('is_thanked'), 'article.is_thanked')
+    isThanked: optionalBoolean(wire.get('is_thanked'), 'article.is_thanked'),
+    endorsements: endorsementsFromWire(wire.get('endorsements')),
+    ipInfo: optionalText(wire.get('ip_info'))
   };
 }
 

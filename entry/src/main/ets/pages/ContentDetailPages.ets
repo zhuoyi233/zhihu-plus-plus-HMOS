@@ -1,8 +1,10 @@
+import { pasteboard } from '@kit.BasicServicesKit';
 import {
   P1Destination,
   P1DestinationName
 } from 'core';
 import {
+  AnswerEndorsementDisplay,
   BlockedFeedHistoryGateway,
   BlockingRuleGateway,
   CollectionRepository,
@@ -79,6 +81,12 @@ struct ContentDetailPage {
   @State private commentReplyDraft: string = '';
   /** P3-9-B：顶栏折叠状态——false 收起（标题行）、true 展开（作者行），滚动后收为标题行。 */
   @State private topBarScrolled: boolean = false;
+  /** P3-9-C：底部菜单弹窗可见性。 */
+  @State private actionMenuShown: boolean = false;
+  /** P3-9-C：菜单操作反馈（复制链接结果等）。 */
+  @State private menuStatus: string = '';
+  /** P3-9-D：阅读进度（0..1），驱动右侧阅读进度条。 */
+  @State private readingPercent: number = 0;
   private controller?: ContentDetailController;
   private blockingAction?: BlockingActionController;
   private voteController?: ContentVoteController;
@@ -154,6 +162,25 @@ struct ContentDetailPage {
       if (this.phase === ContentDetailPhase.READY && this.content !== undefined) {
         this.detailTopBar(this.content)
       }
+      // P3-9-D：右侧阅读进度条（正文加载完成且已滚动时显示）。
+      if (this.phase === ContentDetailPhase.READY && this.readingPercent > 0 && this.readingPercent < 1) {
+        Column() {
+          Column()
+            .width(3)
+            .layoutWeight(this.readingPercent)
+            .backgroundColor($r('app.color.brand_primary'))
+          Column()
+            .width(3)
+            .layoutWeight(1 - this.readingPercent)
+            .backgroundColor($r('app.color.control_background'))
+        }
+        .id('p3_detail_reading_progress')
+        .width(3)
+        .height('80%')
+        .borderRadius(2)
+        .align(Alignment.Center)
+        .margin({ left: '96%' })
+      }
       if (this.kind === ContentDetailKind.ANSWER || this.kind === ContentDetailKind.ARTICLE) {
         if (this.phase === ContentDetailPhase.READY && this.content !== undefined) {
           this.bottomActionBar()
@@ -167,6 +194,9 @@ struct ContentDetailPage {
       }
       if (this.keywordBlockVisible) {
         this.keywordBlockDialog()
+      }
+      if (this.actionMenuShown) {
+        this.actionMenuSheet()
       }
       if (this.kind === ContentDetailKind.ANSWER || this.kind === ContentDetailKind.ARTICLE) {
         CommentLayer({
@@ -282,6 +312,18 @@ struct ContentDetailPage {
           .fontColor($r('app.color.secondary_text'))
           .width('100%')
 
+        if (contentEndorsements(content).length > 0) {
+          this.endorsementFlow(contentEndorsements(content))
+        }
+
+        if (contentIpInfo(content).length > 0) {
+          Text(`IP 属地：${contentIpInfo(content)}`)
+            .id(`p2_${content.kind}_detail_ip`)
+            .fontSize($r('app.float.p1_caption_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
+        }
+
         if (contentAuthorName(content).length > 0) {
           Button('屏蔽作者')
             .id(`p3_${content.kind}_block_author`)
@@ -335,6 +377,9 @@ struct ContentDetailPage {
         emptyMessage: contentEmptyMessage(content),
         onScrollOffset: (offset: number): void => {
           this.topBarScrolled = offset > 0;
+        },
+        onScrollPercent: (percent: number): void => {
+          this.readingPercent = percent;
         }
       })
         .layoutWeight(1)
@@ -493,6 +538,15 @@ struct ContentDetailPage {
                 this.navigate({ name: P1DestinationName.LOGIN });
               }
             })
+
+          Button('更多', { type: ButtonType.Normal })
+            .id(`p3_${this.kind}_detail_more`)
+            .fontSize($r('app.float.p1_body_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .backgroundColor(Color.Transparent)
+            .onClick((): void => {
+              this.actionMenuShown = true;
+            })
         }
       }
       .width('100%')
@@ -506,6 +560,8 @@ struct ContentDetailPage {
     .width('100%')
     .backgroundColor($r('app.color.surface_background'))
     .border({ width: { top: 0.5 }, color: $r('app.color.divider_color') })
+    .zIndex(2)
+    .hitTestBehavior(HitTestMode.Default)
   }
 
   @Builder
@@ -598,6 +654,133 @@ struct ContentDetailPage {
     .border({ width: { bottom: 0.5 }, color: $r('app.color.divider_color') })
     .zIndex(2)
     .hitTestBehavior(HitTestMode.Default)
+  }
+
+  @Builder
+  private actionMenuSheet() {
+    // P3-9-C：底部菜单弹窗（对齐上游 MyModalBottomSheet）。分享/复制链接可用，
+    // 朗读/总结/导出/沉浸式为占位入口（依赖系统能力或后续切片）。
+    Column() {
+      Blank()
+        .onClick((): void => {
+          this.actionMenuShown = false;
+        })
+      Column({ space: $r('app.float.p1_spacing_small') }) {
+        Row({ space: $r('app.float.p1_spacing_small') }) {
+          Text('更多操作')
+            .fontSize($r('app.float.p1_heading_font_size'))
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.primary_text'))
+            .layoutWeight(1)
+          Button('关闭')
+            .id('p3_detail_menu_close')
+            .fontSize($r('app.float.p1_body_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .backgroundColor(Color.Transparent)
+            .onClick((): void => {
+              this.actionMenuShown = false;
+            })
+        }
+        .width('100%')
+
+        Button('复制链接')
+          .id('p3_detail_menu_copy_link')
+          .width('100%')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .onClick((): void => {
+            this.actionMenuShown = false;
+            this.copyContentLink();
+          })
+
+        if (this.menuStatus.length > 0) {
+          Text(this.menuStatus)
+            .id('p3_detail_menu_status')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
+        }
+
+        Button('分享')
+          .id('p3_detail_menu_share')
+          .width('100%')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .onClick((): void => {
+            this.actionMenuShown = false;
+            this.copyContentLink();
+          })
+
+        Button('朗读（开发中）')
+          .id('p3_detail_menu_tts')
+          .width('100%')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .enabled(false)
+
+        Button('导出文章（开发中）')
+          .id('p3_detail_menu_export')
+          .width('100%')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .enabled(false)
+      }
+      .width('100%')
+      .padding($r('app.float.p1_spacing_medium'))
+      .backgroundColor($r('app.color.surface_background'))
+      .borderRadius({
+        topLeft: $r('app.float.p1_card_radius'),
+        topRight: $r('app.float.p1_card_radius')
+      })
+    }
+    .id('p3_detail_menu_sheet')
+    .width('100%')
+    .height('100%')
+    .backgroundColor('#66000000')
+  }
+
+  private copyContentLink(): void {
+    const content = this.content;
+    if (content === undefined) {
+      return;
+    }
+    const url = content.value.url;
+    if (url.trim().length === 0) {
+      return;
+    }
+    try {
+      const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, url);
+      pasteboard.getSystemPasteboard().setData(pasteData).then((): void => {
+        this.menuStatus = '已复制链接';
+      }).catch((_error: Error): void => {
+        this.menuStatus = '复制失败，请重试';
+      });
+    } catch (_error) {
+      this.menuStatus = '复制失败，请重试';
+    }
+  }
+
+  @Builder
+  private endorsementFlow(endorsements: Array<AnswerEndorsementDisplay>) {
+    // P3-9-D1：认可徽章流（对齐上游 FlowRow 胶囊）；用 Flex 换行近似流式布局。
+    Flex({ wrap: FlexWrap.Wrap, direction: FlexDirection.Row }) {
+      ForEach(endorsements, (endorsement: AnswerEndorsementDisplay) => {
+        Row({ space: 4 }) {
+          Text(endorsement.text)
+            .fontSize($r('app.float.p1_caption_font_size'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor(endorsementTextColor(endorsement))
+            .maxLines(1)
+        }
+        .padding({
+          left: 10,
+          right: 10,
+          top: 5,
+          bottom: 5
+        })
+        .borderRadius(16)
+        .backgroundColor(endorsementBackgroundColor(endorsement))
+        .margin({ right: $r('app.float.p1_spacing_small'), bottom: $r('app.float.p1_spacing_small') })
+      }, (endorsement: AnswerEndorsementDisplay): string => endorsement.text)
+    }
+    .id(`p3_${this.kind}_detail_endorsements`)
+    .width('100%')
   }
 
   @Builder
@@ -860,6 +1043,80 @@ export function contentAuthorName(content: LoadedContentDetail): string {
 
 export function contentAuthorHeadline(content: LoadedContentDetail): string {
   return content.value.author?.headline?.trim() ?? '';
+}
+
+/** P3-9-D1：回答/文章的认可徽章流（仅 ANSWER/ARTICLE 有）。 */
+export function contentEndorsements(content: LoadedContentDetail): Array<AnswerEndorsementDisplay> {
+  if (content.kind === ContentDetailKind.QUESTION) {
+    return [];
+  }
+  return content.value.endorsements ?? [];
+}
+
+/** P3-9-D2：IP 属地（仅 ANSWER/ARTICLE 有）。 */
+export function contentIpInfo(content: LoadedContentDetail): string {
+  if (content.kind === ContentDetailKind.QUESTION) {
+    return '';
+  }
+  return (content.value.ipInfo ?? '').trim();
+}
+
+/** 认可徽章背景色：按知乎 token 组映射，未知回退主题浅色。 */
+function endorsementBackgroundColor(endorsement: AnswerEndorsementDisplay): ResourceColor {
+  const group = endorsement.backgroundColorGroup ?? '';
+  const alpha = endorsement.backgroundColorAlpha;
+  if (group.startsWith('GBK') || group.startsWith('GBL') || group.startsWith('GRD') || group.startsWith('GYL')) {
+    const base = endorsementGroupColor(group);
+    return applyAlpha(base, alpha);
+  }
+  return $r('app.color.control_background');
+}
+
+/** 认可徽章文字色：按知乎 token 组映射，未知回退主题主色。 */
+function endorsementTextColor(endorsement: AnswerEndorsementDisplay): ResourceColor {
+  const group = endorsement.textColorGroup ?? '';
+  if (group.startsWith('GBK') || group.startsWith('GBL') || group.startsWith('GRD') || group.startsWith('GYL')) {
+    return endorsementGroupColor(group);
+  }
+  return $r('app.color.brand_primary');
+}
+
+/** 知乎认可徽章 token → 具体色值（精简自上游 ZhihuEndorsementColorTokens 的常见组）。 */
+function endorsementGroupColor(group: string): string {
+  switch (group) {
+    case 'GBK02A':
+      return '#191B1F';
+    case 'GBK03A':
+      return '#373A40';
+    case 'GBK06A':
+    case 'GBK06B':
+    case 'GBK07A':
+      return '#9196A1';
+    case 'GBK10A':
+    case 'GBK10B':
+    case 'GBK12A':
+      return '#F8F8FA';
+    case 'GBL01A':
+      return '#1772F6';
+    case 'GRD01A':
+    case 'GRD03A':
+      return '#F05159';
+    case 'GRD10A':
+      return '#FF501A';
+    case 'GYL01A':
+      return '#F77A31';
+    default:
+      return '#0066FF';
+  }
+}
+
+function applyAlpha(hex: string, alpha: number): string {
+  const clamped = Math.min(1, Math.max(0, alpha));
+  if (clamped >= 1) {
+    return hex;
+  }
+  const byte = Math.round(clamped * 255).toString(16).padStart(2, '0');
+  return `${hex}${byte}`;
 }
 
 export function contentBlockingTitle(content: LoadedContentDetail): string {

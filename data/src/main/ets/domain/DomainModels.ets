@@ -54,6 +54,15 @@ export interface Question {
   isFollowing?: boolean;
 }
 
+export interface AnswerEndorsementDisplay {
+  readonly text: string;
+  /** 徽章背景色 token 组（如 GBK/GBL/GRD/GYL 前缀）；未知回退主题色。 */
+  readonly backgroundColorGroup?: string;
+  readonly backgroundColorAlpha: number;
+  readonly textColorGroup?: string;
+  readonly textColorAlpha: number;
+}
+
 export interface Answer {
   id: string;
   questionId: string;
@@ -71,6 +80,10 @@ export interface Answer {
   thanksCount?: number;
   /** 当前登录用户是否已感谢；详情接口未返回时缺省。 */
   isThanked?: boolean;
+  /** 回答认可徽章流（对齐上游 Answer.endorsements 的 display 精简模型）。 */
+  endorsements?: Array<AnswerEndorsementDisplay>;
+  /** IP 属地（如「广东」）；接口未返回时缺省。 */
+  ipInfo?: string;
 }
 
 export interface Article {
@@ -90,6 +103,10 @@ export interface Article {
   thanksCount?: number;
   /** 当前登录用户是否已感谢；详情接口未返回时缺省。 */
   isThanked?: boolean;
+  /** 文章认可徽章流（对齐上游 Article.endorsements）。 */
+  endorsements?: Array<AnswerEndorsementDisplay>;
+  /** IP 属地（如「广东」）；接口未返回时缺省。 */
+  ipInfo?: string;
 }
 
 export enum FeedTargetKind {

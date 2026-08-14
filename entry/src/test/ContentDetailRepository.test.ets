@@ -132,6 +132,24 @@ export default function contentDetailRepositoryTest(): void {
       expect(article.url).assertEqual('https://zhuanlan.zhihu.com/p/789');
     });
 
+    it('decodesEndorsementsAndIpInfoSafely', 0, () => {
+      const answer: Answer = decodeAnswerDetail(
+        '{"id":"9007199254740993","question":{"id":"456"},"content":"正文","excerpt":"摘要",' +
+        '"voteup_count":21,"comment_count":3,"created_time":1700000000,"updated_time":1700000001,' +
+        '"endorsements":[{"elements":[{"type":"TEXT","content":"专业领域","fontColor":{"group":"GBK03A","alpha":1}},' +
+        '{"type":"IMAGE","imageKey":"zhicon_icon_24_chat_bubble_hash_fill"}]},' +
+        '{"elements":[{"type":"TEXT","content":"不可信","fontColor":{"group":"BAD_TOKEN","alpha":1}}]}],' +
+        '"ip_info":"广东"}',
+        '9007199254740993'
+      );
+      expect(answer.endorsements?.length).assertEqual(2);
+      expect(answer.endorsements?.[0].text).assertEqual('专业领域');
+      expect(answer.endorsements?.[0].textColorGroup).assertEqual('GBK03A');
+      expect(answer.endorsements?.[1].text).assertEqual('不可信');
+      expect(answer.endorsements?.[1].textColorGroup).assertUndefined();
+      expect(answer.ipInfo).assertEqual('广东');
+    });
+
     it('keepsRequestedLongIdWhenJsonNumberCannotBeRepresentedExactly', 0, () => {
       const answer = decodeAnswerDetail(ANSWER_JSON, '9007199254740993');
       expect(answer.id).assertEqual('9007199254740993');
