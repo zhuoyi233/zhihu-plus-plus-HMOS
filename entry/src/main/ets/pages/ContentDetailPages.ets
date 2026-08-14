@@ -151,7 +151,18 @@ struct ContentDetailPage {
         } else if (this.phase === ContentDetailPhase.ERROR) {
           this.statusPanel(this.errorMessage, true)
         } else if (this.content !== undefined) {
-          this.loadedContent(this.content)
+          Column() {
+            Column() {
+              this.loadedContent(this.content)
+            }
+            .layoutWeight(1)
+            .width('100%')
+            if (this.kind === ContentDetailKind.ANSWER || this.kind === ContentDetailKind.ARTICLE) {
+              this.bottomActionBar()
+            }
+          }
+          .width('100%')
+          .height('100%')
         }
       }
       .id(`p2_${this.kind}_detail_page`)
@@ -180,17 +191,6 @@ struct ContentDetailPage {
         .borderRadius(2)
         .align(Alignment.Center)
         .margin({ left: '96%' })
-      }
-      if (this.kind === ContentDetailKind.ANSWER || this.kind === ContentDetailKind.ARTICLE) {
-        if (this.phase === ContentDetailPhase.READY && this.content !== undefined) {
-          Column() {
-            Blank()
-              .layoutWeight(1)
-            this.bottomActionBar()
-          }
-          .width('100%')
-          .height('100%')
-        }
       }
       if (this.favoriteDialogShown && this.collectionRepository !== undefined && this.session !== undefined) {
         this.favoriteDialog()
