@@ -402,6 +402,9 @@ struct ContentDetailPage {
       contentKind: content.kind,
       contentId: content.value.id
     };
+  }
+
+  @Builder
   private interactionBar() {
     Column({ space: $r('app.float.p1_spacing_small') }) {
       if (this.kind === ContentDetailKind.QUESTION) {
