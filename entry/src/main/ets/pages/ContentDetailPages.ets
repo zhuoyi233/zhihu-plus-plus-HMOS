@@ -637,14 +637,10 @@ struct ContentDetailPage {
                 top: $r('app.float.p1_spacing_small'),
                 bottom: $r('app.float.p1_spacing_small')
               })
-          } else {
-            Column()
-              .width('100%')
-              .height(48)
+            }
           }
-        }
       } else {
-        // 收起态：回答/文章不显示标题文字（NavDestination 系统栏「返回」旁已有）；
+        // 收起态：回答/文章完全不渲染（节省空间，标题由 NavDestination 系统栏提供）；
         // 问题页保留标题（系统栏无对应完整标题）。
         if (content.kind === ContentDetailKind.QUESTION) {
           Text(contentTitle(content))
@@ -660,11 +656,6 @@ struct ContentDetailPage {
               top: $r('app.float.p1_spacing_small'),
               bottom: $r('app.float.p1_spacing_small')
             })
-        } else {
-          // 仅保留占位高度（与展开态一致避免正文跳动），不渲染重复标题文字。
-          Column()
-            .width('100%')
-            .height(48)
         }
       }
     }
