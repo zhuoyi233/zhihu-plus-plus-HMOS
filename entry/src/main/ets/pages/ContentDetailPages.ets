@@ -149,6 +149,11 @@ struct ContentDetailPage {
       .height('100%')
       .backgroundColor($r('app.color.page_background'))
 
+      if (this.kind === ContentDetailKind.ANSWER || this.kind === ContentDetailKind.ARTICLE) {
+        if (this.phase === ContentDetailPhase.READY && this.content !== undefined) {
+          this.bottomActionBar()
+        }
+      }
       if (this.favoriteDialogShown && this.collectionRepository !== undefined && this.session !== undefined) {
         this.favoriteDialog()
       }
@@ -284,28 +289,6 @@ struct ContentDetailPage {
               }
             })
         }
-        if (content.kind === ContentDetailKind.ANSWER || content.kind === ContentDetailKind.ARTICLE) {
-          Button('收藏')
-            .id(`p2_${content.kind}_detail_favorite`)
-            .fontSize($r('app.float.p1_body_font_size'))
-            .onClick((): void => {
-              if (this.collectionRepository !== undefined && this.session !== undefined) {
-                this.favoriteDialogShown = true;
-              } else {
-                this.navigate({ name: P1DestinationName.LOGIN });
-              }
-            })
-          Button('评论')
-            .id(`p3_${content.kind}_detail_comment`)
-            .fontSize($r('app.float.p1_body_font_size'))
-            .onClick((): void => {
-              if (this.commentRepository !== undefined && this.session !== undefined) {
-                this.showComments = true;
-              } else {
-                this.navigate({ name: P1DestinationName.LOGIN });
-              }
-            })
-        }
 
         Button('屏蔽关键词')
           .id(`p3_${content.kind}_block_keyword`)
@@ -331,8 +314,6 @@ struct ContentDetailPage {
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
         }
-
-        this.interactionBar()
       }
       .alignItems(HorizontalAlign.Start)
       .width('100%')
@@ -451,27 +432,72 @@ struct ContentDetailPage {
   }
 
   @Builder
-  private interactionBar() {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
-      if (this.kind === ContentDetailKind.QUESTION) {
-        if (this.followController !== undefined) {
-          this.followQuestionAction()
-        }
-      } else if (this.voteController !== undefined) {
-        Row({ space: $r('app.float.p1_spacing_medium') }) {
-          this.voteUpAction()
-          this.voteDownAction()
-          if (this.kind === ContentDetailKind.ANSWER) {
-            this.thankAction()
-          }
-        }
-        .width('100%')
-      }
+  private bottomActionBar() {
+    Column() {
       if (this.interactionErrorMessage.length > 0) {
         this.interactionStatusRow()
       }
+      Row({ space: 0 }) {
+        if (this.kind === ContentDetailKind.QUESTION) {
+          if (this.followController !== undefined) {
+            this.followQuestionAction()
+          }
+          Blank()
+            .layoutWeight(1)
+        } else {
+          // 左组：投票胶囊（赞同图标+数字 / 反对），Neutral 浅蓝底、激活实蓝底（对齐上游主视觉）。
+          Row({ space: 0 }) {
+            this.voteUpAction()
+            this.voteDownAction()
+          }
+          .borderRadius(22)
+          .backgroundColor(this.voteState === ContentVoteState.NEUTRAL
+            ? $r('app.color.brand_primary_container')
+            : $r('app.color.brand_primary'))
+          .clip(true)
+
+          Blank()
+            .layoutWeight(1)
+
+          // 右组：收藏 + 评论 + 更多（对齐上游 bottomBar 右侧）。
+          Button(this.favoriteDialogShown ? '收藏' : '收藏', { type: ButtonType.Normal })
+            .id(`p3_${this.kind}_detail_favorite_bar`)
+            .fontSize($r('app.float.p1_body_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .backgroundColor(Color.Transparent)
+            .onClick((): void => {
+              if (this.collectionRepository !== undefined && this.session !== undefined) {
+                this.favoriteDialogShown = true;
+              } else {
+                this.navigate({ name: P1DestinationName.LOGIN });
+              }
+            })
+
+          Button(`评论 ${this.content?.value.commentCount ?? 0}`, { type: ButtonType.Normal })
+            .id(`p3_${this.kind}_detail_comment_bar`)
+            .fontSize($r('app.float.p1_body_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .backgroundColor(Color.Transparent)
+            .onClick((): void => {
+              if (this.commentRepository !== undefined && this.session !== undefined) {
+                this.showComments = true;
+              } else {
+                this.navigate({ name: P1DestinationName.LOGIN });
+              }
+            })
+        }
+      }
+      .width('100%')
+      .padding({
+        left: $r('app.float.p1_page_padding'),
+        right: $r('app.float.p1_page_padding'),
+        top: $r('app.float.p1_spacing_small'),
+        bottom: $r('app.float.p1_spacing_small')
+      })
     }
     .width('100%')
+    .backgroundColor($r('app.color.surface_background'))
+    .border({ width: { top: 0.5 }, color: $r('app.color.divider_color') })
   }
 
   @Builder
@@ -481,8 +507,9 @@ struct ContentDetailPage {
       .id(`p3_${this.kind}_vote_up`)
       .fontSize($r('app.float.p1_body_font_size'))
       .fontColor(this.voteState === ContentVoteState.UP
-        ? $r('app.color.brand_primary')
-        : $r('app.color.secondary_text'))
+        ? $r('app.color.on_brand')
+        : $r('app.color.brand_primary'))
+      .backgroundColor(Color.Transparent)
       .enabled(!this.interactionPending)
       .onClick((): void => {
         this.voteController?.toggleVote(true);
@@ -495,23 +522,12 @@ struct ContentDetailPage {
       .id(`p3_${this.kind}_vote_down`)
       .fontSize($r('app.float.p1_body_font_size'))
       .fontColor(this.voteState === ContentVoteState.DOWN
-        ? $r('app.color.brand_primary')
-        : $r('app.color.secondary_text'))
+        ? $r('app.color.on_brand')
+        : $r('app.color.brand_primary'))
+      .backgroundColor(Color.Transparent)
       .enabled(!this.interactionPending)
       .onClick((): void => {
         this.voteController?.toggleVote(false);
-      })
-  }
-
-  @Builder
-  private thankAction() {
-    Button(this.thanked ? `已感谢 ${this.thanksCount}` : `感谢 ${this.thanksCount}`, { type: ButtonType.Normal })
-      .id(`p3_${this.kind}_thank`)
-      .fontSize($r('app.float.p1_body_font_size'))
-      .fontColor(this.thanked ? $r('app.color.brand_primary') : $r('app.color.secondary_text'))
-      .enabled(!this.interactionPending)
-      .onClick((): void => {
-        this.voteController?.toggleThanks();
       })
   }
 
