@@ -9,7 +9,7 @@ import {
   parseStrictJson,
   StrictJsonError
 } from 'core';
-import { Answer, Article, Question, UserProfile } from './DomainModels';
+import { Answer, Article, ContentVoteState, Question, UserProfile } from './DomainModels';
 import { DomainDecodeError, DomainDecodeFailureKind } from './ZhihuDomainDecoder';
 
 function parseRoot(json: string, contentName: string): JsonObjectValue {
@@ -123,6 +123,56 @@ function optionalObject(value: JsonValue | undefined, field: string): JsonObject
   return value;
 }
 
+/**
+ * 从详情响应的 reaction.relation 或 relationship 中解析当前用户的投票关系。
+ * 知乎接口两种形态都存在：字符串 vote（UP/DOWN/Neutral）与数字 voting（1/-1/0），
+ * 无法解析时按中性处理，不因缺失该字段拒绝详情加载。
+ */
+function voteStateFromWire(wire: JsonObjectValue): ContentVoteState {
+  const reaction = optionalObject(wire.get('reaction'), 'reaction');
+  if (reaction !== undefined) {
+    const relation = optionalObject(reaction.get('relation'), 'reaction.relation');
+    if (relation !== undefined) {
+      const vote = relation.get('vote');
+      if (vote instanceof JsonStringValue) {
+        return contentVoteStateFromString(vote.value);
+      }
+      const voting = relation.get('voting');
+      if (voting instanceof JsonNumberValue) {
+        return contentVoteStateFromNumber(voting.value);
+      }
+    }
+  }
+  const relationship = optionalObject(wire.get('relationship'), 'relationship');
+  if (relationship !== undefined) {
+    const vote = relationship.get('vote');
+    if (vote instanceof JsonStringValue) {
+      return contentVoteStateFromString(vote.value);
+    }
+  }
+  return ContentVoteState.NEUTRAL;
+}
+
+function contentVoteStateFromString(value: string): ContentVoteState {
+  if (value === 'UP') {
+    return ContentVoteState.UP;
+  }
+  if (value === 'DOWN') {
+    return ContentVoteState.DOWN;
+  }
+  return ContentVoteState.NEUTRAL;
+}
+
+function contentVoteStateFromNumber(value: number): ContentVoteState {
+  if (value === 1) {
+    return ContentVoteState.UP;
+  }
+  if (value === -1) {
+    return ContentVoteState.DOWN;
+  }
+  return ContentVoteState.NEUTRAL;
+}
+
 function authorFromWire(wire: JsonObjectValue | undefined): UserProfile | undefined {
   if (wire === undefined) {
     return undefined;
@@ -155,6 +205,7 @@ export function decodeQuestionDetail(json: string, expectedId: string): Question
   const wire = parseRoot(json, '问题');
   rejectUpstreamError(wire.get('error'), '问题');
   const id = checkedExpectedId(wire.get('id'), expectedId, 'question.id');
+  const relationship = optionalObject(wire.get('relationship'), 'question.relationship');
   return {
     id: id,
     title: requiredText(wire.get('title') ?? wire.get('name'), 'question.title'),
@@ -165,7 +216,10 @@ export function decodeQuestionDetail(json: string, expectedId: string): Question
     followerCount: nonNegativeInteger(wire.get('follower_count'), 'question.follower_count'),
     createdAt: nonNegativeInteger(wire.get('created'), 'question.created'),
     updatedAt: nonNegativeInteger(wire.get('updated_time'), 'question.updated_time'),
-    author: authorFromWire(optionalObject(wire.get('author'), 'author'))
+    author: authorFromWire(optionalObject(wire.get('author'), 'author')),
+    isFollowing: relationship === undefined
+      ? undefined
+      : optionalBoolean(relationship.get('is_following'), 'question.relationship.is_following')
   };
 }
 
@@ -185,7 +239,10 @@ export function decodeAnswerDetail(json: string, expectedId: string): Answer {
     commentCount: nonNegativeInteger(wire.get('comment_count'), 'answer.comment_count'),
     createdAt: nonNegativeInteger(wire.get('created_time'), 'answer.created_time'),
     updatedAt: nonNegativeInteger(wire.get('updated_time'), 'answer.updated_time'),
-    author: authorFromWire(optionalObject(wire.get('author'), 'author'))
+    author: authorFromWire(optionalObject(wire.get('author'), 'author')),
+    voteState: voteStateFromWire(wire),
+    thanksCount: nonNegativeInteger(wire.get('thanks_count'), 'answer.thanks_count'),
+    isThanked: optionalBoolean(wire.get('is_thanked'), 'answer.is_thanked')
   };
 }
 
@@ -203,7 +260,10 @@ export function decodeArticleDetail(json: string, expectedId: string): Article {
     commentCount: nonNegativeInteger(wire.get('comment_count'), 'article.comment_count'),
     createdAt: nonNegativeInteger(wire.get('created'), 'article.created'),
     updatedAt: nonNegativeInteger(wire.get('updated'), 'article.updated'),
-    author: authorFromWire(optionalObject(wire.get('author'), 'author'))
+    author: authorFromWire(optionalObject(wire.get('author'), 'author')),
+    voteState: voteStateFromWire(wire),
+    thanksCount: nonNegativeInteger(wire.get('thanks_count'), 'article.thanks_count'),
+    isThanked: optionalBoolean(wire.get('is_thanked'), 'article.is_thanked')
   };
 }
 

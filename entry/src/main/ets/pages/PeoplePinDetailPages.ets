@@ -1,5 +1,7 @@
 import { P1Destination, P1DestinationName } from 'core';
 import {
+  FollowMutationResult,
+  FollowRepository,
   LoginSessionGateway,
   OpenedContentStore,
   PeopleContentItem,
@@ -19,6 +21,7 @@ import {
   PinDetailViewState,
   ReadOnlyDetailPhase
 } from './PeoplePinDetailState';
+import { FollowController, FollowViewState } from './ContentInteractionState';
 import { PeopleContentController, PeopleContentPhase, PeopleContentViewState } from './PeopleContentState';
 import { NativeContentDocument } from './NativeContentDocument';
 
@@ -73,6 +76,7 @@ export struct PeopleDetailPage {
   identifier: string = '';
   repository: PeopleDetailRepository | undefined = undefined;
   contentRepository: PeopleContentRepository | undefined = undefined;
+  followRepository: FollowRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
@@ -87,8 +91,14 @@ export struct PeopleDetailPage {
   @State private contentCanLoadMore: boolean = false;
   @State private contentRequiresLogin: boolean = false;
   @State private contentErrorMessage: string = '';
+  @State private following: boolean = false;
+  @State private followerCount: number = 0;
+  @State private followPending: boolean = false;
+  @State private followErrorMessage: string = '';
+  @State private followRequiresLogin: boolean = false;
   private controller?: PeopleDetailController;
   private contentController?: PeopleContentController;
+  private followController?: FollowController;
 
   aboutToAppear(): void {
     if (this.repository === undefined || this.session === undefined) {
@@ -108,8 +118,10 @@ export struct PeopleDetailPage {
   aboutToDisappear(): void {
     this.controller?.deactivate();
     this.contentController?.deactivate();
+    this.followController?.deactivate();
     this.controller = undefined;
     this.contentController = undefined;
+    this.followController = undefined;
   }
 
   build() {
@@ -202,10 +214,7 @@ export struct PeopleDetailPage {
         .backgroundColor($r('app.color.surface_background'))
         .borderRadius(16)
 
-        Text(profile.isFollowing ? '已关注' : '只读资料')
-          .id('p2_people_detail_relationship')
-          .fontSize($r('app.float.p1_secondary_font_size'))
-          .fontColor($r('app.color.secondary_text'))
+        this.followBar()
 
         this.contentSectionTabs()
         this.contentList()
@@ -234,6 +243,43 @@ export struct PeopleDetailPage {
     .alignItems(HorizontalAlign.Center)
   }
 
+  @Builder
+  private followBar() {
+    Column({ space: $r('app.float.p1_spacing_small') }) {
+      if (this.followController !== undefined) {
+        Button(this.following ? `已关注 ${this.followerCount}` : `关注 ${this.followerCount}`,
+          { type: ButtonType.Normal })
+          .id('p3_people_follow')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor(this.following ? $r('app.color.brand_primary') : $r('app.color.secondary_text'))
+          .enabled(!this.followPending)
+          .onClick((): void => {
+            this.followController?.toggleFollow();
+          })
+      }
+      if (this.followErrorMessage.length > 0) {
+        Row({ space: $r('app.float.p1_spacing_small') }) {
+          Text(this.followErrorMessage)
+            .id('p3_people_follow_status')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.error_text'))
+            .layoutWeight(1)
+          if (this.followRequiresLogin) {
+            Button('去登录')
+              .id('p3_people_follow_login')
+              .fontSize($r('app.float.p1_secondary_font_size'))
+              .onClick((): void => {
+                this.navigate({ name: P1DestinationName.LOGIN });
+              })
+          }
+        }
+        .width('100%')
+      }
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Center)
+  }
+
   private applyState(state: PeopleDetailViewState): void {
     this.phase = state.phase;
     this.profile = state.profile;
@@ -242,6 +288,34 @@ export struct PeopleDetailPage {
     if (state.phase === ReadOnlyDetailPhase.READY && this.contentController === undefined) {
       this.activateContent();
     }
+    if (state.phase === ReadOnlyDetailPhase.READY && state.profile !== undefined) {
+      this.activateFollow(state.profile);
+    }
+  }
+
+  private activateFollow(profile: PeopleProfile): void {
+    if (this.followController !== undefined || this.followRepository === undefined || this.session === undefined) {
+      return;
+    }
+    const repository = this.followRepository;
+    const session = this.session;
+    const identifier = profile.urlToken ?? profile.id;
+    this.followController = new FollowController(
+      repository,
+      session,
+      (follow: boolean): Promise<FollowMutationResult> => repository.followUser(identifier, follow),
+      (state: FollowViewState): void => this.applyFollowState(state)
+    );
+    this.followController.activate();
+    this.followController.applyInitial(profile.isFollowing, profile.followerCount);
+  }
+
+  private applyFollowState(state: FollowViewState): void {
+    this.following = state.following;
+    this.followerCount = state.followerCount;
+    this.followPending = state.pending;
+    this.followErrorMessage = state.errorMessage ?? '';
+    this.followRequiresLogin = state.requiresLogin;
   }
 
   @Builder

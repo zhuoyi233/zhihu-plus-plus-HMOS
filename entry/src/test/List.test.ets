@@ -32,6 +32,9 @@ import blockingRulesStateTest from './BlockingRulesState.test';
 import readHistoryStateTest from './ReadHistoryState.test';
 import dailyStoryRepositoryTest from './DailyStoryRepository.test';
 import dailyStoryDetailStateTest from './DailyStoryDetailState.test';
+import voteRepositoryTest from './VoteRepository.test';
+import followRepositoryTest from './FollowRepository.test';
+import contentInteractionStateTest from './ContentInteractionState.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -68,4 +71,7 @@ export default function testsuite(): void {
   readHistoryStateTest();
   dailyStoryRepositoryTest();
   dailyStoryDetailStateTest();
+  voteRepositoryTest();
+  followRepositoryTest();
+  contentInteractionStateTest();
 }

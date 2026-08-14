@@ -264,7 +264,8 @@ function cloneLoadedContent(content: LoadedContentDetail): LoadedContentDetail {
           followerCount: content.value.followerCount,
           createdAt: content.value.createdAt,
           updatedAt: content.value.updatedAt,
-          author: cloneAuthor(content.value.author)
+          author: cloneAuthor(content.value.author),
+          isFollowing: content.value.isFollowing
         }
       };
     case ContentDetailKind.ANSWER:
@@ -280,7 +281,10 @@ function cloneLoadedContent(content: LoadedContentDetail): LoadedContentDetail {
           commentCount: content.value.commentCount,
           createdAt: content.value.createdAt,
           updatedAt: content.value.updatedAt,
-          author: cloneAuthor(content.value.author)
+          author: cloneAuthor(content.value.author),
+          voteState: content.value.voteState,
+          thanksCount: content.value.thanksCount,
+          isThanked: content.value.isThanked
         }
       };
     case ContentDetailKind.ARTICLE:
@@ -296,7 +300,10 @@ function cloneLoadedContent(content: LoadedContentDetail): LoadedContentDetail {
           commentCount: content.value.commentCount,
           createdAt: content.value.createdAt,
           updatedAt: content.value.updatedAt,
-          author: cloneAuthor(content.value.author)
+          author: cloneAuthor(content.value.author),
+          voteState: content.value.voteState,
+          thanksCount: content.value.thanksCount,
+          isThanked: content.value.isThanked
         }
       };
   }

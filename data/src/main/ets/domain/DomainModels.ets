@@ -1,3 +1,9 @@
+export enum ContentVoteState {
+  NEUTRAL = 'neutral',
+  UP = 'up',
+  DOWN = 'down'
+}
+
 export interface UserProfile {
   id: string;
   name: string;
@@ -44,6 +50,8 @@ export interface Question {
   createdAt: number;
   updatedAt: number;
   author?: UserProfile;
+  /** 当前登录用户是否已关注该问题；详情接口未返回时缺省。 */
+  isFollowing?: boolean;
 }
 
 export interface Answer {
@@ -57,6 +65,12 @@ export interface Answer {
   createdAt: number;
   updatedAt: number;
   author?: UserProfile;
+  /** 当前登录用户的投票关系；详情接口未返回时缺省。 */
+  voteState?: ContentVoteState;
+  /** 感谢数量；详情接口未返回时缺省。 */
+  thanksCount?: number;
+  /** 当前登录用户是否已感谢；详情接口未返回时缺省。 */
+  isThanked?: boolean;
 }
 
 export interface Article {
@@ -70,6 +84,12 @@ export interface Article {
   createdAt: number;
   updatedAt: number;
   author?: UserProfile;
+  /** 当前登录用户的投票关系；详情接口未返回时缺省。 */
+  voteState?: ContentVoteState;
+  /** 感谢数量；详情接口未返回时缺省。 */
+  thanksCount?: number;
+  /** 当前登录用户是否已感谢；详情接口未返回时缺省。 */
+  isThanked?: boolean;
 }
 
 export enum FeedTargetKind {

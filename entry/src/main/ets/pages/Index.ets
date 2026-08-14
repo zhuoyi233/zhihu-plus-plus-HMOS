@@ -10,11 +10,14 @@ import {
   DefaultContentRepository,
   DefaultDailyStoryRepository,
   DefaultFeedRepository,
+  DefaultFollowRepository,
   DefaultPeopleContentRepository,
   DefaultPeopleRepository,
   DefaultPinRepository,
   DefaultSearchRepository,
+  DefaultVoteRepository,
   FeedRepository,
+  FollowRepository,
   getAppDatabase,
   getAppSessionOwner,
   OpenedContentStore,
@@ -24,6 +27,7 @@ import {
   SearchRepository,
   SessionRepository,
   DailyStoryRepository,
+  VoteRepository,
   ZhihuHttpClient
 } from 'data';
 import { BackgroundTaskProbePage } from './BackgroundTaskProbe';
@@ -67,6 +71,8 @@ struct Index {
   @State private peopleRepository?: PeopleDetailRepository = undefined;
   @State private peopleContentRepository?: PeopleContentRepository = undefined;
   @State private pinRepository?: PinRepository = undefined;
+  @State private voteRepository?: VoteRepository = undefined;
+  @State private followRepository?: FollowRepository = undefined;
 
   aboutToAppear(): void {
     if (this.compositionReady || this.compositionPreparing) {
@@ -101,6 +107,8 @@ struct Index {
       this.peopleRepository = new DefaultPeopleRepository(new ZhihuHttpClient(session));
       this.peopleContentRepository = new DefaultPeopleContentRepository(new ZhihuHttpClient(session));
       this.pinRepository = new DefaultPinRepository(new ZhihuHttpClient(session));
+      this.voteRepository = new DefaultVoteRepository(new ZhihuHttpClient(session));
+      this.followRepository = new DefaultFollowRepository(new ZhihuHttpClient(session));
       this.compositionPreparing = false;
       this.compositionReady = true;
     });
@@ -194,6 +202,9 @@ struct Index {
       contentId: id,
       repository: this.questionRepository,
       openedContentStore: this.openedContentStore,
+      voteRepository: this.voteRepository,
+      followRepository: this.followRepository,
+      session: this.session,
       navigate: navigate
     });
   }
@@ -204,6 +215,9 @@ struct Index {
       contentId: id,
       repository: this.answerRepository,
       openedContentStore: this.openedContentStore,
+      voteRepository: this.voteRepository,
+      followRepository: this.followRepository,
+      session: this.session,
       navigate: navigate
     });
   }
@@ -214,6 +228,9 @@ struct Index {
       contentId: id,
       repository: this.articleRepository,
       openedContentStore: this.openedContentStore,
+      voteRepository: this.voteRepository,
+      followRepository: this.followRepository,
+      session: this.session,
       navigate: navigate
     });
   }
@@ -224,6 +241,7 @@ struct Index {
       identifier: id,
       repository: this.peopleRepository,
       contentRepository: this.peopleContentRepository,
+      followRepository: this.followRepository,
       session: this.session,
       navigate: navigate
     });
