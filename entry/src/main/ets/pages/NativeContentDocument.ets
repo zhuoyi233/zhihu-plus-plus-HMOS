@@ -3,7 +3,7 @@ import { http } from '@kit.NetworkKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { abilityAccessCtrl, Want } from '@kit.AbilityKit';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
-import { getAppSessionOwner, toCookieHeader } from 'data';
+import { getAppSessionOwner, getGuestDeviceCookieManager, toCookieHeader } from 'data';
 import {
   clearFormulaByteCache,
   loadFormulaPixelMap,
@@ -256,7 +256,7 @@ struct ContentInlineFormula {
 
   private async loadFormula(run: ReaderInlineRun, generation: number): Promise<void> {
     try {
-      const pixelMap = await loadFormulaPixelMap(run.sourceUrl, this.formulaCookieHeader());
+      const pixelMap = await loadFormulaPixelMap(run.sourceUrl, await this.formulaCookieHeader());
       if (!this.active || this.loadGeneration !== generation) {
         await pixelMap.release();
         return;
@@ -274,13 +274,17 @@ struct ContentInlineFormula {
     }
   }
 
-  private formulaCookieHeader(): string {
+  private async formulaCookieHeader(): Promise<string> {
     const context = getAbilityContext();
     if (context === undefined) {
       return '';
     }
     const repository = getAppSessionOwner(context).getRepository();
-    return toCookieHeader(repository.getCookies(), Date.now());
+    const sessionCookies = repository.getCookies();
+    if (sessionCookies.length > 0) {
+      return toCookieHeader(sessionCookies, Date.now());
+    }
+    return getGuestDeviceCookieManager(context).getCookieHeader();
   }
 
   private failFormula(id: string): void {
@@ -345,7 +349,7 @@ struct ContentBlockFormula {
 
   private async loadFormula(generation: number): Promise<void> {
     try {
-      const pixelMap = await loadFormulaPixelMap(this.item.sourceUrl, this.formulaCookieHeader());
+      const pixelMap = await loadFormulaPixelMap(this.item.sourceUrl, await this.formulaCookieHeader());
       if (!this.active || this.loadGeneration !== generation) {
         await pixelMap.release();
         return;
@@ -362,13 +366,17 @@ struct ContentBlockFormula {
     }
   }
 
-  private formulaCookieHeader(): string {
+  private async formulaCookieHeader(): Promise<string> {
     const context = getAbilityContext();
     if (context === undefined) {
       return '';
     }
     const repository = getAppSessionOwner(context).getRepository();
-    return toCookieHeader(repository.getCookies(), Date.now());
+    const sessionCookies = repository.getCookies();
+    if (sessionCookies.length > 0) {
+      return toCookieHeader(sessionCookies, Date.now());
+    }
+    return getGuestDeviceCookieManager(context).getCookieHeader();
   }
 
   private releasePixelMap(): void {

@@ -1,7 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { util } from '@kit.ArkTS';
 import { image } from '@kit.ImageKit';
-import { getAppSessionOwner, toCookieHeader } from 'data';
+import { getAppSessionOwner, getGuestDeviceCookieManager, toCookieHeader } from 'data';
 import {
   clearFormulaByteCache,
   loadFormulaPixelMap,
@@ -94,7 +94,7 @@ struct ReaderInlineFormulaBlock {
 
   private async loadFormula(run: ReaderInlineRun, generation: number): Promise<void> {
     try {
-      const pixelMap = await loadFormulaPixelMap(run.sourceUrl, this.formulaCookieHeader());
+      const pixelMap = await loadFormulaPixelMap(run.sourceUrl, await this.formulaCookieHeader());
       if (!this.active || this.loadGeneration !== generation) {
         await pixelMap.release();
         return;
@@ -114,13 +114,17 @@ struct ReaderInlineFormulaBlock {
     }
   }
 
-  private formulaCookieHeader(): string {
+  private async formulaCookieHeader(): Promise<string> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) {
       return '';
     }
     const repository = getAppSessionOwner(context).getRepository();
-    return toCookieHeader(repository.getCookies(), Date.now());
+    const sessionCookies = repository.getCookies();
+    if (sessionCookies.length > 0) {
+      return toCookieHeader(sessionCookies, Date.now());
+    }
+    return getGuestDeviceCookieManager(context).getCookieHeader();
   }
 
   private failFormula(id: string, reason: string): void {
@@ -193,7 +197,7 @@ struct ReaderBlockFormulaBlock {
 
   private async loadFormula(generation: number): Promise<void> {
     try {
-      const pixelMap = await loadFormulaPixelMap(this.item.sourceUrl, this.formulaCookieHeader());
+      const pixelMap = await loadFormulaPixelMap(this.item.sourceUrl, await this.formulaCookieHeader());
       if (!this.active || this.loadGeneration !== generation) {
         await pixelMap.release();
         return;
@@ -212,13 +216,17 @@ struct ReaderBlockFormulaBlock {
     }
   }
 
-  private formulaCookieHeader(): string {
+  private async formulaCookieHeader(): Promise<string> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) {
       return '';
     }
     const repository = getAppSessionOwner(context).getRepository();
-    return toCookieHeader(repository.getCookies(), Date.now());
+    const sessionCookies = repository.getCookies();
+    if (sessionCookies.length > 0) {
+      return toCookieHeader(sessionCookies, Date.now());
+    }
+    return getGuestDeviceCookieManager(context).getCookieHeader();
   }
 
   private releasePixelMap(): void {

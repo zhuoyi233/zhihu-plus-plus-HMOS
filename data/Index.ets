@@ -39,6 +39,7 @@ export * from './src/main/ets/repository/SearchRepository';
 export * from './src/main/ets/session/CookieSession';
 export * from './src/main/ets/session/CookieSessionStore';
 export * from './src/main/ets/session/AppSessionOwner';
+export * from './src/main/ets/session/GuestDeviceCookieManager';
 export * from './src/main/ets/session/SessionCipher';
 export * from './src/main/ets/session/SessionKeyStore';
 export * from './src/main/ets/session/SessionRepository';
