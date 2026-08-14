@@ -183,7 +183,13 @@ struct ContentDetailPage {
       }
       if (this.kind === ContentDetailKind.ANSWER || this.kind === ContentDetailKind.ARTICLE) {
         if (this.phase === ContentDetailPhase.READY && this.content !== undefined) {
-          this.bottomActionBar()
+          Column() {
+            Blank()
+              .layoutWeight(1)
+            this.bottomActionBar()
+          }
+          .width('100%')
+          .height('100%')
         }
       }
       if (this.favoriteDialogShown && this.collectionRepository !== undefined && this.session !== undefined) {
