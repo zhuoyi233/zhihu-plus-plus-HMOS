@@ -504,10 +504,15 @@ struct ContentDetailPage {
           Blank()
             .layoutWeight(1)
         } else {
-          // 左组：投票胶囊（赞同图标+数字 / 反对），Neutral 浅蓝底、激活实蓝底（对齐上游主视觉）。
+          // 左组：投票胶囊（赞同图标+数字 / 反对），对齐上游主视觉——
+          // Neutral 显示赞+踩（浅蓝底蓝字）；点赞同后反对隐藏、踩后赞同隐藏（实蓝底白字）。
           Row({ space: 0 }) {
-            this.voteUpAction()
-            this.voteDownAction()
+            if (this.voteState !== ContentVoteState.DOWN) {
+              this.voteUpAction()
+            }
+            if (this.voteState !== ContentVoteState.UP) {
+              this.voteDownAction()
+            }
           }
           .borderRadius(22)
           .backgroundColor(this.voteState === ContentVoteState.NEUTRAL
