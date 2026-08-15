@@ -234,6 +234,7 @@ struct Index {
     ChannelFeedPage({
       source: ChannelFeedSource.DAILY,
       repository: this.dailyRepository,
+      dailyStoryRepository: this.dailyStoryRepository,
       navigate: navigate,
       rules: this.blockingRuleStore,
       history: this.blockedFeedHistoryStore

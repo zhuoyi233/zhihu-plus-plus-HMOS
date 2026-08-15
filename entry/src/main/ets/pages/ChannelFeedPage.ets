@@ -9,6 +9,7 @@ import {
   channelFeedItemIdentity,
   ChannelFeedRepository,
   ChannelFeedSource,
+  DailyStoryRepository,
   DefaultChannelFeedRepository,
   FeedItem,
   FeedTargetKind
@@ -26,11 +27,13 @@ import {
   channelFeedTitle,
   ChannelFeedViewState
 } from './ChannelFeedState';
+import { dailyStoryDetailErrorMessage } from './DailyStoryDetailState';
 
 @Component
 export struct ChannelFeedPage {
   source: ChannelFeedSource = ChannelFeedSource.HOT;
   repository: ChannelFeedRepository | undefined = new DefaultChannelFeedRepository();
+  dailyStoryRepository: DailyStoryRepository | undefined = undefined;
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
@@ -47,6 +50,8 @@ export struct ChannelFeedPage {
   @State private keywordBlockInput: string = '';
   @State private blockingMessage: string = '';
   @State private blockingBusy: boolean = false;
+  @State private dailyStoryOpening: boolean = false;
+  @State private dailyStoryOpenError: string = '';
   private controller?: ChannelFeedController;
   private blockingAction?: BlockingActionController;
   private pendingBlockItem?: ChannelContentItem = undefined;
@@ -94,20 +99,21 @@ export struct ChannelFeedPage {
   }
 
   build() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
-        Text(channelFeedTitle(this.source))
-          .fontSize($r('app.float.p1_heading_font_size'))
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.primary_text'))
-          .layoutWeight(1)
-        Button(this.refreshing ? '刷新中…' : '刷新')
-          .id(`p2_channel_${this.source}_refresh`)
-          .fontSize($r('app.float.p1_body_font_size'))
-          .enabled(!this.refreshing && !this.loadingMore && this.phase !== ChannelFeedPhase.INITIAL_LOADING)
-          .onClick(() => this.controller?.refresh())
-      }
-      .width('100%')
+    Stack({ alignContent: Alignment.TopStart }) {
+      Column({ space: $r('app.float.p1_spacing_medium') }) {
+        Row({ space: $r('app.float.p1_spacing_small') }) {
+          Text(channelFeedTitle(this.source))
+            .fontSize($r('app.float.p1_heading_font_size'))
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.primary_text'))
+            .layoutWeight(1)
+          Button(this.refreshing ? '刷新中…' : '刷新')
+            .id(`p2_channel_${this.source}_refresh`)
+            .fontSize($r('app.float.p1_body_font_size'))
+            .enabled(!this.refreshing && !this.loadingMore && this.phase !== ChannelFeedPhase.INITIAL_LOADING)
+            .onClick(() => this.controller?.refresh())
+        }
+        .width('100%')
 
       if (this.phase === ChannelFeedPhase.IDLE || this.phase === ChannelFeedPhase.INITIAL_LOADING) {
         this.centeredStatus(`正在加载${channelFeedTitle(this.source)}…`, false);
@@ -181,16 +187,66 @@ export struct ChannelFeedPage {
       if (this.keywordBlockVisible) {
         this.keywordBlockDialog()
       }
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+      .height('100%')
+      .padding({
+        left: $r('app.float.p1_page_padding'),
+        right: $r('app.float.p1_page_padding'),
+        top: $r('app.float.p1_spacing_medium'),
+        bottom: $r('app.float.p1_page_padding')
+      })
+
+      // 打开日报正文时的全屏进度遮罩（无中间跳转页，给触达反馈）。
+      if (this.dailyStoryOpening) {
+        Column({ space: 12 }) {
+          LoadingProgress()
+            .width(40)
+            .height(40)
+            .color($r('app.color.brand_primary'))
+          Text('正在打开日报原文…')
+            .id(`p2_channel_${this.source}_daily_opening`)
+            .fontSize($r('app.float.p1_body_font_size'))
+            .fontColor($r('app.color.primary_text'))
+        }
+        .width('100%')
+        .height('100%')
+        .justifyContent(FlexAlign.Center)
+        .backgroundColor('#66000000')
+      }
+
+      // 打开失败提示。
+      if (this.dailyStoryOpenError.length > 0) {
+        Column() {
+          Column({ space: $r('app.float.p1_spacing_medium') }) {
+            Text('打开日报失败')
+              .fontSize($r('app.float.p1_body_font_size'))
+              .fontWeight(FontWeight.Medium)
+            Text(this.dailyStoryOpenError)
+              .fontSize($r('app.float.p1_secondary_font_size'))
+              .fontColor($r('app.color.secondary_text'))
+              .textAlign(TextAlign.Center)
+            Button('确定')
+              .id(`p2_channel_${this.source}_daily_open_error_ok`)
+              .width('100%')
+              .onClick((): void => {
+                this.dailyStoryOpenError = '';
+              })
+          }
+          .width('80%')
+          .padding($r('app.float.p1_card_padding'))
+          .borderRadius($r('app.float.p1_card_radius'))
+          .backgroundColor($r('app.color.surface_background'))
+        }
+        .width('100%')
+        .height('100%')
+        .justifyContent(FlexAlign.Center)
+        .backgroundColor('#33000000')
+      }
     }
-    .alignItems(HorizontalAlign.Start)
     .width('100%')
     .height('100%')
-    .padding({
-      left: $r('app.float.p1_page_padding'),
-      right: $r('app.float.p1_page_padding'),
-      top: $r('app.float.p1_spacing_medium'),
-      bottom: $r('app.float.p1_page_padding')
-    })
     .backgroundColor($r('app.color.page_background'))
   }
 
@@ -338,8 +394,37 @@ export struct ChannelFeedPage {
     .backgroundColor($r('app.color.surface_background'))
     .accessibilityText(`知乎日报：${item.story.title}`)
     .onClick((): void => {
-      this.navigate({ name: P1DestinationName.DAILY_STORY, id: item.story.id });
+      this.openDailyStory(item.story.id);
     })
+  }
+
+  /**
+   * 直接打开日报正文：先取目标（问题/回答/文章）再一步导航，避免经过
+   * DailyStoryDetailPage 中间跳转页（用户看到“多了一个页面”）。
+   */
+  private async openDailyStory(storyId: string): Promise<void> {
+    const repository = this.dailyStoryRepository;
+    if (repository === undefined) {
+      this.navigate({ name: P1DestinationName.DAILY_STORY, id: storyId });
+      return;
+    }
+    if (this.dailyStoryOpening) {
+      return;
+    }
+    this.dailyStoryOpening = true;
+    this.dailyStoryOpenError = '';
+    try {
+      const destination = await repository.getDestination(storyId);
+      if (destination !== undefined) {
+        this.navigate(destination);
+      } else {
+        this.dailyStoryOpenError = '该日报暂不支持原生阅读';
+      }
+    } catch (error) {
+      this.dailyStoryOpenError = dailyStoryDetailErrorMessage(error);
+    } finally {
+      this.dailyStoryOpening = false;
+    }
   }
 
   private contentBlockMenu(item: ChannelContentItem): Array<MenuElement> {

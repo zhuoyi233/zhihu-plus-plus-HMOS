@@ -31,7 +31,9 @@ export function normalizePeopleIdentifier(idOrToken: string): string {
 
 export function buildPeopleDetailUrl(idOrToken: string): string {
   const identifier = normalizePeopleIdentifier(idOrToken);
-  return `https://api.zhihu.com/people/${encodeURIComponent(identifier)}?include=${encodeURIComponent(
+  // 走 www.zhihu.com 的 members API：api.zhihu.com/people 不在会话可签名白名单，
+  // 匿名请求会被服务端风控 403（对齐上游 people 子接口统一用 www.zhihu.com/api/v4/members）。
+  return `https://www.zhihu.com/api/v4/members/${encodeURIComponent(identifier)}?include=${encodeURIComponent(
     PEOPLE_DETAIL_INCLUDE
   )}`;
 }
@@ -54,7 +56,9 @@ export class DefaultPeopleRepository implements PeopleDetailRepository {
     const generation = this.generation;
     const response = await this.httpClient.execute({
       url: buildPeopleDetailUrl(identifier),
-      accept: 'application/json'
+      accept: 'application/json',
+      useSession: true,
+      signWithZse: true
     });
     if (generation !== this.generation) {
       throw new PeopleRepositoryFailure(PeopleRepositoryFailureKind.CANCELLED);

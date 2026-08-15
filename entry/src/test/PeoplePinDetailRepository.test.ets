@@ -97,7 +97,7 @@ export default function peoplePinDetailRepositoryTest(): void {
   describe('peoplePinDetailRepositoryTest', () => {
     it('buildsFixedEndpointsAndRejectsPathInjection', 0, () => {
       expect(buildPeopleDetailUrl('alice-token')).assertEqual(
-        'https://api.zhihu.com/people/alice-token?include=allow_message%2Cis_followed%2Cis_following%2Cis_org%2C' +
+        'https://www.zhihu.com/api/v4/members/alice-token?include=allow_message%2Cis_followed%2Cis_following%2Cis_org%2C' +
           'is_blocking%2Cbadge_v2%2Canswer_count%2Cfollower_count%2Cfollowing_count%2Carticles_count%2C' +
           'question_count%2Cpins_count'
       );
@@ -130,7 +130,7 @@ export default function peoplePinDetailRepositoryTest(): void {
       });
     });
 
-    it('keepsApiPeopleAnonymousAndSignsOnlyTrustedWebPin', 0, async () => {
+    it('signsPeopleAndPinThroughSessionCookieProvider', 0, async () => {
       const peopleFactory = new DetailTransportFactory([{ statusCode: 200, body: PEOPLE_JSON }]);
       const pinFactory = new DetailTransportFactory([{ statusCode: 200, body: PIN_JSON }]);
       const cookies = new DetailCookieProvider();
@@ -143,8 +143,8 @@ export default function peoplePinDetailRepositoryTest(): void {
 
       expect(people.name).assertEqual('Alice');
       expect(pin.author.name).assertEqual('Pin Author');
-      expect(peopleFactory.requests[0].headers.Cookie).assertUndefined();
-      expect(JSON.stringify(peopleFactory.requests[0].headers).includes('x-zse-96')).assertFalse();
+      expect(peopleFactory.requests[0].headers.Cookie?.includes('people-pin-session')).assertTrue();
+      expect(JSON.stringify(peopleFactory.requests[0].headers).includes('x-zse-96')).assertTrue();
       expect(peopleFactory.requests[0].maxRedirects).assertEqual(0);
       expect(pinFactory.requests[0].headers.Cookie?.includes('people-pin-session')).assertTrue();
       expect(JSON.stringify(pinFactory.requests[0].headers).includes('x-zse-96')).assertTrue();
@@ -210,7 +210,10 @@ export default function peoplePinDetailRepositoryTest(): void {
 
     it('cancelsPendingRequestWithoutWaitingForTransport', 0, async () => {
       const factory = new PendingDetailTransportFactory();
-      const repository = new DefaultPeopleRepository(new ZhihuHttpClient(undefined, factory));
+      // people 请求已走会话签名，需要提供含 d_c0 的 cookie provider 才能正常发起。
+      const repository = new DefaultPeopleRepository(
+        new ZhihuHttpClient(new DetailCookieProvider(), factory)
+      );
       const pending = repository.getUser('alice-token');
       repository.cancel();
       let failure: HttpFailure | undefined = undefined;
