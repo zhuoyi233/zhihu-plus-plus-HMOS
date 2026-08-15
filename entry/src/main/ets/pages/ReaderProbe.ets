@@ -71,7 +71,7 @@ struct ReaderInlineFormulaBlock {
         } else {
           if (this.pixelMaps.get(run.id) !== undefined) {
             ImageSpan(this.pixelMaps.get(run.id) ?? run.text)
-              .id(`p0_inline_formula_${run.id}`)
+              .id(`inline_formula_${run.id}`)
               .width(inlineFormulaWidth(run.text))
               .height(24)
               .objectFit(ImageFit.Contain)
@@ -171,7 +171,7 @@ struct ReaderBlockFormulaBlock {
     Column({ space: 6 }) {
       if (this.pixelMap !== undefined && !this.failed) {
         Image(this.pixelMap)
-          .id(`p0_formula_${this.item.id}`)
+          .id(`formula_${this.item.id}`)
           .width('100%')
           .height(88)
           .objectFit(ImageFit.Contain)
@@ -182,7 +182,7 @@ struct ReaderBlockFormulaBlock {
           })
       } else {
         Text(this.item.text)
-          .id(`p0_formula_fallback_${this.item.id}`)
+          .id(`formula_fallback_${this.item.id}`)
           .fontSize(16)
           .fontColor($r('app.color.secondary_text'))
           .textAlign(TextAlign.Center)
@@ -260,7 +260,7 @@ export struct ReaderProbe {
       Column() {
         Row({ space: 12 }) {
           Button('返回')
-            .id('p0_reader_back')
+            .id('reader_back')
             .onClick(() => this.onBack())
 
           Column({ space: 4 }) {
@@ -269,11 +269,11 @@ export struct ReaderProbe {
               .fontWeight(FontWeight.Bold)
               .fontColor($r('app.color.primary_text'))
             Text(this.status)
-              .id('p0_reader_status')
+              .id('reader_status')
               .fontSize(13)
               .fontColor($r('app.color.secondary_text'))
             Text(this.formulaStatus)
-              .id('p0_formula_status')
+              .id('formula_status')
               .fontSize(13)
               .fontColor($r('app.color.secondary_text'))
           }
@@ -292,7 +292,7 @@ export struct ReaderProbe {
             }
           }, (item: ReaderBlock) => item.id)
         }
-        .id('p0_reader_list')
+        .id('reader_list')
         .width('100%')
         .layoutWeight(1)
         .padding({ left: 20, right: 20, top: 16, bottom: 24 })
@@ -304,12 +304,12 @@ export struct ReaderProbe {
       if (this.previewUrl.length > 0) {
         Stack({ alignContent: Alignment.TopEnd }) {
           Image(this.previewUrl)
-            .id('p0_reader_image_preview')
+            .id('reader_image_preview')
             .width('100%')
             .height('100%')
             .objectFit(ImageFit.Contain)
           Button('关闭预览')
-            .id('p0_reader_image_preview_close')
+            .id('reader_image_preview_close')
             .margin(20)
             .onClick(() => {
               this.previewUrl = '';

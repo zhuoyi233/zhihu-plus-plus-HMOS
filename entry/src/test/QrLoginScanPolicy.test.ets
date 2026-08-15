@@ -5,7 +5,7 @@ export default function qrLoginScanPolicyTest(): void {
   describe('qrLoginScanPolicyTest', () => {
     it('acceptsZhihuDesktopLoginQrUrl', 0, () => {
       const assessment = assessQrScanValue(
-        'https://www.zhihu.com/account/scan/login/p0-test-token?source=web'
+        'https://www.zhihu.com/account/scan/login/probe-test-token?source=web'
       );
 
       expect(assessment.decision).assertEqual(QrScanDecision.ZHIHU_DESKTOP_LOGIN);
@@ -50,7 +50,7 @@ export default function qrLoginScanPolicyTest(): void {
     });
 
     it('doesNotExposeLoginTokenInAssessmentMessage', 0, () => {
-      const token = 'sensitive-p0-token';
+      const token = 'sensitive-probe-token';
       const assessment = assessQrScanValue(`https://www.zhihu.com/account/scan/login/${token}`);
 
       expect(assessment.message.includes(token)).assertFalse();

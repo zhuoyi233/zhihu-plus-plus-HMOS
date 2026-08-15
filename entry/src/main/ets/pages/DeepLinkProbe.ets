@@ -145,7 +145,7 @@ export struct DeepLinkProbePage {
     Scroll() {
       Column({ space: 16 }) {
         Button('返回')
-          .id('p0_deep_link_back')
+          .id('deep_link_back')
           .onClick(() => this.onBack())
 
         Text('知乎 URL 与深链解析')
@@ -159,25 +159,25 @@ export struct DeepLinkProbePage {
           .fontColor($r('app.color.secondary_text'))
 
         TextInput({ text: this.input, placeholder: '输入知乎 URL 或 zhihu:// 链接' })
-          .id('p0_deep_link_input')
+          .id('deep_link_input')
           .onChange((value: string) => {
             this.input = value;
           })
 
         Button('解析链接')
-          .id('p0_run_deep_link_probe')
+          .id('run_deep_link_probe')
           .onClick(() => {
             const destination = resolveZhihuLink(this.input);
             this.status = destination === undefined ? '不支持或链接无效' : describeDeepLink(destination);
           })
 
         Text(this.status)
-          .id('p0_deep_link_status')
+          .id('deep_link_status')
           .fontSize(17)
           .fontColor($r('app.color.primary_text'))
 
         Text(this.matrixStatus)
-          .id('p0_deep_link_matrix_status')
+          .id('deep_link_matrix_status')
           .fontSize(17)
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.primary_text'))

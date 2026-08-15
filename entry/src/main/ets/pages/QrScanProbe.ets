@@ -48,7 +48,7 @@ export struct QrScanProbePage {
     Scroll() {
       Column({ space: 16 }) {
         Button('返回')
-          .id('p0_qr_scan_back')
+          .id('qr_scan_back')
           .onClick(() => this.onBack())
 
         Text('Scan Kit 二维码原型')
@@ -61,33 +61,33 @@ export struct QrScanProbePage {
           .lineHeight(26)
           .fontColor($r('app.color.secondary_text'))
 
-        Text('P0 不发送登录确认请求，也不在页面或日志中显示二维码令牌。')
+        Text('不发送登录确认请求，也不在页面或日志中显示二维码令牌。')
           .fontSize(16)
           .lineHeight(26)
           .fontColor($r('app.color.secondary_text'))
 
         Button(this.scanning ? '扫码界面启动中…' : '打开系统扫码')
-          .id('p0_open_system_qr_scan')
+          .id('open_system_qr_scan')
           .enabled(!this.scanning)
           .onClick(() => {
             this.startScan();
           })
 
         Button('运行内置码图识别')
-          .id('p0_decode_qr_fixture')
+          .id('decode_qr_fixture')
           .enabled(!this.scanning)
           .onClick(() => {
             this.decodeFixture();
           })
 
         Text(this.status)
-          .id('p0_qr_scan_status')
+          .id('qr_scan_status')
           .fontSize(17)
           .lineHeight(26)
           .fontColor($r('app.color.primary_text'))
 
         Text(this.policyStatus)
-          .id('p0_qr_policy_status')
+          .id('qr_policy_status')
           .fontSize(16)
           .lineHeight(24)
           .fontColor($r('app.color.primary_text'))

@@ -2,15 +2,15 @@
   "string": [
     {
       "name": "module_desc",
-      "value": "Zhihu++ HarmonyOS P0 validation module"
+      "value": "Zhihu++ HarmonyOS module"
     },
     {
       "name": "EntryAbility_desc",
-      "value": "Zhihu++ HarmonyOS P0 validation ability"
+      "value": "Zhihu++ HarmonyOS ability"
     },
     {
       "name": "EntryAbility_label",
-      "value": "Zhihu++ P0"
+      "value": "Zhihu++"
     },
     {
       "name": "write_imagevideo_reason",

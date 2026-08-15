@@ -27,7 +27,7 @@ export struct BackgroundTaskProbePage {
     Scroll() {
       Column({ space: 16 }) {
         Button('返回')
-          .id('p0_background_back')
+          .id('background_back')
           .onClick(() => this.onBack())
 
         Text('API 24 后台任务约束')
@@ -35,29 +35,29 @@ export struct BackgroundTaskProbePage {
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.primary_text'))
 
-        Text('P0 只验证系统任务登记与资源配额，不执行真实接口轮询、Feed 抓取或常驻保活。')
+        Text('只验证系统任务登记与资源配额，不执行真实接口轮询、Feed 抓取或常驻保活。')
           .fontSize(16)
           .lineHeight(26)
           .fontColor($r('app.color.secondary_text'))
 
         Button('读取并释放短时任务配额')
-          .id('p0_probe_transient_task')
+          .id('probe_transient_task')
           .enabled(!this.busy)
           .onClick(() => this.runTransientProbe())
 
         Text(this.transientStatus)
-          .id('p0_transient_task_status')
+          .id('transient_task_status')
           .fontSize(16)
           .lineHeight(24)
           .fontColor($r('app.color.primary_text'))
 
         Button('登记并清理延迟任务')
-          .id('p0_probe_deferred_task')
+          .id('probe_deferred_task')
           .enabled(!this.busy)
           .onClick(() => this.runDeferredProbe())
 
         Text(this.deferredStatus)
-          .id('p0_deferred_task_status')
+          .id('deferred_task_status')
           .fontSize(16)
           .lineHeight(24)
           .fontColor($r('app.color.primary_text'))
@@ -68,7 +68,7 @@ export struct BackgroundTaskProbePage {
           .fontColor($r('app.color.primary_text'))
 
         Text(this.policySummary())
-          .id('p0_background_policy_summary')
+          .id('background_policy_summary')
           .fontSize(15)
           .lineHeight(24)
           .fontColor($r('app.color.secondary_text'))
@@ -78,7 +78,7 @@ export struct BackgroundTaskProbePage {
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.primary_text'))
 
-        Text('P0 不申请 KEEP_BACKGROUND_RUNNING。只有未来明确启用的音频播放或用户可感知数据传输，' +
+        Text('不申请 KEEP_BACKGROUND_RUNNING。只有未来明确启用的音频播放或用户可感知数据传输，' +
           '才能按对应模式、通知和停止条件单独接入；周期性 Feed 抓取不属于合规长时任务。')
           .fontSize(15)
           .lineHeight(24)

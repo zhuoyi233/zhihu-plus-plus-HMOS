@@ -45,7 +45,7 @@ export function assessQrScanValue(input: string): QrScanAssessment {
   if (isZhihuDesktopLogin) {
     return {
       decision: QrScanDecision.ZHIHU_DESKTOP_LOGIN,
-      message: '知乎电脑端登录二维码格式有效；P0 仅验证识别，不提交确认请求'
+      message: '知乎电脑端登录二维码格式有效；仅验证识别，不提交确认请求'
     };
   }
 

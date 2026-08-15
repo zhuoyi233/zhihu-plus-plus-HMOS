@@ -31,73 +31,73 @@ export struct TechnicalLabPage {
       Scroll() {
         Column({ space: $r('app.float.p1_spacing_medium') }) {
           Text('Zhihu++ HarmonyOS')
-            .id('p0_title')
+            .id('title')
             .fontSize($r('app.float.p1_display_font_size'))
             .fontWeight(FontWeight.Bold)
             .fontColor($r('app.color.primary_text'))
 
-          Text('P0 技术验证工程')
-            .id('p0_subtitle')
+          Text('技术验证工程')
+            .id('subtitle')
             .fontSize($r('app.float.p1_heading_font_size'))
             .fontColor($r('app.color.primary_text'))
 
           Text('目标与最低兼容 API 24')
-            .id('p0_sdk_baseline')
+            .id('sdk_baseline')
             .fontSize($r('app.float.p1_body_font_size'))
             .fontColor($r('app.color.secondary_text'))
 
-          Text('P0 门禁已收口；此页面仅用于技术回归验证')
-            .id('p0_next_step')
+          Text('门禁已收口；此页面仅用于技术回归验证')
+            .id('next_step')
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
 
           Text(this.networkStatus)
-            .id('p0_http_status')
+            .id('http_status')
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
 
           Text(this.sessionStatus)
-            .id('p0_session_status')
+            .id('session_status')
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
 
           Text(this.loginStatus)
-            .id('p0_login_status')
+            .id('login_status')
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
 
           Button('打开原生长正文原型')
-            .id('p0_open_reader_probe')
+            .id('open_reader_probe')
             .onClick(() => {
               this.navigate({ name: P1DestinationName.READER_PROBE });
             })
 
           Button('打开图片与 GIF 原型')
-            .id('p0_open_image_probe')
+            .id('open_image_probe')
             .onClick(() => {
               this.navigate({ name: P1DestinationName.IMAGE_PROBE });
             })
 
           Button('打开数据库迁移原型')
-            .id('p0_open_database_probe')
+            .id('open_database_probe')
             .onClick(() => {
               this.navigate({ name: P1DestinationName.DATABASE_PROBE });
             })
 
           Button('打开深链解析原型')
-            .id('p0_open_deep_link_probe')
+            .id('open_deep_link_probe')
             .onClick(() => {
               this.navigate({ name: P1DestinationName.DEEP_LINK_PROBE });
             })
 
           Button('打开二维码扫描原型')
-            .id('p0_open_qr_scan_probe')
+            .id('open_qr_scan_probe')
             .onClick(() => {
               this.navigate({ name: P1DestinationName.QR_SCAN_PROBE });
             })
 
           Button('打开后台任务约束原型')
-            .id('p0_open_background_task_probe')
+            .id('open_background_task_probe')
             .onClick(() => {
               this.navigate({ name: P1DestinationName.BACKGROUND_TASK_PROBE });
             })
@@ -109,7 +109,7 @@ export struct TechnicalLabPage {
             })
 
           TextInput({ text: this.cookieInput, placeholder: '粘贴 z_c0=…; d_c0=…' })
-            .id('p0_cookie_input')
+            .id('cookie_input')
             .type(InputType.Password)
             .enabled(!this.loginBusy)
             .onChange((value: string) => {
@@ -118,14 +118,14 @@ export struct TechnicalLabPage {
 
           Column({ space: $r('app.float.p1_spacing_small') }) {
             Button('运行 HTTP 探针')
-              .id('p0_run_http_probe')
+              .id('run_http_probe')
               .width('100%')
               .onClick(() => {
                 this.runHttpProbe();
               })
 
             Button('取消')
-              .id('p0_cancel_http_probe')
+              .id('cancel_http_probe')
               .width('100%')
               .onClick(() => {
                 this.httpProbeClient.cancel();
@@ -136,7 +136,7 @@ export struct TechnicalLabPage {
 
           Column({ space: $r('app.float.p1_spacing_small') }) {
             Button('验证并保存 Cookie')
-              .id('p0_import_cookie')
+              .id('import_cookie')
               .width('100%')
               .enabled(!this.loginBusy && this.cookieInput.trim().length > 0)
               .onClick(() => {
@@ -144,7 +144,7 @@ export struct TechnicalLabPage {
               })
 
             Button('游客模式')
-              .id('p0_guest_mode')
+              .id('guest_mode')
               .width('100%')
               .enabled(!this.loginBusy)
               .onClick(() => {
@@ -154,7 +154,7 @@ export struct TechnicalLabPage {
           .width('100%')
 
           Button('退出并清理本地会话')
-            .id('p0_logout')
+            .id('logout')
             .enabled(!this.loginBusy)
             .onClick(() => {
               this.logout();
@@ -162,14 +162,14 @@ export struct TechnicalLabPage {
 
           Column({ space: $r('app.float.p1_spacing_small') }) {
             Button('写入测试会话')
-              .id('p0_save_session_probe')
+              .id('save_session_probe')
               .width('100%')
               .onClick(() => {
                 this.saveSessionProbe();
               })
 
             Button('恢复并清理')
-              .id('p0_restore_session_probe')
+              .id('restore_session_probe')
               .width('100%')
               .onClick(() => {
                 this.restoreSessionProbe();
@@ -216,7 +216,7 @@ export struct TechnicalLabPage {
     this.sessionStatus = '正在加密测试会话…';
     const now = Date.now();
     const cookies: Array<SessionCookie> = [
-      { name: 'd_c0', value: 'p0-session-probe' },
+      { name: 'd_c0', value: 'probe-session-value' },
       { name: 'expired_probe', value: 'remove-me', expiresAt: now - 1 }
     ];
     try {

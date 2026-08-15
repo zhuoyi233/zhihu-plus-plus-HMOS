@@ -5,7 +5,6 @@ export struct ReaderImageBlock {
   item: ReaderBlock = { id: '', kind: ReaderBlockKind.IMAGE, text: '', sourceUrl: '', inlineRuns: [] };
   onPreview: (url: string) => void = () => {};
   secondaryTextColor: ResourceColor = Color.Gray;
-  @State private status: string = '图片等待加载';
   @State private failed: boolean = false;
   @State private retryRevision: number = 0;
 
@@ -20,17 +19,15 @@ export struct ReaderImageBlock {
   build() {
     Column({ space: 8 }) {
       Image(this.imageSource())
-        .id(`p0_reader_image_${this.item.id}`)
+        .id(`reader_image_${this.item.id}`)
         .width('100%')
         .height(260)
         .objectFit(ImageFit.Contain)
         .onComplete(() => {
           this.failed = false;
-          this.status = '图片加载成功';
         })
         .onError(() => {
           this.failed = true;
-          this.status = '图片加载失败';
         })
         .onClick(() => {
           if (!this.failed) {
@@ -46,23 +43,23 @@ export struct ReaderImageBlock {
           .width('100%')
       }
 
-      Row({ space: 12 }) {
-        Text(this.status)
-          .id(`p0_reader_image_status_${this.item.id}`)
-          .fontSize(13)
-          .fontColor(this.secondaryTextColor)
-        if (this.failed) {
+      // 加载成功/加载中不显示状态小字；仅失败时展示错误与重试。
+      if (this.failed) {
+        Row({ space: 12 }) {
+          Text('图片加载失败')
+            .id(`reader_image_status_${this.item.id}`)
+            .fontSize(13)
+            .fontColor(this.secondaryTextColor)
           Button('重试')
-            .id(`p0_reader_image_retry_${this.item.id}`)
+            .id(`reader_image_retry_${this.item.id}`)
             .onClick(() => {
               this.failed = false;
-              this.status = '正在重试…';
               this.retryRevision += 1;
             })
         }
+        .width('100%')
+        .justifyContent(FlexAlign.Center)
       }
-      .width('100%')
-      .justifyContent(FlexAlign.Center)
     }
     .width('100%')
   }

@@ -1,6 +1,6 @@
 {
   "modelVersion": "6.1.1",
-  "description": "Zhihu++ HarmonyOS P0 validation project.",
+  "description": "Zhihu++ HarmonyOS client.",
   "dependencies": {},
   "devDependencies": {
     "@ohos/hypium": "1.0.25",

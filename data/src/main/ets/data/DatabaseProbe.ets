@@ -4,7 +4,7 @@ import { AppDatabase, getAppDatabase } from './AppDatabase';
 import { OpenedContent, OpenedContentStore } from './OpenedContentStore';
 import { CURRENT_SCHEMA_VERSION, schemaMigrationTo, SchemaMigration } from './RdbSchema';
 
-const DATABASE_NAME = 'p0_rdb_probe.db';
+const DATABASE_NAME = 'zhplus_rdb_probe.db';
 const TABLE_NAME = 'opened_content';
 const PROBE_KEY = 'answer:2035661632110585441';
 const PRODUCTION_PROBE_KEY = 'probe:p1-production-opened-content';

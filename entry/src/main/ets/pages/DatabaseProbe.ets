@@ -10,7 +10,7 @@ export struct DatabaseProbePage {
   build() {
     Column({ space: 20 }) {
       Button('返回')
-        .id('p0_database_back')
+        .id('database_back')
         .onClick(() => this.onBack())
 
       Text('RDB Schema 与迁移验证')
@@ -25,14 +25,14 @@ export struct DatabaseProbePage {
         .textAlign(TextAlign.Center)
 
       Text(this.status)
-        .id('p0_database_status')
+        .id('database_status')
         .fontSize(16)
         .lineHeight(26)
         .fontColor($r('app.color.primary_text'))
         .textAlign(TextAlign.Center)
 
       Button('运行数据库迁移验证')
-        .id('p0_run_database_probe')
+        .id('run_database_probe')
         .enabled(!this.running)
         .onClick(() => this.runProbe())
     }

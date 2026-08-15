@@ -2,7 +2,7 @@ import { backgroundTaskManager, workScheduler } from '@kit.BackgroundTasksKit';
 
 const PROBE_WORK_ID: number = 24001;
 const PROBE_BUNDLE_NAME: string = 'com.github.zhuoyi233.zhplus';
-const PROBE_ABILITY_NAME: string = 'P0WorkSchedulerExtensionAbility';
+const PROBE_ABILITY_NAME: string = 'WorkSchedulerProbeExtensionAbility';
 const DEFERRED_START_DELAY_MS: number = 60_000;
 
 export interface TransientTaskProbeResult {
@@ -21,7 +21,7 @@ export interface DeferredTaskProbeResult {
 export class BackgroundTaskProbe {
   async probeTransientTask(): Promise<TransientTaskProbeResult> {
     const delayInfo = backgroundTaskManager.requestSuspendDelay(
-      'P0 user-initiated operation completion probe',
+      'user-initiated operation completion probe',
       () => {}
     );
     try {
@@ -46,7 +46,7 @@ export class BackgroundTaskProbe {
       networkType: workScheduler.NetworkType.NETWORK_TYPE_ANY,
       earliestStartTime: DEFERRED_START_DELAY_MS,
       parameters: {
-        purpose: 'p0-background-boundary-probe'
+        purpose: 'probe-background-boundary'
       }
     };
     workScheduler.startWork(work);

@@ -89,8 +89,8 @@
     ],
     "extensionAbilities": [
       {
-        "name": "P0WorkSchedulerExtensionAbility",
-        "srcEntry": "./ets/background/P0WorkSchedulerExtensionAbility.ets",
+        "name": "WorkSchedulerProbeExtensionAbility",
+        "srcEntry": "./ets/background/WorkSchedulerProbeExtensionAbility.ets",
         "type": "workScheduler",
         "exported": false
       }
