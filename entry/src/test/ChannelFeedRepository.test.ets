@@ -160,6 +160,11 @@ const FOLLOW_PAGE = '{"data":[{"type":"moments_feed","id":"follow-wrapper","mome
   '"target":{"type":"answer","id":"101","excerpt":"摘要","question":{"title":"关注问题"},' +
   '"author":{"id":"author-1","name":"张三"}}}],"paging":{"is_end":false,' +
   '"next":"https://www.zhihu.com/api/v3/moments?desktop=true&limit=10&offset=10"}}';
+const FOLLOW_PAGE_WITH_TARGETLESS = '{"data":[{"type":"feed","id":"agg-1","verb":"MEMBER_FOLLOW",' +
+  '"created_time":1,"updated_time":1},{"type":"moments_feed","id":"follow-wrapper",' +
+  '"moment_desc":"张三赞同了回答","target":{"type":"answer","id":"101","excerpt":"摘要",' +
+  '"question":{"title":"关注问题"},"author":{"id":"author-1","name":"张三"}}}],' +
+  '"paging":{"is_end":true}}';
 const HOT_PAGE = '{"data":[{"type":"hot_list_feed","id":"hot-wrapper","detail_text":"1234 万热度",' +
   '"target":{"type":"question","id":1993016651038364760,"title":"热榜问题",' +
   '"bound_topic_ids":[1,"2",1]}}],' +
@@ -234,6 +239,23 @@ export default function channelFeedRepositoryTest(): void {
       expect(factory.requests[1].headers.Cookie).assertEqual('z_c0=session-token; d_c0=device-token');
       expect(JSON.stringify(factory.requests[1].headers).includes('x-zse-96')).assertTrue();
       expect(provider.readCount).assertEqual(2);
+    });
+
+    it('skipsTargetlessMomentsEntries', 0, async () => {
+      const factory = new SequenceChannelTransportFactory([
+        new ChannelOutcome(new TestHttpResponse(200, FOLLOW_PAGE_WITH_TARGETLESS))
+      ]);
+      const page = await new DefaultChannelFeedRepository(
+        new ZhihuHttpClient(new ChannelCookieProvider(), factory)
+      ).loadPage(ChannelFeedSource.FOLLOWING);
+
+      expect(page.items.length).assertEqual(1);
+      if (page.items[0].kind === ChannelFeedItemKind.CONTENT) {
+        expect(page.items[0].feedItem.target.id).assertEqual('101');
+        expect(page.items[0].feedItem.actionText).assertEqual('张三赞同了回答');
+      } else {
+        expect(false).assertTrue();
+      }
     });
 
     it('preservesFollowingAndHotDisplayLabelsAndTopicIds', 0, async () => {

@@ -164,30 +164,36 @@ export struct HomeFeedPage {
             .backgroundColor($r('app.color.surface_background'))
           }
 
-          List() {
-            ForEach(this.items, (item: FeedItem) => {
-              ListItem() {
-                this.feedCard(item);
-              }
-              .margin({ bottom: $r('app.float.p1_spacing_medium') })
-            }, (item: FeedItem): string => feedItemIdentity(item))
+          Refresh({ refreshing: this.refreshing, offset: 80, friction: 100 }) {
+            List() {
+              ForEach(this.items, (item: FeedItem) => {
+                ListItem() {
+                  this.feedCard(item);
+                }
+                .margin({ bottom: $r('app.float.p1_spacing_medium') })
+              }, (item: FeedItem): string => feedItemIdentity(item))
 
-            if (this.loadingMore || this.canLoadMore) {
-              ListItem() {
-                Button(this.loadingMore ? '正在加载更多…' : '加载更多')
-                  .id('p2_home_load_more')
-                  .width('100%')
-                  .fontSize($r('app.float.p1_secondary_font_size'))
-                  .enabled(!this.loadingMore)
-                  .onClick(() => this.controller?.loadMore())
+              if (this.loadingMore || this.canLoadMore) {
+                ListItem() {
+                  Button(this.loadingMore ? '正在加载更多…' : '加载更多')
+                    .id('p2_home_load_more')
+                    .width('100%')
+                    .fontSize($r('app.float.p1_secondary_font_size'))
+                    .enabled(!this.loadingMore)
+                    .onClick(() => this.controller?.loadMore())
+                }
               }
             }
+            .id('p2_home_feed_list')
+            .width('100%')
+            .height('100%')
+            .edgeEffect(EdgeEffect.Spring)
+            .onReachEnd(() => this.controller?.loadMore())
           }
-          .id('p2_home_feed_list')
+          .id('p2_home_pull_refresh')
           .width('100%')
           .layoutWeight(1)
-          .edgeEffect(EdgeEffect.Spring)
-          .onReachEnd(() => this.controller?.loadMore())
+          .onRefreshing(() => this.controller?.refresh())
         }
 
         if (this.blockingMessage.length > 0) {

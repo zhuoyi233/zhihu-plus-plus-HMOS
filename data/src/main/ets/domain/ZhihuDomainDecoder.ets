@@ -316,7 +316,9 @@ export function decodeFeedPage(json: string): FeedPage {
     }
     const target = jsonObject(item.get('target'));
     if (target === undefined) {
-      throw invalid('feed.target 不能为空');
+      // 关注流（api/v3/moments）存在无 target 的聚合/辅助条目（如好友动态、赞等），
+      // 对齐上游可空 target 语义：跳过而非使整页失败。
+      return;
     }
     try {
       items.push({
