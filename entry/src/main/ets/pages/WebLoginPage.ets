@@ -1,10 +1,5 @@
 import { webview } from '@kit.ArkWeb';
-import {
-  getAppSessionOwner,
-  parseWebCookieHeader,
-  SessionCookie
-} from 'data';
-import { getAbilityContext } from '../entryability/AbilityContextHolder';
+import { parseWebCookieHeader, SessionCookie } from 'data';
 
 const WEB_LOGIN_HOSTS: Array<string> = ['www.zhihu.com', 'zhuanlan.zhihu.com'];
 
@@ -23,15 +18,14 @@ function isTrustedWebLoginUrl(url: string): boolean {
   return WEB_LOGIN_HOSTS.includes(authority);
 }
 
-/** 桌面 Chrome UA（对齐上游 configureWebLogin 的桌面 UA 切换）。 */
-const WEB_LOGIN_DESKTOP_UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-  '(KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
-
 /**
  * P3-10：网页登录页（ArkWeb，对齐上游 configureWebLogin）。
  * 加载 https://www.zhihu.com/signin，登录成功后知乎跳回首页，
  * 在 onPageEnd 读回 cookie 并回调。
+ *
+ * 使用 ArkWeb 默认移动 UA：桌面 UA 会让知乎返回桌面布局，页面宽度按桌面
+ * 视口渲染后在手机宽度下整体缩小、字体过小；移动 UA 下 signin 返回移动版
+ * 布局，按设备宽度渲染，缩放与字体正常（对齐上游以默认 WebView UA 加载）。
  */
 @Component
 export struct WebLoginPage {
@@ -46,19 +40,9 @@ export struct WebLoginPage {
   private readonly controller: webview.WebviewController = new webview.WebviewController();
 
   aboutToAppear(): void {
-    const context = getAbilityContext();
-    if (context === undefined) {
-      this.loadFailed = true;
-      this.status = '无法获取应用上下文';
-      return;
-    }
     // 清空 ArkWeb cookie，避免残留登录态影响（对齐上游 removeAllCookies）。
     try {
       webview.WebCookieManager.clearAllCookiesSync();
-    } catch (_error) {
-    }
-    try {
-      webview.WebviewController.setUserAgentForHosts(WEB_LOGIN_DESKTOP_UA, WEB_LOGIN_HOSTS);
     } catch (_error) {
     }
   }

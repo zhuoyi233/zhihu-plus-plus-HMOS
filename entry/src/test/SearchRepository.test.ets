@@ -202,6 +202,20 @@ export default function searchRepositoryTest(): void {
       expect(page.cursor.isEnd).assertTrue();
     });
 
+    it('fallsBackToObjectIdWhenWrapperIdMissing', 0, () => {
+      // 服务端新版 search_v3 的 search_result 包裹层可能不返回 id（上游对缺失 id 容忍）。
+      const page = decodeSearchResultPage('{"data":[' +
+        '{"type":"search_result","object":{"type":"answer","id":"answer-9",' +
+        '"question":{"title":"无包裹 id 的回答"}}},' +
+        '{"type":"search_result","id":"wrapper-10","object":{"type":"article","id":"article-10",' +
+        '"title":"有包裹 id 的文章"}}],' +
+        '"paging":{"is_end":true,"is_start":true}}');
+      expect(page.items.length).assertEqual(2);
+      expect(page.items[0].contentId).assertEqual('answer-9');
+      expect(page.items[0].wrapperId).assertEqual('answer-9');
+      expect(page.items[1].wrapperId).assertEqual('wrapper-10');
+    });
+
     it('mapsMalformedSearchFieldsToStructuredErrors', 0, () => {
       const payloads: Array<string> = [
         'null',

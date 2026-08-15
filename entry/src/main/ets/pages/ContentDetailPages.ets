@@ -576,6 +576,7 @@ struct ContentDetailPage {
         if (contentAuthorName(content).length > 0) {
           Row({ space: $r('app.float.p1_spacing_small') }) {
             Stack({ alignContent: Alignment.Center }) {
+              // 底层占位：首字圆，头像缺失或加载失败时可见。
               Circle()
                 .width(36)
                 .height(36)
@@ -583,6 +584,15 @@ struct ContentDetailPage {
               Text(contentAuthorName(content).substring(0, 1))
                 .fontSize($r('app.float.p1_caption_font_size'))
                 .fontColor($r('app.color.secondary_text'))
+              // 顶层真实头像：加载成功覆盖占位（加载失败保持透明，露出首字圆）。
+              if (contentAuthorAvatarUrl(content).length > 0) {
+                Image(contentAuthorAvatarUrl(content))
+                  .id(`p3_${content.kind}_detail_top_avatar`)
+                  .width(36)
+                  .height(36)
+                  .borderRadius(18)
+                  .objectFit(ImageFit.Cover)
+              }
             }
             .width(36)
             .height(36)
@@ -1068,6 +1078,16 @@ export function contentAuthorName(content: LoadedContentDetail): string {
 
 export function contentAuthorHeadline(content: LoadedContentDetail): string {
   return content.value.author?.headline?.trim() ?? '';
+}
+
+/** 答主头像 URL：http 归一化为 https，缺失或不受信返回空串（走首字占位）。 */
+export function contentAuthorAvatarUrl(content: LoadedContentDetail): string {
+  const raw = content.value.author?.avatarUrl?.trim() ?? '';
+  const url = raw.startsWith('http://') ? `https://${raw.substring(7)}` : raw;
+  if (!/^https:\/\/[A-Za-z0-9.-]+/.test(url)) {
+    return '';
+  }
+  return url;
 }
 
 /** P3-9-D1：回答/文章的认可徽章流（仅 ANSWER/ARTICLE 有）。 */

@@ -24,14 +24,13 @@ function isTrustedRiskUrl(url: string): boolean {
   return ZHIHU_RISK_HOSTS.includes(authority);
 }
 
-/** 桌面 Chrome UA（对齐上游 ZHIHU_DESKTOP_USER_AGENT）。 */
-const RISK_DESKTOP_UA =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-  '(KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
-
 /**
  * P3-10：ArkWeb 风控验证页（对齐上游 configureRiskControlWebView）。
- * 注入会话 cookie + 桌面 UA，加载知乎风控页，页面加载完成后读回 cookie。
+ * 注入会话 cookie，加载知乎风控页，页面加载完成后读回 cookie。
+ *
+ * 使用 ArkWeb 默认移动 UA：桌面 UA 会让风控页按桌面视口渲染，在手机宽度下
+ * 整体缩小、字体过小；移动 UA 下页面按设备宽度渲染，滑块等验证交互在手机上
+ * 正常使用。
  */
 @Component
 export struct RiskControlWebPage {
@@ -61,10 +60,6 @@ export struct RiskControlWebPage {
       } catch (_error) {
         // 继续加载，cookie 注入失败由页面内流程决定
       }
-    }
-    try {
-      webview.WebviewController.setUserAgentForHosts(RISK_DESKTOP_UA, ZHIHU_RISK_HOSTS);
-    } catch (_error) {
     }
   }
 

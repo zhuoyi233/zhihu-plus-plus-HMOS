@@ -68,11 +68,12 @@ export function decodeSearchResultPage(json: string): SearchResultPage {
     if (kind === undefined) {
       return;
     }
+    const contentId = requiredId(object.get('id'), 'search.item.object.id');
     const author = optionalObject(object.get('author'), 'search.item.object.author');
     items.push({
-      wrapperId: requiredId(candidate.get('id'), 'search.item.id'),
+      wrapperId: searchWrapperId(candidate.get('id'), contentId),
       kind: kind,
-      contentId: requiredId(object.get('id'), 'search.item.object.id'),
+      contentId: contentId,
       title: searchTitle(object, kind),
       excerpt: textOrEmpty(object.get('excerpt'), 'search.item.object.excerpt'),
       authorId: authorId(author),
@@ -212,6 +213,18 @@ function requiredId(value: JsonValue | undefined, field: string): string {
     return integerLiteral;
   }
   throw malformed(`${field} 缺少有效 ID`);
+}
+
+/** search_result 包裹层 id：服务端新版可能不返回，缺失时用对象 id 兜底（对齐上游容忍性）。 */
+function searchWrapperId(value: JsonValue | undefined, fallback: string): string {
+  if (value instanceof JsonStringValue && value.value.trim().length > 0) {
+    return value.value;
+  }
+  const integerLiteral = jsonIntegerLiteral(value);
+  if (integerLiteral !== undefined && integerLiteral.length <= 30) {
+    return integerLiteral;
+  }
+  return fallback;
 }
 
 function requiredText(value: JsonValue | undefined, field: string): string {
