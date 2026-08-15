@@ -22,10 +22,14 @@ pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall
 
 - **必须用 pwsh 7**：Windows PowerShell 5.1 对 UTF-8 无 BOM 中文会乱码，导致脚本失败。
 - 测试基线 **401 个 Hypium 用例**，`verify-harmony.ps1` 会校验注册数与通过数。
-- 签名：先 `devecocli signature generate`（写入根 `build-profile.json5`），再完整构建得到
-  `entry-default-signed.hap`；**提交前必须 `git checkout -- build-profile.json5` 还原为空模板**。
-- DevEco/hvigor 工具链需要读写工作区外的 `.hvigor` 缓存与 SDK 路径；在受沙箱限制的会话中
-  跑完整构建需相应提权（否则 node 子进程报 ENOENT/Access denied）。
+- 签名：已对 `build-profile.json5` 设置 `git update-index --skip-worktree`，本地签名配置
+  （`devecocli signature generate` 写入）不会进入 `git status`/提交，**无需再还原**
+  （提交前若出现需还原，说明 skip-worktree 失效，重新设置即可）。证书文件在项目外
+  `~/.ohos/config/`；需要提交该文件真实变更（如 targetSdkVersion）时先
+  `git update-index --no-skip-worktree build-profile.json5`。
+- DevEco/hvigor 工具链需要读写工作区外的 `.hvigor` 缓存、SDK 与 `~/.ohos` 签名目录；
+  在受沙箱限制的会话中跑完整构建或 `devecocli signature generate` 需相应提权
+  （否则 node 子进程报 ENOENT/Access denied，devecocli 报"安装未找到"）。
 
 ## 设备调试（模拟器 ZhihuPlus_API26，127.0.0.1:5555）
 
@@ -50,7 +54,7 @@ $hdc = "C:\Users\zhuoyi\App\Huawei\DevEco Studio\sdk\default\openharmony\toolcha
 
 - **永不 push**，所有提交仅本地；远端 `origin/dev` 落后属正常。
 - 提交风格：`<type>(harmony): <中文>`，如 `fix(harmony): 修复搜索响应解析`。
-- 提交前检查：`git status` 干净、`build-profile.json5` 已还原、无临时文件（`.tmp_*` 等）。
+- 提交前检查：`git status` 干净（build-profile.json5 因 skip-worktree 不参与提交）、无临时文件（`.tmp_*` 等）。
 
 ## ArkTS / ArkUI 代码约束
 
