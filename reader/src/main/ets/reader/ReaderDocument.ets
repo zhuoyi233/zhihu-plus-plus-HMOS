@@ -39,7 +39,7 @@ export interface ReaderDocumentStats {
   imageCount: number;
 }
 
-const BLOCK_PATTERN = /<(?:h[1-6]|p|li|figure)\b[^>]*>[\s\S]*?<\/(?:h[1-6]|p|li|figure)>|<hr\b[^>]*\/?>/gi;
+const BLOCK_PATTERN = /<(?:h[1-6]|p|li|figure|blockquote|pre)\b[^>]*>[\s\S]*?<\/(?:h[1-6]|p|li|figure|blockquote|pre)>|<hr\b[^>]*\/?>/gi;
 const IMAGE_PATTERN = /<img\b[^>]*>/gi;
 const NOSCRIPT_PATTERN = /<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi;
 
@@ -55,6 +55,7 @@ function decodeHtml(value: string): string {
   return value
     .replace(/&nbsp;/gi, ' ')
     .replace(/&quot;/gi, '"')
+    .replace(/&#34;/gi, '"')
     .replace(/&#39;|&apos;/gi, "'")
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')

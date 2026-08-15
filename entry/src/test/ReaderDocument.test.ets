@@ -87,6 +87,21 @@ export default function readerDocumentTest(): void {
       expect(blocks[0].text).assertEqual('图片说明');
     });
 
+    it('parsesBlockquoteAndPreAsParagraphs', 0, () => {
+      const blocks = parseZhihuHtml('<p>开场</p><blockquote>记者问：如何看待信教人数增长？</blockquote>' +
+        '<blockquote><p>答：依法管理宗教事务。</p></blockquote><pre>code sample</pre>');
+
+      expect(blocks.length).assertEqual(4);
+      expect(blocks[0].kind).assertEqual(ReaderBlockKind.PARAGRAPH);
+      expect(blocks[0].text).assertEqual('开场');
+      expect(blocks[1].kind).assertEqual(ReaderBlockKind.PARAGRAPH);
+      expect(blocks[1].text).assertEqual('记者问：如何看待信教人数增长？');
+      expect(blocks[2].kind).assertEqual(ReaderBlockKind.PARAGRAPH);
+      expect(blocks[2].text).assertEqual('答：依法管理宗教事务。');
+      expect(blocks[3].kind).assertEqual(ReaderBlockKind.PARAGRAPH);
+      expect(blocks[3].text).assertEqual('code sample');
+    });
+
     it('normalizesProtocolRelativeImageAndRejectsUnsafeSource', 0, () => {
       const protocolRelative = parseZhihuHtml('<figure><img srcset="https://picx.zhimg.com/wrong.jpg 2x" ' +
         'src="//picx.zhimg.com/reading.jpg"></figure>');

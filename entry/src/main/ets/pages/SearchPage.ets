@@ -2,6 +2,37 @@ import { P1Destination, P1DestinationName } from 'core';
 import { FeedTargetKind, SearchRepository, SearchResultItem, searchResultIdentity } from 'data';
 import { SearchController, SearchPhase, SearchViewState } from './SearchState';
 
+interface EmphasisPart {
+  text: string;
+  emphasized: boolean;
+}
+
+/** 把搜索接口返回的 `<em>关键词</em>` 拆成高亮片段（无标签时整段普通文本）。 */
+function splitEmphasis(text: string): Array<EmphasisPart> {
+  const parts: Array<EmphasisPart> = [];
+  const pattern = /<em>([\s\S]*?)<\/em>/gi;
+  let lastIndex = 0;
+  let match = pattern.exec(text);
+  while (match !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ text: text.substring(lastIndex, match.index), emphasized: false });
+    }
+    const emphasized = match[1];
+    if (emphasized !== undefined && emphasized.length > 0) {
+      parts.push({ text: emphasized, emphasized: true });
+    }
+    lastIndex = match.index + match[0].length;
+    match = pattern.exec(text);
+  }
+  if (lastIndex < text.length) {
+    parts.push({ text: text.substring(lastIndex), emphasized: false });
+  }
+  if (parts.length === 0) {
+    parts.push({ text: text, emphasized: false });
+  }
+  return parts;
+}
+
 @Component
 export struct SearchPage {
   initialQuery: string = '';
@@ -193,6 +224,25 @@ export struct SearchPage {
   }
 
   @Builder
+  private highlightedText(text: string, fontSize: Resource, baseColor: Resource, baseWeight: FontWeight) {
+    Text() {
+      ForEach(splitEmphasis(text), (part: EmphasisPart, index: number) => {
+        if (part.emphasized) {
+          Span(part.text)
+            .fontColor($r('app.color.brand_primary'))
+            .fontWeight(FontWeight.Bold)
+        } else {
+          Span(part.text)
+        }
+      }, (part: EmphasisPart, index: number): string => `${index}:${part.emphasized}:${part.text}`)
+    }
+    .fontSize(fontSize)
+    .fontColor(baseColor)
+    .fontWeight(baseWeight)
+    .width('100%')
+  }
+
+  @Builder
   private resultCard(item: SearchResultItem) {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
       Column({ space: $r('app.float.p1_spacing_small') }) {
@@ -211,17 +261,12 @@ export struct SearchPage {
         }
         .width('100%')
 
-        Text(item.title)
-          .fontSize($r('app.float.p1_heading_font_size'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.primary_text'))
-          .width('100%')
+        this.highlightedText(item.title, $r('app.float.p1_heading_font_size'),
+          $r('app.color.primary_text'), FontWeight.Medium)
 
         if (item.excerpt.trim().length > 0) {
-          Text(item.excerpt)
-            .fontSize($r('app.float.p1_body_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .width('100%')
+          this.highlightedText(item.excerpt, $r('app.float.p1_body_font_size'),
+            $r('app.color.secondary_text'), FontWeight.Regular)
         }
 
         Text(`${item.voteupCount} 赞同 · ${item.commentCount} 评论`)
