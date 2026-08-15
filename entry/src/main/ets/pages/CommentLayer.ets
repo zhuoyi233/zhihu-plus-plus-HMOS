@@ -164,7 +164,7 @@ export struct CommentLayer {
 
   @Builder
   private sortChip(order: CommentSortOrder, label: string, testId: string) {
-    Button(label, { type: ButtonType.Normal })
+    Button(label, { type: ButtonType.Capsule })
       .id(testId)
       .fontSize($r('app.float.p1_secondary_font_size'))
       .fontColor(this.sortOrder === order ? $r('app.color.on_brand') : $r('app.color.primary_text'))

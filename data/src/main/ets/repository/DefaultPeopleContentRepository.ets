@@ -66,7 +66,10 @@ export function isPeopleContentCursorUrl(identifier: string, section: PeopleCont
     /[\u0000-\u0020\u007F-\uFFFF]/.test(cursor)) {
     return false;
   }
-  return cursor.startsWith(allowedCursorPrefix(identifier, section)) && !cursor.includes('#');
+  // 知乎分页返回 http:// 的 next 地址（与通知分页同源），归一化为 https 再校验；
+  // 否则分页地址被拒导致整个用户内容加载失败（INVALID_CURSOR）。
+  const normalized = cursor.startsWith('http://') ? `https://${cursor.substring(7)}` : cursor;
+  return normalized.startsWith(allowedCursorPrefix(identifier, section)) && !normalized.includes('#');
 }
 
 export function buildPeopleContentUrl(identifierValue: string, section: PeopleContentSection, cursor?: string): string {

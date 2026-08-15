@@ -309,7 +309,7 @@ export struct PeopleDetailPage {
     Column({ space: $r('app.float.p1_spacing_small') }) {
       if (this.followController !== undefined) {
         Button(this.following ? `已关注 ${this.followerCount}` : `关注 ${this.followerCount}`,
-          { type: ButtonType.Normal })
+          { type: ButtonType.Capsule })
           .id('p3_people_follow')
           .fontSize($r('app.float.p1_body_font_size'))
           .fontColor(this.following ? $r('app.color.brand_primary') : $r('app.color.secondary_text'))
@@ -392,7 +392,7 @@ export struct PeopleDetailPage {
 
   @Builder
   private contentTab(label: string, section: PeopleContentSection) {
-    Button(label, { type: ButtonType.Normal })
+    Button(label, { type: ButtonType.Capsule })
       .id(`p2_people_content_tab_${section}`)
       .layoutWeight(1)
       .fontSize($r('app.float.p1_body_font_size'))

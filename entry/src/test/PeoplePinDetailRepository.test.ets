@@ -11,6 +11,7 @@ import {
   DomainDecodeError,
   HttpFailure,
   HttpFailureKind,
+  isPeopleContentCursorUrl,
   PeopleRepositoryFailure,
   PeopleRepositoryFailureKind,
   PeopleContentRepositoryFailure,
@@ -248,6 +249,17 @@ export default function peoplePinDetailRepositoryTest(): void {
         }
       }
       expect(failure?.kind).assertEqual(PeopleContentRepositoryFailureKind.INVALID_CURSOR);
+    });
+
+    it('acceptsHttpSchemePeopleContentCursorFromZhihu', 0, () => {
+      // 知乎分页 next 可能返回 http://（与通知分页同源），应归一化后接受，
+      // 否则整个用户内容首屏加载报 INVALID_CURSOR 失败。
+      const next = 'http://www.zhihu.com/api/v4/members/alice-token/answers?offset=20&limit=20';
+      expect(isPeopleContentCursorUrl('alice-token', PeopleContentSection.ANSWERS, next)).assertTrue();
+      const rebuilt = buildPeopleContentUrl('alice-token', PeopleContentSection.ANSWERS, next);
+      expect(rebuilt.startsWith('https://www.zhihu.com/api/v4/members/alice-token/answers?')).assertTrue();
+      expect(rebuilt.includes('offset=20')).assertTrue();
+      expect(rebuilt.includes('include=')).assertTrue();
     });
 
     it('decodesAndDeduplicatesPeopleContentPages', 0, async () => {
