@@ -251,15 +251,58 @@ export struct PeopleDetailPage {
         .backgroundColor($r('app.color.surface_background'))
         .borderRadius(16)
 
-        this.followBar()
+        Row({ space: $r('app.float.p1_spacing_small') }) {
+          if (this.followController !== undefined) {
+            Button(this.following ? '已关注' : '关注', { type: ButtonType.Capsule })
+              .id('p3_people_follow')
+              .layoutWeight(1)
+              .fontSize($r('app.float.p1_body_font_size'))
+              .fontColor(this.following ? $r('app.color.brand_primary') : $r('app.color.on_brand'))
+              .backgroundColor(this.following
+                ? $r('app.color.brand_primary_container')
+                : $r('app.color.brand_primary'))
+              .enabled(!this.followPending)
+              .onClick((): void => {
+                this.followController?.toggleFollow();
+              })
+          }
+          Button('屏蔽该用户')
+            .id('p3_people_detail_block_user')
+            .layoutWeight(1)
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .enabled(!this.blockingBusy && this.blockingAction !== undefined)
+            .onClick((): void => {
+              this.pendingUserBlock = { userId: profile.id, userName: profile.name };
+            })
+          Button('收藏夹')
+            .id('p3_people_detail_collections')
+            .layoutWeight(1)
+            .fontSize($r('app.float.p1_body_font_size'))
+            .onClick((): void => {
+              this.navigate({ name: P1DestinationName.COLLECTIONS, id: this.identifier });
+            })
+        }
+        .id('p3_people_action_row')
+        .width('100%')
 
-        Button('屏蔽该用户')
-          .id('p3_people_detail_block_user')
-          .fontSize($r('app.float.p1_secondary_font_size'))
-          .enabled(!this.blockingBusy && this.blockingAction !== undefined)
-          .onClick((): void => {
-            this.pendingUserBlock = { userId: profile.id, userName: profile.name };
-          })
+        if (this.followErrorMessage.length > 0) {
+          Row({ space: $r('app.float.p1_spacing_small') }) {
+            Text(this.followErrorMessage)
+              .id('p3_people_follow_status')
+              .fontSize($r('app.float.p1_secondary_font_size'))
+              .fontColor($r('app.color.error_text'))
+              .layoutWeight(1)
+            if (this.followRequiresLogin) {
+              Button('去登录')
+                .id('p3_people_follow_login')
+                .fontSize($r('app.float.p1_secondary_font_size'))
+                .onClick((): void => {
+                  this.navigate({ name: P1DestinationName.LOGIN });
+                })
+            }
+          }
+          .width('100%')
+        }
 
         if (this.blockingMessage.length > 0) {
           Text(this.blockingMessage)
@@ -268,14 +311,6 @@ export struct PeopleDetailPage {
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
         }
-
-        Button('收藏夹')
-          .id('p3_people_detail_collections')
-          .width('100%')
-          .fontSize($r('app.float.p1_body_font_size'))
-          .onClick((): void => {
-            this.navigate({ name: P1DestinationName.COLLECTIONS, id: this.identifier });
-          })
 
         this.contentSectionTabs()
         this.contentList()
@@ -301,46 +336,6 @@ export struct PeopleDetailPage {
         .fontSize($r('app.float.p1_secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
     }
-    .alignItems(HorizontalAlign.Center)
-  }
-
-  @Builder
-  private followBar() {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
-      if (this.followController !== undefined) {
-        Button(this.following ? `已关注 ${this.followerCount}` : `关注 ${this.followerCount}`,
-          { type: ButtonType.Capsule })
-          .id('p3_people_follow')
-          .fontSize($r('app.float.p1_body_font_size'))
-          .fontColor(this.following ? $r('app.color.brand_primary') : $r('app.color.on_brand'))
-          .backgroundColor(this.following
-            ? $r('app.color.brand_primary_container')
-            : $r('app.color.brand_primary'))
-          .enabled(!this.followPending)
-          .onClick((): void => {
-            this.followController?.toggleFollow();
-          })
-      }
-      if (this.followErrorMessage.length > 0) {
-        Row({ space: $r('app.float.p1_spacing_small') }) {
-          Text(this.followErrorMessage)
-            .id('p3_people_follow_status')
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .fontColor($r('app.color.error_text'))
-            .layoutWeight(1)
-          if (this.followRequiresLogin) {
-            Button('去登录')
-              .id('p3_people_follow_login')
-              .fontSize($r('app.float.p1_secondary_font_size'))
-              .onClick((): void => {
-                this.navigate({ name: P1DestinationName.LOGIN });
-              })
-          }
-        }
-        .width('100%')
-      }
-    }
-    .width('100%')
     .alignItems(HorizontalAlign.Center)
   }
 
