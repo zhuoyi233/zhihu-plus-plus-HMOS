@@ -252,69 +252,75 @@ export struct HomeFeedPage {
 
   @Builder
   private feedCard(item: FeedItem) {
-    Row({ space: $r('app.float.p1_spacing_xsmall') }) {
-      Button({ type: ButtonType.Normal, stateEffect: true }) {
-        Column({ space: $r('app.float.p1_spacing_small') }) {
-          Row({ space: $r('app.float.p1_spacing_xsmall') }) {
-            Text(homeFeedActionLabel(item))
+    Button({ type: ButtonType.Normal, stateEffect: true }) {
+      Column({ space: $r('app.float.p1_spacing_small') }) {
+        Row({ space: $r('app.float.p1_spacing_xsmall') }) {
+          Text(homeFeedActionLabel(item))
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .layoutWeight(1)
+          Text(feedKindLabel(item.target.kind))
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.brand_primary'))
+
+          // 对齐上游 FeedCardMenuBox：右上角紧凑“更多”符号图标，屏蔽等操作收进菜单。
+          Button({ type: ButtonType.Normal, stateEffect: true }) {
+            SymbolGlyph($r('sys.symbol.more'))
+              .fontSize(18)
+              .fontColor([$r('app.color.secondary_text')])
+          }
+          .id(`p3_home_feed_block_${item.target.kind}_${item.target.id}`)
+          .width(32)
+          .height(32)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .enabled(!this.blockingBusy && this.blockingAction !== undefined)
+          .bindMenu(this.feedBlockMenu(item))
+          .accessibilityText('屏蔽作者或关键词')
+        }
+        .width('100%')
+
+        Text(item.target.title)
+          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.primary_text'))
+          .width('100%')
+
+        if (item.target.excerpt.trim().length > 0) {
+          Text(item.target.excerpt)
+            .fontSize($r('app.float.p1_body_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
+        }
+
+        Row({ space: $r('app.float.p1_spacing_medium') }) {
+          if (item.target.author !== undefined) {
+            Text(item.target.author.name)
               .fontSize($r('app.float.p1_secondary_font_size'))
               .fontColor($r('app.color.secondary_text'))
               .layoutWeight(1)
-            Text(feedKindLabel(item.target.kind))
-              .fontSize($r('app.float.p1_secondary_font_size'))
-              .fontColor($r('app.color.brand_primary'))
+          } else {
+            Blank().layoutWeight(1)
           }
-          .width('100%')
-
-          Text(item.target.title)
-            .fontSize($r('app.float.p1_heading_font_size'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.primary_text'))
-            .width('100%')
-
-          if (item.target.excerpt.trim().length > 0) {
-            Text(item.target.excerpt)
-              .fontSize($r('app.float.p1_body_font_size'))
-              .fontColor($r('app.color.secondary_text'))
-              .width('100%')
-          }
-
-          Row({ space: $r('app.float.p1_spacing_medium') }) {
-            if (item.target.author !== undefined) {
-              Text(item.target.author.name)
-                .fontSize($r('app.float.p1_secondary_font_size'))
-                .fontColor($r('app.color.secondary_text'))
-                .layoutWeight(1)
-            } else {
-              Blank().layoutWeight(1)
-            }
-            Text(`${item.target.voteupCount} 赞同`)
-              .fontSize($r('app.float.p1_secondary_font_size'))
-              .fontColor($r('app.color.secondary_text'))
-            Text(`${item.target.commentCount} 评论`)
-              .fontSize($r('app.float.p1_secondary_font_size'))
-              .fontColor($r('app.color.secondary_text'))
-          }
-          .width('100%')
+          Text(`${item.target.voteupCount} 赞同`)
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+          Text(`${item.target.commentCount} 评论`)
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.secondary_text'))
         }
-        .alignItems(HorizontalAlign.Start)
         .width('100%')
       }
-      .id(`p2_home_feed_card_${item.target.kind}_${item.target.id}`)
-      .layoutWeight(1)
-      .padding($r('app.float.p1_card_padding'))
-      .borderRadius($r('app.float.p1_card_radius'))
-      .backgroundColor($r('app.color.surface_background'))
-      .accessibilityText(`打开${feedKindLabel(item.target.kind)}：${item.target.title}`)
-      .onClick(() => this.navigate(homeFeedDestination(item)))
-
-      Button('屏蔽')
-        .id(`p3_home_feed_block_${item.target.kind}_${item.target.id}`)
-        .fontSize($r('app.float.p1_secondary_font_size'))
-        .enabled(!this.blockingBusy && this.blockingAction !== undefined)
-        .bindMenu(this.feedBlockMenu(item))
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
     }
+    .id(`p2_home_feed_card_${item.target.kind}_${item.target.id}`)
     .width('100%')
+    .padding($r('app.float.p1_card_padding'))
+    .borderRadius($r('app.float.p1_card_radius'))
+    .backgroundColor($r('app.color.surface_background'))
+    .accessibilityText(`打开${feedKindLabel(item.target.kind)}：${item.target.title}`)
+    .onClick(() => this.navigate(homeFeedDestination(item)))
   }
 
   private feedBlockMenu(item: FeedItem): Array<MenuElement> {
