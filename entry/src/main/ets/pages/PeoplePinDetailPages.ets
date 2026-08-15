@@ -312,7 +312,10 @@ export struct PeopleDetailPage {
           { type: ButtonType.Capsule })
           .id('p3_people_follow')
           .fontSize($r('app.float.p1_body_font_size'))
-          .fontColor(this.following ? $r('app.color.brand_primary') : $r('app.color.secondary_text'))
+          .fontColor(this.following ? $r('app.color.brand_primary') : $r('app.color.on_brand'))
+          .backgroundColor(this.following
+            ? $r('app.color.brand_primary_container')
+            : $r('app.color.brand_primary'))
           .enabled(!this.followPending)
           .onClick((): void => {
             this.followController?.toggleFollow();
@@ -396,8 +399,10 @@ export struct PeopleDetailPage {
       .id(`p2_people_content_tab_${section}`)
       .layoutWeight(1)
       .fontSize($r('app.float.p1_body_font_size'))
-      .fontColor(this.selectedSection === section ? $r('app.color.brand_primary') : $r('app.color.secondary_text'))
-      .enabled(this.selectedSection !== section)
+      .fontColor(this.selectedSection === section ? $r('app.color.on_brand') : $r('app.color.brand_primary'))
+      .backgroundColor(this.selectedSection === section
+        ? $r('app.color.brand_primary')
+        : $r('app.color.brand_primary_container'))
       .onClick((): void => this.selectSection(section))
   }
 
