@@ -72,10 +72,16 @@ dev 工作区同时包含**安卓构建链残留**与**鸿蒙工程**。鸿蒙�
 ## 七、删除后的访问与验证（重点）
 
 1. **安卓项目仍可离线访问**：worktree 从 git 对象库检出，与 dev 工作区文件无关。
-   - 保留 `refs/remotes/upstream/master`（0023163d）与本地分支 `refs/heads/Android-master`
-     （e0856d27）即可 `git worktree add .worktrees/android-ref upstream/master` 随时拿到完整
-     安卓工程（已实测：837 文件完整检出，主工作区无污染）。
-   - **不要**同时删除这两个引用并跑 `git gc --prune=now`，否则需 `git fetch upstream` 重新拉取。
+   - `refs/remotes/upstream/master`（0023163d）与本地分支 `refs/heads/Android-master`
+     已同步（`Android-master` 已快进并**跟踪 `upstream/master`**），
+     `git worktree add .worktrees/android-ref upstream/master` 随时拿到完整安卓工程
+     （已实测：837 文件完整检出，主工作区无污染）。
+   - **上游更新可见性**：`Android-master` 的跟踪关系已配置，之后每次
+     `git fetch upstream` 即可看到上游更新——上游有推进时 `git status`/`git log` 会显示
+     `behind N`，在 `Android-master` 上 `git pull`（或 `git branch -f Android-master upstream/master`）
+     即可快进到最新。
+   - **不要**删除 `upstream` remote / `Android-master` 分支并跑 `git gc --prune=now`，
+     否则需 `git fetch upstream` 重新拉取。
 2. **鸿蒙回归**：删除后执行 `pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall`
    全量编译 + Hypium 401/401。
 3. **提交流程**：`git rm -r` 全部 A/B 类目标 → 提交（不推送）→ 推送前可先用
@@ -108,5 +114,6 @@ git worktree remove .worktrees/_check
 2. **origin/dev（e0856d27）**：远端 dev 仍是含安卓文件的旧基线。本地 dev 领先，
    正常 `push` 不受影响；但若从 origin **拉取/合并**（而非 push），需要处理文件冲突或
    以删除提交为准。
-3. **`Android-master` / `upstream/master` 引用**：务必保留（见第七节），它们是离线访问
-   安卓项目的唯一来源；删除后仅靠 reflog 保护，过期后 `git gc` 会回收对象。
+3. **`Android-master` / `upstream/master` 引用**：务必保留。`Android-master` 已配置为跟踪
+   `upstream/master`（当前已快进同步），是持续看到上游更新的本地入口；旧快照 e0856d27
+   仍由 `origin/Android-master` 保留。删除后仅靠 reflog 保护，过期后 `git gc` 会回收对象。
