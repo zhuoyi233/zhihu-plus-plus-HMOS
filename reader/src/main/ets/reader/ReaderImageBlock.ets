@@ -1,5 +1,8 @@
 import { ReaderBlock, ReaderBlockKind } from './ReaderDocument';
 
+/** 加载完成前的占位宽高比（加载后按源图比例覆盖）。 */
+const IMAGE_PLACEHOLDER_ASPECT_RATIO = 4 / 3;
+
 @Component
 export struct ReaderImageBlock {
   item: ReaderBlock = { id: '', kind: ReaderBlockKind.IMAGE, text: '', sourceUrl: '', inlineRuns: [] };
@@ -7,6 +10,7 @@ export struct ReaderImageBlock {
   secondaryTextColor: ResourceColor = Color.Gray;
   @State private failed: boolean = false;
   @State private retryRevision: number = 0;
+  @State private imageAspectRatio: number = IMAGE_PLACEHOLDER_ASPECT_RATIO;
 
   private imageSource(): string {
     if (this.retryRevision === 0) {
@@ -20,11 +24,16 @@ export struct ReaderImageBlock {
     Column({ space: 8 }) {
       Image(this.imageSource())
         .id(`reader_image_${this.item.id}`)
-        .width('100%')
-        .height(260)
+        // 对齐上游 RenderImage：宽度为内容宽 80% 居中，高度按源图宽高比自适应，
+        // 不再用固定高度截断（固定 260vp + Contain 会把竖图/方图缩小）。
+        .width('80%')
+        .aspectRatio(this.imageAspectRatio)
         .objectFit(ImageFit.Contain)
-        .onComplete(() => {
+        .onComplete((event) => {
           this.failed = false;
+          if (event !== undefined && event.width > 0 && event.height > 0) {
+            this.imageAspectRatio = event.width / event.height;
+          }
         })
         .onError(() => {
           this.failed = true;
