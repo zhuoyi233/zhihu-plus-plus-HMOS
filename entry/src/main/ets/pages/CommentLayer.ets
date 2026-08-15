@@ -353,14 +353,29 @@ export struct CommentLayer {
   @Builder
   private authorRow(comment: CommentItem) {
     Row({ space: $r('app.float.p1_spacing_small') }) {
-      Text(authorInitial(comment.author.name))
-        .fontSize($r('app.float.p1_secondary_font_size'))
-        .fontColor($r('app.color.on_brand'))
-        .textAlign(TextAlign.Center)
-        .width(32)
-        .height(32)
-        .borderRadius(16)
-        .backgroundColor($r('app.color.brand_primary'))
+      Stack({ alignContent: Alignment.Center }) {
+        // 底层占位：名字首字，头像缺失或加载失败时可见。
+        Text(authorInitial(comment.author.name))
+          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontColor($r('app.color.on_brand'))
+          .textAlign(TextAlign.Center)
+          .width(32)
+          .height(32)
+          .borderRadius(16)
+          .backgroundColor($r('app.color.brand_primary'))
+        // 顶层真实头像：加载成功覆盖占位（加载失败保持透明，露出首字）。
+        if (commentAvatarUrl(comment.author.avatarUrl).length > 0) {
+          Image(commentAvatarUrl(comment.author.avatarUrl))
+            .id(`p3_comments_avatar_${comment.id}`)
+            .width(32)
+            .height(32)
+            .borderRadius(16)
+            .objectFit(ImageFit.Cover)
+        }
+      }
+      .width(32)
+      .height(32)
+      .clip(true)
       Text(comment.author.name)
         .id(`p3_comments_author_${comment.id}`)
         .fontSize($r('app.float.p1_body_font_size'))
@@ -369,7 +384,7 @@ export struct CommentLayer {
         .onClick((): void => {
           this.navigate({
             name: P1DestinationName.PEOPLE,
-            id: comment.author.id
+            id: comment.author.urlToken.length > 0 ? comment.author.urlToken : comment.author.id
           });
         })
       if (comment.authorTag !== undefined) {
@@ -451,7 +466,10 @@ export struct CommentLayer {
               .fontWeight(FontWeight.Medium)
               .fontColor($r('app.color.primary_text'))
               .onClick((): void => {
-                this.navigate({ name: P1DestinationName.PEOPLE, id: child.author.id });
+                this.navigate({
+                  name: P1DestinationName.PEOPLE,
+                  id: child.author.urlToken.length > 0 ? child.author.urlToken : child.author.id
+                });
               })
             Text(stripCommentHtml(child.contentHtml))
               .fontSize($r('app.float.p1_secondary_font_size'))
@@ -623,6 +641,16 @@ export struct CommentLayer {
 function authorInitial(name: string): string {
   const trimmed = name.trim();
   return trimmed.length > 0 ? trimmed.charAt(0) : '?';
+}
+
+/** 评论用户头像 URL：http 归一化为 https，缺失或不受信返回空串（走首字占位）。 */
+function commentAvatarUrl(raw: string): string {
+  const trimmed = raw.trim();
+  const url = trimmed.startsWith('http://') ? `https://${trimmed.substring(7)}` : trimmed;
+  if (!/^https:\/\/[A-Za-z0-9.-]+/.test(url)) {
+    return '';
+  }
+  return url;
 }
 
 function stripCommentHtml(html: string): string {
