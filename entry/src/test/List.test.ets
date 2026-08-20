@@ -60,6 +60,7 @@ import imageUploadContractsTest from './ImageUploadContracts.test';
 import answerPublishStateTest from './AnswerPublishState.test';
 import editorDraftStateTest from './EditorDraftState.test';
 import mediaPickerCoordinatorTest from './MediaPickerCoordinator.test';
+import systemPhotoPickerGatewayTest from './SystemPhotoPickerGateway.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -124,4 +125,5 @@ export default function testsuite(): void {
   answerPublishStateTest();
   editorDraftStateTest();
   mediaPickerCoordinatorTest();
+  systemPhotoPickerGatewayTest();
 }
