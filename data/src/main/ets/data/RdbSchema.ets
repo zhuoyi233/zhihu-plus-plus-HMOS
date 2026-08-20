@@ -4,7 +4,7 @@ export interface SchemaMigration {
   statements: Array<string>;
 }
 
-export const CURRENT_SCHEMA_VERSION: number = 4;
+export const CURRENT_SCHEMA_VERSION: number = 5;
 
 export function schemaMigrationTo(targetVersion: number): SchemaMigration {
   if (targetVersion === 1) {
@@ -56,6 +56,22 @@ export function schemaMigrationTo(targetVersion: number): SchemaMigration {
           'content_id TEXT NOT NULL, blocked_at INTEGER NOT NULL)',
         'CREATE INDEX IF NOT EXISTS index_blocked_feed_history_blocked_at ' +
           'ON blocked_feed_history(blocked_at)'
+      ]
+    };
+  }
+  if (targetVersion === 5) {
+    return {
+      fromVersion: 4,
+      toVersion: 5,
+      statements: [
+        'CREATE TABLE IF NOT EXISTS content_drafts (' +
+          'draft_key TEXT PRIMARY KEY, account_key TEXT NOT NULL, draft_kind TEXT NOT NULL, ' +
+          'target_id TEXT NOT NULL, remote_content_id TEXT, title TEXT NOT NULL, ' +
+          'plain_text_length INTEGER NOT NULL, toc_enabled INTEGER NOT NULL, ' +
+          'image_refs TEXT NOT NULL, topic_refs TEXT NOT NULL, dirty INTEGER NOT NULL, ' +
+          'version INTEGER NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)',
+        'CREATE INDEX IF NOT EXISTS index_content_drafts_account_updated ' +
+          'ON content_drafts(account_key, updated_at DESC, draft_key DESC)'
       ]
     };
   }

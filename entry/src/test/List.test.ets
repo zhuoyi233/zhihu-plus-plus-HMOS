@@ -53,6 +53,7 @@ import phoneLoginCryptoTest from './PhoneLoginCrypto.test';
 import creationPublishRepositoryTest from './CreationPublishRepository.test';
 import videoPlaybackStateTest from './VideoPlaybackState.test';
 import shareServiceTest from './ShareService.test';
+import draftRepositoryTest from './DraftRepository.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -110,4 +111,5 @@ export default function testsuite(): void {
   creationPublishRepositoryTest();
   videoPlaybackStateTest();
   shareServiceTest();
+  draftRepositoryTest();
 }

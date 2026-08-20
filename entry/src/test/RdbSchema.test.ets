@@ -8,13 +8,15 @@ export default function rdbSchemaTest(): void {
       const second = schemaMigrationTo(2);
       const third = schemaMigrationTo(3);
       const fourth = schemaMigrationTo(4);
+      const fifth = schemaMigrationTo(5);
 
-      expect(CURRENT_SCHEMA_VERSION).assertEqual(4);
+      expect(CURRENT_SCHEMA_VERSION).assertEqual(5);
       expect(first.fromVersion).assertEqual(0);
       expect(first.toVersion).assertEqual(second.fromVersion);
       expect(second.toVersion).assertEqual(third.fromVersion);
       expect(third.toVersion).assertEqual(fourth.fromVersion);
-      expect(fourth.toVersion).assertEqual(CURRENT_SCHEMA_VERSION);
+      expect(fourth.toVersion).assertEqual(fifth.fromVersion);
+      expect(fifth.toVersion).assertEqual(CURRENT_SCHEMA_VERSION);
     });
 
     it('addsThreeLocalBlockingRuleTablesWithoutSensitiveContentColumns', 0, () => {
@@ -50,10 +52,24 @@ export default function rdbSchemaTest(): void {
       expect(sql.includes('cookie')).assertFalse();
     });
 
+    it('addsDraftMetadataWithoutPlaintextOrCredentialColumns', 0, () => {
+      const migration = schemaMigrationTo(5);
+      const sql = migration.statements.join(' ');
+
+      expect(migration.statements.length).assertEqual(2);
+      expect(sql.includes('content_drafts')).assertTrue();
+      expect(sql.includes('account_key')).assertTrue();
+      expect(sql.includes('image_refs')).assertTrue();
+      expect(sql.includes('topic_refs')).assertTrue();
+      expect(sql.includes('content_html')).assertFalse();
+      expect(sql.includes('cookie')).assertFalse();
+      expect(sql.includes('upload_token')).assertFalse();
+    });
+
     it('rejectsUnknownSchemaVersion', 0, () => {
       let rejected = false;
       try {
-        schemaMigrationTo(5);
+        schemaMigrationTo(6);
       } catch (_error) {
         rejected = true;
       }

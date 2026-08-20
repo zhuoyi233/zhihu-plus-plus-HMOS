@@ -21,7 +21,7 @@ pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall
 ```
 
 - **必须用 pwsh 7**：Windows PowerShell 5.1 对 UTF-8 无 BOM 中文会乱码，导致脚本失败。
-- 测试基线 **401 个 Hypium 用例**，`verify-harmony.ps1` 会校验注册数与通过数。
+- 测试基线 **416 个 Hypium 用例**，`verify-harmony.ps1` 会校验注册数与通过数。
 - 签名：已对 `build-profile.json5` 设置 `git update-index --skip-worktree`，本地签名配置
   （`devecocli signature generate` 写入）不会进入 `git status`/提交，**无需再还原**
   （提交前若出现需还原，说明 skip-worktree 失效，重新设置即可）。证书文件在项目外
