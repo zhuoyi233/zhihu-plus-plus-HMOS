@@ -58,6 +58,7 @@ import draftRepositoryTest from './DraftRepository.test';
 import pinPublishStateTest from './PinPublishState.test';
 import imageUploadContractsTest from './ImageUploadContracts.test';
 import answerPublishStateTest from './AnswerPublishState.test';
+import answerPublishPageTest from './AnswerPublishPage.test';
 import editorDraftStateTest from './EditorDraftState.test';
 import mediaPickerCoordinatorTest from './MediaPickerCoordinator.test';
 import systemPhotoPickerGatewayTest from './SystemPhotoPickerGateway.test';
@@ -124,6 +125,7 @@ export default function testsuite(): void {
   pinPublishStateTest();
   imageUploadContractsTest();
   answerPublishStateTest();
+  answerPublishPageTest();
   editorDraftStateTest();
   mediaPickerCoordinatorTest();
   systemPhotoPickerGatewayTest();

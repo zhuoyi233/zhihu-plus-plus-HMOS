@@ -34,6 +34,8 @@ export struct P1Shell {
     this.emptyContent;
   @BuilderParam videoContent: (id: string, navigate: (destination: P1Destination) => void) => void =
     this.emptyContent;
+  @BuilderParam writeAnswerContent: (questionId: string, answerId: string | undefined,
+    navigate: (destination: P1Destination) => void) => void = this.emptyWriteAnswer;
   @BuilderParam peopleContent: (id: string, navigate: (destination: P1Destination) => void) => void =
     this.emptyContent;
   @BuilderParam pinContent: (id: string, navigate: (destination: P1Destination) => void) => void =
@@ -107,6 +109,12 @@ export struct P1Shell {
 
   @Builder
   emptyContent(_id: string, _navigate: (destination: P1Destination) => void) {
+    Blank();
+  }
+
+  @Builder
+  emptyWriteAnswer(_questionId: string, _answerId: string | undefined,
+    _navigate: (destination: P1Destination) => void) {
     Blank();
   }
 
@@ -251,6 +259,16 @@ export struct P1Shell {
         );
       }
       .title('视频')
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.WRITE_ANSWER) {
+      NavDestination() {
+        this.writeAnswerContent(
+          destination.questionId,
+          destination.answerId,
+          (destination: P1Destination): void => this.navigate(destination)
+        );
+      }
+      .title(destination.answerId === undefined ? '写回答' : '编辑回答')
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.PEOPLE) {
       NavDestination() {

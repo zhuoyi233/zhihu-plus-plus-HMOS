@@ -8,6 +8,7 @@ import {
   ChannelFeedSource,
   CollectionRepository,
   CommentRepository,
+  ContentDraftStore,
   ContentRepository,
   DefaultChannelFeedRepository,
   DefaultCollectionRepository,
@@ -37,6 +38,8 @@ import {
   SearchRepository,
   SessionRepository,
   DailyStoryRepository,
+  DraftRepository,
+  EncryptedDraftBodyStore,
   VoteRepository,
   ZhihuHttpClient
 } from 'data';
@@ -54,6 +57,11 @@ import { HomeFeedPage } from './HomeFeedPage';
 import { SearchPage } from './SearchPage';
 import { AnswerDetailPage, ArticleDetailPage, QuestionDetailPage } from './ContentDetailPages';
 import { VideoPlaybackPage } from './VideoPlaybackPage';
+import {
+  AnswerPublishPage,
+  AnswerPublishPageControllerFactory,
+  LocalDraftAnswerPublishControllerFactory
+} from './AnswerPublishPage';
 import { LoginPage } from './LoginPage';
 import { ChannelFeedPage } from './ChannelFeedPage';
 import { DailyStoryDetailPage } from './DailyStoryDetailPage';
@@ -96,6 +104,7 @@ struct Index {
   @State private commentRepository?: CommentRepository = undefined;
   @State private notificationRepository?: NotificationRepository = undefined;
   @State private notificationSettings?: NotificationSettingsGateway = undefined;
+  private answerPublishFactory: AnswerPublishPageControllerFactory | undefined = undefined;
 
   aboutToAppear(): void {
     if (this.compositionReady || this.compositionPreparing) {
@@ -108,6 +117,8 @@ struct Index {
     this.compositionPreparing = true;
     const sessionOwner = getAppSessionOwner(context);
     const session = sessionOwner.getRepository();
+    const draftRepository = new DraftRepository(new ContentDraftStore(getAppDatabase(context)),
+      new EncryptedDraftBodyStore(context));
     const openedContentStore = new OpenedContentStore(getAppDatabase(context));
     const blockingRuleStore = new BlockingRuleStore(getAppDatabase(context));
     const blockedFeedHistoryStore = new BlockedFeedHistoryStore(getAppDatabase(context));
@@ -139,6 +150,7 @@ struct Index {
       this.commentRepository = new DefaultCommentRepository(new ZhihuHttpClient(session));
       this.notificationRepository = new DefaultNotificationRepository(new ZhihuHttpClient(session));
       this.notificationSettings = new AppPreferencesStore(context);
+      this.answerPublishFactory = new LocalDraftAnswerPublishControllerFactory(session, draftRepository);
       this.compositionPreparing = false;
       this.compositionReady = true;
     });
@@ -166,6 +178,9 @@ struct Index {
             this.articleContent(id, navigate),
           videoContent: (id: string, navigate: (destination: P1Destination) => void): void =>
             this.videoContent(id, navigate),
+          writeAnswerContent: (questionId: string, answerId: string | undefined,
+            navigate: (destination: P1Destination) => void): void =>
+            this.writeAnswerContent(questionId, answerId, navigate),
           peopleContent: (id: string, navigate: (destination: P1Destination) => void): void =>
             this.peopleContent(id, navigate),
           pinContent: (id: string, navigate: (destination: P1Destination) => void): void => this.pinContent(id, navigate),
@@ -313,6 +328,20 @@ struct Index {
   @Builder
   videoContent(id: string, _navigate: (destination: P1Destination) => void) {
     VideoPlaybackPage({ contentId: id });
+  }
+
+  @Builder
+  writeAnswerContent(questionId: string, answerId: string | undefined,
+    navigate: (destination: P1Destination) => void) {
+    AnswerPublishPage({
+      questionId: questionId,
+      answerId: answerId,
+      session: this.session,
+      controllerFactory: this.answerPublishFactory,
+      onGoLogin: (): void => {
+        navigate({ name: P1DestinationName.LOGIN });
+      }
+    });
   }
 
   @Builder

@@ -21,6 +21,7 @@ import {
 import {
   AnswerPublishController,
   AnswerPublishPhase,
+  AnswerPublishViewState,
   ANSWER_PUBLISH_CONFLICT_MESSAGE,
   ANSWER_PUBLISH_LOGIN_REQUIRED_MESSAGE,
   ANSWER_PUBLISH_RATE_LIMITED_MESSAGE,
@@ -237,6 +238,22 @@ export default function answerPublishStateTest(): void {
       expect(state.html).assertEqual('<p>已有内容</p>');
       expect(state.tocEnabled).assertTrue();
       expect(repository.calls[1]).assertEqual('fetch:456');
+    });
+
+    it('prefersRequestedAnswerIdForEditingWithoutRelationshipLookup', 0, async () => {
+      const repository = new FakeAnswerPublishRepository();
+      repository.existing = { answerId: '456', html: '<p>既有回答</p>', tocEnabled: false };
+      const controller = new AnswerPublishController(repository, createDraftRepository(),
+        new FixedSessionGateway(SessionStatus.AUTHENTICATED), ACCOUNT_KEY, '123',
+        (_state: AnswerPublishViewState): void => {}, '456');
+      controller.activate();
+
+      await controller.open();
+
+      expect(controller.snapshot().answerId).assertEqual('456');
+      expect(controller.snapshot().html).assertEqual('<p>既有回答</p>');
+      expect(repository.calls.length).assertEqual(1);
+      expect(repository.calls[0]).assertEqual('fetch:456');
     });
 
     it('flushesLocalThenRemoteDraftThenPublishesAndClearsOnlyOnNestedSuccess', 0, async () => {

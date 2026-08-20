@@ -79,13 +79,14 @@ export class AnswerPublishController {
 
   constructor(publishRepository: AnswerPublishRepository, draftRepository: DraftRepository,
     session: LoginSessionGateway, accountKey: string, questionId: string,
-    observer: AnswerPublishObserver = (_state: AnswerPublishViewState): void => {}) {
+    observer: AnswerPublishObserver = (_state: AnswerPublishViewState): void => {}, initialAnswerId?: string) {
     this.publishRepository = publishRepository;
     this.draftRepository = draftRepository;
     this.session = session;
     this.accountKey = accountKey;
     this.questionId = questionId;
     this.observer = observer;
+    this.answerId = initialAnswerId;
   }
 
   activate(): void {
@@ -139,11 +140,13 @@ export class AnswerPublishController {
       if (!this.isCurrent(operation)) {
         return;
       }
-      const answerId = await this.publishRepository.findMyAnswerId(this.questionId);
-      if (!this.isCurrent(operation)) {
-        return;
+      if (this.answerId === undefined) {
+        const answerId = await this.publishRepository.findMyAnswerId(this.questionId);
+        if (!this.isCurrent(operation)) {
+          return;
+        }
+        this.answerId = answerId ?? local.draft?.metadata.remoteContentId;
       }
-      this.answerId = answerId ?? local.draft?.metadata.remoteContentId;
       const hasLocalDraft = local.status === ContentDraftLoadStatus.FOUND && local.draft !== undefined;
       if (hasLocalDraft && local.draft !== undefined) {
         this.html = local.draft.html;

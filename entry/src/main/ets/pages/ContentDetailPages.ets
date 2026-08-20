@@ -16,6 +16,7 @@ import {
   FollowRepository,
   LoginSessionGateway,
   OpenedContentStore,
+  SessionStatus,
   VoteRepository
 } from 'data';
 import {
@@ -478,6 +479,10 @@ struct ContentDetailPage {
           }
           Blank()
             .layoutWeight(1)
+          Button('写回答')
+            .id('p4_question_write_answer')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .onClick((): void => this.openAnswerComposer())
         } else {
           // 左组：投票胶囊（赞同图标+数字 / 反对），对齐上游主视觉——
           // Neutral 显示赞+踩（浅蓝底蓝字）；点赞同后反对隐藏、踩后赞同隐藏（实蓝底白字）。
@@ -565,6 +570,15 @@ struct ContentDetailPage {
     .border({ width: { top: 0.5 }, color: $r('app.color.divider_color') })
     .zIndex(2)
     .hitTestBehavior(HitTestMode.Default)
+  }
+
+  private openAnswerComposer(): void {
+    const session = this.session;
+    if (session === undefined || session.getState().status !== SessionStatus.AUTHENTICATED) {
+      this.navigate({ name: P1DestinationName.LOGIN });
+      return;
+    }
+    this.navigate({ name: P1DestinationName.WRITE_ANSWER, questionId: this.contentId });
   }
 
   @Builder
