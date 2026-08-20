@@ -59,6 +59,7 @@ import pinPublishStateTest from './PinPublishState.test';
 import imageUploadContractsTest from './ImageUploadContracts.test';
 import answerPublishStateTest from './AnswerPublishState.test';
 import editorDraftStateTest from './EditorDraftState.test';
+import mediaPickerCoordinatorTest from './MediaPickerCoordinator.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -122,4 +123,5 @@ export default function testsuite(): void {
   imageUploadContractsTest();
   answerPublishStateTest();
   editorDraftStateTest();
+  mediaPickerCoordinatorTest();
 }
