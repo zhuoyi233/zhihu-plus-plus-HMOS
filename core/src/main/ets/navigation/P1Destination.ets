@@ -30,7 +30,9 @@ export enum P1DestinationName {
   DEEP_LINK_PROBE = 'DeepLinkProbe',
   QR_SCAN_PROBE = 'QrScanProbe',
   BACKGROUND_TASK_PROBE = 'BackgroundTaskProbe',
-  DOMAIN_FIXTURE_PROBE = 'DomainFixtureProbe'
+  DOMAIN_FIXTURE_PROBE = 'DomainFixtureProbe',
+  WRITE_ANSWER = 'WriteAnswer',
+  WRITE_PIN = 'WritePin'
 }
 
 export interface StatelessDestination {
@@ -67,12 +69,24 @@ export interface SearchDestination {
   readonly query: string;
 }
 
+export interface WriteAnswerDestination {
+  readonly name: P1DestinationName.WRITE_ANSWER;
+  readonly questionId: string;
+  readonly answerId?: string;
+}
+
+export interface WritePinDestination {
+  readonly name: P1DestinationName.WRITE_PIN;
+  readonly draftId: string;
+}
+
 export type P1Destination = StatelessDestination | InfrastructureDestination | ContentDestination |
-  CommentDestination | SearchDestination;
+  CommentDestination | SearchDestination | WriteAnswerDestination | WritePinDestination;
 
 export const MAX_SEARCH_QUERY_LENGTH: number = 200;
 export const MAX_DECIMAL_CONTENT_ID_LENGTH: number = 30;
 export const MAX_PEOPLE_IDENTIFIER_LENGTH: number = 200;
+export const LOCAL_DRAFT_ID_LENGTH: number = 36;
 
 export function isSafeSearchDestinationQuery(value: string | undefined): boolean {
   return typeof value === 'string' && value.length <= MAX_SEARCH_QUERY_LENGTH &&
@@ -89,6 +103,12 @@ export function isSafePinContentId(value: string | undefined): boolean {
 
 export function isSafePeopleIdentifier(value: string | undefined): boolean {
   return typeof value === 'string' && /^[A-Za-z0-9_-]{1,200}$/.test(value);
+}
+
+/** P4 本地草稿使用规范化的小写 UUID，避免把任意字符串作为持久化键或导航身份。 */
+export function isSafeLocalDraftId(value: string | undefined): boolean {
+  return typeof value === 'string' && value.length === LOCAL_DRAFT_ID_LENGTH &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
 }
 
 export function isP1DestinationName(name: string): boolean {
@@ -123,6 +143,8 @@ export function isP1DestinationName(name: string): boolean {
     case P1DestinationName.QR_SCAN_PROBE:
     case P1DestinationName.BACKGROUND_TASK_PROBE:
     case P1DestinationName.DOMAIN_FIXTURE_PROBE:
+    case P1DestinationName.WRITE_ANSWER:
+    case P1DestinationName.WRITE_PIN:
       return true;
     default:
       return false;
@@ -205,6 +227,10 @@ export function decodeP1Destination(name: string, param: Object): P1Destination 
       return decodeContent(wire, P1DestinationName.COLLECTION);
     case P1DestinationName.COLLECTIONS:
       return decodeContent(wire, P1DestinationName.COLLECTIONS);
+    case P1DestinationName.WRITE_ANSWER:
+      return decodeWriteAnswer(wire);
+    case P1DestinationName.WRITE_PIN:
+      return decodeWritePin(wire);
     case P1DestinationName.COMMENT:
       const contentId = readString(wire, 'contentId');
       const commentId = readString(wire, 'commentId');
@@ -269,6 +295,8 @@ export function shouldReloadAfterAuthentication(destination: P1Destination): boo
     case P1DestinationName.COLLECTION:
     case P1DestinationName.COLLECTIONS:
     case P1DestinationName.NOTIFICATION:
+    case P1DestinationName.WRITE_ANSWER:
+    case P1DestinationName.WRITE_PIN:
       return true;
     default:
       return false;
@@ -301,7 +329,30 @@ function decodeContent(wire: JsonObjectValue, name: P1DestinationName.QUESTION |
 function hasNoParameters(wire: JsonObjectValue): boolean {
   return readString(wire, 'id') === undefined && readString(wire, 'contentId') === undefined &&
     readString(wire, 'commentId') === undefined && readString(wire, 'query') === undefined &&
+    readString(wire, 'questionId') === undefined && readString(wire, 'answerId') === undefined &&
+    readString(wire, 'draftId') === undefined &&
     hasOnlyFields(wire, ['name']);
+}
+
+function decodeWriteAnswer(wire: JsonObjectValue): WriteAnswerDestination | undefined {
+  const questionId = readString(wire, 'questionId');
+  const answerId = readString(wire, 'answerId');
+  if (questionId === undefined || !isSafeDecimalContentId(questionId) ||
+    (answerId !== undefined && !isSafeDecimalContentId(answerId)) ||
+    !hasOnlyFields(wire, ['name', 'questionId', 'answerId'])) {
+    return undefined;
+  }
+  return answerId === undefined
+    ? { name: P1DestinationName.WRITE_ANSWER, questionId: questionId }
+    : { name: P1DestinationName.WRITE_ANSWER, questionId: questionId, answerId: answerId };
+}
+
+function decodeWritePin(wire: JsonObjectValue): WritePinDestination | undefined {
+  const draftId = readString(wire, 'draftId');
+  if (draftId === undefined || !isSafeLocalDraftId(draftId) || !hasOnlyFields(wire, ['name', 'draftId'])) {
+    return undefined;
+  }
+  return { name: P1DestinationName.WRITE_PIN, draftId: draftId };
 }
 
 function hasText(value: string | undefined): boolean {

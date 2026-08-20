@@ -108,6 +108,11 @@ export function p1DestinationIdentity(destination: P1Destination): string {
     case P1DestinationName.COLLECTION:
     case P1DestinationName.COLLECTIONS:
       return `${destination.name}:${encodeURIComponent(destination.id)}`;
+    case P1DestinationName.WRITE_ANSWER:
+      return `${destination.name}:${encodeURIComponent(destination.questionId)}:` +
+        encodeURIComponent(destination.answerId ?? '');
+    case P1DestinationName.WRITE_PIN:
+      return `${destination.name}:${encodeURIComponent(destination.draftId)}`;
     case P1DestinationName.COMMENT:
       return `${destination.name}:${encodeURIComponent(destination.contentId)}:` +
         encodeURIComponent(destination.commentId ?? '');

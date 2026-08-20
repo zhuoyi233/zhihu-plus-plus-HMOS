@@ -3,12 +3,14 @@ import {
   HttpFailure,
   HttpFailureKind,
   isSessionCapableZhihuRequestUrl,
+  isSafeZhihuRefererPath,
   isTrustedZhihuRequestUrl,
   PreparedZhihuHttpRequest,
   prepareZhihuHttpRequest,
   SessionCookie,
   SessionCookieProvider,
   ZhihuHttpClient,
+  ZhihuHttpMethod,
   ZhihuHttpRequest,
   ZhihuHttpResponse,
   ZhihuHttpTransport,
@@ -19,7 +21,8 @@ class FixedCookieProvider implements SessionCookieProvider {
   getCookies(): Array<SessionCookie> {
     return [
       { name: 'z_c0', value: 'login-token' },
-      { name: 'd_c0', value: 'device-token' }
+      { name: 'd_c0', value: 'device-token' },
+      { name: '_xsrf', value: 'xsrf-token' }
     ];
   }
 }
@@ -164,21 +167,19 @@ export default function zhihuHttpClientTest(): void {
         useSession: true,
         signWithZse: true
       }, new FixedCookieProvider().getCookies(), 1);
-      expect(prepared.headers.Cookie).assertEqual('z_c0=login-token; d_c0=device-token');
+      expect(prepared.headers.Cookie).assertEqual('z_c0=login-token; d_c0=device-token; _xsrf=xsrf-token');
       const serializedHeaders = JSON.stringify(prepared.headers);
       expect(serializedHeaders.includes('"x-zse-93":"101_3_3.0"')).assertTrue();
       expect(serializedHeaders.includes('"x-zse-96":"2.0_')).assertTrue();
     });
 
-    it('rejectsSensitiveSessionHeadersForApiHostBeforeReadingCookies', 0, async () => {
+    it('limitsSensitiveSessionHeadersToWebAndApiHosts', 0, async () => {
       expect(isSessionCapableZhihuRequestUrl('https://www.zhihu.com/api/v4/me')).assertTrue();
-      expect(isSessionCapableZhihuRequestUrl('https://api.zhihu.com/topstory/recommend')).assertFalse();
+      expect(isSessionCapableZhihuRequestUrl('https://api.zhihu.com/topstory/recommend')).assertTrue();
       expect(isSessionCapableZhihuRequestUrl('https://news-at.zhihu.com/api/4/stories/latest')).assertFalse();
       expect(isSessionCapableZhihuRequestUrl('https://daily.zhihu.com/api/4/stories/latest')).assertFalse();
       const provider = new CountingCookieProvider();
       const rejectedRequests: Array<ZhihuHttpRequest> = [
-        { url: 'https://api.zhihu.com/topstory/recommend', useSession: true },
-        { url: 'https://api.zhihu.com/topstory/recommend', signWithZse: true },
         { url: 'https://news-at.zhihu.com/api/4/stories/latest', useSession: true },
         { url: 'https://news-at.zhihu.com/api/4/stories/latest', signWithZse: true },
         { url: 'https://daily.zhihu.com/api/4/stories/latest', useSession: true },
@@ -196,6 +197,34 @@ export default function zhihuHttpClientTest(): void {
         expect(failure?.kind).assertEqual(HttpFailureKind.CLIENT);
       }
       expect(provider.readCount).assertEqual(0);
+    });
+
+    it('addsXsrfOnlyWhenExplicitlyRequestedAndConstrainsRefererPath', 0, () => {
+      const prepared = prepareZhihuHttpRequest({
+        url: 'https://www.zhihu.com/api/v4/content/publish',
+        method: ZhihuHttpMethod.POST,
+        body: '{}',
+        useSession: true,
+        signWithZse: true,
+        includeXsrfToken: true,
+        refererPath: '/question/123/answer/456'
+      }, new FixedCookieProvider().getCookies(), 1);
+      expect(JSON.stringify(prepared.headers).includes('"x-xsrftoken":"xsrf-token"')).assertTrue();
+      expect(prepared.headers.Referer).assertEqual('https://www.zhihu.com/question/123/answer/456');
+      expect(isSafeZhihuRefererPath('/question/123/answer/456')).assertTrue();
+      expect(isSafeZhihuRefererPath('https://evil.example/')).assertFalse();
+      let failure: HttpFailure | undefined = undefined;
+      try {
+        prepareZhihuHttpRequest({
+          url: 'https://www.zhihu.com/api/v4/content/publish',
+          refererPath: '/question/123?target=evil'
+        });
+      } catch (error) {
+        if (error instanceof HttpFailure) {
+          failure = error;
+        }
+      }
+      expect(failure?.kind).assertEqual(HttpFailureKind.CLIENT);
     });
 
     it('mapsProviderAndFactoryExceptionsToSafeStructuredFailure', 0, async () => {
@@ -234,7 +263,8 @@ export default function zhihuHttpClientTest(): void {
         signWithZse: true
       });
       expect(response.statusCode).assertEqual(200);
-      expect(factory.transport.requestValue?.headers.Cookie).assertEqual('z_c0=login-token; d_c0=device-token');
+      expect(factory.transport.requestValue?.headers.Cookie)
+        .assertEqual('z_c0=login-token; d_c0=device-token; _xsrf=xsrf-token');
       expect(factory.transport.destroyCount).assertEqual(1);
     });
 

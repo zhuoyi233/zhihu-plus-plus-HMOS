@@ -30,6 +30,7 @@ export interface ZhihuRequestHeaders {
   'x-requested-with'?: string;
   'x-zse-93'?: string;
   'x-zse-96'?: string;
+  'x-xsrftoken'?: string;
   'Content-Type'?: string;
 }
 
@@ -40,6 +41,10 @@ export interface ZhihuHttpRequest {
   accept?: string;
   useSession?: boolean;
   signWithZse?: boolean;
+  /** 仅发布等网页写接口需要；令客户端从受保护会话 Cookie 提取 `_xsrf`。 */
+  includeXsrfToken?: boolean;
+  /** 仅接受站内路径，防止调用方借 Referer 写入任意外部地址。 */
+  refererPath?: string;
   contentType?: string;
 }
 
@@ -94,7 +99,11 @@ export function isSessionCapableZhihuRequestUrl(url: string): boolean {
   if (!isTrustedZhihuRequestUrl(url)) {
     return false;
   }
-  return /^https:\/\/www\.zhihu\.com(?:[/?#]|$)/.test(url);
+  return /^https:\/\/(?:www|api)\.zhihu\.com(?:[/?#]|$)/.test(url);
+}
+
+export function isSafeZhihuRefererPath(value: string | undefined): boolean {
+  return typeof value === 'string' && /^\/(?:[A-Za-z0-9._~-]+\/)*[A-Za-z0-9._~-]*$/.test(value);
 }
 
 export function sessionCookieValue(cookies: Array<SessionCookie>, name: string): string | undefined {
@@ -110,12 +119,15 @@ export function prepareZhihuHttpRequest(
   if (!isTrustedZhihuRequestUrl(request.url)) {
     throw new HttpFailure(HttpFailureKind.CLIENT);
   }
-  if ((request.useSession === true || request.signWithZse === true) &&
+  if (request.refererPath !== undefined && !isSafeZhihuRefererPath(request.refererPath)) {
+    throw new HttpFailure(HttpFailureKind.CLIENT);
+  }
+  if ((request.useSession === true || request.signWithZse === true || request.includeXsrfToken === true) &&
     !isSessionCapableZhihuRequestUrl(request.url)) {
     throw new HttpFailure(HttpFailureKind.CLIENT);
   }
   let cookieHeader: string | undefined = undefined;
-  if (request.useSession === true || request.signWithZse === true) {
+  if (request.useSession === true || request.signWithZse === true || request.includeXsrfToken === true) {
     cookieHeader = toCookieHeader(cookies, now);
     if (cookieHeader.length === 0) {
       throw new HttpFailure(HttpFailureKind.AUTHENTICATION);
@@ -129,18 +141,26 @@ export function prepareZhihuHttpRequest(
     }
     zse96 = createZse96Header(request.url, dc0, request.body);
   }
+  const xsrf = request.includeXsrfToken === true ? sessionCookieValue(cookies, '_xsrf') : undefined;
+  if (request.includeXsrfToken === true && xsrf === undefined) {
+    throw new HttpFailure(HttpFailureKind.AUTHENTICATION);
+  }
   const accept = request.accept ?? 'application/json, text/plain, */*';
   const bodyContentType = request.contentType ?? 'application/json';
+  const referer = request.refererPath === undefined
+    ? 'https://www.zhihu.com/'
+    : `https://www.zhihu.com${request.refererPath}`;
   let headers: ZhihuRequestHeaders;
   if (zse96 !== undefined && request.body !== undefined) {
     headers = {
       'Accept': accept,
       'User-Agent': ZHIHU_USER_AGENT,
       'Cookie': cookieHeader,
-      'Referer': 'https://www.zhihu.com/',
+      'Referer': referer,
       'x-requested-with': 'fetch',
       'x-zse-93': ZHIHU_WEB_ZSE93,
       'x-zse-96': zse96,
+      'x-xsrftoken': xsrf,
       'Content-Type': bodyContentType
     };
   } else if (zse96 !== undefined) {
@@ -148,18 +168,20 @@ export function prepareZhihuHttpRequest(
       'Accept': accept,
       'User-Agent': ZHIHU_USER_AGENT,
       'Cookie': cookieHeader,
-      'Referer': 'https://www.zhihu.com/',
+      'Referer': referer,
       'x-requested-with': 'fetch',
       'x-zse-93': ZHIHU_WEB_ZSE93,
-      'x-zse-96': zse96
+      'x-zse-96': zse96,
+      'x-xsrftoken': xsrf
     };
   } else if (cookieHeader !== undefined && request.body !== undefined) {
     headers = {
       'Accept': accept,
       'User-Agent': ZHIHU_USER_AGENT,
       'Cookie': cookieHeader,
-      'Referer': 'https://www.zhihu.com/',
+      'Referer': referer,
       'x-requested-with': 'fetch',
+      'x-xsrftoken': xsrf,
       'Content-Type': bodyContentType
     };
   } else if (cookieHeader !== undefined) {
@@ -167,8 +189,9 @@ export function prepareZhihuHttpRequest(
       'Accept': accept,
       'User-Agent': ZHIHU_USER_AGENT,
       'Cookie': cookieHeader,
-      'Referer': 'https://www.zhihu.com/',
-      'x-requested-with': 'fetch'
+      'Referer': referer,
+      'x-requested-with': 'fetch',
+      'x-xsrftoken': xsrf
     };
   } else if (request.body !== undefined) {
     headers = {
@@ -292,13 +315,16 @@ export class ZhihuHttpClient {
     if (!isTrustedZhihuRequestUrl(request.url)) {
       throw new HttpFailure(HttpFailureKind.CLIENT);
     }
-    if ((request.useSession === true || request.signWithZse === true) &&
+    if (request.refererPath !== undefined && !isSafeZhihuRefererPath(request.refererPath)) {
+      throw new HttpFailure(HttpFailureKind.CLIENT);
+    }
+    if ((request.useSession === true || request.signWithZse === true || request.includeXsrfToken === true) &&
       !isSessionCapableZhihuRequestUrl(request.url)) {
       throw new HttpFailure(HttpFailureKind.CLIENT);
     }
     let activeRequest: ActiveZhihuRequest | undefined = undefined;
     try {
-      const cookies = request.useSession === true || request.signWithZse === true
+      const cookies = request.useSession === true || request.signWithZse === true || request.includeXsrfToken === true
         ? this.cookieProvider?.getCookies() ?? []
         : [];
       const preparedRequest = prepareZhihuHttpRequest(request, cookies);
@@ -317,7 +343,7 @@ export class ZhihuHttpClient {
       return response;
     } catch (error) {
       if (error instanceof HttpFailure) {
-        throw error;
+        throw new HttpFailure(error.kind, error.status, error.transportCode);
       }
       throw httpFailureFromTransport();
     } finally {

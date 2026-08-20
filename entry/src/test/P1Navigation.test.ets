@@ -20,6 +20,9 @@ interface TestDestinationParam {
   contentId?: string;
   commentId?: string;
   query?: string;
+  questionId?: string;
+  answerId?: string;
+  draftId?: string;
   unexpected?: string;
 }
 
@@ -55,7 +58,9 @@ export default function p1NavigationTest(): void {
         P1DestinationName.DEEP_LINK_PROBE,
         P1DestinationName.QR_SCAN_PROBE,
         P1DestinationName.BACKGROUND_TASK_PROBE,
-        P1DestinationName.DOMAIN_FIXTURE_PROBE
+        P1DestinationName.DOMAIN_FIXTURE_PROBE,
+        P1DestinationName.WRITE_ANSWER,
+        P1DestinationName.WRITE_PIN
       ];
 
       expect(names.every((name: P1DestinationName) => isP1DestinationName(name))).assertTrue();
@@ -113,6 +118,15 @@ export default function p1NavigationTest(): void {
       const loginParam: TestDestinationParam = {
         name: P1DestinationName.LOGIN
       };
+      const writeAnswerParam: TestDestinationParam = {
+        name: P1DestinationName.WRITE_ANSWER,
+        questionId: '123',
+        answerId: '456'
+      };
+      const writePinParam: TestDestinationParam = {
+        name: P1DestinationName.WRITE_PIN,
+        draftId: '01234567-89ab-4cde-8fab-0123456789ab'
+      };
       const dailyStoryParam: TestDestinationParam = {
         name: P1DestinationName.DAILY_STORY,
         id: '987654321'
@@ -138,6 +152,8 @@ export default function p1NavigationTest(): void {
       const answer = decodeP1Destination(P1DestinationName.ANSWER, answerParam);
       const probe = decodeP1Destination(P1DestinationName.READER_PROBE, probeParam);
       const login = decodeP1Destination(P1DestinationName.LOGIN, loginParam);
+      const writeAnswer = decodeP1Destination(P1DestinationName.WRITE_ANSWER, writeAnswerParam);
+      const writePin = decodeP1Destination(P1DestinationName.WRITE_PIN, writePinParam);
       const dailyStory = decodeP1Destination(P1DestinationName.DAILY_STORY, dailyStoryParam);
       const search: SearchDestination = { name: P1DestinationName.SEARCH, query: 'ArkTS' };
       const following: StatelessDestination = { name: P1DestinationName.FOLLOWING };
@@ -168,6 +184,15 @@ export default function p1NavigationTest(): void {
       expect(decodeP1Destination(P1DestinationName.DOMAIN_FIXTURE_PROBE, fixtureParam)?.name)
         .assertEqual(P1DestinationName.DOMAIN_FIXTURE_PROBE);
       expect(login?.name).assertEqual(P1DestinationName.LOGIN);
+      if (writeAnswer?.name === P1DestinationName.WRITE_ANSWER) {
+        expect(writeAnswer.questionId).assertEqual('123');
+        expect(writeAnswer.answerId).assertEqual('456');
+        expect(shouldReloadAfterAuthentication(writeAnswer)).assertTrue();
+      }
+      if (writePin?.name === P1DestinationName.WRITE_PIN) {
+        expect(writePin.draftId).assertEqual('01234567-89ab-4cde-8fab-0123456789ab');
+        expect(shouldReloadAfterAuthentication(writePin)).assertTrue();
+      }
       expect(decodeP1Destination(P1DestinationName.SEARCH, unexpectedSearchParam)).assertUndefined();
       expect(decodeP1Destination(P1DestinationName.COMMENT, emptyCommentIdParam)).assertUndefined();
     });
