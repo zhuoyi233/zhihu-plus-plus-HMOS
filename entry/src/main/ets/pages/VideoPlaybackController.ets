@@ -83,9 +83,14 @@ export class VideoPlaybackController {
   private playback: VideoPlaybackState = initialVideoPlaybackState();
   private active: boolean = false;
   private source: VideoPlaybackSource | undefined = undefined;
+  private readonly sourceResolver: VideoSourceResolver;
+  private readonly player: VideoPlayerAdapter;
+  private readonly listener: VideoPlaybackStateListener;
 
-  constructor(private readonly sourceResolver: VideoSourceResolver, private readonly player: VideoPlayerAdapter,
-    private readonly listener: VideoPlaybackStateListener) {
+  constructor(sourceResolver: VideoSourceResolver, player: VideoPlayerAdapter, listener: VideoPlaybackStateListener) {
+    this.sourceResolver = sourceResolver;
+    this.player = player;
+    this.listener = listener;
   }
 
   activate(contentId: string): void {

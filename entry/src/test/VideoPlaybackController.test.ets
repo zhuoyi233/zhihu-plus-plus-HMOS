@@ -10,7 +10,10 @@ import {
 import { VideoPlaybackPhase } from '../main/ets/pages/VideoPlaybackState';
 
 class FakeSourceResolver implements VideoSourceResolver {
-  constructor(private readonly source: VideoPlaybackSource | undefined) {
+  private readonly source: VideoPlaybackSource | undefined;
+
+  constructor(source: VideoPlaybackSource | undefined) {
+    this.source = source;
   }
 
   resolve(_contentId: string): Promise<VideoPlaybackSource | undefined> {
