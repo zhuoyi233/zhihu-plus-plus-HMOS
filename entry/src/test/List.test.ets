@@ -61,6 +61,7 @@ import answerPublishStateTest from './AnswerPublishState.test';
 import editorDraftStateTest from './EditorDraftState.test';
 import mediaPickerCoordinatorTest from './MediaPickerCoordinator.test';
 import systemPhotoPickerGatewayTest from './SystemPhotoPickerGateway.test';
+import pinPublishPageStateTest from './PinPublishPageState.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -126,4 +127,5 @@ export default function testsuite(): void {
   editorDraftStateTest();
   mediaPickerCoordinatorTest();
   systemPhotoPickerGatewayTest();
+  pinPublishPageStateTest();
 }
