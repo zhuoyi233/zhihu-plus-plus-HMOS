@@ -4,7 +4,7 @@
 > 范围：P4（创作与媒体，预计 3–5 周）的可执行切片、依赖顺序与验收门禁  
 > 工具链：HarmonyOS API 26 编译，`targetSdkVersion` / `compatibleSdkVersion` 均为 6.1.1（API 24）  
 > 起始测试基线：51 个套件、Hypium `404/404`  
-> 当前进度（2026-08-20）：P4-0 已完成；P4-1 安全草稿、P4-5 播放状态机、P4-6 扫码确认和 P4-7 分享安全边界已完成首个可验证切片。当前测试基线：57 个套件、Hypium `436/436`；P4-2、P4-3、P4-4 与 P4-8 待开始
+> 当前进度（2026-08-20）：P4-0 已完成；P4-1 安全草稿、P4-2 图片上传协议、P4-3 回答发布编排、P4-4 想法发布状态机、P4-5 播放状态机、P4-6 扫码确认和 P4-7 分享安全边界均已完成首个可验证切片。当前测试基线：59 个套件、Hypium `457/457`；P4-8 待完成可行性门禁
 > 行为基线：Android Lite 的 `WriteAnswerScreen`、`WritePinScreen`、`ZhihuAnswerPublisher`、`ZhihuPinPublisher`、`ZhihuImageUpload`、`VideoPlayerActivity` 与 `QRCodeScanActivity`
 
 ## 1. 阶段目标与边界
