@@ -55,6 +55,7 @@ import videoPlaybackStateTest from './VideoPlaybackState.test';
 import shareServiceTest from './ShareService.test';
 import draftRepositoryTest from './DraftRepository.test';
 import pinPublishStateTest from './PinPublishState.test';
+import imageUploadContractsTest from './ImageUploadContracts.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -114,4 +115,5 @@ export default function testsuite(): void {
   shareServiceTest();
   draftRepositoryTest();
   pinPublishStateTest();
+  imageUploadContractsTest();
 }

@@ -144,3 +144,23 @@ export function hmacSha1Hex(key: string, message: string): string {
   outer.set(innerHash, 64);
   return bytesToHex(sha1Bytes(outer));
 }
+
+/**
+ * OSS 临时授权要求 HMAC-SHA1 的 Base64 表示。调用方只能在单次上传请求中使用结果，
+ * 不得把密钥、签名或授权头写入草稿、数据库和日志。
+ */
+export function hmacSha1Base64(key: string, message: string): string {
+  const hex = hmacSha1Hex(key, message);
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let output = '';
+  for (let offset = 0; offset < hex.length; offset += 6) {
+    const first = parseInt(hex.substring(offset, offset + 2), 16);
+    const second = offset + 2 < hex.length ? parseInt(hex.substring(offset + 2, offset + 4), 16) : -1;
+    const third = offset + 4 < hex.length ? parseInt(hex.substring(offset + 4, offset + 6), 16) : -1;
+    output += alphabet.charAt(first >>> 2);
+    output += alphabet.charAt(((first & 0x03) << 4) | (second < 0 ? 0 : second >>> 4));
+    output += second < 0 ? '=' : alphabet.charAt(((second & 0x0f) << 2) | (third < 0 ? 0 : third >>> 6));
+    output += third < 0 ? '=' : alphabet.charAt(third & 0x3f);
+  }
+  return output;
+}

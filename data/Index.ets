@@ -54,6 +54,7 @@ export * from './src/main/ets/repository/DefaultSearchRepository';
 export * from './src/main/ets/repository/DefaultOnlineHistoryRepository';
 export * from './src/main/ets/repository/DefaultVoteRepository';
 export * from './src/main/ets/repository/CreationPublishRepository';
+export * from './src/main/ets/repository/ImageUploadContracts';
 export * from './src/main/ets/repository/FeedRepository';
 export * from './src/main/ets/repository/FollowRepository';
 export * from './src/main/ets/repository/OnlineHistoryRepository';
