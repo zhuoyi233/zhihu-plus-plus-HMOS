@@ -37,7 +37,6 @@
 1. **日期行**：`发布于 <时间>`、`编辑于 <时间>`（11sp Gray，可 `pinAnswerDate` 置顶）。
 2. **社交信用行**（`ArticleVotersSocialCredit`）：
    - 「N 人赞同了该回答」（bodySmall，可点击 → `VotersSheet` 赞同者列表）。
-   - 「有 N 人认为此回答包含AIGC内容」（error 色，AIGC 标记人数）。
 3. **认可徽章流**（`AnswerEndorsementChip`）：`FlowRow` 流式换行，间隔 8dp；
    每个徽章为圆角胶囊（RoundedCornerShape(50)），内边距
    `start=10, top=5, end=8, bottom=5`，含可选 16dp 前后图标 + 13sp SemiBold 文本，
@@ -71,7 +70,7 @@
 ### 2.4 底部菜单弹窗（`MyModalBottomSheet`）
 
 `MenuActionButton`（图标+文字，12dp 间隔竖排）依次：
-**朗读** → **分享** → **总结本文** → **标记疑似 AIGC** → **复制链接** →
+**朗读** → **分享** → **总结本文** → **复制链接** →
 **进入沉浸式** → **导出文章 (Markdown/图片/HTML/PDF)** → **在电脑中打开**。
 
 ### 2.5 附加元素
@@ -151,8 +150,7 @@
 
 新增 `ActionMenuSheet`（ArkUI `bindSheet` 或自绘弹层），`MenuActionButton` 竖排：
 分享（复用 `ZhihuShare`/系统分享）→ 复制链接 → 朗读（如系统 TTS 可用）→
-总结本文（预留）→ 标记疑似 AIGC（**P3-8 已移除，仅预留接口，不渲染入口**）→
-导出（预留）→ 沉浸式（预留）。
+总结本文（预留）→ 导出（预留）→ 沉浸式（预留）。
 
 **实现**：自绘半屏弹层（遮罩 + 圆角上弹），底部栏「更多」按钮打开；可用项
 「复制链接」（`pasteboard` 写系统剪贴板 + 菜单内反馈）、「分享」（当前复制链接
