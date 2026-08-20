@@ -54,6 +54,7 @@ import creationPublishRepositoryTest from './CreationPublishRepository.test';
 import videoPlaybackStateTest from './VideoPlaybackState.test';
 import shareServiceTest from './ShareService.test';
 import draftRepositoryTest from './DraftRepository.test';
+import pinPublishStateTest from './PinPublishState.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -112,4 +113,5 @@ export default function testsuite(): void {
   videoPlaybackStateTest();
   shareServiceTest();
   draftRepositoryTest();
+  pinPublishStateTest();
 }
