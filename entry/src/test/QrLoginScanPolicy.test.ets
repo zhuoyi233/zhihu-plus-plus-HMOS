@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@ohos/hypium';
-import { assessQrScanValue, QrScanDecision } from 'core';
+import { assessQrScanValue, MAX_QR_LOGIN_TOKEN_LENGTH, QrScanDecision } from 'core';
 
 export default function qrLoginScanPolicyTest(): void {
   describe('qrLoginScanPolicyTest', () => {
@@ -54,6 +54,26 @@ export default function qrLoginScanPolicyTest(): void {
       const assessment = assessQrScanValue(`https://www.zhihu.com/account/scan/login/${token}`);
 
       expect(assessment.message.includes(token)).assertFalse();
+    });
+
+    it('rejectsEncodedAndOversizedLoginTokens', 0, () => {
+      const encodedSlash = assessQrScanValue(
+        'https://www.zhihu.com/account/scan/login/token%2Fextra'
+      );
+      const encodedSeparator = assessQrScanValue(
+        'https://www.zhihu.com/account/scan/login/%2E%2E%2Ftoken'
+      );
+      const oversized = assessQrScanValue(
+        `https://www.zhihu.com/account/scan/login/${'a'.repeat(MAX_QR_LOGIN_TOKEN_LENGTH + 1)}`
+      );
+      const fragment = assessQrScanValue(
+        'https://www.zhihu.com/account/scan/login/token#https://evil.example/'
+      );
+
+      expect(encodedSlash.decision).assertEqual(QrScanDecision.UNSUPPORTED);
+      expect(encodedSeparator.decision).assertEqual(QrScanDecision.UNSUPPORTED);
+      expect(oversized.decision).assertEqual(QrScanDecision.UNSUPPORTED);
+      expect(fragment.decision).assertEqual(QrScanDecision.UNSUPPORTED);
     });
   });
 }

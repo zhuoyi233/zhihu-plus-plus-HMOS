@@ -1,7 +1,8 @@
-import { common } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { detectBarcode, scanBarcode, scanCore } from '@kit.ScanKit';
+import { detectBarcode, scanCore } from '@kit.ScanKit';
 import { assessQrScanValue, QrScanDecision } from 'core';
+import { QrScanner } from '../platform/P4PlatformServices';
+import { SystemQrScanner } from '../platform/SystemQrScanner';
 import { QR_FIXTURE_VALUE, writeQrScanFixture } from '../scan/QrScanFixture';
 
 class QrScanServiceFailure extends Error {
@@ -120,14 +121,9 @@ export struct QrScanProbePage {
       if (context === undefined) {
         throw new Error('无法获取应用上下文');
       }
-      const result = await scanBarcode.startScanForResult(context, {
-        scanTypes: [scanCore.ScanType.QR_CODE],
-        enableMultiMode: false,
-        enableAlbum: true
-      }).catch((error: BusinessError) => {
-        throw new QrScanServiceFailure(error.code);
-      });
-      this.status = assessQrScanValue(result.originalValue).message;
+      const scanner: QrScanner = new SystemQrScanner(context);
+      const value = await scanner.scanSingleQrCode();
+      this.status = value === undefined ? '用户取消扫码' : assessQrScanValue(value).message;
     } catch (error) {
       const code = error instanceof QrScanServiceFailure ? error.code : undefined;
       this.status = code === scanCore.ScanErrorCode.SCAN_SERVICE_CANCELED

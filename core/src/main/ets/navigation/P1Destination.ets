@@ -29,6 +29,7 @@ export enum P1DestinationName {
   DATABASE_PROBE = 'DatabaseProbe',
   DEEP_LINK_PROBE = 'DeepLinkProbe',
   QR_SCAN_PROBE = 'QrScanProbe',
+  QR_DESKTOP_LOGIN_SCAN = 'QrDesktopLoginScan',
   BACKGROUND_TASK_PROBE = 'BackgroundTaskProbe',
   DOMAIN_FIXTURE_PROBE = 'DomainFixtureProbe',
   WRITE_ANSWER = 'WriteAnswer',
@@ -46,7 +47,8 @@ export interface InfrastructureDestination {
     P1DestinationName.NOTIFICATION_SETTINGS |
     P1DestinationName.READER_PROBE | P1DestinationName.IMAGE_PROBE |
     P1DestinationName.DATABASE_PROBE | P1DestinationName.DEEP_LINK_PROBE |
-    P1DestinationName.QR_SCAN_PROBE | P1DestinationName.BACKGROUND_TASK_PROBE |
+    P1DestinationName.QR_SCAN_PROBE | P1DestinationName.QR_DESKTOP_LOGIN_SCAN |
+    P1DestinationName.BACKGROUND_TASK_PROBE |
     P1DestinationName.DOMAIN_FIXTURE_PROBE;
 }
 
@@ -141,6 +143,7 @@ export function isP1DestinationName(name: string): boolean {
     case P1DestinationName.DATABASE_PROBE:
     case P1DestinationName.DEEP_LINK_PROBE:
     case P1DestinationName.QR_SCAN_PROBE:
+    case P1DestinationName.QR_DESKTOP_LOGIN_SCAN:
     case P1DestinationName.BACKGROUND_TASK_PROBE:
     case P1DestinationName.DOMAIN_FIXTURE_PROBE:
     case P1DestinationName.WRITE_ANSWER:
@@ -207,6 +210,8 @@ export function decodeP1Destination(name: string, param: Object): P1Destination 
       return hasNoParameters(wire) ? { name: P1DestinationName.DEEP_LINK_PROBE } : undefined;
     case P1DestinationName.QR_SCAN_PROBE:
       return hasNoParameters(wire) ? { name: P1DestinationName.QR_SCAN_PROBE } : undefined;
+    case P1DestinationName.QR_DESKTOP_LOGIN_SCAN:
+      return hasNoParameters(wire) ? { name: P1DestinationName.QR_DESKTOP_LOGIN_SCAN } : undefined;
     case P1DestinationName.BACKGROUND_TASK_PROBE:
       return hasNoParameters(wire) ? { name: P1DestinationName.BACKGROUND_TASK_PROBE } : undefined;
     case P1DestinationName.DOMAIN_FIXTURE_PROBE:
@@ -273,6 +278,7 @@ export function isInfrastructureDestination(destination: P1Destination): boolean
     case P1DestinationName.DATABASE_PROBE:
     case P1DestinationName.DEEP_LINK_PROBE:
     case P1DestinationName.QR_SCAN_PROBE:
+    case P1DestinationName.QR_DESKTOP_LOGIN_SCAN:
     case P1DestinationName.BACKGROUND_TASK_PROBE:
     case P1DestinationName.DOMAIN_FIXTURE_PROBE:
       return true;

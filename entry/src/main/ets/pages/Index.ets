@@ -46,6 +46,7 @@ import { DeepLinkProbePage } from './DeepLinkProbe';
 import { DomainFixtureProbe } from './DomainFixtureProbe';
 import { P1Shell } from './P1Shell';
 import { QrScanProbePage } from './QrScanProbe';
+import { QrDesktopLoginScanPage } from './QrDesktopLoginScanPage';
 import { ReaderProbe } from './ReaderProbe';
 import { ImageProbe } from './ImageProbe';
 import { TechnicalLabPage } from './TechnicalLabPage';
@@ -176,8 +177,8 @@ struct Index {
           blockingRulesContent: (): void => this.blockingRulesContent(),
           blockedFeedHistoryContent: (): void => this.blockedFeedHistoryContent(),
           readHistoryContent: (navigate: (destination: P1Destination) => void): void => this.readHistoryContent(navigate),
-          loginContent: (onBack: () => void, onAuthenticated: () => void): void =>
-            this.loginContent(onBack, onAuthenticated),
+          loginContent: (onBack: () => void, onAuthenticated: () => void, onScanDesktopLogin: () => void): void =>
+            this.loginContent(onBack, onAuthenticated, onScanDesktopLogin),
           technicalLabContent: (navigate: (destination: P1Destination) => void): void =>
             this.technicalLabContent(navigate),
           readerProbeContent: (onBack: () => void): void => this.readerProbeContent(onBack),
@@ -185,6 +186,7 @@ struct Index {
           databaseProbeContent: (onBack: () => void): void => this.databaseProbeContent(onBack),
           deepLinkProbeContent: (onBack: () => void): void => this.deepLinkProbeContent(onBack),
           qrScanProbeContent: (onBack: () => void): void => this.qrScanProbeContent(onBack),
+          qrDesktopLoginScanContent: (onBack: () => void): void => this.qrDesktopLoginScanContent(onBack),
           backgroundTaskProbeContent: (onBack: () => void): void => this.backgroundTaskProbeContent(onBack),
           domainFixtureProbeContent: (onBack: () => void): void => this.domainFixtureProbeContent(onBack)
         });
@@ -403,8 +405,12 @@ struct Index {
   }
 
   @Builder
-  loginContent(onBack: () => void, onAuthenticated: () => void) {
-    LoginPage({ onBack: onBack, onAuthenticated: onAuthenticated });
+  loginContent(onBack: () => void, onAuthenticated: () => void, onScanDesktopLogin: () => void) {
+    LoginPage({
+      onBack: onBack,
+      onAuthenticated: onAuthenticated,
+      onScanDesktopLogin: onScanDesktopLogin
+    });
   }
 
   @Builder
@@ -435,6 +441,11 @@ struct Index {
   @Builder
   qrScanProbeContent(onBack: () => void) {
     QrScanProbePage({ onBack: onBack });
+  }
+
+  @Builder
+  qrDesktopLoginScanContent(onBack: () => void) {
+    QrDesktopLoginScanPage({ onBack: onBack });
   }
 
   @Builder

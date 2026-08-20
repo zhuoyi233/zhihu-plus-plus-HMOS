@@ -12,6 +12,12 @@ export interface QrScanAssessment {
 }
 
 const MAX_QR_VALUE_LENGTH: number = 4096;
+export const MAX_QR_LOGIN_TOKEN_LENGTH: number = 512;
+
+function isSafeDesktopLoginToken(value: string): boolean {
+  return value.length > 0 && value.length <= MAX_QR_LOGIN_TOKEN_LENGTH &&
+    /^[A-Za-z0-9_-]+$/.test(value);
+}
 
 export function assessQrScanValue(input: string): QrScanAssessment {
   const value = input.trim();
@@ -31,7 +37,7 @@ export function assessQrScanValue(input: string): QrScanAssessment {
   }
 
   const segments = parsed.pathname.split('/');
-  const isZhihuDesktopLogin = parsed.protocol.toLowerCase() === 'https:' &&
+  const isZhihuDesktopLogin = !value.includes('#') && parsed.protocol.toLowerCase() === 'https:' &&
     parsed.hostname.toLowerCase() === 'www.zhihu.com' &&
     parsed.port.length === 0 &&
     !parsed.hasUserInfo &&
@@ -40,7 +46,7 @@ export function assessQrScanValue(input: string): QrScanAssessment {
     segments[1] === 'account' &&
     segments[2] === 'scan' &&
     segments[3] === 'login' &&
-    segments[4].length > 0;
+    isSafeDesktopLoginToken(segments[4]);
 
   if (isZhihuDesktopLogin) {
     return {

@@ -38,6 +38,8 @@ export struct LoginPage {
   };
   onAuthenticated: () => void = (): void => {
   };
+  onScanDesktopLogin: () => void = (): void => {
+  };
   @State private cookieInput: string = '';
   @State private viewState: LoginViewState = {
     phase: LoginPhase.GUEST,
@@ -187,6 +189,13 @@ export struct LoginPage {
               Text('请使用另一台已登录知乎的设备扫码。本机 Scan Kit 识码结果不会被当作登录完成。')
                 .fontSize($r('app.float.p1_secondary_font_size'))
                 .fontColor($r('app.color.secondary_text'))
+
+              Button('扫描电脑端登录二维码')
+                .id('p4_login_desktop_scan_open')
+                .width('100%')
+                .onClick((): void => {
+                  this.onScanDesktopLogin();
+                })
 
               if (this.viewState.qrLink !== undefined) {
                 QRCode(this.viewState.qrLink)

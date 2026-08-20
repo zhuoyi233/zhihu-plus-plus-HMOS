@@ -45,12 +45,14 @@ export struct P1Shell {
   @BuilderParam blockingRulesContent: () => void = this.emptyPage;
   @BuilderParam blockedFeedHistoryContent: () => void = this.emptyPage;
   @BuilderParam readHistoryContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
-  @BuilderParam loginContent: (onBack: () => void, onAuthenticated: () => void) => void = this.emptyLogin;
+  @BuilderParam loginContent: (onBack: () => void, onAuthenticated: () => void,
+    onScanDesktopLogin: () => void) => void = this.emptyLogin;
   @BuilderParam readerProbeContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam imageProbeContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam databaseProbeContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam deepLinkProbeContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam qrScanProbeContent: (onBack: () => void) => void = this.emptyProbe;
+  @BuilderParam qrDesktopLoginScanContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam backgroundTaskProbeContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam domainFixtureProbeContent: (onBack: () => void) => void = this.emptyProbe;
   session: LoginSessionGateway | undefined = undefined;
@@ -117,7 +119,7 @@ export struct P1Shell {
   }
 
   @Builder
-  emptyLogin(_onBack: () => void, _onAuthenticated: () => void) {
+  emptyLogin(_onBack: () => void, _onAuthenticated: () => void, _onScanDesktopLogin: () => void) {
     Blank();
   }
 
@@ -170,6 +172,8 @@ export struct P1Shell {
           this.pathStack.pop();
         }, (): void => {
           this.returnFromSuccessfulLogin();
+        }, (): void => {
+          this.navigate({ name: P1DestinationName.QR_DESKTOP_LOGIN_SCAN });
         });
       }
       .hideTitleBar(true)
@@ -319,6 +323,14 @@ export struct P1Shell {
           this.pathStack.pop();
         });
       }
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.QR_DESKTOP_LOGIN_SCAN) {
+      NavDestination() {
+        this.qrDesktopLoginScanContent((): void => {
+          this.pathStack.pop();
+        });
+      }
+      .title('扫描电脑端登录码')
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.BACKGROUND_TASK_PROBE) {
       NavDestination() {

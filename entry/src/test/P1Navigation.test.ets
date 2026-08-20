@@ -57,6 +57,7 @@ export default function p1NavigationTest(): void {
         P1DestinationName.DATABASE_PROBE,
         P1DestinationName.DEEP_LINK_PROBE,
         P1DestinationName.QR_SCAN_PROBE,
+        P1DestinationName.QR_DESKTOP_LOGIN_SCAN,
         P1DestinationName.BACKGROUND_TASK_PROBE,
         P1DestinationName.DOMAIN_FIXTURE_PROBE,
         P1DestinationName.WRITE_ANSWER,
@@ -118,6 +119,9 @@ export default function p1NavigationTest(): void {
       const loginParam: TestDestinationParam = {
         name: P1DestinationName.LOGIN
       };
+      const desktopLoginScanParam: TestDestinationParam = {
+        name: P1DestinationName.QR_DESKTOP_LOGIN_SCAN
+      };
       const writeAnswerParam: TestDestinationParam = {
         name: P1DestinationName.WRITE_ANSWER,
         questionId: '123',
@@ -152,6 +156,7 @@ export default function p1NavigationTest(): void {
       const answer = decodeP1Destination(P1DestinationName.ANSWER, answerParam);
       const probe = decodeP1Destination(P1DestinationName.READER_PROBE, probeParam);
       const login = decodeP1Destination(P1DestinationName.LOGIN, loginParam);
+      const desktopLoginScan = decodeP1Destination(P1DestinationName.QR_DESKTOP_LOGIN_SCAN, desktopLoginScanParam);
       const writeAnswer = decodeP1Destination(P1DestinationName.WRITE_ANSWER, writeAnswerParam);
       const writePin = decodeP1Destination(P1DestinationName.WRITE_PIN, writePinParam);
       const dailyStory = decodeP1Destination(P1DestinationName.DAILY_STORY, dailyStoryParam);
@@ -184,6 +189,7 @@ export default function p1NavigationTest(): void {
       expect(decodeP1Destination(P1DestinationName.DOMAIN_FIXTURE_PROBE, fixtureParam)?.name)
         .assertEqual(P1DestinationName.DOMAIN_FIXTURE_PROBE);
       expect(login?.name).assertEqual(P1DestinationName.LOGIN);
+      expect(desktopLoginScan?.name).assertEqual(P1DestinationName.QR_DESKTOP_LOGIN_SCAN);
       if (writeAnswer?.name === P1DestinationName.WRITE_ANSWER) {
         expect(writeAnswer.questionId).assertEqual('123');
         expect(writeAnswer.answerId).assertEqual('456');
