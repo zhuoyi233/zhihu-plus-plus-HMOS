@@ -53,6 +53,7 @@ import { TechnicalLabPage } from './TechnicalLabPage';
 import { HomeFeedPage } from './HomeFeedPage';
 import { SearchPage } from './SearchPage';
 import { AnswerDetailPage, ArticleDetailPage, QuestionDetailPage } from './ContentDetailPages';
+import { VideoPlaybackPage } from './VideoPlaybackPage';
 import { LoginPage } from './LoginPage';
 import { ChannelFeedPage } from './ChannelFeedPage';
 import { DailyStoryDetailPage } from './DailyStoryDetailPage';
@@ -163,6 +164,8 @@ struct Index {
             this.answerContent(id, navigate),
           articleContent: (id: string, navigate: (destination: P1Destination) => void): void =>
             this.articleContent(id, navigate),
+          videoContent: (id: string, navigate: (destination: P1Destination) => void): void =>
+            this.videoContent(id, navigate),
           peopleContent: (id: string, navigate: (destination: P1Destination) => void): void =>
             this.peopleContent(id, navigate),
           pinContent: (id: string, navigate: (destination: P1Destination) => void): void => this.pinContent(id, navigate),
@@ -305,6 +308,11 @@ struct Index {
       commentRepository: this.commentRepository,
       session: this.session
     });
+  }
+
+  @Builder
+  videoContent(id: string, _navigate: (destination: P1Destination) => void) {
+    VideoPlaybackPage({ contentId: id });
   }
 
   @Builder

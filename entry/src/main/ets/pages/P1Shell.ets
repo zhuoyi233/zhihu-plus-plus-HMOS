@@ -32,6 +32,8 @@ export struct P1Shell {
     this.emptyContent;
   @BuilderParam articleContent: (id: string, navigate: (destination: P1Destination) => void) => void =
     this.emptyContent;
+  @BuilderParam videoContent: (id: string, navigate: (destination: P1Destination) => void) => void =
+    this.emptyContent;
   @BuilderParam peopleContent: (id: string, navigate: (destination: P1Destination) => void) => void =
     this.emptyContent;
   @BuilderParam pinContent: (id: string, navigate: (destination: P1Destination) => void) => void =
@@ -240,6 +242,15 @@ export struct P1Shell {
         );
       }
       .title('文章')
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.VIDEO) {
+      NavDestination() {
+        this.videoContent(
+          destination.id,
+          (destination: P1Destination): void => this.navigate(destination)
+        );
+      }
+      .title('视频')
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.PEOPLE) {
       NavDestination() {
