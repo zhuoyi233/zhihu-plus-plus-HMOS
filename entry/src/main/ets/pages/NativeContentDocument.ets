@@ -1,8 +1,17 @@
 import { image } from '@kit.ImageKit';
 import { http } from '@kit.NetworkKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
-import { abilityAccessCtrl, Want } from '@kit.AbilityKit';
+import { abilityAccessCtrl } from '@kit.AbilityKit';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
+import {
+  createSystemShareService
+} from '../platform/SystemShareService';
+import {
+  ShareImageSourceKind,
+  ShareImagePayload,
+  ShareOutcome,
+  SharePayloadKind
+} from '../platform/ShareContracts';
 import { getAppSessionOwner, getGuestDeviceCookieManager, toCookieHeader } from 'data';
 import {
   clearFormulaByteCache,
@@ -176,13 +185,16 @@ struct ContentImagePreview {
       this.actionStatus = '图片来源不受支持';
       return;
     }
-    const want: Want = {
-      action: 'ohos.want.action.sendData',
-      type: 'text/plain',
-      uri: this.url
+    const shareService = createSystemShareService(context);
+    const payload: ShareImagePayload = {
+      kind: SharePayloadKind.IMAGE,
+      title: '知乎图片',
+      summary: '来自知乎++的受信图片链接',
+      sourceKind: ShareImageSourceKind.TRUSTED_URL,
+      trustedImageUrl: this.url
     };
-    context.startAbility(want).then((): void => {
-      this.actionStatus = '已打开分享面板';
+    shareService.share(payload).then((outcome: ShareOutcome): void => {
+      this.actionStatus = outcome === ShareOutcome.CANCELLED ? '' : '已打开分享面板';
     }).catch((): void => {
       this.actionStatus = '暂时无法打开分享面板';
     });

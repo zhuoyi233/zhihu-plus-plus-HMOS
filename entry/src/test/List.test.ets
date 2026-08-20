@@ -51,6 +51,7 @@ import backStackStateTest from './BackStackState.test';
 import phoneLoginCryptoTest from './PhoneLoginCrypto.test';
 import creationPublishRepositoryTest from './CreationPublishRepository.test';
 import videoPlaybackStateTest from './VideoPlaybackState.test';
+import shareServiceTest from './ShareService.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -106,4 +107,5 @@ export default function testsuite(): void {
   phoneLoginCryptoTest();
   creationPublishRepositoryTest();
   videoPlaybackStateTest();
+  shareServiceTest();
 }
