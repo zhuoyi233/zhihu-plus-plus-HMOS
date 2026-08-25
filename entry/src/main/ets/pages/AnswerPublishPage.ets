@@ -339,6 +339,7 @@ export struct AnswerPublishPage {
   onGoLogin: () => void = (): void => {};
   onBack: () => void = (): void => {};
   @State private viewState: AnswerPublishPageViewState = emptyViewState();
+  @State private publishConfirmationVisible: boolean = false;
   private coordinator: AnswerPublishPageCoordinator | undefined = undefined;
 
   aboutToAppear(): void {
@@ -353,6 +354,7 @@ export struct AnswerPublishPage {
   }
 
   aboutToDisappear(): void {
+    this.publishConfirmationVisible = false;
     this.coordinator?.deactivate();
     this.coordinator = undefined;
   }
@@ -410,11 +412,11 @@ export struct AnswerPublishPage {
             .layoutWeight(1)
             .enabled(this.viewState.canSaveDraft)
             .onClick((): void => this.coordinator?.saveLocalDraft())
-          Button('发布回答')
+        Button('发布回答')
             .id('p4_answer_page_publish')
             .layoutWeight(1)
             .enabled(this.viewState.canPublish)
-            .onClick((): void => this.coordinator?.publish())
+            .onClick((): void => this.requestPublishConfirmation())
         }
         .width('100%')
 
@@ -425,6 +427,9 @@ export struct AnswerPublishPage {
             .onClick((): void => this.coordinator?.continueEditingExistingAnswer())
         }
       }
+      if (this.publishConfirmationVisible) {
+        this.publishConfirmation()
+      }
     }
     .alignItems(HorizontalAlign.Start)
     .width('100%')
@@ -434,8 +439,51 @@ export struct AnswerPublishPage {
   }
 
   private exitEditor(): void {
+    this.publishConfirmationVisible = false;
     this.coordinator?.deactivate();
     this.onBack();
+  }
+
+  private requestPublishConfirmation(): void {
+    if (!this.viewState.canPublish || this.viewState.pending) {
+      return;
+    }
+    this.publishConfirmationVisible = true;
+  }
+
+  @Builder
+  private publishConfirmation() {
+    Column({ space: $r('app.float.p1_spacing_medium') }) {
+      Text('确认发布回答')
+        .id('p4_answer_page_publish_confirm_title')
+        .fontSize($r('app.float.p1_heading_font_size'))
+        .fontWeight(FontWeight.Medium)
+      Text('确认后将先保存本地草稿并同步知乎草稿，再提交回答。')
+        .id('p4_answer_page_publish_confirm_message')
+        .fontSize($r('app.float.p1_body_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Button('继续编辑')
+          .id('p4_answer_page_publish_confirm_cancel')
+          .layoutWeight(1)
+          .onClick((): void => {
+            this.publishConfirmationVisible = false;
+          })
+        Button('确认发布')
+          .id('p4_answer_page_publish_confirm_submit')
+          .layoutWeight(1)
+          .onClick((): void => {
+            this.publishConfirmationVisible = false;
+            this.coordinator?.publish();
+          })
+      }
+      .width('100%')
+    }
+    .id('p4_answer_page_publish_confirmation')
+    .width('100%')
+    .padding($r('app.float.p1_card_padding'))
+    .borderRadius($r('app.float.p1_card_radius'))
+    .backgroundColor($r('app.color.surface_background'))
   }
 }
 

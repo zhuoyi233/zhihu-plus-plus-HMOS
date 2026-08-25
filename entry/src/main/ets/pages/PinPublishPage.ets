@@ -185,6 +185,7 @@ export struct PinPublishPage {
   onPublished: PinPublishPagePublishedCallback = (_contentId: string): void => {};
   @State private viewState: PinPublishPageViewState = initialViewState();
   @State private topicQuery: string = '';
+  @State private publishConfirmationVisible: boolean = false;
   private controller: PinPublishPageController | undefined = undefined;
   private configurationGeneration: number = 0;
 
@@ -251,6 +252,7 @@ export struct PinPublishPage {
 
   aboutToDisappear(): void {
     this.configurationGeneration += 1;
+    this.publishConfirmationVisible = false;
     this.controller?.deactivate();
     this.controller = undefined;
     this.topicQuery = '';
@@ -270,6 +272,9 @@ export struct PinPublishPage {
         .fontColor(this.viewState.requiresSecurityVerification ? $r('app.color.error_text') :
           $r('app.color.secondary_text'))
         .width('100%')
+      if (this.publishConfirmationVisible) {
+        this.publishConfirmation()
+      }
     }
     .id('p4_pin_publish_page')
     .alignItems(HorizontalAlign.Start)
@@ -340,7 +345,7 @@ export struct PinPublishPage {
           .layoutWeight(1)
           .enabled(this.viewState.canPublish)
           .onClick((): void => {
-            this.controller?.publishPin().then((): void => {}, (): void => {});
+            this.requestPublishConfirmation();
           })
       }
       .width('100%')
@@ -388,6 +393,48 @@ export struct PinPublishPage {
 
   private publishLabel(): string {
     return this.viewState.operation === PinPublishOperation.PUBLISHED ? '已发布' : '发布';
+  }
+
+  private requestPublishConfirmation(): void {
+    if (!this.viewState.canPublish || !this.viewState.canEdit) {
+      return;
+    }
+    this.publishConfirmationVisible = true;
+  }
+
+  @Builder
+  private publishConfirmation() {
+    Column({ space: $r('app.float.p1_spacing_medium') }) {
+      Text('确认发布想法')
+        .id('p4_pin_publish_confirm_title')
+        .fontSize($r('app.float.p1_heading_font_size'))
+        .fontWeight(FontWeight.Medium)
+      Text('确认后将先保存本地草稿并同步知乎草稿，再发布想法。')
+        .id('p4_pin_publish_confirm_message')
+        .fontSize($r('app.float.p1_body_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Button('继续编辑')
+          .id('p4_pin_publish_confirm_cancel')
+          .layoutWeight(1)
+          .onClick((): void => {
+            this.publishConfirmationVisible = false;
+          })
+        Button('确认发布')
+          .id('p4_pin_publish_confirm_submit')
+          .layoutWeight(1)
+          .onClick((): void => {
+            this.publishConfirmationVisible = false;
+            this.controller?.publishPin().then((): void => {}, (): void => {});
+          })
+      }
+      .width('100%')
+    }
+    .id('p4_pin_publish_confirmation')
+    .width('100%')
+    .padding($r('app.float.p1_card_padding'))
+    .borderRadius($r('app.float.p1_card_radius'))
+    .backgroundColor($r('app.color.surface_background'))
   }
 }
 
