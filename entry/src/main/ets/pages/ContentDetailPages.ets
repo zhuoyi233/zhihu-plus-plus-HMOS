@@ -41,6 +41,7 @@ import {
 import { CollectionDialogComponent } from './CollectionDialogComponent';
 import { CommentLayer } from './CommentLayer';
 import { NativeContentDocument } from './NativeContentDocument';
+import { stageAnswerEditSeed } from './AnswerEditSeedStore';
 
 @Component
 struct ContentDetailPage {
@@ -503,6 +504,13 @@ struct ContentDetailPage {
           Blank()
             .layoutWeight(1)
 
+          if (this.canEditExistingAnswer()) {
+            Button('编辑')
+              .id('p4_answer_edit_existing')
+              .fontSize($r('app.float.p1_secondary_font_size'))
+              .onClick((): void => this.openExistingAnswerEditor())
+          }
+
           // 右组：收藏 + 评论 + 更多（对齐上游 bottomBar 右侧图标按钮）。
           Button({ type: ButtonType.Normal }) {
             SymbolGlyph($r('sys.symbol.bookmark'))
@@ -579,6 +587,31 @@ struct ContentDetailPage {
       return;
     }
     this.navigate({ name: P1DestinationName.WRITE_ANSWER, questionId: this.contentId });
+  }
+
+  private canEditExistingAnswer(): boolean {
+    const content = this.content;
+    const session = this.session;
+    const profile = session?.getState().profile;
+    return content !== undefined && content.kind === ContentDetailKind.ANSWER &&
+      session?.getState().status === SessionStatus.AUTHENTICATED && profile !== undefined &&
+      content.value.author?.id === profile.id;
+  }
+
+  /** 只从当前已加载、且作者与登录身份精确一致的回答建立一次性编辑种子。 */
+  private openExistingAnswerEditor(): void {
+    const content = this.content;
+    if (!this.canEditExistingAnswer() || content === undefined || content.kind !== ContentDetailKind.ANSWER) {
+      return;
+    }
+    if (!stageAnswerEditSeed(content.value.id, content.value.contentHtml)) {
+      return;
+    }
+    this.navigate({
+      name: P1DestinationName.WRITE_ANSWER,
+      questionId: content.value.questionId,
+      answerId: content.value.id
+    });
   }
 
   @Builder

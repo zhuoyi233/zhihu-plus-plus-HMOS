@@ -2,6 +2,7 @@ import {
   AnswerPublishInput,
   AnswerPublishRepository,
   DraftRepository,
+  ExistingAnswerForEditing,
   hashDraftAccountId,
   LoginSessionGateway,
   PublishFailure,
@@ -14,6 +15,7 @@ import {
   AnswerPublishPhase,
   AnswerPublishViewState
 } from './AnswerPublishState';
+import { takeAnswerEditSeed } from './AnswerEditSeedStore';
 
 export enum AnswerPublishPagePhase {
   PREPARING = 'preparing',
@@ -292,8 +294,8 @@ class LocalDraftOnlyAnswerPublishRepository implements AnswerPublishRepository {
     return Promise.resolve(undefined);
   }
 
-  fetchAnswerForEditing(_answerId: string): Promise<undefined> {
-    return Promise.resolve(undefined);
+  fetchAnswerForEditing(_answerId: string): Promise<ExistingAnswerForEditing | undefined> {
+    return Promise.resolve(takeAnswerEditSeed(_answerId));
   }
 
   saveRemoteDraft(_input: AnswerPublishInput): Promise<void> {

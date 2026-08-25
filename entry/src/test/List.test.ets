@@ -65,6 +65,7 @@ import mediaPickerCoordinatorTest from './MediaPickerCoordinator.test';
 import systemPhotoPickerGatewayTest from './SystemPhotoPickerGateway.test';
 import systemPickedImageFileStoreTest from './SystemPickedImageFileStore.test';
 import pinPublishPageStateTest from './PinPublishPageState.test';
+import answerEditSeedStoreTest from './AnswerEditSeedStore.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -134,4 +135,5 @@ export default function testsuite(): void {
   systemPhotoPickerGatewayTest();
   systemPickedImageFileStoreTest();
   pinPublishPageStateTest();
+  answerEditSeedStoreTest();
 }
