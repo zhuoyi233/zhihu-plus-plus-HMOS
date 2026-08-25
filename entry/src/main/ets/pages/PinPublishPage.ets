@@ -1,12 +1,22 @@
 import {
   ContentDraftIdentity,
+  createPinDraftIdentity,
   DraftRepository,
+  hashDraftAccountId,
   LoginSessionGateway,
+  PinPublishInput,
   PinPublishRepository,
   PinTopicSuggestion,
-  PublishPinTopic
+  PublishFailure,
+  PublishFailureKind,
+  PublishPinTopic,
+  SessionStatus
 } from 'data';
-import { PinPublishOperation, PinPublishTraceIdFactory, PinTopicSearchScheduler } from './PinPublishState';
+import {
+  PinPublishOperation,
+  PinPublishTraceIdFactory,
+  PinTopicSearchScheduler
+} from './PinPublishState';
 import {
   PinPublishPageController,
   PinPublishPagePhase,
@@ -17,12 +27,100 @@ export type PinPublishPageBackCallback = () => void;
 export type PinPublishPageLoginCallback = () => void;
 export type PinPublishPagePublishedCallback = (contentId: string) => void;
 
+/** 已解析的发布页依赖；组合根在认证完成后才创建，避免游客态接触草稿或发布仓储。 */
+export interface PinPublishPageConfiguration {
+  readonly repository: PinPublishRepository;
+  readonly drafts: DraftRepository;
+  readonly session: LoginSessionGateway;
+  readonly identity: ContentDraftIdentity;
+  readonly traceIds: PinPublishTraceIdFactory;
+  readonly topicScheduler: PinTopicSearchScheduler;
+}
+
+/** 用 draftId 延迟构造依赖，保证路由参数不会承载账号信息、Cookie 或正文。 */
+export interface PinPublishPageConfigurationFactory {
+  create(draftId: string): Promise<PinPublishPageConfiguration | undefined>;
+}
+
+/**
+ * API 26 默认组合根：仅启用加密本地草稿；所有远端推荐、远端草稿和正式发布均拒绝，
+ * 以便真实外部写入只能在人工门禁替换仓储后发生。
+ */
+export class LocalDraftPinPublishPageConfigurationFactory implements PinPublishPageConfigurationFactory {
+  private readonly session: LoginSessionGateway;
+  private readonly drafts: DraftRepository;
+
+  constructor(session: LoginSessionGateway, drafts: DraftRepository) {
+    this.session = session;
+    this.drafts = drafts;
+  }
+
+  async create(draftId: string): Promise<PinPublishPageConfiguration | undefined> {
+    const state = this.session.getState();
+    const profile = state.profile;
+    if (state.status !== SessionStatus.AUTHENTICATED || profile === undefined) {
+      return undefined;
+    }
+    try {
+      const accountKey = await hashDraftAccountId(profile.id);
+      return {
+        repository: new LocalDraftOnlyPinPublishRepository(),
+        drafts: this.drafts,
+        session: this.session,
+        identity: createPinDraftIdentity(accountKey, draftId),
+        traceIds: new SystemPinPublishTraceIdFactory(),
+        topicScheduler: new SystemPinTopicSearchScheduler()
+      };
+    } catch (_error) {
+      return undefined;
+    }
+  }
+}
+
+/** 不含 HTTP 客户端的默认实现，绝不读取 Cookie，也不向知乎发送任何请求。 */
+export class LocalDraftOnlyPinPublishRepository implements PinPublishRepository {
+  recommendTopics(_query: string, _title: string, _contentHtml: string): Promise<Array<PinTopicSuggestion>> {
+    return Promise.resolve([]);
+  }
+
+  saveRemoteDraft(_input: PinPublishInput): Promise<void> {
+    return Promise.reject(new PublishFailure(PublishFailureKind.SERVER));
+  }
+
+  publish(_input: PinPublishInput): Promise<string> {
+    return Promise.reject(new PublishFailure(PublishFailureKind.SERVER));
+  }
+
+  cancel(): void {
+  }
+}
+
+export class SystemPinPublishTraceIdFactory implements PinPublishTraceIdFactory {
+  createTraceId(): string {
+    const timestamp = Math.max(1, Math.floor(Date.now()));
+    return `${timestamp},${randomHex(8)}-${randomHex(4)}-4${randomHex(3)}-8${randomHex(3)}-${randomHex(12)}`;
+  }
+}
+
+export class SystemPinTopicSearchScheduler implements PinTopicSearchScheduler {
+  schedule(delayMs: number, callback: () => void): number {
+    return setTimeout(callback, delayMs) as number;
+  }
+
+  cancel(handle: number): void {
+    clearTimeout(handle);
+  }
+}
+
 /**
  * 可注入的想法创作页。它不注册目的地，也不创建网络仓储；组合根在准备好账号、草稿和发布依赖后
  * 才能嵌入本页。离开只取消，不暗中保存；正文只绑定编辑控件和加密草稿边界。
  */
 @Component
 export struct PinPublishPage {
+  /** 仅用于 factory 模式；必须是经 P1Destination 校验的本地 UUID。 */
+  draftId: string = '';
+  configurationFactory: PinPublishPageConfigurationFactory | undefined = undefined;
   repository: PinPublishRepository | undefined = undefined;
   drafts: DraftRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
@@ -35,24 +133,71 @@ export struct PinPublishPage {
   @State private viewState: PinPublishPageViewState = initialViewState();
   @State private topicQuery: string = '';
   private controller: PinPublishPageController | undefined = undefined;
+  private configurationGeneration: number = 0;
 
   aboutToAppear(): void {
     if (this.controller !== undefined) {
       return;
     }
+    const factory = this.configurationFactory;
+    if (factory !== undefined) {
+      this.prepareFromFactory(factory);
+      return;
+    }
+    this.prepareDirectConfiguration();
+  }
+
+  private prepareDirectConfiguration(): void {
     if (this.repository === undefined || this.drafts === undefined || this.session === undefined ||
       this.identity === undefined || this.traceIds === undefined || this.topicScheduler === undefined) {
       this.viewState = configurationFailureState();
       return;
     }
-    this.controller = new PinPublishPageController(this.repository, this.drafts, this.session, this.identity,
-      this.traceIds, this.topicScheduler, (state: PinPublishPageViewState): void => {
+    this.installConfiguration({
+      repository: this.repository,
+      drafts: this.drafts,
+      session: this.session,
+      identity: this.identity,
+      traceIds: this.traceIds,
+      topicScheduler: this.topicScheduler
+    });
+  }
+
+  private prepareFromFactory(factory: PinPublishPageConfigurationFactory): void {
+    const generation = this.configurationGeneration + 1;
+    this.configurationGeneration = generation;
+    factory.create(this.draftId).then((configuration: PinPublishPageConfiguration | undefined): void => {
+      if (generation !== this.configurationGeneration) {
+        return;
+      }
+      if (configuration === undefined) {
+        const session = this.session;
+        if (session !== undefined && session.getState().status !== SessionStatus.AUTHENTICATED) {
+          this.viewState = loginRequiredState();
+        } else {
+          this.viewState = configurationFailureState();
+        }
+        return;
+      }
+      this.installConfiguration(configuration);
+    }, (_error: Error): void => {
+      if (generation === this.configurationGeneration) {
+        this.viewState = configurationFailureState();
+      }
+    });
+  }
+
+  private installConfiguration(configuration: PinPublishPageConfiguration): void {
+    this.controller = new PinPublishPageController(configuration.repository, configuration.drafts, configuration.session,
+      configuration.identity, configuration.traceIds, configuration.topicScheduler,
+      (state: PinPublishPageViewState): void => {
         this.viewState = state;
       }, this.onPublished);
     this.controller.activate();
   }
 
   aboutToDisappear(): void {
+    this.configurationGeneration += 1;
     this.controller?.deactivate();
     this.controller = undefined;
     this.topicQuery = '';
@@ -85,7 +230,7 @@ export struct PinPublishPage {
   private header() {
     Row({ space: $r('app.float.p1_spacing_small') }) {
       Text('发布想法')
-        .fontSize($r('app.float.p1_title_font_size'))
+        .fontSize($r('app.float.p1_heading_font_size'))
         .fontWeight(FontWeight.Medium)
         .layoutWeight(1)
       Button('取消')
@@ -225,4 +370,28 @@ function configurationFailureState(): PinPublishPageViewState {
     topicSuggestions: [],
     message: '创作功能暂不可用'
   };
+}
+
+function loginRequiredState(): PinPublishPageViewState {
+  return {
+    phase: PinPublishPagePhase.LOGIN_REQUIRED,
+    content: { title: '', html: '', images: [], topics: [] },
+    operation: PinPublishOperation.IDLE,
+    canEdit: false,
+    canSaveDraft: false,
+    canPublish: false,
+    requiresLogin: true,
+    requiresSecurityVerification: false,
+    retryable: false,
+    topicSuggestions: [],
+    message: PIN_PAGE_LOGIN_REQUIRED_TEXT
+  };
+}
+
+function randomHex(length: number): string {
+  let value = '';
+  for (let index = 0; index < length; index += 1) {
+    value += Math.floor(Math.random() * 16).toString(16);
+  }
+  return value;
 }

@@ -11,6 +11,8 @@ import {
   PinPublishInput,
   PinPublishRepository,
   PinTopicSuggestion,
+  PublishFailure,
+  PublishFailureKind,
   SessionCookie,
   SessionLoginOperation,
   SessionState,
@@ -23,6 +25,10 @@ import {
   PinPublishPagePhase,
   PinPublishPageViewState
 } from '../main/ets/pages/PinPublishPageState';
+import {
+  LocalDraftOnlyPinPublishRepository,
+  LocalDraftPinPublishPageConfigurationFactory
+} from '../main/ets/pages/PinPublishPage';
 import { PinPublishTraceIdFactory, PinTopicSearchScheduler } from '../main/ets/pages/PinPublishState';
 
 const ACCOUNT_KEY: string = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -129,7 +135,14 @@ class FakeSession implements LoginSessionGateway {
   private readonly state: SessionState;
 
   constructor(status: SessionStatus) {
-    this.state = { status: status, message: 'fixed session state', hasRetainedCredentials: false };
+    this.state = {
+      status: status,
+      message: 'fixed session state',
+      hasRetainedCredentials: status === SessionStatus.AUTHENTICATED,
+      profile: status === SessionStatus.AUTHENTICATED
+        ? { id: 'member-1', name: '测试用户', userType: 'people', avatarUrl: '' }
+        : undefined
+    };
   }
 
   getState(): SessionState {
@@ -258,6 +271,43 @@ export default function pinPublishPageStateTest(): void {
       expect(drafts.saves.length).assertEqual(2);
       expect(publishedId).assertEqual('701');
       expect(page.snapshot().phase).assertEqual(PinPublishPagePhase.PUBLISHED);
+    });
+
+    it('buildsAuthenticatedPinCompositionWithAccountIsolatedIdentity', 0, async () => {
+      const drafts = new FakeDraftRepository();
+      const factory = new LocalDraftPinPublishPageConfigurationFactory(
+        new FakeSession(SessionStatus.AUTHENTICATED), drafts);
+
+      const configuration = await factory.create(DRAFT_ID);
+
+      expect(configuration === undefined).assertFalse();
+      if (configuration !== undefined) {
+        expect(configuration.identity.kind).assertEqual(ContentDraftKind.PIN);
+        expect(configuration.identity.targetId).assertEqual(DRAFT_ID);
+        expect(configuration.identity.accountKey.startsWith('sha256:')).assertTrue();
+        expect(configuration.drafts === drafts).assertTrue();
+      }
+    });
+
+    it('keepsGuestAndDefaultRemotePinOperationsOutsideNetworkBoundary', 0, async () => {
+      const drafts = new FakeDraftRepository();
+      const guestFactory = new LocalDraftPinPublishPageConfigurationFactory(new FakeSession(SessionStatus.GUEST), drafts);
+      const guestConfiguration = await guestFactory.create(DRAFT_ID);
+      const repository = new LocalDraftOnlyPinPublishRepository();
+      const result: Object = await repository.saveRemoteDraft({
+        title: '',
+        html: '仅用于验证安全默认实现',
+        textLength: 10,
+        images: [],
+        topics: [],
+        traceId: '1770000000000,01234567-89ab-4cde-8fab-0123456789ab'
+      }).then((): Object => new Error('默认远端草稿实现不应成功'), (error: Error): Object => error);
+
+      expect(guestConfiguration).assertUndefined();
+      expect(result instanceof PublishFailure).assertTrue();
+      if (result instanceof PublishFailure) {
+        expect(result.kind).assertEqual(PublishFailureKind.SERVER);
+      }
     });
   });
 }
