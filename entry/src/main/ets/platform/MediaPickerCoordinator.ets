@@ -163,6 +163,27 @@ export class MediaPickerCoordinator {
     return this.snapshot();
   }
 
+  /**
+   * 预览列表只允许移除本协调器创建的受控缓存副本。索引无效、非就绪态和迟到点击均不触碰文件。
+   */
+  async removePreparedImage(index: number): Promise<MediaPickerViewState> {
+    if (this.state.phase !== MediaPickerPhase.READY || !Number.isSafeInteger(index) || index < 0 ||
+      index >= this.state.images.length) {
+      return this.snapshot();
+    }
+    const generation = this.state.generation + 1;
+    const removed = this.state.images[index];
+    const retained: Array<PreparedPickedImage> = [];
+    for (let itemIndex = 0; itemIndex < this.state.images.length; itemIndex += 1) {
+      if (itemIndex !== index) {
+        retained.push(this.state.images[itemIndex]);
+      }
+    }
+    this.state = stateOf(retained.length === 0 ? MediaPickerPhase.IDLE : MediaPickerPhase.READY, generation, retained);
+    await this.removeAll([removed]);
+    return this.snapshot();
+  }
+
   async release(): Promise<MediaPickerViewState> {
     const generation = this.state.generation + 1;
     await this.releaseCurrentImages();

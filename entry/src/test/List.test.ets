@@ -62,6 +62,7 @@ import answerPublishPageTest from './AnswerPublishPage.test';
 import editorDraftStateTest from './EditorDraftState.test';
 import mediaPickerCoordinatorTest from './MediaPickerCoordinator.test';
 import systemPhotoPickerGatewayTest from './SystemPhotoPickerGateway.test';
+import systemPickedImageFileStoreTest from './SystemPickedImageFileStore.test';
 import pinPublishPageStateTest from './PinPublishPageState.test';
 
 export default function testsuite(): void {
@@ -129,5 +130,6 @@ export default function testsuite(): void {
   editorDraftStateTest();
   mediaPickerCoordinatorTest();
   systemPhotoPickerGatewayTest();
+  systemPickedImageFileStoreTest();
   pinPublishPageStateTest();
 }

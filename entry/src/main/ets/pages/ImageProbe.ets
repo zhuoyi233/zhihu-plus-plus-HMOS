@@ -1,3 +1,5 @@
+import { P4ImagePickerPanel } from './P4ImagePickerPanel';
+
 const STATIC_IMAGE_URL = 'https://picx.zhimg.com/v2-7f36f391170ca2319d6b61239694e0ef_1440w.jpg';
 const GIF_IMAGE_URL = 'https://pic2.zhimg.com/v2-5e25b72ea793eb39f3709e89e56b2513_1440w.gif';
 const FAILURE_IMAGE_URL = 'https://picx.zhimg.com/probe-image-that-does-not-exist.jpg';
@@ -102,6 +104,12 @@ export struct ImageProbe {
               this.retryStatus = '正在重试…';
               this.retryAttempt += 1;
             })
+
+          Text('P4 系统相册选择（API 26）')
+            .fontSize(19)
+            .fontWeight(FontWeight.Medium)
+            .width('100%')
+          P4ImagePickerPanel()
         }
         .width('100%')
         .padding(20)

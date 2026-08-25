@@ -204,5 +204,30 @@ export default function mediaPickerCoordinatorTest(): void {
       expect(store.removed.length).assertEqual(1);
       expect(store.removed[0].includes('/p4-images/')).assertTrue();
     });
+
+    it('removesOnlyTheChosenControlledPreviewAndKeepsOtherPreparedImages', 0, async () => {
+      const selected: PhotoPickerResult = {
+        kind: PhotoPickerResultKind.SELECTED,
+        selections: [selection('file://media/Photo/1'), selection('file://media/Photo/2')]
+      };
+      const picker = new FixedPhotoPickerGateway(selected);
+      const inspector = new FakePickedImageInspector();
+      inspector.inspections.set('file://media/Photo/1', validInspection('file://media/Photo/1'));
+      inspector.inspections.set('file://media/Photo/2', validInspection('file://media/Photo/2'));
+      const store = new MemoryTemporaryStore();
+      const value = coordinator(picker, inspector, store);
+      const ready = await value.pickExplicitly();
+      const removed = await value.removePreparedImage(0);
+
+      expect(ready.images.length).assertEqual(2);
+      expect(removed.phase).assertEqual(MediaPickerPhase.READY);
+      expect(removed.images.length).assertEqual(1);
+      expect(removed.images[0].image.sourceUri).assertEqual('file://media/Photo/2');
+      expect(store.removed.length).assertEqual(1);
+      const ignored = await value.removePreparedImage(7);
+      expect(ignored.phase).assertEqual(MediaPickerPhase.READY);
+      expect(ignored.images.length).assertEqual(1);
+      expect(store.removed.length).assertEqual(1);
+    });
   });
 }
