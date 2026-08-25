@@ -205,6 +205,21 @@ export default function mediaPickerCoordinatorTest(): void {
       expect(store.removed[0].includes('/p4-images/')).assertTrue();
     });
 
+    it('clearSelectionPurgesPreparedCacheAndDoesNotRetainAnImageReference', 0, async () => {
+      const picker = new FixedPhotoPickerGateway(selectedResult());
+      const inspector = new FakePickedImageInspector();
+      inspector.inspections.set('file://media/Photo/123', validInspection());
+      const store = new MemoryTemporaryStore();
+      const value = coordinator(picker, inspector, store);
+      const ready = await value.pickExplicitly();
+      const cleared = await value.cancel();
+
+      expect(ready.phase).assertEqual(MediaPickerPhase.READY);
+      expect(cleared.phase).assertEqual(MediaPickerPhase.CANCELLED);
+      expect(cleared.images.length).assertEqual(0);
+      expect(store.removed.length).assertEqual(1);
+    });
+
     it('removesOnlyTheChosenControlledPreviewAndKeepsOtherPreparedImages', 0, async () => {
       const selected: PhotoPickerResult = {
         kind: PhotoPickerResultKind.SELECTED,

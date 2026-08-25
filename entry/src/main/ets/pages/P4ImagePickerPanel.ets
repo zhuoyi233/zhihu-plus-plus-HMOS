@@ -99,9 +99,8 @@ export struct P4ImagePickerPanel {
         .objectFit(ImageFit.Cover)
         .borderRadius($r('app.float.p1_card_radius'))
         .onError((): void => {
-          // 缓存副本被系统回收时只显示固定失败状态；不显示内部路径或平台错误。
-          this.viewState = failedPickerViewState(ImageUploadFailureKind.INVALID_INPUT);
-          this.onPreparedImagesChanged([]);
+          // 缓存副本被系统回收时，立即经协调器删除所有受控副本；不显示内部路径或平台错误。
+          this.discardUnavailablePreview();
         })
       Text(previewDescription(item))
         .id(`p4_image_picker_metadata_${index}`)
@@ -161,6 +160,19 @@ export struct P4ImagePickerPanel {
     }
     void coordinator.cancel().then((state: MediaPickerViewState): void => {
       this.sync(state);
+    }, (): void => {
+      this.sync(failedPickerViewState(ImageUploadFailureKind.INVALID_INPUT));
+    });
+  }
+
+  private discardUnavailablePreview(): void {
+    const coordinator = this.coordinator;
+    if (coordinator === undefined) {
+      this.sync(failedPickerViewState(ImageUploadFailureKind.INVALID_INPUT));
+      return;
+    }
+    void coordinator.cancel().then((): void => {
+      this.sync(failedPickerViewState(ImageUploadFailureKind.INVALID_INPUT));
     }, (): void => {
       this.sync(failedPickerViewState(ImageUploadFailureKind.INVALID_INPUT));
     });
