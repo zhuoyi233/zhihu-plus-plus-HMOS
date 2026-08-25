@@ -4,8 +4,8 @@
 > 制定日期：2026-07-20<br>
 > 迁移基线：Android Lite 版本<br>
 > 开发工具：DevEco Studio 6.1.1 Release<br>
-> HarmonyOS SDK：6.1.1（API 24）<br>
-> 最低兼容版本：HarmonyOS 6.1.1（API 24）<br>
+> HarmonyOS SDK：26.0.0（API 26）<br>
+> 目标兼容版本：HarmonyOS 26.0.0（API 26）<br>
 > 目标分支：`dev`（开发）、`main`（发布）<br>
 > Android 上游镜像：`Android-master`
 
@@ -24,8 +24,8 @@
 ## 2. 目标平台与官方技术基线
 
 - 开发工具固定为 DevEco Studio 6.1.1 Release。
-- HarmonyOS 开发与验证主基线固定为 6.1.1（API 24）。工程的 `targetSdkVersion` 使用 API 24，编译环境使用 DevEco Studio 6.1.1 自带的 API 24 SDK。
-- 最低兼容版本固定为 HarmonyOS 6.1.1（API 24），`compatibleSdkVersion` 使用 API 24。
+- HarmonyOS 开发、运行与验证主基线固定为 26.0.0（API 26）。工程的 `targetSdkVersion` 与 `compatibleSdkVersion` 均使用 API 26，编译环境使用 DevEco Studio 的 API 26 SDK。
+- 不再维护 API 24 或更低版本的兼容路径；设备验收只在 `ZhihuPlus_API26` 模拟器与后续 API 26 设备上进行。
 - 使用 Stage 模型。
 - 第一阶段支持 Phone，随后适配 Tablet、折叠屏和自由窗口。
 - 开发语言为 ArkTS，UI 使用 ArkUI 声明式范式。
@@ -44,6 +44,8 @@
 - [HarmonyOS SDK 文档中心](https://developer.huawei.com/consumer/cn/doc/)
 
 从 2026-08-10 起，版本矩阵收敛为 API 24 单一基线：开发、编译、目标行为、最低兼容和设备回归均只考虑 API 24。DevEco Studio 6.1.1 官方模板不单独写 `compileSdkVersion`；实际编译 SDK 由构建环境中的 API 24 SDK 决定。此前 API 20 的实验结果保留为历史记录，但不再约束新实现，也不再要求 API 20 降级路径。
+
+从 2026-08-25 起，P4 将版本矩阵升级为 API 26 单一基线：`targetSdkVersion`、`compatibleSdkVersion`、构建和设备验收统一为 API 26。此前 API 24 的阶段记录保留为历史证据，不再构成后续 P4 的实现或验收约束。
 
 ## 3. AI 能力边界
 
