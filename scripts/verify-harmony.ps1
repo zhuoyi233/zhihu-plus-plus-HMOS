@@ -7,8 +7,8 @@ param(
   [string]$OhpmPath = '',
   [string]$ExpectedCompileApiVersion = '26',
   [string]$ExpectedCompilePlatformVersion = '26.0.0',
-  [string]$ExpectedTargetSdkVersion = '6.1.1(24)',
-  [string]$ExpectedCompatibleSdkVersion = '6.1.1(24)',
+  [string]$ExpectedTargetSdkVersion = '26.0.0',
+  [string]$ExpectedCompatibleSdkVersion = '26.0.0',
   [string]$ExpectedBundleName = 'com.github.zhuoyi233.zhplus',
   [ValidateRange(0, 100000)]
   [int]$ExpectedTestCount = 0,
@@ -228,10 +228,13 @@ function Get-SdkApiVersion {
     [string]$SdkVersion,
     [string]$Description
   )
-  if ($SdkVersion -notmatch '\((\d+)\)$') {
-    throw "$Description 必须以 API 版本结尾，例如 6.1.1(24)：$SdkVersion"
+  if ($SdkVersion -match '\((\d+)\)$') {
+    return [int]$Matches[1]
   }
-  return [int]$Matches[1]
+  if ($SdkVersion -match '^(\d+)(?:\.\d+){0,2}$') {
+    return [int]$Matches[1]
+  }
+  throw "$Description 必须为 SDK 版本，例如 26.0.0 或 6.1.1(24)：$SdkVersion"
 }
 
 $previousLocation = Get-Location
@@ -310,7 +313,7 @@ try {
   if (-not $SkipBuild) {
     Invoke-Hvigor -ResolvedNode $resolvedNode -ResolvedHvigor $resolvedHvigor `
       -Arguments (@('assembleHap') + $commonProperties + @('--no-daemon')) `
-      -Description '构建 API 26 编译 / API 24 兼容 Debug HAP' | Out-Null
+      -Description '构建 API 26 Debug HAP' | Out-Null
     $hapDirectory = Join-Path $script:RepositoryRoot "entry\build\$($script:Product)\outputs\$($script:Product)"
     $hap = Get-ChildItem -LiteralPath $hapDirectory -Filter '*.hap' -File -ErrorAction SilentlyContinue |
       Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1

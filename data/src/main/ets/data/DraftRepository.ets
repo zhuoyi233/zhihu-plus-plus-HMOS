@@ -59,6 +59,14 @@ export class DraftRepository {
     }
   }
 
+  async listMetadataForAccount(accountKey: string): Promise<Array<ContentDraftMetadata>> {
+    if (accountKey.length === 0 || accountKey.length > 160) {
+      return [];
+    }
+    await this.mutationQueue;
+    return this.metadataStore.listForAccount(accountKey);
+  }
+
   save(input: ContentDraftSaveInput, now: number = Date.now()): Promise<ContentDraftMetadata> {
     validateContentDraftSaveInput(input);
     if (!isSafeTimestamp(now)) {

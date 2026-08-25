@@ -2,7 +2,7 @@
 
 > 制定日期：2026-08-20  
 > 范围：P4（创作与媒体，预计 3–5 周）的可执行切片、依赖顺序与验收门禁  
-> 工具链：HarmonyOS API 26 编译，`targetSdkVersion` / `compatibleSdkVersion` 均为 6.1.1（API 24）  
+> 工具链：HarmonyOS API 26 编译与运行，`targetSdkVersion` / `compatibleSdkVersion` 均为 26.0.0（API 26）  
 > 起始测试基线：51 个套件、Hypium `404/404`  
 > 当前进度（2026-08-25）：P4-0 已完成；P4-1 已具备安全草稿与编辑器协调、P4-2 已具备图片上传协议、媒体选择协调和系统 Picker、P4-3 已具备发布编排与回答创作页、P4-4 已具备发布状态机与想法创作页、P4-5 已具备播放状态机与可达视频页、P4-6 扫码确认和 P4-7 分享安全边界均已完成可验证切片。当前测试基线：65 个套件、Hypium `483/483`；P4-8 已完成可行性门禁并以后置结论收口（API 24 无可审计的应用级系统 TTS 接口）
 > 行为基线：Android Lite 的 `WriteAnswerScreen`、`WritePinScreen`、`ZhihuAnswerPublisher`、`ZhihuPinPublisher`、`ZhihuImageUpload`、`VideoPlayerActivity` 与 `QRCodeScanActivity`
@@ -48,8 +48,8 @@ P4 必做范围：
 
 进入 P4 开发不要求把所有 P3 设备欠账串行清零，但 P4 最终验收前必须满足：
 
-1. API 26 编译产物在 API 24 设备完成核心链路回归；
-2. 修复或保护所有 API 26-only 调用，尤其是当前 `ContentDetailPages.ets` 的 `fill` 兼容警告；
+1. API 26 编译产物在 `ZhihuPlus_API26` 模拟器完成核心链路回归；
+2. 以 API 26 为唯一设备门槛；不再维护 API 24 降级路径；
 3. 真实登录态写通道至少完成一次点赞/收藏/评论类操作的 401、403 和失败回滚验证，证明 P4 复用的会话边界可信；
 4. 每个真实发布测试均由用户在专用测试账号和指定测试内容上显式确认，不由 CI 或无人值守脚本触发。
 
