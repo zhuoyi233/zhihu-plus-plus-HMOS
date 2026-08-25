@@ -53,6 +53,7 @@ import phoneLoginCryptoTest from './PhoneLoginCrypto.test';
 import creationPublishRepositoryTest from './CreationPublishRepository.test';
 import videoPlaybackStateTest from './VideoPlaybackState.test';
 import videoPlaybackControllerTest from './VideoPlaybackController.test';
+import api26VideoPlayerAdapterTest from './Api26VideoPlayerAdapter.test';
 import shareServiceTest from './ShareService.test';
 import draftRepositoryTest from './DraftRepository.test';
 import pinPublishStateTest from './PinPublishState.test';
@@ -121,6 +122,7 @@ export default function testsuite(): void {
   creationPublishRepositoryTest();
   videoPlaybackStateTest();
   videoPlaybackControllerTest();
+  api26VideoPlayerAdapterTest();
   shareServiceTest();
   draftRepositoryTest();
   pinPublishStateTest();
