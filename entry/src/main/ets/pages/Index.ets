@@ -13,6 +13,7 @@ import {
   DefaultChannelFeedRepository,
   DefaultCollectionRepository,
   DefaultCommentRepository,
+  DefaultCreationPublishRepository,
   DefaultContentRepository,
   DefaultDailyStoryRepository,
   DefaultFeedRepository,
@@ -20,6 +21,7 @@ import {
   DefaultPeopleContentRepository,
   DefaultPeopleRepository,
   DefaultPinRepository,
+  DefaultPinPublishRepository,
   DefaultSearchRepository,
   DefaultOnlineHistoryRepository,
   DefaultNotificationRepository,
@@ -40,6 +42,9 @@ import {
   DailyStoryRepository,
   DraftRepository,
   EncryptedDraftBodyStore,
+  ExistingAnswerForEditing,
+  AnswerPublishRepository,
+  PinPublishRepository,
   VoteRepository,
   ZhihuHttpClient
 } from 'data';
@@ -60,7 +65,8 @@ import { VideoPlaybackPage } from './VideoPlaybackPage';
 import {
   AnswerPublishPage,
   AnswerPublishPageControllerFactory,
-  LocalDraftAnswerPublishControllerFactory
+  LocalDraftAnswerPublishControllerFactory,
+  SeededAnswerPublishRepository
 } from './AnswerPublishPage';
 import {
   LocalDraftPinPublishPageConfigurationFactory,
@@ -159,8 +165,11 @@ struct Index {
       this.commentRepository = new DefaultCommentRepository(new ZhihuHttpClient(session));
       this.notificationRepository = new DefaultNotificationRepository(new ZhihuHttpClient(session));
       this.notificationSettings = new AppPreferencesStore(context);
-      this.answerPublishFactory = new LocalDraftAnswerPublishControllerFactory(session, draftRepository);
-      const pinPublishFactory = new LocalDraftPinPublishPageConfigurationFactory(session, draftRepository);
+      this.answerPublishFactory = new LocalDraftAnswerPublishControllerFactory(session, draftRepository,
+        (editSeed: ExistingAnswerForEditing | undefined): AnswerPublishRepository =>
+          new SeededAnswerPublishRepository(new DefaultCreationPublishRepository(new ZhihuHttpClient(session)), editSeed));
+      const pinPublishFactory = new LocalDraftPinPublishPageConfigurationFactory(session, draftRepository,
+        (): PinPublishRepository => new DefaultPinPublishRepository(new ZhihuHttpClient(session)));
       this.pinPublishFactory = pinPublishFactory;
       this.pinDraftResumeGateway = pinPublishFactory;
       this.compositionPreparing = false;

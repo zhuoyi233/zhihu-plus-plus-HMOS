@@ -55,6 +55,9 @@ export interface AnswerPublishPageControllerFactory {
     observer: AnswerPublishObserver): Promise<AnswerPublishPageController | undefined>;
 }
 
+/** 每个编辑页创建独立发布仓储，避免其他页面取消 HTTP 请求时影响当前创作流程。 */
+export type AnswerPublishRepositoryFactory = (editSeed: ExistingAnswerForEditing | undefined) => AnswerPublishRepository;
+
 export interface AnswerPublishTraceIdFactory {
   createTraceId(): string;
 }
@@ -263,17 +266,18 @@ export class AnswerPublishPageCoordinator {
   }
 }
 
-/**
- * 组合根默认使用此工厂：草稿仍通过加密 DraftRepository，但发布仓储刻意为本地安全占位，
- * 因此当前页面可编辑、可保留草稿，却不会向知乎发出任何写请求。
- */
+/** 组合根可注入生产仓储；默认安全实现仍只保留本地草稿，供单测与受限场景使用。 */
 export class LocalDraftAnswerPublishControllerFactory implements AnswerPublishPageControllerFactory {
   private readonly session: LoginSessionGateway;
   private readonly drafts: DraftRepository;
+  private readonly repositories: AnswerPublishRepositoryFactory;
 
-  constructor(session: LoginSessionGateway, drafts: DraftRepository) {
+  constructor(session: LoginSessionGateway, drafts: DraftRepository,
+    repositories: AnswerPublishRepositoryFactory = (editSeed: ExistingAnswerForEditing | undefined): AnswerPublishRepository =>
+      new LocalDraftOnlyAnswerPublishRepository(editSeed)) {
     this.session = session;
     this.drafts = drafts;
+    this.repositories = repositories;
   }
 
   async create(questionId: string, answerId: string | undefined,
@@ -284,8 +288,45 @@ export class LocalDraftAnswerPublishControllerFactory implements AnswerPublishPa
     }
     const accountKey = await hashDraftAccountId(profile.id);
     const editSeed = answerId === undefined ? undefined : takeAnswerEditSeed(answerId);
-    return new AnswerPublishController(new LocalDraftOnlyAnswerPublishRepository(editSeed), this.drafts,
+    return new AnswerPublishController(this.repositories(editSeed), this.drafts,
       this.session, accountKey, questionId, observer, answerId);
+  }
+}
+
+/** 使用详情页刚加载的安全编辑种子一次，其他调用继续委托生产仓储请求。 */
+export class SeededAnswerPublishRepository implements AnswerPublishRepository {
+  private readonly delegate: AnswerPublishRepository;
+  private editSeed: ExistingAnswerForEditing | undefined;
+
+  constructor(delegate: AnswerPublishRepository, editSeed: ExistingAnswerForEditing | undefined = undefined) {
+    this.delegate = delegate;
+    this.editSeed = editSeed;
+  }
+
+  findMyAnswerId(questionId: string): Promise<string | undefined> {
+    return this.delegate.findMyAnswerId(questionId);
+  }
+
+  fetchAnswerForEditing(answerId: string): Promise<ExistingAnswerForEditing | undefined> {
+    const seed = this.editSeed;
+    this.editSeed = undefined;
+    if (seed !== undefined && seed.answerId === answerId) {
+      return Promise.resolve(seed);
+    }
+    return this.delegate.fetchAnswerForEditing(answerId);
+  }
+
+  saveRemoteDraft(input: AnswerPublishInput): Promise<void> {
+    return this.delegate.saveRemoteDraft(input);
+  }
+
+  publish(input: AnswerPublishInput): Promise<string> {
+    return this.delegate.publish(input);
+  }
+
+  cancel(): void {
+    this.editSeed = undefined;
+    this.delegate.cancel();
   }
 }
 

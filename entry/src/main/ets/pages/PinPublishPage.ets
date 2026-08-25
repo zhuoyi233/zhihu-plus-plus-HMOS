@@ -45,6 +45,9 @@ export interface PinPublishPageConfigurationFactory {
   create(draftId: string): Promise<PinPublishPageConfiguration | undefined>;
 }
 
+/** 每个想法编辑页创建独立仓储，避免跨页面取消请求。 */
+export type PinPublishRepositoryFactory = () => PinPublishRepository;
+
 export const MAX_PIN_DRAFT_RESUME_COUNT: number = 100;
 
 /** 草稿箱只展示加密正文之外的最少恢复元数据。 */
@@ -58,18 +61,18 @@ export interface PinDraftResumeListGateway {
   listResumeItems(): Promise<Array<PinDraftResumeItem>>;
 }
 
-/**
- * API 26 默认组合根：仅启用加密本地草稿；所有远端推荐、远端草稿和正式发布均拒绝，
- * 以便真实外部写入只能在人工门禁替换仓储后发生。
- */
+/** API 26 组合根可注入生产仓储；默认值保持本地草稿模式，供单测与受限场景使用。 */
 export class LocalDraftPinPublishPageConfigurationFactory implements PinPublishPageConfigurationFactory,
   PinDraftResumeListGateway {
   private readonly session: LoginSessionGateway;
   private readonly drafts: DraftRepository;
+  private readonly repositories: PinPublishRepositoryFactory;
 
-  constructor(session: LoginSessionGateway, drafts: DraftRepository) {
+  constructor(session: LoginSessionGateway, drafts: DraftRepository,
+    repositories: PinPublishRepositoryFactory = (): PinPublishRepository => new LocalDraftOnlyPinPublishRepository()) {
     this.session = session;
     this.drafts = drafts;
+    this.repositories = repositories;
   }
 
   async create(draftId: string): Promise<PinPublishPageConfiguration | undefined> {
@@ -79,7 +82,7 @@ export class LocalDraftPinPublishPageConfigurationFactory implements PinPublishP
     }
     try {
       return {
-        repository: new LocalDraftOnlyPinPublishRepository(),
+        repository: this.repositories(),
         drafts: this.drafts,
         session: this.session,
         identity: createPinDraftIdentity(accountKey, draftId),
