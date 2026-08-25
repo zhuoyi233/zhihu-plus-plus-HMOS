@@ -191,8 +191,8 @@ struct Index {
           videoContent: (id: string, navigate: (destination: P1Destination) => void): void =>
             this.videoContent(id, navigate),
           writeAnswerContent: (questionId: string, answerId: string | undefined,
-            navigate: (destination: P1Destination) => void): void =>
-            this.writeAnswerContent(questionId, answerId, navigate),
+            navigate: (destination: P1Destination) => void, onBack: () => void): void =>
+            this.writeAnswerContent(questionId, answerId, navigate, onBack),
           writePinContent: (draftId: string, navigate: (destination: P1Destination) => void,
             onBack: () => void): void => this.writePinContent(draftId, navigate, onBack),
           pinDraftInboxContent: (navigate: (destination: P1Destination) => void): void =>
@@ -348,7 +348,7 @@ struct Index {
 
   @Builder
   writeAnswerContent(questionId: string, answerId: string | undefined,
-    navigate: (destination: P1Destination) => void) {
+    navigate: (destination: P1Destination) => void, onBack: () => void) {
     AnswerPublishPage({
       questionId: questionId,
       answerId: answerId,
@@ -386,7 +386,8 @@ struct Index {
       },
       onGoLogin: (): void => {
         navigate({ name: P1DestinationName.LOGIN });
-      }
+      },
+      onBack: onBack
     });
   }
 

@@ -35,7 +35,7 @@ export struct P1Shell {
   @BuilderParam videoContent: (id: string, navigate: (destination: P1Destination) => void) => void =
     this.emptyContent;
   @BuilderParam writeAnswerContent: (questionId: string, answerId: string | undefined,
-    navigate: (destination: P1Destination) => void) => void = this.emptyWriteAnswer;
+    navigate: (destination: P1Destination) => void, onBack: () => void) => void = this.emptyWriteAnswer;
   @BuilderParam writePinContent: (draftId: string, navigate: (destination: P1Destination) => void,
     onBack: () => void) => void = this.emptyWritePin;
   @BuilderParam pinDraftInboxContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
@@ -117,7 +117,7 @@ export struct P1Shell {
 
   @Builder
   emptyWriteAnswer(_questionId: string, _answerId: string | undefined,
-    _navigate: (destination: P1Destination) => void) {
+    _navigate: (destination: P1Destination) => void, _onBack: () => void) {
     Blank();
   }
 
@@ -273,7 +273,10 @@ export struct P1Shell {
         this.writeAnswerContent(
           destination.questionId,
           destination.answerId,
-          (destination: P1Destination): void => this.navigate(destination)
+          (destination: P1Destination): void => this.navigate(destination),
+          (): void => {
+            this.pathStack.pop();
+          }
         );
       }
       .title(destination.answerId === undefined ? '写回答' : '编辑回答')

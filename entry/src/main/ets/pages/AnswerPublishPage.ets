@@ -325,6 +325,7 @@ export struct AnswerPublishPage {
   controllerFactory: AnswerPublishPageControllerFactory | undefined = undefined;
   traceIds: AnswerPublishTraceIdFactory | undefined = undefined;
   onGoLogin: () => void = (): void => {};
+  onBack: () => void = (): void => {};
   @State private viewState: AnswerPublishPageViewState = emptyViewState();
   private coordinator: AnswerPublishPageCoordinator | undefined = undefined;
 
@@ -346,11 +347,18 @@ export struct AnswerPublishPage {
 
   build() {
     Column({ space: $r('app.float.p1_spacing_medium') }) {
-      Text(this.viewState.answerId === undefined ? '撰写回答' : '编辑回答')
-        .id('p4_answer_page_title')
-        .fontSize($r('app.float.p1_heading_font_size'))
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.primary_text'))
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Text(this.viewState.answerId === undefined ? '撰写回答' : '编辑回答')
+          .id('p4_answer_page_title')
+          .layoutWeight(1)
+          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.primary_text'))
+        Button('退出')
+          .id('p4_answer_page_exit')
+          .onClick((): void => this.exitEditor())
+      }
+      .width('100%')
 
       Text(this.viewState.statusMessage)
         .id('p4_answer_page_status')
@@ -411,6 +419,11 @@ export struct AnswerPublishPage {
     .height('100%')
     .padding($r('app.float.p1_card_padding'))
     .backgroundColor($r('app.color.page_background'))
+  }
+
+  private exitEditor(): void {
+    this.coordinator?.deactivate();
+    this.onBack();
   }
 }
 
