@@ -80,7 +80,7 @@ export struct PinDraftInboxPage {
           .fontSize($r('app.float.p1_body_font_size'))
           .fontColor($r('app.color.secondary_text'))
       } else {
-        List({ space: $r('app.float.p1_spacing_small') }) {
+        List({ space: 8 }) {
           ForEach(this.items, (item: PinDraftResumeItem) => {
             ListItem() {
               Button(item.title)

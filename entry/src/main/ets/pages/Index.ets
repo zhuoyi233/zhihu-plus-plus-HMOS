@@ -356,7 +356,8 @@ struct Index {
       controllerFactory: this.answerPublishFactory,
       onGoLogin: (): void => {
         navigate({ name: P1DestinationName.LOGIN });
-      }
+      },
+      onBack: onBack
     });
   }
 
@@ -386,8 +387,7 @@ struct Index {
       },
       onGoLogin: (): void => {
         navigate({ name: P1DestinationName.LOGIN });
-      },
-      onBack: onBack
+      }
     });
   }
 
