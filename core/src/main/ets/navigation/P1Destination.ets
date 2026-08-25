@@ -33,7 +33,8 @@ export enum P1DestinationName {
   BACKGROUND_TASK_PROBE = 'BackgroundTaskProbe',
   DOMAIN_FIXTURE_PROBE = 'DomainFixtureProbe',
   WRITE_ANSWER = 'WriteAnswer',
-  WRITE_PIN = 'WritePin'
+  WRITE_PIN = 'WritePin',
+  PIN_DRAFTS = 'PinDrafts'
 }
 
 export interface StatelessDestination {
@@ -49,7 +50,7 @@ export interface InfrastructureDestination {
     P1DestinationName.DATABASE_PROBE | P1DestinationName.DEEP_LINK_PROBE |
     P1DestinationName.QR_SCAN_PROBE | P1DestinationName.QR_DESKTOP_LOGIN_SCAN |
     P1DestinationName.BACKGROUND_TASK_PROBE |
-    P1DestinationName.DOMAIN_FIXTURE_PROBE;
+    P1DestinationName.DOMAIN_FIXTURE_PROBE | P1DestinationName.PIN_DRAFTS;
 }
 
 export interface ContentDestination {
@@ -148,6 +149,7 @@ export function isP1DestinationName(name: string): boolean {
     case P1DestinationName.DOMAIN_FIXTURE_PROBE:
     case P1DestinationName.WRITE_ANSWER:
     case P1DestinationName.WRITE_PIN:
+    case P1DestinationName.PIN_DRAFTS:
       return true;
     default:
       return false;
@@ -216,6 +218,8 @@ export function decodeP1Destination(name: string, param: Object): P1Destination 
       return hasNoParameters(wire) ? { name: P1DestinationName.BACKGROUND_TASK_PROBE } : undefined;
     case P1DestinationName.DOMAIN_FIXTURE_PROBE:
       return hasNoParameters(wire) ? { name: P1DestinationName.DOMAIN_FIXTURE_PROBE } : undefined;
+    case P1DestinationName.PIN_DRAFTS:
+      return hasNoParameters(wire) ? { name: P1DestinationName.PIN_DRAFTS } : undefined;
     case P1DestinationName.QUESTION:
       return decodeContent(wire, P1DestinationName.QUESTION);
     case P1DestinationName.ANSWER:
@@ -281,6 +285,7 @@ export function isInfrastructureDestination(destination: P1Destination): boolean
     case P1DestinationName.QR_DESKTOP_LOGIN_SCAN:
     case P1DestinationName.BACKGROUND_TASK_PROBE:
     case P1DestinationName.DOMAIN_FIXTURE_PROBE:
+    case P1DestinationName.PIN_DRAFTS:
       return true;
     default:
       return false;
@@ -303,6 +308,7 @@ export function shouldReloadAfterAuthentication(destination: P1Destination): boo
     case P1DestinationName.NOTIFICATION:
     case P1DestinationName.WRITE_ANSWER:
     case P1DestinationName.WRITE_PIN:
+    case P1DestinationName.PIN_DRAFTS:
       return true;
     default:
       return false;

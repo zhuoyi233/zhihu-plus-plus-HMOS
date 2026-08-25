@@ -64,9 +64,11 @@ import {
 } from './AnswerPublishPage';
 import {
   LocalDraftPinPublishPageConfigurationFactory,
+  PinDraftResumeListGateway,
   PinPublishPage,
   PinPublishPageConfigurationFactory
 } from './PinPublishPage';
+import { PinDraftInboxPage } from './PinDraftInboxPage';
 import { LoginPage } from './LoginPage';
 import { ChannelFeedPage } from './ChannelFeedPage';
 import { DailyStoryDetailPage } from './DailyStoryDetailPage';
@@ -111,6 +113,7 @@ struct Index {
   @State private notificationSettings?: NotificationSettingsGateway = undefined;
   private answerPublishFactory: AnswerPublishPageControllerFactory | undefined = undefined;
   private pinPublishFactory: PinPublishPageConfigurationFactory | undefined = undefined;
+  private pinDraftResumeGateway: PinDraftResumeListGateway | undefined = undefined;
 
   aboutToAppear(): void {
     if (this.compositionReady || this.compositionPreparing) {
@@ -157,7 +160,9 @@ struct Index {
       this.notificationRepository = new DefaultNotificationRepository(new ZhihuHttpClient(session));
       this.notificationSettings = new AppPreferencesStore(context);
       this.answerPublishFactory = new LocalDraftAnswerPublishControllerFactory(session, draftRepository);
-      this.pinPublishFactory = new LocalDraftPinPublishPageConfigurationFactory(session, draftRepository);
+      const pinPublishFactory = new LocalDraftPinPublishPageConfigurationFactory(session, draftRepository);
+      this.pinPublishFactory = pinPublishFactory;
+      this.pinDraftResumeGateway = pinPublishFactory;
       this.compositionPreparing = false;
       this.compositionReady = true;
     });
@@ -190,6 +195,8 @@ struct Index {
             this.writeAnswerContent(questionId, answerId, navigate),
           writePinContent: (draftId: string, navigate: (destination: P1Destination) => void,
             onBack: () => void): void => this.writePinContent(draftId, navigate, onBack),
+          pinDraftInboxContent: (navigate: (destination: P1Destination) => void): void =>
+            this.pinDraftInboxContent(navigate),
           peopleContent: (id: string, navigate: (destination: P1Destination) => void): void =>
             this.peopleContent(id, navigate),
           pinContent: (id: string, navigate: (destination: P1Destination) => void): void => this.pinContent(id, navigate),
@@ -365,6 +372,20 @@ struct Index {
       },
       onPublished: (contentId: string): void => {
         navigate({ name: P1DestinationName.PIN, id: contentId });
+      }
+    });
+  }
+
+  @Builder
+  pinDraftInboxContent(navigate: (destination: P1Destination) => void) {
+    PinDraftInboxPage({
+      gateway: this.pinDraftResumeGateway,
+      session: this.session,
+      onOpen: (draftId: string): void => {
+        navigate({ name: P1DestinationName.WRITE_PIN, draftId: draftId });
+      },
+      onGoLogin: (): void => {
+        navigate({ name: P1DestinationName.LOGIN });
       }
     });
   }

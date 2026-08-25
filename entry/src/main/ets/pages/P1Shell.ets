@@ -38,6 +38,7 @@ export struct P1Shell {
     navigate: (destination: P1Destination) => void) => void = this.emptyWriteAnswer;
   @BuilderParam writePinContent: (draftId: string, navigate: (destination: P1Destination) => void,
     onBack: () => void) => void = this.emptyWritePin;
+  @BuilderParam pinDraftInboxContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
   @BuilderParam peopleContent: (id: string, navigate: (destination: P1Destination) => void) => void =
     this.emptyContent;
   @BuilderParam pinContent: (id: string, navigate: (destination: P1Destination) => void) => void =
@@ -289,6 +290,12 @@ export struct P1Shell {
       }
       .title('发布想法')
       .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.PIN_DRAFTS) {
+      NavDestination() {
+        this.pinDraftInboxContent((destination: P1Destination): void => this.navigate(destination));
+      }
+      .title('想法草稿')
+      .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.PEOPLE) {
       NavDestination() {
         this.peopleContent(
@@ -500,6 +507,12 @@ export struct P1Shell {
           .width('100%')
           .fontSize($r('app.float.p1_body_font_size'))
           .onClick((): void => this.openPinComposer())
+
+        Button('想法草稿')
+          .id('p4_open_pin_drafts')
+          .width('100%')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .onClick((): void => this.navigate({ name: P1DestinationName.PIN_DRAFTS }))
 
         Button('内容屏蔽')
           .id('p2_open_blocking_rules')

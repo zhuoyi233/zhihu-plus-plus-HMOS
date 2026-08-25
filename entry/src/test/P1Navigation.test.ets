@@ -61,7 +61,8 @@ export default function p1NavigationTest(): void {
         P1DestinationName.BACKGROUND_TASK_PROBE,
         P1DestinationName.DOMAIN_FIXTURE_PROBE,
         P1DestinationName.WRITE_ANSWER,
-        P1DestinationName.WRITE_PIN
+        P1DestinationName.WRITE_PIN,
+        P1DestinationName.PIN_DRAFTS
       ];
 
       expect(names.every((name: P1DestinationName) => isP1DestinationName(name))).assertTrue();
@@ -131,6 +132,9 @@ export default function p1NavigationTest(): void {
         name: P1DestinationName.WRITE_PIN,
         draftId: '01234567-89ab-4cde-8fab-0123456789ab'
       };
+      const pinDraftsParam: TestDestinationParam = {
+        name: P1DestinationName.PIN_DRAFTS
+      };
       const dailyStoryParam: TestDestinationParam = {
         name: P1DestinationName.DAILY_STORY,
         id: '987654321'
@@ -159,6 +163,7 @@ export default function p1NavigationTest(): void {
       const desktopLoginScan = decodeP1Destination(P1DestinationName.QR_DESKTOP_LOGIN_SCAN, desktopLoginScanParam);
       const writeAnswer = decodeP1Destination(P1DestinationName.WRITE_ANSWER, writeAnswerParam);
       const writePin = decodeP1Destination(P1DestinationName.WRITE_PIN, writePinParam);
+      const pinDrafts = decodeP1Destination(P1DestinationName.PIN_DRAFTS, pinDraftsParam);
       const dailyStory = decodeP1Destination(P1DestinationName.DAILY_STORY, dailyStoryParam);
       const search: SearchDestination = { name: P1DestinationName.SEARCH, query: 'ArkTS' };
       const following: StatelessDestination = { name: P1DestinationName.FOLLOWING };
@@ -198,6 +203,10 @@ export default function p1NavigationTest(): void {
       if (writePin?.name === P1DestinationName.WRITE_PIN) {
         expect(writePin.draftId).assertEqual('01234567-89ab-4cde-8fab-0123456789ab');
         expect(shouldReloadAfterAuthentication(writePin)).assertTrue();
+      }
+      expect(pinDrafts?.name).assertEqual(P1DestinationName.PIN_DRAFTS);
+      if (pinDrafts?.name === P1DestinationName.PIN_DRAFTS) {
+        expect(shouldReloadAfterAuthentication(pinDrafts)).assertTrue();
       }
       expect(decodeP1Destination(P1DestinationName.SEARCH, unexpectedSearchParam)).assertUndefined();
       expect(decodeP1Destination(P1DestinationName.COMMENT, emptyCommentIdParam)).assertUndefined();
@@ -265,7 +274,7 @@ export default function p1NavigationTest(): void {
       expect(decodeP1Destination(P1DestinationName.COLLECTIONS, oversizedCollectionsParam)).assertUndefined();
       [P1DestinationName.FOLLOWING, P1DestinationName.HOT, P1DestinationName.DAILY,
         P1DestinationName.BLOCKING_RULES, P1DestinationName.BLOCKED_FEED_HISTORY,
-        P1DestinationName.READ_HISTORY]
+        P1DestinationName.READ_HISTORY, P1DestinationName.PIN_DRAFTS]
         .forEach((name: P1DestinationName): void => {
           const validParam: TestDestinationParam = { name: name };
           const invalidParam: TestDestinationParam = { name: name, id: 'unexpected' };
