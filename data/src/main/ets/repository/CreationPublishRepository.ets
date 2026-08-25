@@ -173,6 +173,20 @@ export function buildAnswerRemoteDraftRequest(input: AnswerPublishInput): Publis
   };
 }
 
+/** 获取已有回答的可编辑正文；仅使用固定 include，避免调用方自行拼接详情地址。 */
+export function buildAnswerEditingRequest(answerId: string): PublishHttpContract {
+  const normalizedAnswerId = requireContentId(answerId);
+  return {
+    url: 'https://www.zhihu.com/api/v4/answers/' + normalizedAnswerId + '?include=' +
+      encodeURIComponent(ANSWER_PUBLISH_INCLUDE),
+    method: ZhihuHttpMethod.GET,
+    useSession: true,
+    signWithZse: true,
+    includeXsrfToken: false,
+    refererPath: '/'
+  };
+}
+
 export function buildAnswerPublishRequest(input: AnswerPublishInput): PublishHttpContract {
   validateAnswerInput(input);
   return {

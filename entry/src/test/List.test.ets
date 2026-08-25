@@ -51,6 +51,7 @@ import notificationStateTest from './NotificationState.test';
 import backStackStateTest from './BackStackState.test';
 import phoneLoginCryptoTest from './PhoneLoginCrypto.test';
 import creationPublishRepositoryTest from './CreationPublishRepository.test';
+import defaultCreationPublishRepositoryTest from './DefaultCreationPublishRepository.test';
 import videoPlaybackStateTest from './VideoPlaybackState.test';
 import videoPlaybackControllerTest from './VideoPlaybackController.test';
 import api26VideoPlayerAdapterTest from './Api26VideoPlayerAdapter.test';
@@ -121,6 +122,7 @@ export default function testsuite(): void {
   backStackStateTest();
   phoneLoginCryptoTest();
   creationPublishRepositoryTest();
+  defaultCreationPublishRepositoryTest();
   videoPlaybackStateTest();
   videoPlaybackControllerTest();
   api26VideoPlayerAdapterTest();
