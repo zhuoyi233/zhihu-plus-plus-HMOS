@@ -1,6 +1,7 @@
 import { fileIo } from '@kit.CoreFileKit';
 import {
   createImageTemporaryLifecycle,
+  IMAGE_TEMPORARY_MAX_AGE_MILLIS,
   ImageTemporaryFile,
   ImageUploadFailure,
   ImageUploadFailureKind,
@@ -19,6 +20,7 @@ import { createSystemPhotoPickerGateway } from './SystemPhotoPickerGateway';
 
 const INSPECTION_HEADER_BYTES: number = 65536;
 const CONTROLLED_FILE_NAME: RegExp = /^[a-f0-9]{32}\.(?:jpg|png|webp|gif)$/;
+const CONTROLLED_TEMPORARY_ARTIFACT_NAME: RegExp = /^[a-f0-9]{32}\.(?:jpg|png|webp|gif)(?:\.copying)?$/;
 const PICKED_MEDIA_URI: RegExp = /^file:\/\/(?:media|com\.ohos\.filemanager\.dir)\/[A-Za-z0-9._~%/-]+$/;
 
 /**
@@ -129,6 +131,61 @@ export function buildControlledImageTemporaryPath(cacheDir: string, fileName: st
     throw new ImageUploadFailure(ImageUploadFailureKind.INVALID_INPUT);
   }
   return `${normalizeCacheDir(cacheDir)}/p4-images/${fileName}`;
+}
+
+/**
+ * 页面进入时回收崩溃、系统回收或进程终止后遗留的受控缓存。仅匹配应用随机名；目录错误、文件错误
+ * 和并发删除均安全忽略，不能影响选图流程或访问用户目录。
+ */
+export async function purgeExpiredControlledImageCache(cacheDir: string, nowMillis: number = Date.now()): Promise<number> {
+  const normalizedCacheDir = normalizeCacheDir(cacheDir);
+  if (!Number.isSafeInteger(nowMillis) || nowMillis < 0) {
+    throw new ImageUploadFailure(ImageUploadFailureKind.INVALID_INPUT);
+  }
+  const directory = `${normalizedCacheDir}/p4-images`;
+  let entries: Array<string>;
+  try {
+    entries = await fileIo.listFile(directory);
+  } catch (_error) {
+    return 0;
+  }
+  let removedCount = 0;
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    if (!shouldPurgeControlledImageTemporaryArtifact(entry, -1, nowMillis)) {
+      continue;
+    }
+    const path = `${directory}/${entry}`;
+    try {
+      const stat = await fileIo.stat(path);
+      if (!stat.isFile() || !shouldPurgeControlledImageTemporaryArtifact(entry, stat.mtime, nowMillis)) {
+        continue;
+      }
+      await fileIo.unlink(path);
+      removedCount += 1;
+    } catch (_error) {
+      // 文件在枚举后被正常清理、不可访问或不是普通文件时不重试，也不泄漏其名称。
+    }
+  }
+  return removedCount;
+}
+
+/** 纯函数，供测试固定 24 小时的缓存回收边界；-1 用于只判定应用生成的文件名。 */
+export function shouldPurgeControlledImageTemporaryArtifact(
+  fileName: string,
+  modifiedAtSeconds: number,
+  nowMillis: number
+): boolean {
+  if (!CONTROLLED_TEMPORARY_ARTIFACT_NAME.test(fileName) || !Number.isSafeInteger(nowMillis) || nowMillis < 0) {
+    return false;
+  }
+  if (modifiedAtSeconds === -1) {
+    return true;
+  }
+  if (!Number.isSafeInteger(modifiedAtSeconds) || modifiedAtSeconds < 0) {
+    return false;
+  }
+  return nowMillis >= modifiedAtSeconds * 1000 + IMAGE_TEMPORARY_MAX_AGE_MILLIS;
 }
 
 async function readImageInspection(reference: string, sourceUri: string): Promise<PickedImageInspection> {

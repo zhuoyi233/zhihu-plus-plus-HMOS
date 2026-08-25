@@ -6,7 +6,10 @@ import {
   MediaPickerViewState,
   PreparedPickedImage
 } from '../platform/MediaPickerCoordinator';
-import { createProductionMediaPickerCoordinator } from '../platform/SystemPickedImageFileStore';
+import {
+  createProductionMediaPickerCoordinator,
+  purgeExpiredControlledImageCache
+} from '../platform/SystemPickedImageFileStore';
 
 export type P4ImagePickerSelectionCallback = (images: Array<PreparedPickedImage>) => void;
 
@@ -32,6 +35,8 @@ export struct P4ImagePickerPanel {
     try {
       this.coordinator = createProductionMediaPickerCoordinator(context.cacheDir);
       this.sync(this.coordinator.snapshot());
+      // 仅回收 24 小时前的应用缓存；失败不影响用户本次显式选择。
+      void purgeExpiredControlledImageCache(context.cacheDir);
     } catch (_error) {
       this.viewState = failedPickerViewState(ImageUploadFailureKind.INVALID_INPUT);
     }
