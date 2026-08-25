@@ -114,6 +114,17 @@ class FakePinRepository implements PinPublishRepository {
   }
 }
 
+class FakeSessionLoginOperation implements SessionLoginOperation {
+  readonly result: Promise<SessionState>;
+
+  constructor(state: SessionState) {
+    this.result = Promise.resolve(state);
+  }
+
+  cancel(): void {
+  }
+}
+
 class FakeSession implements LoginSessionGateway {
   private readonly state: SessionState;
 
@@ -142,8 +153,7 @@ class FakeSession implements LoginSessionGateway {
   }
 
   private operation(): SessionLoginOperation {
-    const operation: SessionLoginOperation = { result: Promise.resolve(this.state), cancel: (): void => {} };
-    return operation;
+    return new FakeSessionLoginOperation(this.state);
   }
 }
 
