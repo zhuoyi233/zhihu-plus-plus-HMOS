@@ -62,6 +62,11 @@ import {
   AnswerPublishPageControllerFactory,
   LocalDraftAnswerPublishControllerFactory
 } from './AnswerPublishPage';
+import {
+  LocalDraftPinPublishPageConfigurationFactory,
+  PinPublishPage,
+  PinPublishPageConfigurationFactory
+} from './PinPublishPage';
 import { LoginPage } from './LoginPage';
 import { ChannelFeedPage } from './ChannelFeedPage';
 import { DailyStoryDetailPage } from './DailyStoryDetailPage';
@@ -105,6 +110,7 @@ struct Index {
   @State private notificationRepository?: NotificationRepository = undefined;
   @State private notificationSettings?: NotificationSettingsGateway = undefined;
   private answerPublishFactory: AnswerPublishPageControllerFactory | undefined = undefined;
+  private pinPublishFactory: PinPublishPageConfigurationFactory | undefined = undefined;
 
   aboutToAppear(): void {
     if (this.compositionReady || this.compositionPreparing) {
@@ -151,6 +157,7 @@ struct Index {
       this.notificationRepository = new DefaultNotificationRepository(new ZhihuHttpClient(session));
       this.notificationSettings = new AppPreferencesStore(context);
       this.answerPublishFactory = new LocalDraftAnswerPublishControllerFactory(session, draftRepository);
+      this.pinPublishFactory = new LocalDraftPinPublishPageConfigurationFactory(session, draftRepository);
       this.compositionPreparing = false;
       this.compositionReady = true;
     });
@@ -181,6 +188,8 @@ struct Index {
           writeAnswerContent: (questionId: string, answerId: string | undefined,
             navigate: (destination: P1Destination) => void): void =>
             this.writeAnswerContent(questionId, answerId, navigate),
+          writePinContent: (draftId: string, navigate: (destination: P1Destination) => void,
+            onBack: () => void): void => this.writePinContent(draftId, navigate, onBack),
           peopleContent: (id: string, navigate: (destination: P1Destination) => void): void =>
             this.peopleContent(id, navigate),
           pinContent: (id: string, navigate: (destination: P1Destination) => void): void => this.pinContent(id, navigate),
@@ -340,6 +349,22 @@ struct Index {
       controllerFactory: this.answerPublishFactory,
       onGoLogin: (): void => {
         navigate({ name: P1DestinationName.LOGIN });
+      }
+    });
+  }
+
+  @Builder
+  writePinContent(draftId: string, navigate: (destination: P1Destination) => void, onBack: () => void) {
+    PinPublishPage({
+      draftId: draftId,
+      configurationFactory: this.pinPublishFactory,
+      session: this.session,
+      onBack: onBack,
+      onLoginRequired: (): void => {
+        navigate({ name: P1DestinationName.LOGIN });
+      },
+      onPublished: (contentId: string): void => {
+        navigate({ name: P1DestinationName.PIN, id: contentId });
       }
     });
   }

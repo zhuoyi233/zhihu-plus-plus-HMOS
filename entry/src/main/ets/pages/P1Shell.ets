@@ -36,6 +36,8 @@ export struct P1Shell {
     this.emptyContent;
   @BuilderParam writeAnswerContent: (questionId: string, answerId: string | undefined,
     navigate: (destination: P1Destination) => void) => void = this.emptyWriteAnswer;
+  @BuilderParam writePinContent: (draftId: string, navigate: (destination: P1Destination) => void,
+    onBack: () => void) => void = this.emptyWritePin;
   @BuilderParam peopleContent: (id: string, navigate: (destination: P1Destination) => void) => void =
     this.emptyContent;
   @BuilderParam pinContent: (id: string, navigate: (destination: P1Destination) => void) => void =
@@ -115,6 +117,11 @@ export struct P1Shell {
   @Builder
   emptyWriteAnswer(_questionId: string, _answerId: string | undefined,
     _navigate: (destination: P1Destination) => void) {
+    Blank();
+  }
+
+  @Builder
+  emptyWritePin(_draftId: string, _navigate: (destination: P1Destination) => void, _onBack: () => void) {
     Blank();
   }
 
@@ -269,6 +276,18 @@ export struct P1Shell {
         );
       }
       .title(destination.answerId === undefined ? '写回答' : '编辑回答')
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.WRITE_PIN) {
+      NavDestination() {
+        this.writePinContent(
+          destination.draftId,
+          (destination: P1Destination): void => this.navigate(destination),
+          (): void => {
+            this.pathStack.pop();
+          }
+        );
+      }
+      .title('发布想法')
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.PEOPLE) {
       NavDestination() {
@@ -476,6 +495,12 @@ export struct P1Shell {
           .fontSize($r('app.float.p1_body_font_size'))
           .onClick(() => this.navigate({ name: P1DestinationName.LOGIN }))
 
+        Button('发布想法')
+          .id('p4_open_pin_publish')
+          .width('100%')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .onClick((): void => this.openPinComposer())
+
         Button('内容屏蔽')
           .id('p2_open_blocking_rules')
           .width('100%')
@@ -620,6 +645,23 @@ export struct P1Shell {
       return;
     }
     this.navigate({ name: P1DestinationName.COLLECTIONS, id: identifier });
+  }
+
+  /** 路由只持有随机本地草稿键；账号范围和正文均由目标页在认证后解析。 */
+  private openPinComposer(): void {
+    this.navigate({ name: P1DestinationName.WRITE_PIN, draftId: this.createLocalDraftId() });
+  }
+
+  private createLocalDraftId(): string {
+    return `${this.randomHex(8)}-${this.randomHex(4)}-4${this.randomHex(3)}-8${this.randomHex(3)}-${this.randomHex(12)}`;
+  }
+
+  private randomHex(length: number): string {
+    let value = '';
+    for (let index = 0; index < length; index += 1) {
+      value += Math.floor(Math.random() * 16).toString(16);
+    }
+    return value;
   }
 
   private returnFromSuccessfulLogin(): void {
