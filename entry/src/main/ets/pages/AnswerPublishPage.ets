@@ -283,19 +283,31 @@ export class LocalDraftAnswerPublishControllerFactory implements AnswerPublishPa
       return undefined;
     }
     const accountKey = await hashDraftAccountId(profile.id);
-    return new AnswerPublishController(new LocalDraftOnlyAnswerPublishRepository(), this.drafts,
+    const editSeed = answerId === undefined ? undefined : takeAnswerEditSeed(answerId);
+    return new AnswerPublishController(new LocalDraftOnlyAnswerPublishRepository(editSeed), this.drafts,
       this.session, accountKey, questionId, observer, answerId);
   }
 }
 
 /** 不含 HTTP 客户端的默认仓储，确保接线完成前发布不会意外落到外部服务。 */
 class LocalDraftOnlyAnswerPublishRepository implements AnswerPublishRepository {
+  private editSeed: ExistingAnswerForEditing | undefined;
+
+  constructor(editSeed: ExistingAnswerForEditing | undefined = undefined) {
+    this.editSeed = editSeed;
+  }
+
   findMyAnswerId(_questionId: string): Promise<string | undefined> {
     return Promise.resolve(undefined);
   }
 
   fetchAnswerForEditing(_answerId: string): Promise<ExistingAnswerForEditing | undefined> {
-    return Promise.resolve(takeAnswerEditSeed(_answerId));
+    const seed = this.editSeed;
+    this.editSeed = undefined;
+    if (seed === undefined || seed.answerId !== _answerId) {
+      return Promise.resolve(undefined);
+    }
+    return Promise.resolve(seed);
   }
 
   saveRemoteDraft(_input: AnswerPublishInput): Promise<void> {
