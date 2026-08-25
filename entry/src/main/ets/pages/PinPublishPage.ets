@@ -1,5 +1,7 @@
 import {
   ContentDraftIdentity,
+  ContentDraftKind,
+  ContentDraftMetadata,
   createPinDraftIdentity,
   DraftRepository,
   hashDraftAccountId,
@@ -22,6 +24,7 @@ import {
   PinPublishPagePhase,
   PinPublishPageViewState
 } from './PinPublishPageState';
+import { isSafeLocalDraftId } from 'core';
 
 export type PinPublishPageBackCallback = () => void;
 export type PinPublishPageLoginCallback = () => void;
@@ -42,11 +45,25 @@ export interface PinPublishPageConfigurationFactory {
   create(draftId: string): Promise<PinPublishPageConfiguration | undefined>;
 }
 
+export const MAX_PIN_DRAFT_RESUME_COUNT: number = 100;
+
+/** 草稿箱只展示加密正文之外的最少恢复元数据。 */
+export interface PinDraftResumeItem {
+  readonly draftId: string;
+  readonly title: string;
+  readonly updatedAt: number;
+}
+
+export interface PinDraftResumeListGateway {
+  listResumeItems(): Promise<Array<PinDraftResumeItem>>;
+}
+
 /**
  * API 26 默认组合根：仅启用加密本地草稿；所有远端推荐、远端草稿和正式发布均拒绝，
  * 以便真实外部写入只能在人工门禁替换仓储后发生。
  */
-export class LocalDraftPinPublishPageConfigurationFactory implements PinPublishPageConfigurationFactory {
+export class LocalDraftPinPublishPageConfigurationFactory implements PinPublishPageConfigurationFactory,
+  PinDraftResumeListGateway {
   private readonly session: LoginSessionGateway;
   private readonly drafts: DraftRepository;
 
@@ -56,13 +73,11 @@ export class LocalDraftPinPublishPageConfigurationFactory implements PinPublishP
   }
 
   async create(draftId: string): Promise<PinPublishPageConfiguration | undefined> {
-    const state = this.session.getState();
-    const profile = state.profile;
-    if (state.status !== SessionStatus.AUTHENTICATED || profile === undefined) {
+    const accountKey = await this.resolveAccountKey();
+    if (accountKey === undefined) {
       return undefined;
     }
     try {
-      const accountKey = await hashDraftAccountId(profile.id);
       return {
         repository: new LocalDraftOnlyPinPublishRepository(),
         drafts: this.drafts,
@@ -71,6 +86,44 @@ export class LocalDraftPinPublishPageConfigurationFactory implements PinPublishP
         traceIds: new SystemPinPublishTraceIdFactory(),
         topicScheduler: new SystemPinTopicSearchScheduler()
       };
+    } catch (_error) {
+      return undefined;
+    }
+  }
+
+  async listResumeItems(): Promise<Array<PinDraftResumeItem>> {
+    const accountKey = await this.resolveAccountKey();
+    if (accountKey === undefined) {
+      return [];
+    }
+    try {
+      const metadata = await this.drafts.listMetadataForAccount(accountKey);
+      const result: Array<PinDraftResumeItem> = [];
+      metadata.forEach((item: ContentDraftMetadata): void => {
+        if (item.kind !== ContentDraftKind.PIN || !item.dirty || !isSafeLocalDraftId(item.targetId)) {
+          return;
+        }
+        result.push({
+          draftId: item.targetId,
+          title: item.title.trim().length === 0 ? '未命名想法' : item.title,
+          updatedAt: item.updatedAt
+        });
+      });
+      result.sort((first: PinDraftResumeItem, second: PinDraftResumeItem): number => second.updatedAt - first.updatedAt);
+      return result.slice(0, MAX_PIN_DRAFT_RESUME_COUNT);
+    } catch (_error) {
+      return [];
+    }
+  }
+
+  private async resolveAccountKey(): Promise<string | undefined> {
+    const state = this.session.getState();
+    const profile = state.profile;
+    if (state.status !== SessionStatus.AUTHENTICATED || profile === undefined) {
+      return undefined;
+    }
+    try {
+      return await hashDraftAccountId(profile.id);
     } catch (_error) {
       return undefined;
     }

@@ -33,6 +33,7 @@ import { PinPublishTraceIdFactory, PinTopicSearchScheduler } from '../main/ets/p
 
 const ACCOUNT_KEY: string = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const DRAFT_ID: string = '01234567-89ab-4cde-8fab-0123456789ab';
+const SECOND_DRAFT_ID: string = 'fedcba98-7654-4cde-8fab-0123456789ab';
 const SECRET_BODY: string = '不得泄露的正文内容';
 
 class FakeMetadataStore implements ContentDraftMetadataStore {
@@ -69,6 +70,7 @@ class FakeBodyStore implements DraftBodyStore {
 
 class FakeDraftRepository extends DraftRepository {
   readonly saves: Array<ContentDraftSaveInput> = [];
+  resumeMetadata: Array<ContentDraftMetadata> = [];
 
   constructor() {
     super(new FakeMetadataStore(), new FakeBodyStore());
@@ -93,6 +95,10 @@ class FakeDraftRepository extends DraftRepository {
       updatedAt: 1
     };
     return Promise.resolve(metadata);
+  }
+
+  listMetadataForAccount(_accountKey: string): Promise<Array<ContentDraftMetadata>> {
+    return Promise.resolve(this.resumeMetadata.slice());
   }
 }
 
@@ -191,6 +197,25 @@ function identity(): ContentDraftIdentity {
     accountKey: ACCOUNT_KEY,
     kind: ContentDraftKind.PIN,
     targetId: DRAFT_ID
+  };
+}
+
+function resumeMetadata(draftId: string, title: string, updatedAt: number, dirty: boolean,
+  kind: ContentDraftKind = ContentDraftKind.PIN): ContentDraftMetadata {
+  return {
+    draftKey: `${kind}:${ACCOUNT_KEY}:${draftId}`,
+    accountKey: ACCOUNT_KEY,
+    kind: kind,
+    targetId: draftId,
+    title: title,
+    plainTextLength: 1,
+    tocEnabled: false,
+    imageRefsJson: '[]',
+    topicRefsJson: '[]',
+    dirty: dirty,
+    version: 1,
+    createdAt: 1,
+    updatedAt: updatedAt
   };
 }
 
@@ -308,6 +333,23 @@ export default function pinPublishPageStateTest(): void {
       if (result instanceof PublishFailure) {
         expect(result.kind).assertEqual(PublishFailureKind.SERVER);
       }
+    });
+
+    it('listsOnlyDirtyPinMetadataForDraftResume', 0, async () => {
+      const drafts = new FakeDraftRepository();
+      drafts.resumeMetadata = [
+        resumeMetadata(DRAFT_ID, '较早想法', 100, true),
+        resumeMetadata(SECOND_DRAFT_ID, '已发布草稿', 200, false),
+        resumeMetadata('123', '回答不应出现', 300, true, ContentDraftKind.ANSWER)
+      ];
+      const factory = new LocalDraftPinPublishPageConfigurationFactory(
+        new FakeSession(SessionStatus.AUTHENTICATED), drafts);
+
+      const items = await factory.listResumeItems();
+
+      expect(items.length).assertEqual(1);
+      expect(items[0].draftId).assertEqual(DRAFT_ID);
+      expect(items[0].title).assertEqual('较早想法');
     });
   });
 }
