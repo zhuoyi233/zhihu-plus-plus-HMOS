@@ -59,6 +59,7 @@ import shareServiceTest from './ShareService.test';
 import draftRepositoryTest from './DraftRepository.test';
 import pinPublishStateTest from './PinPublishState.test';
 import imageUploadContractsTest from './ImageUploadContracts.test';
+import defaultImageUploadRepositoryTest from './DefaultImageUploadRepository.test';
 import answerPublishStateTest from './AnswerPublishState.test';
 import answerPublishPageTest from './AnswerPublishPage.test';
 import editorDraftStateTest from './EditorDraftState.test';
@@ -130,6 +131,7 @@ export default function testsuite(): void {
   draftRepositoryTest();
   pinPublishStateTest();
   imageUploadContractsTest();
+  defaultImageUploadRepositoryTest();
   answerPublishStateTest();
   answerPublishPageTest();
   editorDraftStateTest();

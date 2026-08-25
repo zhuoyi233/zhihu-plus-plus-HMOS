@@ -60,16 +60,26 @@ export enum ImageUploadFailureKind {
   INVALID_RESPONSE = 'invalid_response',
   MISSING_ETAG = 'missing_etag',
   POLL_TIMEOUT = 'poll_timeout',
-  CANCELLED = 'cancelled'
+  CANCELLED = 'cancelled',
+  AUTHENTICATION = 'authentication',
+  FORBIDDEN = 'forbidden',
+  RATE_LIMITED = 'rate_limited',
+  NETWORK = 'network',
+  TIMEOUT = 'timeout',
+  SERVER = 'server'
 }
 
 export class ImageUploadFailure extends Error {
   readonly kind: ImageUploadFailureKind;
+  readonly retryable: boolean;
 
   constructor(kind: ImageUploadFailureKind) {
     super(imageUploadFailureMessage(kind));
     this.name = 'ImageUploadFailure';
     this.kind = kind;
+    this.retryable = kind === ImageUploadFailureKind.RATE_LIMITED || kind === ImageUploadFailureKind.NETWORK ||
+      kind === ImageUploadFailureKind.TIMEOUT || kind === ImageUploadFailureKind.SERVER ||
+      kind === ImageUploadFailureKind.POLL_TIMEOUT;
   }
 }
 
@@ -871,6 +881,12 @@ function imageUploadFailureMessage(kind: ImageUploadFailureKind): string {
   if (kind === ImageUploadFailureKind.MISSING_ETAG) return '图片分片上传未返回 ETag';
   if (kind === ImageUploadFailureKind.POLL_TIMEOUT) return '图片处理超时，可稍后重试';
   if (kind === ImageUploadFailureKind.CANCELLED) return '已取消图片上传';
+  if (kind === ImageUploadFailureKind.AUTHENTICATION) return '登录已失效，请重新登录后上传图片';
+  if (kind === ImageUploadFailureKind.FORBIDDEN) return '图片上传被拒绝或需要完成安全验证';
+  if (kind === ImageUploadFailureKind.RATE_LIMITED) return '图片上传请求过于频繁，请稍后重试';
+  if (kind === ImageUploadFailureKind.TIMEOUT) return '图片上传请求超时，请稍后重试';
+  if (kind === ImageUploadFailureKind.SERVER) return '图片服务暂时不可用，请稍后重试';
+  if (kind === ImageUploadFailureKind.NETWORK) return '网络不可用，请检查连接后重试';
   if (kind === ImageUploadFailureKind.INVALID_RESPONSE) return '图片服务返回无效结果';
   return '图片输入无效';
 }
