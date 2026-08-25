@@ -185,6 +185,7 @@ function richContent(): PinDraftContent {
       height: 720,
       watermark: 'original'
     }],
+    localImageReferences: [],
     topics: [
       { topicId: '2', displayName: 'HarmonyOS' },
       { topicId: '2', displayName: '重复话题' }

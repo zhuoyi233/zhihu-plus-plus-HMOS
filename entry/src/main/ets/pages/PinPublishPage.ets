@@ -3,9 +3,11 @@ import {
   ContentDraftKind,
   ContentDraftMetadata,
   createPinDraftIdentity,
+  createLocalDraftImageReference,
   DraftRepository,
   hashDraftAccountId,
   LoginSessionGateway,
+  LocalDraftImageReference,
   PinPublishInput,
   PinPublishRepository,
   PinTopicSuggestion,
@@ -25,6 +27,8 @@ import {
   PinPublishPageViewState
 } from './PinPublishPageState';
 import { isSafeLocalDraftId } from 'core';
+import { PreparedPickedImage } from '../platform/MediaPickerCoordinator';
+import { P4ImagePickerPanel } from './P4ImagePickerPanel';
 
 export type PinPublishPageBackCallback = () => void;
 export type PinPublishPageLoginCallback = () => void;
@@ -334,6 +338,10 @@ export struct PinPublishPage {
         .height(180)
         .enabled(this.viewState.canEdit)
         .onChange((value: string): void => this.controller?.updateHtml(value))
+      P4ImagePickerPanel({
+        onPreparedImagesChanged: (images: Array<PreparedPickedImage>): void => this.applyPreparedImages(images),
+        retainPreparedImages: this.viewState.localDraftSaved
+      })
       this.topicEditor()
       Row({ space: $r('app.float.p1_spacing_small') }) {
         Button('保存草稿')
@@ -398,6 +406,18 @@ export struct PinPublishPage {
     return this.viewState.operation === PinPublishOperation.PUBLISHED ? '已发布' : '发布';
   }
 
+  private applyPreparedImages(images: Array<PreparedPickedImage>): void {
+    const references: Array<LocalDraftImageReference> = [];
+    for (let index = 0; index < images.length; index += 1) {
+      try {
+        references.push(createLocalDraftImageReference(images[index].lifecycle.file, images[index].image.descriptor));
+      } catch (_error) {
+        return;
+      }
+    }
+    this.controller?.replaceLocalImageReferences(references);
+  }
+
   private requestPublishConfirmation(): void {
     if (!this.viewState.canPublish || !this.viewState.canEdit) {
       return;
@@ -446,8 +466,9 @@ const PIN_PAGE_LOGIN_REQUIRED_TEXT: string = '登录后才可保存或发布想�
 function initialViewState(): PinPublishPageViewState {
   return {
     phase: PinPublishPagePhase.SETUP,
-    content: { title: '', html: '', images: [], topics: [] },
+    content: { title: '', html: '', images: [], localImageReferences: [], topics: [] },
     operation: PinPublishOperation.IDLE,
+    localDraftSaved: false,
     canEdit: false,
     canSaveDraft: false,
     canPublish: false,
@@ -462,8 +483,9 @@ function initialViewState(): PinPublishPageViewState {
 function configurationFailureState(): PinPublishPageViewState {
   return {
     phase: PinPublishPagePhase.SETUP,
-    content: { title: '', html: '', images: [], topics: [] },
+    content: { title: '', html: '', images: [], localImageReferences: [], topics: [] },
     operation: PinPublishOperation.IDLE,
+    localDraftSaved: false,
     canEdit: false,
     canSaveDraft: false,
     canPublish: false,
@@ -478,8 +500,9 @@ function configurationFailureState(): PinPublishPageViewState {
 function loginRequiredState(): PinPublishPageViewState {
   return {
     phase: PinPublishPagePhase.LOGIN_REQUIRED,
-    content: { title: '', html: '', images: [], topics: [] },
+    content: { title: '', html: '', images: [], localImageReferences: [], topics: [] },
     operation: PinPublishOperation.IDLE,
+    localDraftSaved: false,
     canEdit: false,
     canSaveDraft: false,
     canPublish: false,

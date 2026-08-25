@@ -81,3 +81,4 @@ export * from './src/main/ets/data/DraftCipher';
 export * from './src/main/ets/data/DraftKeyStore';
 export * from './src/main/ets/data/EncryptedDraftBodyStore';
 export * from './src/main/ets/data/DraftRepository';
+export * from './src/main/ets/data/LocalDraftImageReferences';

@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
+  LocalDraftImageReference,
   LoginSessionGateway,
   SessionCookie,
   SessionLoginOperation,
@@ -85,6 +86,8 @@ class FakeAnswerPageController implements AnswerPublishPageController {
     questionId: '123',
     html: '',
     tocEnabled: false,
+    localImageReferences: [],
+    localDraftSaved: false,
     pending: false,
     requiresLogin: false,
     requiresVerification: false,
@@ -110,6 +113,9 @@ class FakeAnswerPageController implements AnswerPublishPageController {
   updateContent(html: string, tocEnabled: boolean): void {
     this.state = this.withState({ html: html, tocEnabled: tocEnabled, phase: AnswerPublishPhase.READY });
     this.emit();
+  }
+
+  updateLocalImageReferences(_references: Array<LocalDraftImageReference>): void {
   }
 
   saveLocalDraft(_now?: number): Promise<void> {
@@ -138,6 +144,8 @@ class FakeAnswerPageController implements AnswerPublishPageController {
       answerId: this.state.answerId,
       html: change.html ?? this.state.html,
       tocEnabled: change.tocEnabled ?? this.state.tocEnabled,
+      localImageReferences: this.state.localImageReferences,
+      localDraftSaved: this.state.localDraftSaved,
       pending: this.state.pending,
       requiresLogin: this.state.requiresLogin,
       requiresVerification: this.state.requiresVerification,

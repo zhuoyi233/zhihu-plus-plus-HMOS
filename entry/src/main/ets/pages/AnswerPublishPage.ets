@@ -3,7 +3,9 @@ import {
   AnswerPublishRepository,
   DraftRepository,
   ExistingAnswerForEditing,
+  createLocalDraftImageReference,
   hashDraftAccountId,
+  LocalDraftImageReference,
   LoginSessionGateway,
   PublishFailure,
   PublishFailureKind,
@@ -16,6 +18,8 @@ import {
   AnswerPublishViewState
 } from './AnswerPublishState';
 import { takeAnswerEditSeed } from './AnswerEditSeedStore';
+import { P4ImagePickerPanel } from './P4ImagePickerPanel';
+import { PreparedPickedImage } from '../platform/MediaPickerCoordinator';
 
 export enum AnswerPublishPagePhase {
   PREPARING = 'preparing',
@@ -31,6 +35,8 @@ export interface AnswerPublishPageViewState {
   readonly answerId?: string;
   readonly html: string;
   readonly tocEnabled: boolean;
+  readonly localImageReferences: Array<LocalDraftImageReference>;
+  readonly localDraftSaved: boolean;
   readonly pending: boolean;
   readonly canPublish: boolean;
   readonly canSaveDraft: boolean;
@@ -44,6 +50,7 @@ export interface AnswerPublishPageController {
   deactivate(): void;
   open(): Promise<void>;
   updateContent(html: string, tocEnabled: boolean): void;
+  updateLocalImageReferences(references: Array<LocalDraftImageReference>): void;
   saveLocalDraft(now?: number): Promise<void>;
   publish(traceId: string, now?: number): Promise<void>;
   continueEditingExistingAnswer(): void;
@@ -116,6 +123,8 @@ export class AnswerPublishPageCoordinator {
       answerId: this.requestedAnswerId,
       html: '',
       tocEnabled: false,
+      localImageReferences: [],
+      localDraftSaved: false,
       pending: false,
       canPublish: false,
       canSaveDraft: false,
@@ -130,6 +139,10 @@ export class AnswerPublishPageCoordinator {
 
   updateContent(html: string, tocEnabled: boolean): void {
     this.controller?.updateContent(html, tocEnabled);
+  }
+
+  updateLocalImageReferences(references: Array<LocalDraftImageReference>): void {
+    this.controller?.updateLocalImageReferences(references);
   }
 
   saveLocalDraft(): void {
@@ -171,6 +184,8 @@ export class AnswerPublishPageCoordinator {
       answerId: this.requestedAnswerId,
       html: '',
       tocEnabled: false,
+      localImageReferences: [],
+      localDraftSaved: false,
       pending: true,
       canPublish: false,
       canSaveDraft: false,
@@ -211,6 +226,8 @@ export class AnswerPublishPageCoordinator {
       answerId: state.answerId ?? this.requestedAnswerId,
       html: state.html,
       tocEnabled: state.tocEnabled,
+      localImageReferences: state.localImageReferences,
+      localDraftSaved: state.localDraftSaved,
       pending: state.pending,
       canPublish: !state.pending && state.phase !== AnswerPublishPhase.PUBLISHED && state.html.trim().length > 0,
       canSaveDraft: !state.pending && state.phase !== AnswerPublishPhase.PUBLISHED,
@@ -226,6 +243,8 @@ export class AnswerPublishPageCoordinator {
       answerId: this.requestedAnswerId,
       html: '',
       tocEnabled: false,
+      localImageReferences: [],
+      localDraftSaved: false,
       pending: false,
       canPublish: false,
       canSaveDraft: false,
@@ -241,6 +260,8 @@ export class AnswerPublishPageCoordinator {
       answerId: this.requestedAnswerId,
       html: '',
       tocEnabled: false,
+      localImageReferences: [],
+      localDraftSaved: false,
       pending: false,
       canPublish: false,
       canSaveDraft: false,
@@ -435,6 +456,11 @@ export struct AnswerPublishPage {
             this.coordinator?.updateContent(value, this.viewState.tocEnabled);
           })
 
+        P4ImagePickerPanel({
+          onPreparedImagesChanged: (images: Array<PreparedPickedImage>): void => this.applyPreparedImages(images),
+          retainPreparedImages: this.viewState.localDraftSaved
+        })
+
         Row({ space: $r('app.float.p1_spacing_small') }) {
           Text('显示目录')
             .fontSize($r('app.float.p1_body_font_size'))
@@ -492,6 +518,18 @@ export struct AnswerPublishPage {
     this.publishConfirmationVisible = true;
   }
 
+  private applyPreparedImages(images: Array<PreparedPickedImage>): void {
+    const references: Array<LocalDraftImageReference> = [];
+    for (let index = 0; index < images.length; index += 1) {
+      try {
+        references.push(createLocalDraftImageReference(images[index].lifecycle.file, images[index].image.descriptor));
+      } catch (_error) {
+        return;
+      }
+    }
+    this.coordinator?.updateLocalImageReferences(references);
+  }
+
   @Builder
   private publishConfirmation() {
     Column({ space: $r('app.float.p1_spacing_medium') }) {
@@ -534,6 +572,8 @@ function emptyViewState(): AnswerPublishPageViewState {
     questionId: '',
     html: '',
     tocEnabled: false,
+    localImageReferences: [],
+    localDraftSaved: false,
     pending: false,
     canPublish: false,
     canSaveDraft: false,

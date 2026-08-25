@@ -20,6 +20,11 @@ export type P4ImagePickerSelectionCallback = (images: Array<PreparedPickedImage>
 @Component
 export struct P4ImagePickerPanel {
   onPreparedImagesChanged: P4ImagePickerSelectionCallback = (_images: Array<PreparedPickedImage>): void => {};
+  /**
+   * 编辑器在 DraftRepository 确认保存受控引用后设为 true，所有权随之移交给草稿；
+   * 面板离开时不得删除仍可恢复的缓存副本。未保存的选择仍按原逻辑立即清理。
+   */
+  retainPreparedImages: boolean = false;
   @State private viewState: MediaPickerViewState = initialPickerViewState();
   private coordinator: MediaPickerCoordinator | undefined = undefined;
 
@@ -45,7 +50,7 @@ export struct P4ImagePickerPanel {
   aboutToDisappear(): void {
     const coordinator = this.coordinator;
     this.coordinator = undefined;
-    if (coordinator !== undefined) {
+    if (coordinator !== undefined && !this.retainPreparedImages) {
       void coordinator.release();
     }
   }

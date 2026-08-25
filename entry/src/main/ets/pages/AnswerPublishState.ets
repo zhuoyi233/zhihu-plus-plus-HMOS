@@ -8,11 +8,15 @@ import {
   DraftRepository,
   ExistingAnswerForEditing,
   isExistingAnswerConflict,
+  LocalDraftImageReference,
   LoginSessionGateway,
+  cloneLocalDraftImageReferences,
+  parseLocalDraftImageReferences,
   parsePublishedContentId,
   PublishFailure,
   PublishFailureKind,
   SessionStatus,
+  serializeLocalDraftImageReferences,
   toPublishFailure
 } from 'data';
 
@@ -35,6 +39,9 @@ export interface AnswerPublishViewState {
   readonly answerId?: string;
   readonly html: string;
   readonly tocEnabled: boolean;
+  /** 仅用于本地草稿恢复；不属于知乎发布图片。 */
+  readonly localImageReferences: Array<LocalDraftImageReference>;
+  readonly localDraftSaved: boolean;
   readonly pending: boolean;
   readonly requiresLogin: boolean;
   readonly requiresVerification: boolean;
@@ -69,6 +76,8 @@ export class AnswerPublishController {
   private answerId?: string;
   private html: string = '';
   private tocEnabled: boolean = false;
+  private localImageReferences: Array<LocalDraftImageReference> = [];
+  private localDraftSaved: boolean = false;
   private pending: boolean = false;
   private requiresLogin: boolean = false;
   private requiresVerification: boolean = false;
@@ -116,6 +125,8 @@ export class AnswerPublishController {
       answerId: this.answerId,
       html: this.html,
       tocEnabled: this.tocEnabled,
+      localImageReferences: cloneLocalDraftImageReferences(this.localImageReferences),
+      localDraftSaved: this.localDraftSaved,
       pending: this.pending,
       requiresLogin: this.requiresLogin,
       requiresVerification: this.requiresVerification,
@@ -151,6 +162,8 @@ export class AnswerPublishController {
       if (hasLocalDraft && local.draft !== undefined) {
         this.html = local.draft.html;
         this.tocEnabled = local.draft.metadata.tocEnabled;
+        this.localImageReferences = parseLocalDraftImageReferences(local.draft.metadata.imageRefsJson);
+        this.localDraftSaved = true;
       } else if (this.answerId !== undefined) {
         const existing = await this.publishRepository.fetchAnswerForEditing(this.answerId);
         if (!this.isCurrent(operation)) {
@@ -171,9 +184,27 @@ export class AnswerPublishController {
     }
     this.html = html;
     this.tocEnabled = tocEnabled;
+    this.localDraftSaved = false;
     this.phase = AnswerPublishPhase.READY;
     this.clearFailure();
     this.emit();
+  }
+
+  /** 只接收已验证的受控缓存引用；这里不会上传或写远端草稿。 */
+  updateLocalImageReferences(references: Array<LocalDraftImageReference>): void {
+    if (!this.active || this.pending || this.phase === AnswerPublishPhase.RELEASED ||
+      this.phase === AnswerPublishPhase.PUBLISHED) {
+      return;
+    }
+    try {
+      this.localImageReferences = parseLocalDraftImageReferences(serializeLocalDraftImageReferences(references));
+      this.localDraftSaved = false;
+      this.phase = AnswerPublishPhase.READY;
+      this.clearFailure();
+      this.emit();
+    } catch (_error) {
+      // 非受控路径和不完整元数据均不能进入草稿或远端发布链路。
+    }
   }
 
   async saveLocalDraft(now: number = Date.now()): Promise<void> {
@@ -188,6 +219,7 @@ export class AnswerPublishController {
         return;
       }
       this.phase = AnswerPublishPhase.READY;
+      this.localDraftSaved = true;
       this.clearFailure();
       this.emit();
     } catch (error) {
@@ -296,7 +328,7 @@ export class AnswerPublishController {
       title: '',
       plainTextLength: countPlainText(this.html),
       tocEnabled: this.tocEnabled,
-      imageRefsJson: '[]',
+      imageRefsJson: serializeLocalDraftImageReferences(this.localImageReferences),
       topicRefsJson: '[]',
       dirty: true
     };

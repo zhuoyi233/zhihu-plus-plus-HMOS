@@ -9,6 +9,7 @@ import {
   buildOssSinglePutRequest,
   createGifUploadParts,
   createImageTemporaryLifecycle,
+  createLocalDraftImageReference,
   defaultImageSelectionLimits,
   ImageResourceReleasePlan,
   ImageTemporaryFile,
@@ -25,12 +26,14 @@ import {
   OssTemporaryCredential,
   parseImageApplyResult,
   parseImageStatusResult,
+  parseLocalDraftImageReferences,
   parseOssMultipartUploadId,
   PickedImageFormat,
   PickedImageInspection,
   requireOssEtag,
   sniffImageBinary,
   transitionImageTemporaryLifecycle,
+  serializeLocalDraftImageReferences,
   validatePickedImageBatch,
   ZhihuHttpMethod
 } from 'data';
@@ -153,6 +156,12 @@ export default function imageUploadContractsTest(): void {
       expect(afterUpload.deleteTemporaryFile).assertTrue();
       expect(afterUpload.releasePixelMap).assertTrue();
       expect(imageTemporaryReleasePlan(cancelled, 1770000000001).closeFileHandles).assertTrue();
+      const reference = createLocalDraftImageReference(temporaryFile(), sniffImageBinary(PNG_HEADER));
+      const restored = parseLocalDraftImageReferences(serializeLocalDraftImageReferences([reference]));
+      expect(restored.length).assertEqual(1);
+      expect(restored[0].fileName).assertEqual('0123456789abcdef0123456789abcdef.png');
+      expect(serializeLocalDraftImageReferences([reference]).includes('file://media')).assertFalse();
+      expect(parseLocalDraftImageReferences('[{"fileName":"../../outside.png"}]').length).assertEqual(0);
       expect((): void => {
         transitionImageTemporaryLifecycle(uploaded, ImageTemporaryState.PROCESSING);
       }).assertThrowError('图片输入无效');

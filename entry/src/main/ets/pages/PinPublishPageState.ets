@@ -2,6 +2,7 @@ import {
   ContentDraftIdentity,
   DraftRepository,
   LoginSessionGateway,
+  LocalDraftImageReference,
   PinPublishRepository,
   PinTopicSuggestion,
   PublishPinTopic,
@@ -37,6 +38,7 @@ export interface PinPublishPageViewState {
   readonly phase: PinPublishPagePhase;
   readonly content: PinDraftContent;
   readonly operation: PinPublishOperation;
+  readonly localDraftSaved: boolean;
   readonly canEdit: boolean;
   readonly canSaveDraft: boolean;
   readonly canPublish: boolean;
@@ -108,7 +110,8 @@ export class PinPublishPageController {
       return;
     }
     const content = this.publish.snapshot().content;
-    this.publish.replaceContent({ title: title, html: content.html, images: content.images, topics: content.topics });
+    this.publish.replaceContent({ title: title, html: content.html, images: content.images,
+      localImageReferences: content.localImageReferences, topics: content.topics });
   }
 
   updateHtml(html: string): void {
@@ -116,7 +119,8 @@ export class PinPublishPageController {
       return;
     }
     const content = this.publish.snapshot().content;
-    this.publish.replaceContent({ title: content.title, html: html, images: content.images, topics: content.topics });
+    this.publish.replaceContent({ title: content.title, html: html, images: content.images,
+      localImageReferences: content.localImageReferences, topics: content.topics });
   }
 
   replaceImages(images: Array<UploadedZhihuImage>): void {
@@ -124,7 +128,15 @@ export class PinPublishPageController {
       return;
     }
     const content = this.publish.snapshot().content;
-    this.publish.replaceContent({ title: content.title, html: content.html, images: images, topics: content.topics });
+    this.publish.replaceContent({ title: content.title, html: content.html, images: images,
+      localImageReferences: content.localImageReferences, topics: content.topics });
+  }
+
+  replaceLocalImageReferences(references: Array<LocalDraftImageReference>): void {
+    if (!this.canWrite()) {
+      return;
+    }
+    this.publish.replaceLocalImageReferences(references);
   }
 
   requestTopicSuggestions(query: string): void {
@@ -171,6 +183,7 @@ export class PinPublishPageController {
       phase: this.phase,
       content: released ? emptyContent() : cloneContent(publish.content),
       operation: publish.operation,
+      localDraftSaved: publish.localDraftSaved,
       canEdit: canEdit,
       canSaveDraft: canEdit && hasContent(publish.content),
       canPublish: canEdit && hasContent(publish.content),
@@ -250,11 +263,12 @@ function isBusy(operation: PinPublishOperation): boolean {
 }
 
 function hasContent(content: PinDraftContent): boolean {
-  return content.title.trim().length > 0 || content.html.trim().length > 0 || content.images.length > 0;
+  return content.title.trim().length > 0 || content.html.trim().length > 0 || content.images.length > 0 ||
+    content.localImageReferences.length > 0;
 }
 
 function emptyContent(): PinDraftContent {
-  return { title: '', html: '', images: [], topics: [] };
+  return { title: '', html: '', images: [], localImageReferences: [], topics: [] };
 }
 
 function cloneContent(content: PinDraftContent): PinDraftContent {
@@ -269,6 +283,15 @@ function cloneContent(content: PinDraftContent): PinDraftContent {
       height: image.height,
       watermark: image.watermark,
       watermarkUrl: image.watermarkUrl
+    })),
+    localImageReferences: content.localImageReferences.map((reference: LocalDraftImageReference): LocalDraftImageReference => ({
+      fileName: reference.fileName,
+      mimeType: reference.mimeType,
+      byteLength: reference.byteLength,
+      width: reference.width,
+      height: reference.height,
+      animated: reference.animated,
+      createdAtMillis: reference.createdAtMillis
     })),
     topics: content.topics.map((topic: PublishPinTopic): PublishPinTopic => ({
       topicId: topic.topicId,

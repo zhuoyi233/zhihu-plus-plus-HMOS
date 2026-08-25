@@ -5,12 +5,15 @@ import {
   buildPinPublishRequest,
   DraftRepository,
   MAX_PIN_TOPIC_COUNT,
+  LocalDraftImageReference,
   PinPublishInput,
   PinPublishRepository,
   PinTopicSuggestion,
   PublishFailure,
   PublishFailureKind,
   PublishPinTopic,
+  parseLocalDraftImageReferences,
+  serializeLocalDraftImageReferences,
   toPublishFailure,
   UploadedZhihuImage
 } from 'data';
@@ -34,6 +37,8 @@ export interface PinDraftContent {
   readonly title: string;
   readonly html: string;
   readonly images: Array<UploadedZhihuImage>;
+  /** 尚未上传的应用受控缓存引用；不传给远端发布合同。 */
+  readonly localImageReferences: Array<LocalDraftImageReference>;
   readonly topics: Array<PublishPinTopic>;
 }
 
@@ -167,6 +172,20 @@ export class PinPublishController {
     this.emit();
   }
 
+  /** 本地引用只进入 DraftRepository；上传必须由最终发布确认后的专用网关接管。 */
+  replaceLocalImageReferences(references: Array<LocalDraftImageReference>): void {
+    if (!this.active || this.isBusy()) {
+      return;
+    }
+    this.replaceContent({
+      title: this.content.title,
+      html: this.content.html,
+      images: this.content.images,
+      localImageReferences: normalizeLocalImageReferences(references),
+      topics: this.content.topics
+    });
+  }
+
   selectTopic(topic: PublishPinTopic): void {
     if (!this.active || this.isBusy() || this.content.topics.some((item: PublishPinTopic): boolean => item.topicId === topic.topicId)) {
       return;
@@ -176,6 +195,7 @@ export class PinPublishController {
       title: this.content.title,
       html: this.content.html,
       images: this.content.images,
+      localImageReferences: this.content.localImageReferences,
       topics: topics
     });
   }
@@ -192,6 +212,7 @@ export class PinPublishController {
       title: this.content.title,
       html: this.content.html,
       images: this.content.images,
+      localImageReferences: this.content.localImageReferences,
       topics: topics
     });
   }
@@ -200,8 +221,7 @@ export class PinPublishController {
     if (!this.active || this.isBusy()) {
       return;
     }
-    const input = this.createPublishInput();
-    if (input === undefined) {
+    if (!hasDraftContent(this.content)) {
       this.fail(new PublishFailure(PublishFailureKind.INVALID_INPUT), PIN_EMPTY_CONTENT_MESSAGE);
       return;
     }
@@ -209,7 +229,7 @@ export class PinPublishController {
     this.failure = undefined;
     this.emit();
     try {
-      await this.drafts.save(this.toDraftSaveInput(input));
+      await this.drafts.save(this.toDraftSaveInput());
       if (!this.active) {
         return;
       }
@@ -401,20 +421,21 @@ export class PinPublishController {
     }
   }
 
-  private toDraftSaveInput(input: PinPublishInput, remoteContentId?: string,
+  private toDraftSaveInput(input?: PinPublishInput, remoteContentId?: string,
     dirty: boolean = true): ContentDraftSaveInput {
     return {
       draftKey: this.identity.draftKey,
       accountKey: this.identity.accountKey,
       kind: this.identity.kind,
       targetId: this.identity.targetId,
-      html: input.html,
+      html: input?.html ?? this.content.html,
       remoteContentId: remoteContentId,
-      title: input.title,
-      plainTextLength: input.textLength,
+      title: input?.title ?? this.content.title,
+      plainTextLength: input?.textLength ?? plainTextLength(this.content.html),
       tocEnabled: false,
-      imageRefsJson: JSON.stringify(input.images),
-      topicRefsJson: JSON.stringify(input.topics),
+      imageRefsJson: serializeDraftImageReferences(input?.images ?? this.content.images,
+        this.content.localImageReferences),
+      topicRefsJson: JSON.stringify(input?.topics ?? this.content.topics),
       dirty: dirty
     };
   }
@@ -453,7 +474,7 @@ class PinPublishMessageFailure extends PublishFailure {
 }
 
 function emptyPinDraftContent(): PinDraftContent {
-  return { title: '', html: '', images: [], topics: [] };
+  return { title: '', html: '', images: [], localImageReferences: [], topics: [] };
 }
 
 function normalizePinDraftContent(content: PinDraftContent): PinDraftContent {
@@ -461,6 +482,7 @@ function normalizePinDraftContent(content: PinDraftContent): PinDraftContent {
     title: content.title,
     html: content.html,
     images: cloneImages(content.images),
+    localImageReferences: normalizeLocalImageReferences(content.localImageReferences),
     topics: dedupeTopics(content.topics)
   };
 }
@@ -479,6 +501,32 @@ function cloneImages(images: Array<UploadedZhihuImage>): Array<UploadedZhihuImag
     watermark: image.watermark,
     watermarkUrl: image.watermarkUrl
   }));
+}
+
+function normalizeLocalImageReferences(references: Array<LocalDraftImageReference>): Array<LocalDraftImageReference> {
+  try {
+    return parseLocalDraftImageReferences(serializeLocalDraftImageReferences(references));
+  } catch (_error) {
+    return [];
+  }
+}
+
+function serializeDraftImageReferences(images: Array<UploadedZhihuImage>,
+  localReferences: Array<LocalDraftImageReference>): string {
+  const uploaded = JSON.stringify(cloneImages(images));
+  const local = serializeLocalDraftImageReferences(localReferences);
+  if (images.length === 0) {
+    return local;
+  }
+  if (localReferences.length === 0) {
+    return uploaded;
+  }
+  return uploaded.substring(0, uploaded.length - 1) + ',' + local.substring(1);
+}
+
+function hasDraftContent(content: PinDraftContent): boolean {
+  return content.title.trim().length > 0 || content.html.trim().length > 0 || content.images.length > 0 ||
+    content.localImageReferences.length > 0;
 }
 
 function cloneTopic(topic: PublishPinTopic): PublishPinTopic {
