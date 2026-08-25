@@ -20,6 +20,7 @@ export interface VideoPlaybackSource {
 
 export interface VideoPlayerCallbacks {
   readonly onReady: (durationMs: number) => void;
+  readonly onPosition: (positionMs: number) => void;
   readonly onCompleted: () => void;
   readonly onError: () => void;
 }
@@ -186,6 +187,15 @@ export class VideoPlaybackController {
         this.playback = markVideoReady(this.playback, generation, durationMs);
         if (this.playback.phase === VideoPlaybackPhase.READY) {
           this.notify('视频已就绪');
+        }
+      },
+      onPosition: (positionMs: number): void => {
+        if (!this.active || generation !== this.playback.generation) {
+          return;
+        }
+        this.playback = updateVideoPosition(this.playback, generation, positionMs);
+        if (this.playback.phase === VideoPlaybackPhase.PLAYING) {
+          this.notify('正在播放');
         }
       },
       onCompleted: (): void => {

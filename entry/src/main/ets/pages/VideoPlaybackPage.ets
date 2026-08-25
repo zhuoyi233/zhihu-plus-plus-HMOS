@@ -1,11 +1,11 @@
 import {
-  UnavailableVideoPlayerAdapter,
   UnavailableVideoSourceResolver,
   VideoPlaybackController,
   VideoPlaybackPageViewState,
   VideoPlayerAdapter,
   VideoSourceResolver
 } from './VideoPlaybackController';
+import { Api26VideoPlayerAdapter } from './Api26VideoPlayerAdapter';
 import { VideoPlaybackPhase } from './VideoPlaybackState';
 
 @Component
@@ -17,34 +17,39 @@ export struct VideoPlaybackPage {
     playback: { phase: VideoPlaybackPhase.IDLE, generation: 0, positionMs: 0, durationMs: 0 },
     message: '正在准备视频…'
   };
+  @State private surfaceReady: boolean = false;
+  private readonly surfaceController: XComponentController = new XComponentController();
   private controller: VideoPlaybackController | undefined = undefined;
+  private appeared: boolean = false;
+  private surfaceId: string = '';
 
   aboutToAppear(): void {
-    if (this.controller !== undefined) {
-      return;
-    }
-    const sourceResolver = this.sourceResolver ?? new UnavailableVideoSourceResolver();
-    const player = this.player ?? new UnavailableVideoPlayerAdapter();
-    this.controller = new VideoPlaybackController(sourceResolver, player, (state: VideoPlaybackPageViewState): void => {
-      this.viewState = state;
-    });
-    this.controller.activate(this.contentId);
+    this.appeared = true;
+    this.activateWhenSurfaceReady();
   }
 
   aboutToDisappear(): void {
-    this.controller?.deactivate();
-    this.controller = undefined;
+    this.appeared = false;
+    this.releaseController();
   }
 
   build() {
     Column({ space: $r('app.float.p1_spacing_medium') }) {
       Stack({ alignContent: Alignment.Center }) {
-        Text('视频画面将在设备播放器完成接入后显示')
-          .id('p4_video_surface_placeholder')
-          .fontSize($r('app.float.p1_body_font_size'))
-          .fontColor($r('app.color.secondary_text'))
-          .textAlign(TextAlign.Center)
-          .padding($r('app.float.p1_card_padding'))
+        XComponent({ id: 'p4_video_surface', type: XComponentType.SURFACE, controller: this.surfaceController })
+          .id('p4_video_surface')
+          .width('100%')
+          .height('100%')
+          .onLoad((): void => this.onSurfaceReady())
+          .onDestroy((): void => this.onSurfaceDestroyed())
+        if (!this.surfaceReady) {
+          Text('正在初始化视频画面')
+            .id('p4_video_surface_placeholder')
+            .fontSize($r('app.float.p1_body_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .textAlign(TextAlign.Center)
+            .padding($r('app.float.p1_card_padding'))
+        }
       }
       .width('100%')
       .height(220)
@@ -66,12 +71,23 @@ export struct VideoPlaybackPage {
           .id('p4_video_playback_progress')
           .fontSize($r('app.float.p1_secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
+        Slider({
+          value: this.viewState.playback.positionMs,
+          min: 0,
+          max: this.viewState.playback.durationMs,
+          step: 1000
+        })
+          .id('p4_video_playback_seek')
+          .width('100%')
+          .enabled(this.canSeek())
+          .onChange((value: number): void => this.controller?.seek(Math.floor(value)))
       }
 
       Button(this.playButtonLabel())
         .id('p4_video_playback_toggle')
         .width('100%')
         .fontSize($r('app.float.p1_body_font_size'))
+        .enabled(this.canTogglePlayback())
         .onClick((): void => this.togglePlayback())
     }
     .alignItems(HorizontalAlign.Start)
@@ -89,8 +105,51 @@ export struct VideoPlaybackPage {
     this.controller?.play();
   }
 
+  private onSurfaceReady(): void {
+    const surfaceId = this.surfaceController.getXComponentSurfaceId();
+    if (surfaceId.length === 0) {
+      return;
+    }
+    this.surfaceId = surfaceId;
+    this.surfaceReady = true;
+    this.activateWhenSurfaceReady();
+  }
+
+  private onSurfaceDestroyed(): void {
+    this.surfaceReady = false;
+    this.surfaceId = '';
+    this.releaseController();
+  }
+
+  private activateWhenSurfaceReady(): void {
+    if (!this.appeared || !this.surfaceReady || this.controller !== undefined) {
+      return;
+    }
+    const sourceResolver = this.sourceResolver ?? new UnavailableVideoSourceResolver();
+    const player = this.player ?? new Api26VideoPlayerAdapter(this.surfaceId);
+    this.controller = new VideoPlaybackController(sourceResolver, player, (state: VideoPlaybackPageViewState): void => {
+      this.viewState = state;
+    });
+    this.controller.activate(this.contentId);
+  }
+
+  private releaseController(): void {
+    this.controller?.deactivate();
+    this.controller = undefined;
+  }
+
   private playButtonLabel(): string {
     return this.viewState.playback.phase === VideoPlaybackPhase.PLAYING ? '暂停' : '播放';
+  }
+
+  private canTogglePlayback(): boolean {
+    return this.viewState.playback.phase === VideoPlaybackPhase.READY ||
+      this.viewState.playback.phase === VideoPlaybackPhase.PLAYING ||
+      this.viewState.playback.phase === VideoPlaybackPhase.PAUSED;
+  }
+
+  private canSeek(): boolean {
+    return this.viewState.playback.phase === VideoPlaybackPhase.PLAYING;
   }
 
   private formatDuration(value: number): string {

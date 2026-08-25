@@ -121,5 +121,26 @@ export default function videoPlaybackControllerTest(): void {
         done();
       });
     });
+
+    it('updatesPlayingPositionFromInjectedPlayerCallback', 0, (done: Function) => {
+      const player = new FakeVideoPlayer();
+      let latest: VideoPlaybackPageViewState | undefined = undefined;
+      const source: VideoPlaybackSource = { contentId: '789', url: 'https://video.zhimg.com/asset.mp4' };
+      const controller = new VideoPlaybackController(new FakeSourceResolver(source), player,
+        (state: VideoPlaybackPageViewState): void => {
+          latest = state;
+        });
+
+      controller.activate('789');
+      Promise.resolve().then((): void => {
+        player.callbacks?.onReady(1000);
+        controller.play();
+      }).then((): void => {
+        player.callbacks?.onPosition(700);
+        expect(latest?.playback.phase).assertEqual(VideoPlaybackPhase.PLAYING);
+        expect(latest?.playback.positionMs).assertEqual(700);
+        done();
+      });
+    });
   });
 }

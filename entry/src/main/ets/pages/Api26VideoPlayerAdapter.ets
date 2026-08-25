@@ -6,6 +6,7 @@ export type Api26VideoPlayerState = 'prepared' | 'completed';
 
 export type Api26VideoPlayerStateListener = (state: Api26VideoPlayerState) => void;
 export type Api26VideoPlayerErrorListener = () => void;
+export type Api26VideoPlayerTimeListener = (positionMs: number) => void;
 
 /**
  * 对 AVPlayer 的窄封装，便于在 Hypium 中验证资源释放和 XComponent 绑定。
@@ -16,6 +17,7 @@ export interface Api26NativeVideoPlayer {
   setSurfaceId(surfaceId: string): void;
   getDuration(): number;
   onStateChange(listener: Api26VideoPlayerStateListener): void;
+  onTimeUpdate(listener: Api26VideoPlayerTimeListener): void;
   onError(listener: Api26VideoPlayerErrorListener): void;
   prepare(): Promise<void>;
   play(): Promise<void>;
@@ -53,6 +55,12 @@ export class HarmonyApi26NativeVideoPlayer implements Api26NativeVideoPlayer {
       if (state === 'prepared' || state === 'completed') {
         listener(state);
       }
+    });
+  }
+
+  onTimeUpdate(listener: Api26VideoPlayerTimeListener): void {
+    this.player.on('timeUpdate', (positionMs: number): void => {
+      listener(positionMs);
     });
   }
 
@@ -128,6 +136,9 @@ export class Api26VideoPlayerAdapter implements VideoPlayerAdapter {
       player.onStateChange((state: Api26VideoPlayerState): void => {
         this.onNativeState(currentOperation, state);
       });
+      player.onTimeUpdate((positionMs: number): void => {
+        this.onNativeTimeUpdate(currentOperation, positionMs);
+      });
       player.onError((): void => {
         this.onNativeError(currentOperation);
       });
@@ -202,6 +213,12 @@ export class Api26VideoPlayerAdapter implements VideoPlayerAdapter {
   private onNativeError(operation: number): void {
     if (this.isCurrent(operation)) {
       this.callbacks?.onError();
+    }
+  }
+
+  private onNativeTimeUpdate(operation: number, positionMs: number): void {
+    if (this.isCurrent(operation) && Number.isSafeInteger(positionMs) && positionMs >= 0) {
+      this.callbacks?.onPosition(positionMs);
     }
   }
 

@@ -6,6 +6,7 @@ import {
   Api26VideoPlayerErrorListener,
   Api26VideoPlayerState,
   Api26VideoPlayerStateListener,
+  Api26VideoPlayerTimeListener,
   isApi26VideoSurfaceId
 } from '../main/ets/pages/Api26VideoPlayerAdapter';
 import { VideoPlaybackSource, VideoPlayerCallbacks } from '../main/ets/pages/VideoPlaybackController';
@@ -20,6 +21,7 @@ class FakeApi26NativeVideoPlayer implements Api26NativeVideoPlayer {
   pauseCalls: number = 0;
   seekCalls: number = 0;
   private stateListener: Api26VideoPlayerStateListener | undefined = undefined;
+  private timeListener: Api26VideoPlayerTimeListener | undefined = undefined;
   private errorListener: Api26VideoPlayerErrorListener | undefined = undefined;
 
   setSource(url: string): void {
@@ -36,6 +38,10 @@ class FakeApi26NativeVideoPlayer implements Api26NativeVideoPlayer {
 
   onStateChange(listener: Api26VideoPlayerStateListener): void {
     this.stateListener = listener;
+  }
+
+  onTimeUpdate(listener: Api26VideoPlayerTimeListener): void {
+    this.timeListener = listener;
   }
 
   onError(listener: Api26VideoPlayerErrorListener): void {
@@ -73,6 +79,10 @@ class FakeApi26NativeVideoPlayer implements Api26NativeVideoPlayer {
   emitError(): void {
     this.errorListener?.();
   }
+
+  emitTime(positionMs: number): void {
+    this.timeListener?.(positionMs);
+  }
 }
 
 class FakeApi26NativeVideoPlayerFactory implements Api26NativeVideoPlayerFactory {
@@ -89,10 +99,14 @@ function fixtureSource(): VideoPlaybackSource {
   return { contentId: 'fixture-1', url: 'https://video.zhimg.com/fixture.mp4' };
 }
 
-function createCallbacks(ready: Array<number>, completed: Array<boolean>, errors: Array<boolean>): VideoPlayerCallbacks {
+function createCallbacks(ready: Array<number>, positions: Array<number>, completed: Array<boolean>,
+  errors: Array<boolean>): VideoPlayerCallbacks {
   return {
     onReady: (durationMs: number): void => {
       ready.push(durationMs);
+    },
+    onPosition: (positionMs: number): void => {
+      positions.push(positionMs);
     },
     onCompleted: (): void => {
       completed.push(true);
@@ -109,17 +123,20 @@ export default function api26VideoPlayerAdapterTest(): void {
       const factory = new FakeApi26NativeVideoPlayerFactory();
       const adapter = new Api26VideoPlayerAdapter('fixture-surface-26', factory);
       const ready: Array<number> = [];
+      const positions: Array<number> = [];
       const completed: Array<boolean> = [];
       const errors: Array<boolean> = [];
 
-      adapter.prepare(fixtureSource(), createCallbacks(ready, completed, errors)).then((): void => {
+      adapter.prepare(fixtureSource(), createCallbacks(ready, positions, completed, errors)).then((): void => {
         expect(factory.createCalls).assertEqual(1);
         expect(factory.player.surfaceId).assertEqual('fixture-surface-26');
         expect(factory.player.source).assertEqual('https://video.zhimg.com/fixture.mp4');
         expect(factory.player.prepareCalls).assertEqual(1);
         factory.player.emitState('prepared');
+        factory.player.emitTime(500);
         factory.player.emitState('completed');
         expect(ready[0]).assertEqual(1200);
+        expect(positions[0]).assertEqual(500);
         expect(completed.length).assertEqual(1);
         expect(errors.length).assertEqual(0);
         done();
@@ -130,16 +147,19 @@ export default function api26VideoPlayerAdapterTest(): void {
       const factory = new FakeApi26NativeVideoPlayerFactory();
       const adapter = new Api26VideoPlayerAdapter('fixture-surface-26', factory);
       const ready: Array<number> = [];
+      const positions: Array<number> = [];
       const completed: Array<boolean> = [];
       const errors: Array<boolean> = [];
 
-      adapter.prepare(fixtureSource(), createCallbacks(ready, completed, errors)).then((): Promise<void> => {
+      adapter.prepare(fixtureSource(), createCallbacks(ready, positions, completed, errors)).then((): Promise<void> => {
         return adapter.release();
       }).then((): void => {
         factory.player.emitState('prepared');
+        factory.player.emitTime(500);
         factory.player.emitError();
         expect(factory.player.releaseCalls).assertEqual(1);
         expect(ready.length).assertEqual(0);
+        expect(positions.length).assertEqual(0);
         expect(completed.length).assertEqual(0);
         expect(errors.length).assertEqual(0);
         done();
@@ -150,10 +170,11 @@ export default function api26VideoPlayerAdapterTest(): void {
       const factory = new FakeApi26NativeVideoPlayerFactory();
       const adapter = new Api26VideoPlayerAdapter('', factory);
       const ready: Array<number> = [];
+      const positions: Array<number> = [];
       const completed: Array<boolean> = [];
       const errors: Array<boolean> = [];
 
-      adapter.prepare(fixtureSource(), createCallbacks(ready, completed, errors)).catch((_error: Error): void => {
+      adapter.prepare(fixtureSource(), createCallbacks(ready, positions, completed, errors)).catch((_error: Error): void => {
         expect(factory.createCalls).assertEqual(0);
         expect(isApi26VideoSurfaceId('fixture-surface-26')).assertTrue();
         expect(isApi26VideoSurfaceId('bad\nvalue')).assertFalse();
