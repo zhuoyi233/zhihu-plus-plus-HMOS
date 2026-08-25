@@ -148,6 +148,23 @@ export default function draftRepositoryTest(): void {
       expect(correctAccount.status).assertEqual(ContentDraftLoadStatus.FOUND);
     });
 
+    it('listsOnlyMetadataInTheRequestedAccountScopeWithoutReadingBodies', 0, async () => {
+      const metadataStore = new MemoryMetadataStore();
+      const bodyStore = new MemoryBodyStore();
+      const repository = new DraftRepository(metadataStore, bodyStore);
+      await repository.save(answerInput(FIRST_ACCOUNT, '<p>first private body</p>'), 100);
+      await repository.save(answerInput(SECOND_ACCOUNT, '<p>second private body</p>'), 200);
+
+      const firstAccount = await repository.listMetadataForAccount(FIRST_ACCOUNT);
+      const secondAccount = await repository.listMetadataForAccount(SECOND_ACCOUNT);
+
+      expect(firstAccount.length).assertEqual(1);
+      expect(firstAccount[0].accountKey).assertEqual(FIRST_ACCOUNT);
+      expect(firstAccount[0].draftKey.includes('first private body')).assertFalse();
+      expect(secondAccount.length).assertEqual(1);
+      expect(secondAccount[0].accountKey).assertEqual(SECOND_ACCOUNT);
+    });
+
     it('containsDamagedEnvelopeAndDeletesMetadataAndBodyOnlyOnExplicitDiscard', 0, async () => {
       const metadataStore = new MemoryMetadataStore();
       const bodyStore = new MemoryBodyStore();

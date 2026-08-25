@@ -59,6 +59,7 @@ export class DraftRepository {
     }
   }
 
+  /** 只读已加密正文之外的恢复元数据；调用方不得借此跨账号枚举草稿。 */
   async listMetadataForAccount(accountKey: string): Promise<Array<ContentDraftMetadata>> {
     if (accountKey.length === 0 || accountKey.length > 160) {
       return [];
