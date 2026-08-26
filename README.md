@@ -1,5 +1,42 @@
 # Zhihu++：注重隐私、互联网个人权利和无广告的知乎客户端
 
+## HarmonyOS 移植版（本仓库）
+
+本仓库是 Zhihu++ 的 **鸿蒙（HarmonyOS）原生移植版**：用 ArkTS/ArkUI 重写，而非把安卓 Kotlin/Compose 代码直接搬运行，目标是在鸿蒙设备上提供与安卓 Lite 版一致的隐私增强、去广告、内容过滤体验。
+
+- **迁移基线**：安卓 Lite 版；开发工具固定 DevEco Studio 6.1.1 Release；运行/编译基线固定 API 26（HarmonyOS 26.0.0），`targetSdkVersion`/`compatibleSdkVersion` 均为 6.1.1(24)。
+- **工程模型**：Stage 模型，ArkUI 声明式范式，状态管理优先 V2；耗时计算用 TaskPool，必要时才用 Worker。
+- **应用标识**：`bundleName` 为 `com.github.zhuoyi233.zhplus`（与上游安卓包名不同）。
+
+### 工程结构
+
+- `entry`：HAP 主模块（页面、登录、创作发布、信息流等 UI 与编排）。
+- `core` / `data` / `reader`：HAR 共享库（协议解析、仓储、过滤、阅读器等核心能力）。
+- `AppScope`：应用壳与资源。
+- 构建：`oh-package.json5` + hvigor；`build-profile.json5` 的本地签名配置已 `git update-index --skip-worktree`，不进提交。
+
+### 构建与验证
+
+需要 **pwsh 7**（Windows PowerShell 5.1 对中文会乱码）：
+
+```powershell
+# 编译 + Hypium 测试（跳过依赖安装与 HAP 构建，最常用）
+pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall -SkipBuild
+
+# 完整构建（assembleHap + 签名 + 测试）
+pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall
+```
+
+测试基线为 **416 个 Hypium 用例**，`verify-harmony.ps1` 会校验注册数与通过数。
+
+### 当前进度
+
+按 `docs/harmonyos-migration-plan.md` 分阶段迁移（P0–P3）。已落地能力包括：根级导航与通用页面壳；手机号 / 扫码 / 网页三种登录与风控 ArkWeb 验证；首页 / 频道 / 关注信息流；创作（回答 / 想法）编辑与图片发布链路；收藏夹、评论、通知；阅读与历史；屏蔽规则与屏蔽记录等。详细验收记录见 `docs/p0`–`docs/p3`。
+
+> 鸿蒙版仍在开发中，功能覆盖以各阶段验收文档为准，不保证与安卓版 100% 一致。
+
+> 以下为原仓库文档（锚定提交 e0856d27a715e1902635f3b6e9b722c0eea2d542）：
+
 [![GitHub release](https://img.shields.io/github/v/release/zly2006/zhihu-plus-plus)](https://github.com/zly2006/zhihu-plus-plus/releases)
 
 本项目还不够完善，欢迎PR。
