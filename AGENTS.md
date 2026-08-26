@@ -34,7 +34,8 @@ pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall
 ## 设备调试（模拟器 ZhihuPlus_API26，127.0.0.1:5555）
 
 ```powershell
-$hdc = "C:\Users\zhuoyi\App\Huawei\DevEco Studio\sdk\default\openharmony\toolchains\hdc.exe"
+# hdc 路径因机器而异，建议加入 PATH 或改用环境变量；此处按 PATH 解析，不硬编码本机绝对路径。
+$hdc = "hdc"
 & $hdc -t 127.0.0.1:5555 install entry\build\default\outputs\default\entry-default-signed.hap
 & $hdc -t 127.0.0.1:5555 shell "aa start -a EntryAbility -b com.github.zhuoyi233.zhplus"
 & $hdc -t 127.0.0.1:5555 shell "uitest dumpLayout"   # 输出到 /data/local/tmp/layout_*.json
