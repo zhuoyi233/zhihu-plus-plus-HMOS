@@ -21,6 +21,9 @@
 4. HarmonyOS 的 `main`、`dev` 不长期携带 Android 工程；Android 历史代码保留在 `Android-master`。
 5. 首个可用版本优先保证登录、浏览、阅读和过滤，不追求一次性完整移植所有高级能力。
 
+全应用页面信息架构、按钮位置语义、HarmonyOS 原生组件映射、当前完成度与宽屏迁移边界见
+[`docs/upstream-ui-layout-harmonyos-migration-analysis.md`](upstream-ui-layout-harmonyos-migration-analysis.md)。
+
 ## 2. 目标平台与官方技术基线
 
 - 开发工具固定为 DevEco Studio 6.1.1 Release。
