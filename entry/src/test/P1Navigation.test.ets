@@ -13,6 +13,12 @@ import {
   shouldPushP1Destination,
   toP1Destination
 } from 'core';
+import {
+  isP1TopLevelTabIndex,
+  P1TopLevelTab,
+  p1TopLevelTabForDestination,
+  p1TopLevelTabLabel
+} from '../main/ets/pages/P1TopLevelTabs';
 
 interface TestDestinationParam {
   name: string;
@@ -92,6 +98,23 @@ export default function p1NavigationTest(): void {
       expect(settings.name).assertEqual(P1DestinationName.SETTINGS);
       expect(laboratory.name).assertEqual(P1DestinationName.TECHNICAL_LAB);
       expect(login.name).assertEqual(P1DestinationName.LOGIN);
+    });
+
+    it('mapsTopLevelDestinationsToStableBottomTabs', 0, () => {
+      expect(p1TopLevelTabForDestination({ name: P1DestinationName.HOME })).assertEqual(P1TopLevelTab.HOME);
+      expect(p1TopLevelTabForDestination({ name: P1DestinationName.FOLLOWING }))
+        .assertEqual(P1TopLevelTab.FOLLOWING);
+      expect(p1TopLevelTabForDestination({ name: P1DestinationName.HOT })).assertEqual(P1TopLevelTab.HOT);
+      expect(p1TopLevelTabForDestination({ name: P1DestinationName.DAILY })).assertEqual(P1TopLevelTab.DAILY);
+      expect(p1TopLevelTabForDestination({ name: P1DestinationName.SETTINGS }))
+        .assertEqual(P1TopLevelTab.ACCOUNT);
+      expect(p1TopLevelTabForDestination({ name: P1DestinationName.LOGIN })).assertUndefined();
+      expect(p1TopLevelTabLabel(P1TopLevelTab.ACCOUNT)).assertEqual('我的');
+      expect(isP1TopLevelTabIndex(P1TopLevelTab.HOME)).assertTrue();
+      expect(isP1TopLevelTabIndex(P1TopLevelTab.ACCOUNT)).assertTrue();
+      expect(isP1TopLevelTabIndex(-1)).assertFalse();
+      expect(isP1TopLevelTabIndex(5)).assertFalse();
+      expect(isP1TopLevelTabIndex(1.5)).assertFalse();
     });
 
     it('decodesOnlyMatchingRuntimeDestinations', 0, () => {

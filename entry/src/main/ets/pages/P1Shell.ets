@@ -12,14 +12,19 @@ import {
   startupDestinationChannel,
   StartupDestinationListener
 } from 'core';
+import { AppNavigationRow, AppPageHeader } from './AppPageChrome';
+import { isP1TopLevelTabIndex, P1TopLevelTab, p1TopLevelTabForDestination } from './P1TopLevelTabs';
 
 @Component
 export struct P1Shell {
   @BuilderParam homeContent: (reloadToken: number, navigate: (destination: P1Destination) => void) => void =
     this.emptyReloadableHome;
-  @BuilderParam followingContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
-  @BuilderParam hotContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
-  @BuilderParam dailyContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
+  @BuilderParam followingContent: (reloadToken: number, navigate: (destination: P1Destination) => void) => void =
+    this.emptyReloadableHome;
+  @BuilderParam hotContent: (reloadToken: number, navigate: (destination: P1Destination) => void) => void =
+    this.emptyReloadableHome;
+  @BuilderParam dailyContent: (reloadToken: number, navigate: (destination: P1Destination) => void) => void =
+    this.emptyReloadableHome;
   @BuilderParam dailyStoryContent: (id: string, navigate: (destination: P1Destination) => void) => void =
     this.emptyContent;
   @BuilderParam technicalLabContent: (navigate: (destination: P1Destination) => void) => void =
@@ -66,6 +71,10 @@ export struct P1Shell {
   @State private themeMode: AppThemeMode = AppThemeMode.SYSTEM;
   @State private themePersistenceStatus: string = '正在读取主题设置…';
   @State private homeReloadToken: number = 0;
+  @State private followingReloadToken: number = 0;
+  @State private hotReloadToken: number = 0;
+  @State private dailyReloadToken: number = 0;
+  @State private topLevelTabIndex: number = P1TopLevelTab.HOME;
   @Provide('p1PathStack') pathStack: NavPathStack = new NavPathStack();
   private unsubscribeStartupDestination: (() => void) | undefined = undefined;
   private readonly themeOperationGuard: LatestOperationGuard = new LatestOperationGuard();
@@ -207,19 +216,20 @@ export struct P1Shell {
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.FOLLOWING) {
       NavDestination() {
-        this.followingContent((destination: P1Destination): void => this.navigate(destination));
+        this.followingContent(this.followingReloadToken,
+          (destination: P1Destination): void => this.navigate(destination));
       }
       .title('关注')
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.HOT) {
       NavDestination() {
-        this.hotContent((destination: P1Destination): void => this.navigate(destination));
+        this.hotContent(this.hotReloadToken, (destination: P1Destination): void => this.navigate(destination));
       }
       .title('热榜')
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.DAILY) {
       NavDestination() {
-        this.dailyContent((destination: P1Destination): void => this.navigate(destination));
+        this.dailyContent(this.dailyReloadToken, (destination: P1Destination): void => this.navigate(destination));
       }
       .title('知乎日报')
       .backgroundColor($r('app.color.page_background'))
@@ -415,17 +425,52 @@ export struct P1Shell {
 
   build() {
     Navigation(this.pathStack) {
-      Stack({ alignContent: Alignment.TopStart }) {
-        this.homeContent(this.homeReloadToken, (destination: P1Destination): void => this.navigate(destination));
+      Tabs({ barPosition: BarPosition.End, index: $$this.topLevelTabIndex }) {
+        TabContent() {
+          this.homeContent(this.homeReloadToken, (destination: P1Destination): void => this.navigate(destination));
+        }
+        .id('p1_top_level_home_content')
+        .tabBar('首页')
+
+        TabContent() {
+          this.followingContent(this.followingReloadToken,
+            (destination: P1Destination): void => this.navigate(destination));
+        }
+        .id('p1_top_level_following_content')
+        .tabBar('关注')
+
+        TabContent() {
+          this.hotContent(this.hotReloadToken, (destination: P1Destination): void => this.navigate(destination));
+        }
+        .id('p1_top_level_hot_content')
+        .tabBar('热榜')
+
+        TabContent() {
+          this.dailyContent(this.dailyReloadToken, (destination: P1Destination): void => this.navigate(destination));
+        }
+        .id('p1_top_level_daily_content')
+        .tabBar('日报')
+
+        TabContent() {
+          this.settingsPage();
+        }
+        .id('p1_top_level_account_content')
+        .tabBar('我的')
       }
-      .id('p1_home_top_start_container')
+      .id('p1_top_level_tabs')
       .width('100%')
       .height('100%')
-      .alignContent(Alignment.TopStart)
+      .barMode(BarMode.Fixed)
+      .scrollable(false)
+      .animationDuration(0)
+      .onChange((index: number): void => {
+        if (isP1TopLevelTabIndex(index)) {
+          this.topLevelTabIndex = index;
+        }
+      })
       .backgroundColor($r('app.color.page_background'))
     }
-    .title('Zhihu++')
-    .titleMode(NavigationTitleMode.Mini)
+    .hideTitleBar(true)
     .hideBackButton(true)
     .mode(NavigationMode.Stack)
     .navDestination(this.destinationBuilder)
@@ -438,6 +483,7 @@ export struct P1Shell {
     Stack({ alignContent: Alignment.TopStart }) {
       Scroll() {
         Column({ space: $r('app.float.p1_spacing_large') }) {
+        AppPageHeader({ title: '我的' });
         Column({ space: $r('app.float.p1_spacing_small') }) {
           Text('主题模式')
             .fontSize($r('app.float.p1_heading_font_size'))
@@ -493,65 +539,35 @@ export struct P1Shell {
           .fontSize($r('app.float.p1_secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
 
-        Button('技术实验室')
-          .id('p1_open_technical_lab')
-          .width('100%')
-          .fontSize($r('app.float.p1_body_font_size'))
-          .onClick(() => this.navigate({ name: P1DestinationName.TECHNICAL_LAB }))
+        AppNavigationRow({ title: '账号与登录', description: '管理当前知乎账号的登录状态', testId: 'p2_open_login',
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.LOGIN }) });
 
-        Button('账号与登录')
-          .id('p2_open_login')
-          .width('100%')
-          .fontSize($r('app.float.p1_body_font_size'))
-          .onClick(() => this.navigate({ name: P1DestinationName.LOGIN }))
+        AppNavigationRow({ title: '发布想法', description: '创建一条新的想法', testId: 'p4_open_pin_publish',
+          onRowClick: (): void => this.openPinComposer() });
 
-        Button('发布想法')
-          .id('p4_open_pin_publish')
-          .width('100%')
-          .fontSize($r('app.float.p1_body_font_size'))
-          .onClick((): void => this.openPinComposer())
+        AppNavigationRow({ title: '想法草稿', description: '继续编辑本地保存的草稿', testId: 'p4_open_pin_drafts',
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.PIN_DRAFTS }) });
 
-        Button('想法草稿')
-          .id('p4_open_pin_drafts')
-          .width('100%')
-          .fontSize($r('app.float.p1_body_font_size'))
-          .onClick((): void => this.navigate({ name: P1DestinationName.PIN_DRAFTS }))
+        AppNavigationRow({ title: '内容屏蔽', description: '管理作者与关键词屏蔽规则', testId: 'p2_open_blocking_rules',
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.BLOCKING_RULES }) });
 
-        Button('内容屏蔽')
-          .id('p2_open_blocking_rules')
-          .width('100%')
-          .fontSize($r('app.float.p1_body_font_size'))
-          .onClick(() => this.navigate({ name: P1DestinationName.BLOCKING_RULES }))
+        AppNavigationRow({ title: '屏蔽记录', description: '查看最近隐藏的内容', testId: 'p3_open_blocked_feed_history',
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.BLOCKED_FEED_HISTORY }) });
 
-        Button('屏蔽记录')
-          .id('p3_open_blocked_feed_history')
-          .width('100%')
-          .fontSize($r('app.float.p1_body_font_size'))
-          .onClick(() => this.navigate({ name: P1DestinationName.BLOCKED_FEED_HISTORY }))
+        AppNavigationRow({ title: '已读记录', description: '查看已打开的内容', testId: 'p2_open_read_history',
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.READ_HISTORY }) });
 
-        Button('已读记录')
-          .id('p2_open_read_history')
-          .width('100%')
-          .fontSize($r('app.float.p1_body_font_size'))
-          .onClick(() => this.navigate({ name: P1DestinationName.READ_HISTORY }))
+        AppNavigationRow({ title: '我的收藏夹', description: '查看自己的知乎收藏夹', testId: 'p3_open_my_collections',
+          onRowClick: (): void => this.openMyCollections() });
 
-        Button('我的收藏夹')
-          .id('p3_open_my_collections')
-          .width('100%')
-          .fontSize($r('app.float.p1_body_font_size'))
-          .onClick(() => this.openMyCollections())
+        AppNavigationRow({ title: '通知', description: '查看互动和系统消息', testId: 'p3_open_notifications',
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION }) });
 
-        Button('通知')
-          .id('p3_open_notifications')
-          .width('100%')
-          .fontSize($r('app.float.p1_body_font_size'))
-          .onClick(() => this.navigate({ name: P1DestinationName.NOTIFICATION }))
+        AppNavigationRow({ title: '通知设置', description: '设置提醒和推送偏好', testId: 'p3_open_notification_settings',
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION_SETTINGS }) });
 
-        Button('通知设置')
-          .id('p3_open_notification_settings')
-          .width('100%')
-          .fontSize($r('app.float.p1_body_font_size'))
-          .onClick(() => this.navigate({ name: P1DestinationName.NOTIFICATION_SETTINGS }))
+        AppNavigationRow({ title: '技术实验室', description: '仅用于本机诊断与验证', testId: 'p1_open_technical_lab',
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.TECHNICAL_LAB }) });
         }
         .width('100%')
         .padding($r('app.float.p1_page_padding'))
@@ -630,8 +646,10 @@ export struct P1Shell {
   }
 
   private navigate(destination: P1Destination): void {
-    if (destination.name === P1DestinationName.HOME) {
+    const topLevelTab = p1TopLevelTabForDestination(destination);
+    if (topLevelTab !== undefined) {
       this.pathStack.clear();
+      this.topLevelTabIndex = topLevelTab;
       return;
     }
     const paths: Array<NavPathInfo> | undefined = this.pathStack.getPathStack();
@@ -684,7 +702,7 @@ export struct P1Shell {
     this.pathStack.pop();
     const paths: Array<NavPathInfo> | undefined = this.pathStack.getPathStack();
     if (paths === undefined || paths.length === 0) {
-      this.homeReloadToken += 1;
+      this.reloadCurrentTopLevelTab();
       return;
     }
     const current = paths[paths.length - 1];
@@ -697,6 +715,25 @@ export struct P1Shell {
     }
     this.pathStack.pop();
     this.pathStack.pushPath({ name: destination.name, param: destination });
+  }
+
+  private reloadCurrentTopLevelTab(): void {
+    switch (this.topLevelTabIndex) {
+      case P1TopLevelTab.HOME:
+        this.homeReloadToken += 1;
+        return;
+      case P1TopLevelTab.FOLLOWING:
+        this.followingReloadToken += 1;
+        return;
+      case P1TopLevelTab.HOT:
+        this.hotReloadToken += 1;
+        return;
+      case P1TopLevelTab.DAILY:
+        this.dailyReloadToken += 1;
+        return;
+      default:
+        return;
+    }
   }
 
   private destinationDescription(destination: P1Destination): string {

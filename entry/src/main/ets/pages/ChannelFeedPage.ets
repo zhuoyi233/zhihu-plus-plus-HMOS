@@ -21,6 +21,7 @@ import {
   BlockingActionViewState,
   BlockingUserCandidate
 } from './BlockingActionState';
+import { AppPageHeader, AppPageStatusKind, AppPageStatusPanel } from './AppPageChrome';
 import {
   ChannelFeedController,
   ChannelFeedPhase,
@@ -36,6 +37,7 @@ export struct ChannelFeedPage {
   dailyStoryRepository: DailyStoryRepository | undefined = undefined;
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
+  @Prop @Watch('reloadAfterAuthentication') reloadToken: number = 0;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
   @State private phase: ChannelFeedPhase = ChannelFeedPhase.IDLE;
@@ -79,8 +81,6 @@ export struct ChannelFeedPage {
 
   aboutToDisappear(): void {
     this.controller?.deactivate();
-    this.controller = undefined;
-    this.blockingAction = undefined;
     this.pendingUserBlock = undefined;
     this.keywordBlockVisible = false;
     this.keywordBlockInput = '';
@@ -98,22 +98,23 @@ export struct ChannelFeedPage {
     });
   }
 
+  private reloadAfterAuthentication(): void {
+    this.controller?.refresh();
+  }
+
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       Column({ space: $r('app.float.p1_spacing_medium') }) {
-        Row({ space: $r('app.float.p1_spacing_small') }) {
-          Text(channelFeedTitle(this.source))
-            .fontSize($r('app.float.p1_heading_font_size'))
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.primary_text'))
-            .layoutWeight(1)
-          Button(this.refreshing ? '刷新中…' : '刷新')
-            .id(`p2_channel_${this.source}_refresh`)
-            .fontSize($r('app.float.p1_body_font_size'))
-            .enabled(!this.refreshing && !this.loadingMore && this.phase !== ChannelFeedPhase.INITIAL_LOADING)
-            .onClick(() => this.controller?.refresh())
-        }
-        .width('100%')
+        AppPageHeader({
+          title: channelFeedTitle(this.source),
+          actionLabel: this.refreshing ? '刷新中…' : '刷新',
+          actionId: `p2_channel_${this.source}_refresh`,
+          actionEnabled: !this.refreshing && !this.loadingMore && this.phase !== ChannelFeedPhase.INITIAL_LOADING,
+          actionAccessibilityText: this.refreshing ? `${channelFeedTitle(this.source)}正在刷新` : `刷新${channelFeedTitle(this.source)}`,
+          onAction: (): void => {
+            this.controller?.refresh();
+          }
+        });
 
       if (this.phase === ChannelFeedPhase.IDLE || this.phase === ChannelFeedPhase.INITIAL_LOADING) {
         this.centeredStatus(`正在加载${channelFeedTitle(this.source)}…`, false);
@@ -252,35 +253,20 @@ export struct ChannelFeedPage {
 
   @Builder
   private centeredStatus(message: string, retry: boolean) {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
-      if (!retry) {
-        LoadingProgress()
-          .width(40)
-          .height(40)
-          .color($r('app.color.brand_primary'))
-      }
-      Text(message)
-        .fontSize($r('app.float.p1_body_font_size'))
-        .fontColor($r('app.color.secondary_text'))
-        .textAlign(TextAlign.Center)
-        .width('100%')
-      if (retry) {
+    AppPageStatusPanel({
+      kind: retry ? AppPageStatusKind.ERROR : AppPageStatusKind.LOADING,
+      message: message,
+      testId: `p2_channel_${this.source}_status`,
+      actionLabel: retry ? (this.requiresLogin ? '去登录' : '重新加载') : '',
+      actionId: this.requiresLogin ? `p2_channel_${this.source}_login` : `p2_channel_${this.source}_retry`,
+      onAction: (): void => {
         if (this.requiresLogin) {
-          Button('去登录')
-            .id(`p2_channel_${this.source}_login`)
-            .onClick(() => this.navigate({ name: P1DestinationName.LOGIN }))
-        } else {
-          Button('重新加载')
-            .id(`p2_channel_${this.source}_retry`)
-            .onClick(() => this.controller?.retry())
+          this.navigate({ name: P1DestinationName.LOGIN });
+          return;
         }
+        this.controller?.retry();
       }
-    }
-    .id(`p2_channel_${this.source}_status`)
-    .justifyContent(FlexAlign.Center)
-    .alignItems(HorizontalAlign.Center)
-    .width('100%')
-    .layoutWeight(1)
+    });
   }
 
   @Builder

@@ -79,6 +79,22 @@ export default function homeFeedStateTest(): void {
       expect(controller.snapshot().canLoadMore).assertTrue();
     });
 
+    it('keepsLoadedItemsWhenReactivatedAfterTopLevelTabSwitch', 0, async () => {
+      const repository = new ControlledFeedRepository();
+      const controller = new HomeFeedController(repository);
+      controller.activate();
+      const loading = controller.loadInitial();
+      repository.succeed(0, page([feed('retained')], 'next'));
+      await loading;
+
+      controller.deactivate();
+      controller.activate();
+
+      expect(repository.cursors.length).assertEqual(1);
+      expect(controller.snapshot().phase).assertEqual(HomeFeedPhase.READY);
+      expect(controller.snapshot().items[0].id).assertEqual('retained');
+    });
+
     it('appendsOnePaginationRequestAndUsesServerCursor', 0, async () => {
       const repository = new ControlledFeedRepository();
       const controller = new HomeFeedController(repository);

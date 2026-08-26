@@ -71,6 +71,23 @@ export default function channelFeedStateTest(): void {
       expect(controller.snapshot().canLoadMore).assertTrue();
     });
 
+    it('keepsLoadedChannelItemsWhenReactivatedAfterTopLevelTabSwitch', 0, async () => {
+      const repository = new ControlledChannelRepository();
+      const controller = new ChannelFeedController(ChannelFeedSource.HOT, repository);
+      controller.activate();
+      const loading = controller.loadInitial();
+      repository.succeed(0, page([content('retained')], 'next'));
+      await loading;
+
+      controller.deactivate();
+      controller.activate();
+
+      expect(repository.cursors.length).assertEqual(1);
+      expect(controller.snapshot().phase).assertEqual(ChannelFeedPhase.READY);
+      expect(controller.snapshot().items.length).assertEqual(1);
+      expect((controller.snapshot().items[0] as ChannelContentItem).feedItem.target.id).assertEqual('retained');
+    });
+
     it('serializesPaginationAndRetriesSameCursor', 0, async () => {
       const repository = new ControlledChannelRepository();
       const controller = new ChannelFeedController(ChannelFeedSource.DAILY, repository);

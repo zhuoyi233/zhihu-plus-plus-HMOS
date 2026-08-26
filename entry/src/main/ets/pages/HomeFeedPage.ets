@@ -15,6 +15,7 @@ import {
   BlockingActionViewState,
   BlockingUserCandidate
 } from './BlockingActionState';
+import { AppPageStatusKind, AppPageStatusPanel } from './AppPageChrome';
 import { HomeFeedController, HomeFeedPhase, HomeFeedViewState } from './HomeFeedState';
 
 @Component
@@ -64,8 +65,6 @@ export struct HomeFeedPage {
 
   aboutToDisappear(): void {
     this.controller?.deactivate();
-    this.controller = undefined;
-    this.blockingAction = undefined;
     this.pendingUserBlock = undefined;
     this.keywordBlockVisible = false;
     this.keywordBlockInput = '';
@@ -91,47 +90,40 @@ export struct HomeFeedPage {
     Stack({ alignContent: Alignment.TopStart }) {
       Column({ space: $r('app.float.p1_spacing_medium') }) {
         Row({ space: $r('app.float.p1_spacing_small') }) {
-          Button('搜索')
+          Button({ type: ButtonType.Normal, stateEffect: true }) {
+            Row({ space: $r('app.float.p1_spacing_small') }) {
+              SymbolGlyph($r('sys.symbol.magnifyingglass'))
+                .fontSize(18)
+                .fontColor([$r('app.color.secondary_text')])
+              Text('搜索内容')
+                .fontSize($r('app.float.p1_body_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+            }
+            .width('100%')
+            .alignItems(VerticalAlign.Center)
+          }
             .id('p2_home_search')
-            .fontSize($r('app.float.p1_body_font_size'))
             .layoutWeight(1)
+            .padding($r('app.float.p1_spacing_small'))
+            .backgroundColor($r('app.color.control_background'))
+            .borderRadius($r('app.float.p1_card_radius'))
             .accessibilityText('打开搜索')
             .onClick(() => this.navigate({ name: P1DestinationName.SEARCH, query: '' }))
 
-          Button('显示')
-            .id('p2_home_settings')
-            .fontSize($r('app.float.p1_body_font_size'))
-            .accessibilityText('打开显示与阅读设置')
-            .onClick(() => this.navigate({ name: P1DestinationName.SETTINGS }))
-
-          Button(this.refreshing ? '刷新中…' : '刷新')
-            .id('p2_home_refresh')
-            .fontSize($r('app.float.p1_body_font_size'))
-            .enabled(!this.refreshing && !this.loadingMore && this.phase !== HomeFeedPhase.INITIAL_LOADING)
-            .accessibilityText(this.refreshing ? '首页正在刷新' : '刷新首页')
-            .onClick(() => this.controller?.refresh())
+          Button({ type: ButtonType.Normal, stateEffect: true }) {
+            SymbolGlyph($r('sys.symbol.bell'))
+              .fontSize(20)
+              .fontColor([$r('app.color.primary_text')])
+          }
+            .id('p2_home_notifications')
+            .width(40)
+            .height(40)
+            .padding(0)
+            .backgroundColor(Color.Transparent)
+            .accessibilityText('打开通知')
+            .onClick(() => this.navigate({ name: P1DestinationName.NOTIFICATION }))
         }
         .id('p2_home_top_actions')
-        .width('100%')
-
-        Row({ space: $r('app.float.p1_spacing_small') }) {
-          Button('关注')
-            .id('p2_home_following')
-            .layoutWeight(1)
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .onClick(() => this.navigate({ name: P1DestinationName.FOLLOWING }))
-          Button('热榜')
-            .id('p2_home_hot')
-            .layoutWeight(1)
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .onClick(() => this.navigate({ name: P1DestinationName.HOT }))
-          Button('日报')
-            .id('p2_home_daily')
-            .layoutWeight(1)
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .onClick(() => this.navigate({ name: P1DestinationName.DAILY }))
-        }
-        .id('p2_home_channels')
         .width('100%')
 
         if (this.phase === HomeFeedPhase.INITIAL_LOADING || this.phase === HomeFeedPhase.IDLE) {
@@ -229,31 +221,16 @@ export struct HomeFeedPage {
 
   @Builder
   private centeredStatus(message: string, retry: boolean, testId: string) {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
-      if (!retry) {
-        LoadingProgress()
-          .id('p2_home_loading_progress')
-          .width(40)
-          .height(40)
-          .color($r('app.color.brand_primary'))
+    AppPageStatusPanel({
+      kind: retry ? AppPageStatusKind.ERROR : AppPageStatusKind.LOADING,
+      message: message,
+      testId: testId,
+      actionLabel: retry && !this.requiresLogin ? '重新加载' : '',
+      actionId: `${testId}_retry`,
+      onAction: (): void => {
+        this.controller?.retry();
       }
-      Text(message)
-        .fontSize($r('app.float.p1_body_font_size'))
-        .fontColor($r('app.color.secondary_text'))
-        .textAlign(TextAlign.Center)
-        .width('100%')
-      if (retry) {
-        Button('重新加载')
-          .id(`${testId}_retry`)
-          .fontSize($r('app.float.p1_body_font_size'))
-          .onClick(() => this.controller?.retry())
-      }
-    }
-    .id(testId)
-    .justifyContent(FlexAlign.Center)
-    .alignItems(HorizontalAlign.Center)
-    .width('100%')
-    .layoutWeight(1)
+    });
   }
 
   @Builder

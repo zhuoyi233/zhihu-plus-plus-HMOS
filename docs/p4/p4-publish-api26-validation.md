@@ -35,7 +35,7 @@ pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall
 已安装主线签名 HAP 并启动 `EntryAbility`。使用已有登录态刷新首页；没有选择图片、保存草稿或发出知乎写请求。
 
 1. 首页显示 `p2_home_feed_list`，不显示 `p2_home_error_login` 或 `p2_home_error_retry`。
-2. 首页点击 `p2_home_settings`，设置页打开 `p4_open_pin_publish` 后出现
+2. 切换到根底部导航的“我的”，打开 `p4_open_pin_publish` 后出现
    `p4_pin_publish_page`、`p4_pin_publish_title`、`p4_pin_publish_body`、
    `p4_image_picker_select` 与 `p4_pin_publish_submit`，且不显示登录 CTA。
 

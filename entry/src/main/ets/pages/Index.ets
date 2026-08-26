@@ -191,9 +191,12 @@ struct Index {
           session: this.session,
           homeContent: (reloadToken: number, navigate: (destination: P1Destination) => void): void =>
             this.homeContent(reloadToken, navigate),
-          followingContent: (navigate: (destination: P1Destination) => void): void => this.followingContent(navigate),
-          hotContent: (navigate: (destination: P1Destination) => void): void => this.hotContent(navigate),
-          dailyContent: (navigate: (destination: P1Destination) => void): void => this.dailyContent(navigate),
+          followingContent: (reloadToken: number, navigate: (destination: P1Destination) => void): void =>
+            this.followingContent(reloadToken, navigate),
+          hotContent: (reloadToken: number, navigate: (destination: P1Destination) => void): void =>
+            this.hotContent(reloadToken, navigate),
+          dailyContent: (reloadToken: number, navigate: (destination: P1Destination) => void): void =>
+            this.dailyContent(reloadToken, navigate),
           dailyStoryContent: (id: string, navigate: (destination: P1Destination) => void): void =>
             this.dailyStoryContent(id, navigate),
           searchContent: (query: string, navigate: (destination: P1Destination) => void): void =>
@@ -260,10 +263,11 @@ struct Index {
   }
 
   @Builder
-  followingContent(navigate: (destination: P1Destination) => void) {
+  followingContent(reloadToken: number, navigate: (destination: P1Destination) => void) {
     ChannelFeedPage({
       source: ChannelFeedSource.FOLLOWING,
       repository: this.followingRepository,
+      reloadToken: reloadToken,
       navigate: navigate,
       rules: this.blockingRuleStore,
       history: this.blockedFeedHistoryStore
@@ -271,10 +275,11 @@ struct Index {
   }
 
   @Builder
-  hotContent(navigate: (destination: P1Destination) => void) {
+  hotContent(reloadToken: number, navigate: (destination: P1Destination) => void) {
     ChannelFeedPage({
       source: ChannelFeedSource.HOT,
       repository: this.hotRepository,
+      reloadToken: reloadToken,
       navigate: navigate,
       rules: this.blockingRuleStore,
       history: this.blockedFeedHistoryStore
@@ -282,11 +287,12 @@ struct Index {
   }
 
   @Builder
-  dailyContent(navigate: (destination: P1Destination) => void) {
+  dailyContent(reloadToken: number, navigate: (destination: P1Destination) => void) {
     ChannelFeedPage({
       source: ChannelFeedSource.DAILY,
       repository: this.dailyRepository,
       dailyStoryRepository: this.dailyStoryRepository,
+      reloadToken: reloadToken,
       navigate: navigate,
       rules: this.blockingRuleStore,
       history: this.blockedFeedHistoryStore
