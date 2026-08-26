@@ -12,6 +12,7 @@ import {
 import {
   PinDraftContent,
   PinPublishController,
+  PinPublishImageUploader,
   PinPublishOperation,
   PinPublishTraceIdFactory,
   PinPublishViewState,
@@ -21,6 +22,7 @@ import {
 export const PIN_PAGE_LOGIN_REQUIRED_MESSAGE: string = '发布想法需要登录，请先登录';
 export const PIN_PAGE_READY_MESSAGE: string = '内容仅会在你保存草稿或发布时写入';
 export const PIN_PAGE_SAVING_MESSAGE: string = '正在安全保存草稿';
+export const PIN_PAGE_UPLOADING_IMAGES_MESSAGE: string = '正在上传图片，草稿已保留';
 export const PIN_PAGE_PUBLISHING_MESSAGE: string = '正在发布想法';
 export const PIN_PAGE_PUBLISHED_MESSAGE: string = '想法已发布';
 export const PIN_PAGE_CANCELLED_MESSAGE: string = '已取消编辑，未保存本次内容';
@@ -63,6 +65,7 @@ export class PinPublishPageController {
   private readonly publish: PinPublishController;
   private readonly observer: PinPublishPageObserver;
   private readonly onPublished: PinPublishPagePublishedCallback;
+  private readonly imageUploaders: (() => PinPublishImageUploader) | undefined;
   private active: boolean = false;
   private phase: PinPublishPagePhase = PinPublishPagePhase.SETUP;
   private publishedNotified: boolean = false;
@@ -70,10 +73,12 @@ export class PinPublishPageController {
   constructor(repository: PinPublishRepository, drafts: DraftRepository, session: LoginSessionGateway,
     identity: ContentDraftIdentity, traceIds: PinPublishTraceIdFactory, scheduler: PinTopicSearchScheduler,
     observer: PinPublishPageObserver = (_state: PinPublishPageViewState): void => {},
-    onPublished: PinPublishPagePublishedCallback = (_contentId: string): void => {}) {
+    onPublished: PinPublishPagePublishedCallback = (_contentId: string): void => {},
+    imageUploaders: (() => PinPublishImageUploader) | undefined = undefined) {
     this.session = session;
     this.observer = observer;
     this.onPublished = onPublished;
+    this.imageUploaders = imageUploaders;
     this.publish = new PinPublishController(repository, drafts, identity, traceIds, scheduler,
       (state: PinPublishViewState): void => this.handlePublishState(state));
   }
@@ -171,6 +176,23 @@ export class PinPublishPageController {
     if (!this.canWrite()) {
       return;
     }
+    const references = this.publish.snapshot().content.localImageReferences;
+    if (references.length > 0) {
+      const factory = this.imageUploaders;
+      if (factory === undefined) {
+        await this.publish.saveLocalDraft();
+        return;
+      }
+      let uploader: PinPublishImageUploader;
+      try {
+        uploader = factory();
+      } catch (_error) {
+        return;
+      }
+      if (!await this.publish.uploadLocalImages(uploader)) {
+        return;
+      }
+    }
     await this.publish.publish();
   }
 
@@ -239,6 +261,9 @@ export class PinPublishPageController {
       publish.operation === PinPublishOperation.SAVING_REMOTE_DRAFT) {
       return PIN_PAGE_SAVING_MESSAGE;
     }
+    if (publish.operation === PinPublishOperation.UPLOADING_IMAGES) {
+      return PIN_PAGE_UPLOADING_IMAGES_MESSAGE;
+    }
     if (publish.operation === PinPublishOperation.PUBLISHING) {
       return PIN_PAGE_PUBLISHING_MESSAGE;
     }
@@ -259,6 +284,7 @@ export class PinPublishPageController {
 
 function isBusy(operation: PinPublishOperation): boolean {
   return operation === PinPublishOperation.SAVING_LOCAL ||
+    operation === PinPublishOperation.UPLOADING_IMAGES ||
     operation === PinPublishOperation.SAVING_REMOTE_DRAFT || operation === PinPublishOperation.PUBLISHING;
 }
 

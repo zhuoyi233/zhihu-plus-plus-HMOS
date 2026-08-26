@@ -111,27 +111,57 @@ export class MediaPickerCoordinator {
     return copyMediaPickerState(this.state);
   }
 
-  async pickExplicitly(): Promise<MediaPickerViewState> {
-    const previous = this.state.images;
-    const generation = this.state.generation + 1;
-    this.state = stateOf(MediaPickerPhase.PICKING, generation, []);
-    await this.removeAll(previous);
-    if (!this.isCurrent(generation)) {
+  /**
+   * 草稿恢复只接受平台层从受控缓存名重建的 READY 生命周期；系统相册 URI 不会参与恢复。
+   * 恢复后的图片归同一个协调器管理，移除/清空仍只会删除应用缓存中的随机文件。
+   */
+  restorePreparedImages(images: Array<PreparedPickedImage>): MediaPickerViewState {
+    if (this.state.phase === MediaPickerPhase.PICKING || this.state.phase === MediaPickerPhase.PROCESSING ||
+      this.state.phase === MediaPickerPhase.RELEASED) {
       return this.snapshot();
     }
+    try {
+      const restored: Array<PreparedPickedImage> = [];
+      for (let index = 0; index < images.length; index += 1) {
+        const selected = createImageTemporaryLifecycle(images[index].lifecycle.file, this.runtime.cacheDir);
+        const processing = transitionImageTemporaryLifecycle(selected, ImageTemporaryState.PROCESSING);
+        const ready = transitionImageTemporaryLifecycle(processing, ImageTemporaryState.READY);
+        if (images[index].lifecycle.state !== ImageTemporaryState.READY ||
+          images[index].image.byteLength !== ready.file.byteLength ||
+          images[index].image.descriptor.mimeType !== ready.file.mimeType) {
+          throw new ImageUploadFailure(ImageUploadFailureKind.INVALID_INPUT);
+        }
+        restored.push({ image: images[index].image, lifecycle: ready });
+      }
+      this.state = stateOf(restored.length === 0 ? MediaPickerPhase.IDLE : MediaPickerPhase.READY,
+        this.state.generation + 1, restored);
+    } catch (_error) {
+      this.state = stateOf(MediaPickerPhase.FAILED, this.state.generation + 1, [], ImageUploadFailureKind.INVALID_INPUT);
+    }
+    return this.snapshot();
+  }
+
+  async pickExplicitly(): Promise<MediaPickerViewState> {
+    const previous = this.state.images;
+    const remainingCount = this.runtime.limits.maxCount - previous.length;
+    if (remainingCount <= 0) {
+      return this.snapshot();
+    }
+    const generation = this.state.generation + 1;
+    this.state = stateOf(MediaPickerPhase.PICKING, generation, []);
 
     let result: PhotoPickerResult;
     try {
-      result = await this.picker.pickImages(this.runtime.limits.maxCount);
+      result = await this.picker.pickImages(remainingCount);
     } catch (_error) {
       // 正常取消必须由 gateway 返回明确结果；异常一律按可重试失败处理，且不暴露系统原文。
-      return this.failIfCurrent(generation, ImageUploadFailureKind.INVALID_INPUT);
+      return this.failIfCurrent(generation, ImageUploadFailureKind.INVALID_INPUT, previous);
     }
     if (!this.isCurrent(generation)) {
       return this.snapshot();
     }
     if (result.kind === PhotoPickerResultKind.CANCELLED || result.selections.length === 0) {
-      this.state = stateOf(MediaPickerPhase.CANCELLED, generation, []);
+      this.state = stateOf(previous.length === 0 ? MediaPickerPhase.CANCELLED : MediaPickerPhase.READY, generation, previous);
       return this.snapshot();
     }
 
@@ -143,16 +173,17 @@ export class MediaPickerCoordinator {
       }
       validateInspectionOrigins(result.selections, inspected);
       const validated = validatePickedImageBatch(inspected, this.runtime.limits);
+      validateCombinedBatchBytes(previous, validated, this.runtime.limits.maxBatchBytes);
       const prepared = await this.persistAll(result.selections, validated, generation);
       if (!this.isCurrent(generation)) {
         await this.removeAll(prepared);
         return this.snapshot();
       }
-      this.state = stateOf(MediaPickerPhase.READY, generation, prepared);
+      this.state = stateOf(MediaPickerPhase.READY, generation, previous.concat(prepared));
       return this.snapshot();
     } catch (error) {
       const failure = error instanceof ImageUploadFailure ? error.kind : ImageUploadFailureKind.INVALID_INPUT;
-      return this.failIfCurrent(generation, failure);
+      return this.failIfCurrent(generation, failure, previous);
     }
   }
 
@@ -252,9 +283,11 @@ export class MediaPickerCoordinator {
     }
   }
 
-  private failIfCurrent(generation: number, failureKind: ImageUploadFailureKind): MediaPickerViewState {
+  private failIfCurrent(generation: number, failureKind: ImageUploadFailureKind,
+    retained: Array<PreparedPickedImage> = []): MediaPickerViewState {
     if (this.isCurrent(generation)) {
-      this.state = stateOf(MediaPickerPhase.FAILED, generation, [], failureKind);
+      this.state = stateOf(retained.length === 0 ? MediaPickerPhase.FAILED : MediaPickerPhase.READY,
+        generation, retained, retained.length === 0 ? failureKind : undefined);
     }
     return this.snapshot();
   }
@@ -317,5 +350,19 @@ function validateInspectionOrigins(
     if (selections[index].image.uri !== inspections[index].sourceUri) {
       throw new ImageUploadFailure(ImageUploadFailureKind.INVALID_INPUT);
     }
+  }
+}
+
+function validateCombinedBatchBytes(existing: Array<PreparedPickedImage>,
+  selected: Array<ValidatedPickedImage>, maxBatchBytes: number): void {
+  let totalBytes = 0;
+  for (let index = 0; index < existing.length; index += 1) {
+    totalBytes += existing[index].image.byteLength;
+  }
+  for (let index = 0; index < selected.length; index += 1) {
+    totalBytes += selected[index].byteLength;
+  }
+  if (!Number.isSafeInteger(totalBytes) || totalBytes > maxBatchBytes) {
+    throw new ImageUploadFailure(ImageUploadFailureKind.LIMIT_EXCEEDED);
   }
 }

@@ -12,14 +12,19 @@ import {
   ExistingAnswerForEditing,
   HttpFailure,
   HttpFailureKind,
+  ImageUploadFailure,
+  ImageUploadFailureKind,
+  LocalDraftImageReference,
   LoginSessionGateway,
   SessionCookie,
   SessionLoginOperation,
   SessionState,
-  SessionStatus
+  SessionStatus,
+  UploadedZhihuImage
 } from 'data';
 import {
   AnswerPublishController,
+  AnswerPublishImageUploader,
   AnswerPublishPhase,
   AnswerPublishViewState,
   ANSWER_PUBLISH_CONFLICT_MESSAGE,
@@ -195,6 +200,22 @@ class FakeAnswerPublishRepository implements AnswerPublishRepository {
   }
 }
 
+class FakeAnswerImageUploader implements AnswerPublishImageUploader {
+  readonly uploads: Array<Array<LocalDraftImageReference>> = [];
+  result: Array<UploadedZhihuImage> = [uploadedImage()];
+  failure?: Object;
+  cancelCount: number = 0;
+
+  upload(references: Array<LocalDraftImageReference>): Promise<Array<UploadedZhihuImage>> {
+    this.uploads.push(references);
+    return this.failure === undefined ? Promise.resolve(this.result) : Promise.reject(this.failure);
+  }
+
+  cancel(): void {
+    this.cancelCount += 1;
+  }
+}
+
 function createDraftRepository(): DraftRepository {
   return new DraftRepository(new MemoryMetadataStore(), new MemoryBodyStore());
 }
@@ -273,6 +294,47 @@ export default function answerPublishStateTest(): void {
       expect(repository.remoteDraftInputs[0].html).assertEqual('<p>新的回答</p>');
       expect(repository.publishInputs[0].tocEnabled).assertTrue();
       expect((await drafts.load(createAnswerIdentity())).status).assertEqual(ContentDraftLoadStatus.NOT_FOUND);
+    });
+
+    it('uploadsControlledImagesOnlyAfterSavingLocalDraftThenPublishesTrustedAnswerHtml', 0, async () => {
+      const repository = new FakeAnswerPublishRepository();
+      const drafts = createDraftRepository();
+      const controller = createController(repository, drafts);
+      const uploader = new FakeAnswerImageUploader();
+      await controller.open();
+      controller.updateContent('<p>带图回答</p>', false);
+      controller.updateLocalImageReferences([localImageReference()]);
+
+      expect(await controller.uploadLocalImages(uploader, 100)).assertTrue();
+      expect(uploader.uploads.length).assertEqual(1);
+      expect(controller.snapshot().localImageReferences.length).assertEqual(0);
+      expect(controller.snapshot().html.includes('https://picx.zhimg.com/v2-image-original.jpg')).assertTrue();
+      const savedBeforeRemote = await drafts.load(createAnswerIdentity());
+      expect(savedBeforeRemote.status).assertEqual(ContentDraftLoadStatus.FOUND);
+      expect(savedBeforeRemote.draft?.metadata.imageRefsJson.includes(localImageReference().fileName)).assertTrue();
+
+      await controller.publish(TRACE_ID, 101);
+      expect(repository.remoteDraftInputs[0].html.includes('https://picx.zhimg.com/v2-image-original.jpg')).assertTrue();
+      expect(repository.calls[1]).assertEqual('remoteDraft');
+    });
+
+    it('keepsLocalImageReferenceAndDoesNotStartRemoteDraftWhenUploadFails', 0, async () => {
+      const repository = new FakeAnswerPublishRepository();
+      const drafts = createDraftRepository();
+      const controller = createController(repository, drafts);
+      const uploader = new FakeAnswerImageUploader();
+      uploader.failure = new ImageUploadFailure(ImageUploadFailureKind.NETWORK);
+      await controller.open();
+      controller.updateContent('<p>失败图片</p>', false);
+      controller.updateLocalImageReferences([localImageReference()]);
+
+      expect(await controller.uploadLocalImages(uploader, 100)).assertFalse();
+      expect(controller.snapshot().phase).assertEqual(AnswerPublishPhase.FAILED);
+      expect(controller.snapshot().localImageReferences.length).assertEqual(1);
+      expect(repository.calls.length).assertEqual(1);
+      const saved = await drafts.load(createAnswerIdentity());
+      expect(saved.status).assertEqual(ContentDraftLoadStatus.FOUND);
+      expect(saved.draft?.metadata.imageRefsJson.includes(localImageReference().fileName)).assertTrue();
     });
 
     it('publishesExistingAnswerAsEditWithoutDroppingAnswerIdOrToc', 0, async () => {
@@ -384,5 +446,28 @@ function createAnswerIdentity(): ContentDraftIdentity {
     kind: ContentDraftKind.ANSWER,
     targetId: '123',
     draftKey: `answer:${ACCOUNT_KEY}:123`
+  };
+}
+
+function localImageReference(): LocalDraftImageReference {
+  return {
+    fileName: '0123456789abcdef0123456789abcdef.jpg',
+    mimeType: 'image/jpeg',
+    byteLength: 4096,
+    width: 1080,
+    height: 720,
+    animated: false,
+    createdAtMillis: 100
+  };
+}
+
+function uploadedImage(): UploadedZhihuImage {
+  return {
+    imageId: '1',
+    url: 'https://picx.zhimg.com/v2-image.jpg',
+    originalUrl: 'https://picx.zhimg.com/v2-image-original.jpg',
+    width: 1080,
+    height: 720,
+    watermark: 'original'
   };
 }

@@ -9,6 +9,7 @@ import {
 } from 'data';
 import {
   AnswerPublishObserver,
+  AnswerPublishImageUploader,
   AnswerPublishPhase,
   AnswerPublishViewState
 } from '../main/ets/pages/AnswerPublishState';
@@ -121,6 +122,10 @@ class FakeAnswerPageController implements AnswerPublishPageController {
   saveLocalDraft(_now?: number): Promise<void> {
     this.saveCalls += 1;
     return Promise.resolve();
+  }
+
+  uploadLocalImages(_uploader: AnswerPublishImageUploader, _now?: number): Promise<boolean> {
+    return Promise.resolve(true);
   }
 
   publish(traceId: string, _now?: number): Promise<void> {

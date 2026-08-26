@@ -2,16 +2,22 @@ import { fileIo } from '@kit.CoreFileKit';
 import {
   createImageTemporaryLifecycle,
   IMAGE_TEMPORARY_MAX_AGE_MILLIS,
+  ImageBinaryDescriptor,
   ImageTemporaryFile,
+  ImageTemporaryState,
   ImageUploadFailure,
   ImageUploadFailureKind,
   inspectPickedImage,
+  LocalDraftImageReference,
+  PickedImageFormat,
   PickedImageInspection,
+  transitionImageTemporaryLifecycle,
   ValidatedPickedImage
 } from 'data';
 import {
   defaultMediaPickerRuntimePolicy,
   MediaPickerCoordinator,
+  PreparedPickedImage,
   PhotoPickerSelection,
   PickedImageInspector,
   PickedImageTemporaryStore
@@ -131,6 +137,35 @@ export function buildControlledImageTemporaryPath(cacheDir: string, fileName: st
     throw new ImageUploadFailure(ImageUploadFailureKind.INVALID_INPUT);
   }
   return `${normalizeCacheDir(cacheDir)}/p4-images/${fileName}`;
+}
+
+/**
+ * 草稿恢复时只用加密元数据中的随机文件名重建应用缓存对象；不会读取 Photo Picker URI，
+ * 也不会在恢复阶段访问网络。实际上传前仍会由上传读取器重新校验文件大小和 magic bytes。
+ */
+export function restoreControlledPickedImages(cacheDir: string,
+  references: Array<LocalDraftImageReference>): Array<PreparedPickedImage> {
+  const result: Array<PreparedPickedImage> = [];
+  const normalizedCacheDir = normalizeCacheDir(cacheDir);
+  for (let index = 0; index < references.length; index += 1) {
+    const reference = references[index];
+    const file: ImageTemporaryFile = {
+      path: buildControlledImageTemporaryPath(normalizedCacheDir, reference.fileName),
+      mimeType: reference.mimeType,
+      byteLength: reference.byteLength,
+      createdAtMillis: reference.createdAtMillis
+    };
+    const selected = createImageTemporaryLifecycle(file, normalizedCacheDir);
+    const processing = transitionImageTemporaryLifecycle(selected, ImageTemporaryState.PROCESSING);
+    const ready = transitionImageTemporaryLifecycle(processing, ImageTemporaryState.READY);
+    const image: ValidatedPickedImage = {
+      sourceUri: `file://${file.path}`,
+      byteLength: reference.byteLength,
+      descriptor: descriptorForDraftReference(reference)
+    };
+    result.push({ image: image, lifecycle: ready });
+  }
+  return result;
 }
 
 /**
@@ -256,6 +291,33 @@ function sameValidatedImage(left: ValidatedPickedImage, right: ValidatedPickedIm
     left.descriptor.mimeType === right.descriptor.mimeType && left.descriptor.extension === right.descriptor.extension &&
     left.descriptor.width === right.descriptor.width && left.descriptor.height === right.descriptor.height &&
     left.descriptor.animated === right.descriptor.animated;
+}
+
+function descriptorForDraftReference(reference: LocalDraftImageReference): ImageBinaryDescriptor {
+  const format = formatForMime(reference.mimeType);
+  return {
+    format: format,
+    mimeType: reference.mimeType,
+    extension: extensionForFormat(format),
+    width: reference.width,
+    height: reference.height,
+    animated: reference.animated
+  };
+}
+
+function formatForMime(mimeType: string): PickedImageFormat {
+  if (mimeType === 'image/jpeg') return PickedImageFormat.JPEG;
+  if (mimeType === 'image/png') return PickedImageFormat.PNG;
+  if (mimeType === 'image/webp') return PickedImageFormat.WEBP;
+  if (mimeType === 'image/gif') return PickedImageFormat.GIF;
+  throw new ImageUploadFailure(ImageUploadFailureKind.INVALID_INPUT);
+}
+
+function extensionForFormat(format: PickedImageFormat): string {
+  if (format === PickedImageFormat.JPEG) return 'jpg';
+  if (format === PickedImageFormat.PNG) return 'png';
+  if (format === PickedImageFormat.WEBP) return 'webp';
+  return 'gif';
 }
 
 function randomControlledFileName(extension: string): string {

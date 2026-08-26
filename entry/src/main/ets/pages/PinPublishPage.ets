@@ -18,6 +18,7 @@ import {
 } from 'data';
 import {
   PinPublishOperation,
+  PinPublishImageUploader,
   PinPublishTraceIdFactory,
   PinTopicSearchScheduler
 } from './PinPublishState';
@@ -42,6 +43,7 @@ export interface PinPublishPageConfiguration {
   readonly identity: ContentDraftIdentity;
   readonly traceIds: PinPublishTraceIdFactory;
   readonly topicScheduler: PinTopicSearchScheduler;
+  readonly imageUploaders?: PinPublishImageUploaderFactory;
 }
 
 /** 用 draftId 延迟构造依赖，保证路由参数不会承载账号信息、Cookie 或正文。 */
@@ -51,6 +53,7 @@ export interface PinPublishPageConfigurationFactory {
 
 /** 每个想法编辑页创建独立仓储，避免跨页面取消请求。 */
 export type PinPublishRepositoryFactory = () => PinPublishRepository;
+export type PinPublishImageUploaderFactory = () => PinPublishImageUploader;
 
 export const MAX_PIN_DRAFT_RESUME_COUNT: number = 100;
 
@@ -71,12 +74,15 @@ export class LocalDraftPinPublishPageConfigurationFactory implements PinPublishP
   private readonly session: LoginSessionGateway;
   private readonly drafts: DraftRepository;
   private readonly repositories: PinPublishRepositoryFactory;
+  private readonly imageUploaders: PinPublishImageUploaderFactory | undefined;
 
   constructor(session: LoginSessionGateway, drafts: DraftRepository,
-    repositories: PinPublishRepositoryFactory = (): PinPublishRepository => new LocalDraftOnlyPinPublishRepository()) {
+    repositories: PinPublishRepositoryFactory = (): PinPublishRepository => new LocalDraftOnlyPinPublishRepository(),
+    imageUploaders: PinPublishImageUploaderFactory | undefined = undefined) {
     this.session = session;
     this.drafts = drafts;
     this.repositories = repositories;
+    this.imageUploaders = imageUploaders;
   }
 
   async create(draftId: string): Promise<PinPublishPageConfiguration | undefined> {
@@ -91,7 +97,8 @@ export class LocalDraftPinPublishPageConfigurationFactory implements PinPublishP
         session: this.session,
         identity: createPinDraftIdentity(accountKey, draftId),
         traceIds: new SystemPinPublishTraceIdFactory(),
-        topicScheduler: new SystemPinTopicSearchScheduler()
+        topicScheduler: new SystemPinTopicSearchScheduler(),
+        imageUploaders: this.imageUploaders
       };
     } catch (_error) {
       return undefined;
@@ -187,6 +194,7 @@ export struct PinPublishPage {
   identity: ContentDraftIdentity | undefined = undefined;
   traceIds: PinPublishTraceIdFactory | undefined = undefined;
   topicScheduler: PinTopicSearchScheduler | undefined = undefined;
+  imageUploaderFactory: PinPublishImageUploaderFactory | undefined = undefined;
   onBack: PinPublishPageBackCallback = (): void => {};
   onLoginRequired: PinPublishPageLoginCallback = (): void => {};
   onPublished: PinPublishPagePublishedCallback = (_contentId: string): void => {};
@@ -220,7 +228,8 @@ export struct PinPublishPage {
       session: this.session,
       identity: this.identity,
       traceIds: this.traceIds,
-      topicScheduler: this.topicScheduler
+      topicScheduler: this.topicScheduler,
+      imageUploaders: this.imageUploaderFactory
     });
   }
 
@@ -253,7 +262,7 @@ export struct PinPublishPage {
       configuration.identity, configuration.traceIds, configuration.topicScheduler,
       (state: PinPublishPageViewState): void => {
         this.viewState = state;
-      }, this.onPublished);
+      }, this.onPublished, configuration.imageUploaders);
     this.controller.activate();
   }
 
@@ -340,7 +349,8 @@ export struct PinPublishPage {
         .onChange((value: string): void => this.controller?.updateHtml(value))
       P4ImagePickerPanel({
         onPreparedImagesChanged: (images: Array<PreparedPickedImage>): void => this.applyPreparedImages(images),
-        retainPreparedImages: this.viewState.localDraftSaved
+        retainPreparedImages: this.viewState.content.localImageReferences.length > 0,
+        restoredLocalImageReferences: this.viewState.content.localImageReferences
       })
       this.topicEditor()
       Row({ space: $r('app.float.p1_spacing_small') }) {
@@ -432,7 +442,7 @@ export struct PinPublishPage {
         .id('p4_pin_publish_confirm_title')
         .fontSize($r('app.float.p1_heading_font_size'))
         .fontWeight(FontWeight.Medium)
-      Text('确认后将先保存本地草稿并同步知乎草稿，再发布想法。')
+      Text('确认后将先保存本地草稿、上传已选图片、同步知乎草稿，再发布想法。')
         .id('p4_pin_publish_confirm_message')
         .fontSize($r('app.float.p1_body_font_size'))
         .fontColor($r('app.color.secondary_text'))

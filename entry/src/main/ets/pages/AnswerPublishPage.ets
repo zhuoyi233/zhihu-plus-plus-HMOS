@@ -13,6 +13,7 @@ import {
 } from 'data';
 import {
   AnswerPublishController,
+  AnswerPublishImageUploader,
   AnswerPublishObserver,
   AnswerPublishPhase,
   AnswerPublishViewState
@@ -52,6 +53,7 @@ export interface AnswerPublishPageController {
   updateContent(html: string, tocEnabled: boolean): void;
   updateLocalImageReferences(references: Array<LocalDraftImageReference>): void;
   saveLocalDraft(now?: number): Promise<void>;
+  uploadLocalImages(uploader: AnswerPublishImageUploader, now?: number): Promise<boolean>;
   publish(traceId: string, now?: number): Promise<void>;
   continueEditingExistingAnswer(): void;
   snapshot(): AnswerPublishViewState;
@@ -69,6 +71,9 @@ export interface AnswerPublishTraceIdFactory {
   createTraceId(): string;
 }
 
+/** 每次最终确认创建独立上传生命周期，离页取消不会影响其他创作页面。 */
+export type AnswerPublishImageUploaderFactory = () => AnswerPublishImageUploader;
+
 export type AnswerPublishPageObserver = (state: AnswerPublishPageViewState) => void;
 
 const LOGIN_REQUIRED_STATUS: string = '登录后即可撰写和发布回答';
@@ -83,6 +88,7 @@ export class AnswerPublishPageCoordinator {
   private readonly factory: AnswerPublishPageControllerFactory | undefined;
   private readonly traceIds: AnswerPublishTraceIdFactory;
   private readonly observer: AnswerPublishPageObserver;
+  private readonly imageUploaders: AnswerPublishImageUploaderFactory | undefined;
   private controller: AnswerPublishPageController | undefined;
   private active: boolean = false;
   private generation: number = 0;
@@ -92,11 +98,13 @@ export class AnswerPublishPageCoordinator {
 
   constructor(session: LoginSessionGateway | undefined, factory: AnswerPublishPageControllerFactory | undefined,
     traceIds: AnswerPublishTraceIdFactory = new SystemAnswerPublishTraceIdFactory(),
-    observer: AnswerPublishPageObserver = (_state: AnswerPublishPageViewState): void => {}) {
+    observer: AnswerPublishPageObserver = (_state: AnswerPublishPageViewState): void => {},
+    imageUploaders: AnswerPublishImageUploaderFactory | undefined = undefined) {
     this.session = session;
     this.factory = factory;
     this.traceIds = traceIds;
     this.observer = observer;
+    this.imageUploaders = imageUploaders;
   }
 
   activate(questionId: string, answerId?: string): void {
@@ -159,7 +167,17 @@ export class AnswerPublishPageCoordinator {
       return;
     }
     // 发布能力只能经已注入的 AnswerPublishController 触发；本页不认识发布 URL、Cookie 或请求体。
-    void controller.publish(this.traceIds.createTraceId());
+    if (this.state.localImageReferences.length === 0) {
+      void controller.publish(this.traceIds.createTraceId());
+      return;
+    }
+    const factory = this.imageUploaders;
+    if (factory === undefined) {
+      // 缺少显式图片上传能力时宁可保留本地草稿，也绝不丢弃图片后继续发布正文。
+      void controller.saveLocalDraft();
+      return;
+    }
+    void this.publishAfterUploadingImages(controller, factory);
   }
 
   continueEditingExistingAnswer(): void {
@@ -234,6 +252,23 @@ export class AnswerPublishPageCoordinator {
       canContinueEditing: state.phase === AnswerPublishPhase.CONFLICT && state.conflictAnswerId !== undefined,
       statusMessage: pageStatusMessage(state)
     });
+  }
+
+  private async publishAfterUploadingImages(controller: AnswerPublishPageController,
+    factory: AnswerPublishImageUploaderFactory): Promise<void> {
+    let uploader: AnswerPublishImageUploader;
+    try {
+      uploader = factory();
+    } catch (_error) {
+      return;
+    }
+    if (!await controller.uploadLocalImages(uploader)) {
+      return;
+    }
+    if (!this.active || this.controller !== controller) {
+      return;
+    }
+    await controller.publish(this.traceIds.createTraceId());
   }
 
   private applyLoginRequired(): void {
@@ -398,6 +433,7 @@ export struct AnswerPublishPage {
   session: LoginSessionGateway | undefined = undefined;
   controllerFactory: AnswerPublishPageControllerFactory | undefined = undefined;
   traceIds: AnswerPublishTraceIdFactory | undefined = undefined;
+  imageUploaderFactory: AnswerPublishImageUploaderFactory | undefined = undefined;
   onGoLogin: () => void = (): void => {};
   onBack: () => void = (): void => {};
   @State private viewState: AnswerPublishPageViewState = emptyViewState();
@@ -411,7 +447,7 @@ export struct AnswerPublishPage {
     this.coordinator = new AnswerPublishPageCoordinator(this.session, this.controllerFactory, this.traceIds,
       (state: AnswerPublishPageViewState): void => {
         this.viewState = state;
-      });
+      }, this.imageUploaderFactory);
     this.coordinator.activate(this.questionId, this.answerId);
   }
 
@@ -458,7 +494,8 @@ export struct AnswerPublishPage {
 
         P4ImagePickerPanel({
           onPreparedImagesChanged: (images: Array<PreparedPickedImage>): void => this.applyPreparedImages(images),
-          retainPreparedImages: this.viewState.localDraftSaved
+          retainPreparedImages: this.viewState.localImageReferences.length > 0,
+          restoredLocalImageReferences: this.viewState.localImageReferences
         })
 
         Row({ space: $r('app.float.p1_spacing_small') }) {
@@ -537,7 +574,7 @@ export struct AnswerPublishPage {
         .id('p4_answer_page_publish_confirm_title')
         .fontSize($r('app.float.p1_heading_font_size'))
         .fontWeight(FontWeight.Medium)
-      Text('确认后将先保存本地草稿并同步知乎草稿，再提交回答。')
+      Text('确认后将先保存本地草稿、上传已选图片、同步知乎草稿，再提交回答。')
         .id('p4_answer_page_publish_confirm_message')
         .fontSize($r('app.float.p1_body_font_size'))
         .fontColor($r('app.color.secondary_text'))
@@ -589,6 +626,8 @@ function pageStatusMessage(state: AnswerPublishViewState): string {
   switch (state.phase) {
     case AnswerPublishPhase.LOADING:
       return '正在恢复回答草稿…';
+    case AnswerPublishPhase.UPLOADING_IMAGES:
+      return '正在上传图片，草稿已保留…';
     case AnswerPublishPhase.SAVING_REMOTE_DRAFT:
       return '正在保存草稿…';
     case AnswerPublishPhase.PUBLISHING:

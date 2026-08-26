@@ -10,15 +10,20 @@ import {
   DraftRepository,
   HttpFailure,
   HttpFailureKind,
+  ImageUploadFailure,
+  ImageUploadFailureKind,
+  LocalDraftImageReference,
   PinPublishInput,
   PinPublishRepository,
-  PinTopicSuggestion
+  PinTopicSuggestion,
+  UploadedZhihuImage
 } from 'data';
 import {
   PIN_EMPTY_CONTENT_MESSAGE,
   PIN_TOPIC_LOOKUP_FAILED_MESSAGE,
   PinDraftContent,
   PinPublishController,
+  PinPublishImageUploader,
   PinPublishOperation,
   PinPublishTraceIdFactory,
   PinTopicSearchScheduler
@@ -136,6 +141,22 @@ class FakePinPublishRepository implements PinPublishRepository {
   }
 }
 
+class FakePinImageUploader implements PinPublishImageUploader {
+  readonly uploads: Array<Array<LocalDraftImageReference>> = [];
+  result: Array<UploadedZhihuImage> = [uploadedImage()];
+  failure?: Object;
+  cancelCount: number = 0;
+
+  upload(references: Array<LocalDraftImageReference>): Promise<Array<UploadedZhihuImage>> {
+    this.uploads.push(references);
+    return this.failure === undefined ? Promise.resolve(this.result) : Promise.reject(this.failure);
+  }
+
+  cancel(): void {
+    this.cancelCount += 1;
+  }
+}
+
 class FakeScheduler implements PinTopicSearchScheduler {
   readonly callbacks: Map<number, () => void> = new Map<number, () => void>();
   private nextHandle: number = 1;
@@ -193,6 +214,29 @@ function richContent(): PinDraftContent {
   };
 }
 
+function localImageReference(): LocalDraftImageReference {
+  return {
+    fileName: '0123456789abcdef0123456789abcdef.jpg',
+    mimeType: 'image/jpeg',
+    byteLength: 4096,
+    width: 1080,
+    height: 720,
+    animated: false,
+    createdAtMillis: 100
+  };
+}
+
+function uploadedImage(): UploadedZhihuImage {
+  return {
+    imageId: '1',
+    url: 'https://picx.zhimg.com/v2-image.jpg',
+    originalUrl: 'https://picx.zhimg.com/v2-image-original.jpg',
+    width: 1080,
+    height: 720,
+    watermark: 'original'
+  };
+}
+
 function createController(repository: FakePinPublishRepository, drafts: FakeDraftRepository,
   scheduler: FakeScheduler): PinPublishController {
   return new PinPublishController(repository, drafts, pinIdentity(), new FixedTraceIdFactory(), scheduler);
@@ -234,6 +278,42 @@ export default function pinPublishStateTest(): void {
       expect(drafts.saves[1].dirty).assertFalse();
       expect(controller.snapshot().operation).assertEqual(PinPublishOperation.PUBLISHED);
       expect(controller.snapshot().publishedContentId).assertEqual('888');
+    });
+
+    it('savesLocalReferencesBeforeUploadAndUsesOnlyUploadedImagesForRemotePublish', 0, async () => {
+      const repository = new FakePinPublishRepository();
+      const drafts = new FakeDraftRepository();
+      const controller = createController(repository, drafts, new FakeScheduler());
+      const uploader = new FakePinImageUploader();
+      controller.activate();
+      controller.replaceContent({ title: '', html: '', images: [], localImageReferences: [localImageReference()], topics: [] });
+
+      expect(await controller.uploadLocalImages(uploader)).assertTrue();
+      expect(drafts.saves.length).assertEqual(1);
+      expect(drafts.saves[0].imageRefsJson.includes(localImageReference().fileName)).assertTrue();
+      expect(controller.snapshot().content.localImageReferences.length).assertEqual(0);
+      expect(controller.snapshot().content.images.length).assertEqual(1);
+      expect(repository.calls.length).assertEqual(0);
+
+      await controller.publish();
+      expect(repository.calls[0]).assertEqual('remote-draft');
+      expect(repository.calls[1]).assertEqual('publish');
+    });
+
+    it('keepsLocalReferencesAndDoesNotStartRemotePublishWhenUploadFails', 0, async () => {
+      const repository = new FakePinPublishRepository();
+      const drafts = new FakeDraftRepository();
+      const controller = createController(repository, drafts, new FakeScheduler());
+      const uploader = new FakePinImageUploader();
+      uploader.failure = new ImageUploadFailure(ImageUploadFailureKind.NETWORK);
+      controller.activate();
+      controller.replaceContent({ title: '', html: '', images: [], localImageReferences: [localImageReference()], topics: [] });
+
+      expect(await controller.uploadLocalImages(uploader)).assertFalse();
+      expect(controller.snapshot().operation).assertEqual(PinPublishOperation.ERROR);
+      expect(controller.snapshot().content.localImageReferences.length).assertEqual(1);
+      expect(drafts.saves.length).assertEqual(1);
+      expect(repository.calls.length).assertEqual(0);
     });
 
     it('keepsLocalDraftForAuthenticationForbiddenRateLimitAndOtherPublishFailures', 0, async () => {

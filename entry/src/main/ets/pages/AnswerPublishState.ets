@@ -7,9 +7,13 @@ import {
   createAnswerDraftIdentity,
   DraftRepository,
   ExistingAnswerForEditing,
+  ImageUploadFailure,
+  ImageUploadFailureKind,
+  isSafeUploadedZhihuImage,
   isExistingAnswerConflict,
   LocalDraftImageReference,
   LoginSessionGateway,
+  MAX_CREATION_HTML_LENGTH,
   cloneLocalDraftImageReferences,
   parseLocalDraftImageReferences,
   parsePublishedContentId,
@@ -17,13 +21,15 @@ import {
   PublishFailureKind,
   SessionStatus,
   serializeLocalDraftImageReferences,
-  toPublishFailure
+  toPublishFailure,
+  UploadedZhihuImage
 } from 'data';
 
 export enum AnswerPublishPhase {
   IDLE = 'idle',
   LOADING = 'loading',
   READY = 'ready',
+  UPLOADING_IMAGES = 'uploading_images',
   SAVING_REMOTE_DRAFT = 'saving_remote_draft',
   PUBLISHING = 'publishing',
   PUBLISHED = 'published',
@@ -53,6 +59,12 @@ export interface AnswerPublishViewState {
 
 export type AnswerPublishObserver = (state: AnswerPublishViewState) => void;
 
+/** 最终确认后才由页面注入；状态机不接触文件、HTTP 或会话凭证。 */
+export interface AnswerPublishImageUploader {
+  upload(references: Array<LocalDraftImageReference>): Promise<Array<UploadedZhihuImage>>;
+  cancel(): void;
+}
+
 export const ANSWER_PUBLISH_LOGIN_REQUIRED_MESSAGE: string = '发布回答需要登录，请先登录';
 export const ANSWER_PUBLISH_VERIFICATION_MESSAGE: string = '发布被拒绝或需要完成安全验证';
 export const ANSWER_PUBLISH_RATE_LIMITED_MESSAGE: string = '发布过于频繁，请稍后重试';
@@ -77,6 +89,7 @@ export class AnswerPublishController {
   private html: string = '';
   private tocEnabled: boolean = false;
   private localImageReferences: Array<LocalDraftImageReference> = [];
+  private activeImageUploader?: AnswerPublishImageUploader;
   private localDraftSaved: boolean = false;
   private pending: boolean = false;
   private requiresLogin: boolean = false;
@@ -112,6 +125,8 @@ export class AnswerPublishController {
     }
     this.active = false;
     this.generation += 1;
+    this.activeImageUploader?.cancel();
+    this.activeImageUploader = undefined;
     this.publishRepository.cancel();
     this.pending = false;
     this.phase = AnswerPublishPhase.RELEASED;
@@ -224,6 +239,53 @@ export class AnswerPublishController {
       this.emit();
     } catch (error) {
       this.fail(operation, error);
+    }
+  }
+
+  /**
+   * 将受控缓存图片附加到回答前先落本地草稿。上传失败时原始本地引用仍在草稿中，
+   * 远端草稿和正式发布均不会开始。
+   */
+  async uploadLocalImages(uploader: AnswerPublishImageUploader, now: number = Date.now()): Promise<boolean> {
+    if (!this.active || this.pending || this.phase === AnswerPublishPhase.RELEASED ||
+      this.phase === AnswerPublishPhase.PUBLISHED) {
+      return false;
+    }
+    const references = cloneLocalDraftImageReferences(this.localImageReferences);
+    if (references.length === 0) {
+      return true;
+    }
+    if (!this.requireAuthenticatedSession()) {
+      return false;
+    }
+    const operation = this.begin(AnswerPublishPhase.UPLOADING_IMAGES);
+    this.activeImageUploader = uploader;
+    try {
+      await this.draftRepository.save(this.createLocalDraftInput(), now);
+      if (!this.isCurrent(operation)) {
+        return false;
+      }
+      this.localDraftSaved = true;
+      const uploaded = await uploader.upload(references);
+      if (!this.isCurrent(operation)) {
+        return false;
+      }
+      if (uploaded.length !== references.length || !uploaded.every((image: UploadedZhihuImage): boolean =>
+        isSafeUploadedZhihuImage(image))) {
+        throw new PublishFailure(PublishFailureKind.INVALID_INPUT);
+      }
+      this.html = appendUploadedImages(this.html, uploaded);
+      this.localImageReferences = [];
+      this.localDraftSaved = false;
+      this.finishReady();
+      return true;
+    } catch (error) {
+      this.fail(operation, toAttachmentPublishFailure(error));
+      return false;
+    } finally {
+      if (this.activeImageUploader === uploader) {
+        this.activeImageUploader = undefined;
+      }
     }
   }
 
@@ -435,4 +497,32 @@ function messageForFailure(kind: PublishFailureKind): string {
     default:
       return ANSWER_PUBLISH_FAILED_MESSAGE;
   }
+}
+
+function appendUploadedImages(html: string, images: Array<UploadedZhihuImage>): string {
+  let result = html;
+  for (let index = 0; index < images.length; index += 1) {
+    const image = images[index];
+    result += `<p><img src="${image.originalUrl}" width="${image.width}" height="${image.height}" /></p>`;
+  }
+  if (result.length > MAX_CREATION_HTML_LENGTH || result.includes('\u0000')) {
+    throw new PublishFailure(PublishFailureKind.INVALID_INPUT);
+  }
+  return result;
+}
+
+function toAttachmentPublishFailure(error: Object): PublishFailure {
+  if (!(error instanceof ImageUploadFailure)) {
+    return toPublishFailure(error);
+  }
+  if (error.kind === ImageUploadFailureKind.AUTHENTICATION) return new PublishFailure(PublishFailureKind.AUTHENTICATION);
+  if (error.kind === ImageUploadFailureKind.FORBIDDEN) return new PublishFailure(PublishFailureKind.FORBIDDEN);
+  if (error.kind === ImageUploadFailureKind.RATE_LIMITED) return new PublishFailure(PublishFailureKind.RATE_LIMITED);
+  if (error.kind === ImageUploadFailureKind.TIMEOUT || error.kind === ImageUploadFailureKind.POLL_TIMEOUT) {
+    return new PublishFailure(PublishFailureKind.TIMEOUT);
+  }
+  if (error.kind === ImageUploadFailureKind.CANCELLED) return new PublishFailure(PublishFailureKind.CANCELLED);
+  if (error.kind === ImageUploadFailureKind.SERVER) return new PublishFailure(PublishFailureKind.SERVER);
+  if (error.kind === ImageUploadFailureKind.NETWORK) return new PublishFailure(PublishFailureKind.NETWORK);
+  return new PublishFailure(PublishFailureKind.INVALID_INPUT);
 }

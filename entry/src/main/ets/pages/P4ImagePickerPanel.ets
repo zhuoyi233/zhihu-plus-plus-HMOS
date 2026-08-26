@@ -1,5 +1,5 @@
 import { fileUri } from '@kit.CoreFileKit';
-import { ImageUploadFailureKind } from 'data';
+import { ImageUploadFailureKind, LocalDraftImageReference } from 'data';
 import {
   MediaPickerCoordinator,
   MediaPickerPhase,
@@ -8,7 +8,8 @@ import {
 } from '../platform/MediaPickerCoordinator';
 import {
   createProductionMediaPickerCoordinator,
-  purgeExpiredControlledImageCache
+  purgeExpiredControlledImageCache,
+  restoreControlledPickedImages
 } from '../platform/SystemPickedImageFileStore';
 
 export type P4ImagePickerSelectionCallback = (images: Array<PreparedPickedImage>) => void;
@@ -25,6 +26,8 @@ export struct P4ImagePickerPanel {
    * 面板离开时不得删除仍可恢复的缓存副本。未保存的选择仍按原逻辑立即清理。
    */
   retainPreparedImages: boolean = false;
+  /** 已保存草稿的受控缓存引用；只用于恢复本地预览和移除操作，不包含系统相册 URI。 */
+  restoredLocalImageReferences: Array<LocalDraftImageReference> = [];
   @State private viewState: MediaPickerViewState = initialPickerViewState();
   private coordinator: MediaPickerCoordinator | undefined = undefined;
 
@@ -39,7 +42,8 @@ export struct P4ImagePickerPanel {
     }
     try {
       this.coordinator = createProductionMediaPickerCoordinator(context.cacheDir);
-      this.sync(this.coordinator.snapshot());
+      this.viewState = this.coordinator.restorePreparedImages(
+        restoreControlledPickedImages(context.cacheDir, this.restoredLocalImageReferences));
       // 仅回收 24 小时前的应用缓存；失败不影响用户本次显式选择。
       void purgeExpiredControlledImageCache(context.cacheDir);
     } catch (_error) {

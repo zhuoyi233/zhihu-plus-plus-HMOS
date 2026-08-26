@@ -43,6 +43,7 @@ import {
   DraftRepository,
   EncryptedDraftBodyStore,
   ExistingAnswerForEditing,
+  ImageUploadSource,
   AnswerPublishRepository,
   PinPublishRepository,
   VoteRepository,
@@ -64,6 +65,7 @@ import { AnswerDetailPage, ArticleDetailPage, QuestionDetailPage } from './Conte
 import { VideoPlaybackPage } from './VideoPlaybackPage';
 import {
   AnswerPublishPage,
+  AnswerPublishImageUploaderFactory,
   AnswerPublishPageControllerFactory,
   LocalDraftAnswerPublishControllerFactory,
   SeededAnswerPublishRepository
@@ -87,6 +89,7 @@ import { CollectionContentPage } from './CollectionContentPage';
 import { NotificationPage } from './NotificationPage';
 import { NotificationSettingsPage } from './NotificationSettingsPage';
 import { ReadHistoryContentKind, ReadHistoryOpenTarget } from './ReadHistoryState';
+import { ProductionImageAttachmentUploaderFactory } from '../platform/SystemImageUploadPlatform';
 
 @Entry
 @Component
@@ -118,6 +121,7 @@ struct Index {
   @State private notificationRepository?: NotificationRepository = undefined;
   @State private notificationSettings?: NotificationSettingsGateway = undefined;
   private answerPublishFactory: AnswerPublishPageControllerFactory | undefined = undefined;
+  private answerImageUploaderFactory: AnswerPublishImageUploaderFactory | undefined = undefined;
   private pinPublishFactory: PinPublishPageConfigurationFactory | undefined = undefined;
   private pinDraftResumeGateway: PinDraftResumeListGateway | undefined = undefined;
 
@@ -168,8 +172,11 @@ struct Index {
       this.answerPublishFactory = new LocalDraftAnswerPublishControllerFactory(session, draftRepository,
         (editSeed: ExistingAnswerForEditing | undefined): AnswerPublishRepository =>
           new SeededAnswerPublishRepository(new DefaultCreationPublishRepository(new ZhihuHttpClient(session)), editSeed));
+      const imageUploaders = new ProductionImageAttachmentUploaderFactory(context.cacheDir, session);
+      this.answerImageUploaderFactory = () => imageUploaders.create(ImageUploadSource.ANSWER);
       const pinPublishFactory = new LocalDraftPinPublishPageConfigurationFactory(session, draftRepository,
-        (): PinPublishRepository => new DefaultPinPublishRepository(new ZhihuHttpClient(session)));
+        (): PinPublishRepository => new DefaultPinPublishRepository(new ZhihuHttpClient(session)),
+        () => imageUploaders.create(ImageUploadSource.PIN));
       this.pinPublishFactory = pinPublishFactory;
       this.pinDraftResumeGateway = pinPublishFactory;
       this.compositionPreparing = false;
@@ -363,6 +370,7 @@ struct Index {
       answerId: answerId,
       session: this.session,
       controllerFactory: this.answerPublishFactory,
+      imageUploaderFactory: this.answerImageUploaderFactory,
       onGoLogin: (): void => {
         navigate({ name: P1DestinationName.LOGIN });
       },

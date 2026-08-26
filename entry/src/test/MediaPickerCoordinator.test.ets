@@ -244,5 +244,25 @@ export default function mediaPickerCoordinatorTest(): void {
       expect(ignored.images.length).assertEqual(1);
       expect(store.removed.length).assertEqual(1);
     });
+
+    it('restoresControlledDraftImagesAndAppendsNewExplicitSelectionsWithoutDeletingTheDraftCopy', 0, async () => {
+      const firstPicker = new FixedPhotoPickerGateway(selectedResult('file://media/Photo/1'));
+      const inspector = new FakePickedImageInspector();
+      inspector.inspections.set('file://media/Photo/1', validInspection('file://media/Photo/1'));
+      inspector.inspections.set('file://media/Photo/2', validInspection('file://media/Photo/2'));
+      const store = new MemoryTemporaryStore();
+      const initial = await coordinator(firstPicker, inspector, store).pickExplicitly();
+      const nextPicker = new FixedPhotoPickerGateway(selectedResult('file://media/Photo/2'));
+      const value = coordinator(nextPicker, inspector, store);
+
+      const restored = value.restorePreparedImages(initial.images);
+      const selected = await value.pickExplicitly();
+
+      expect(restored.phase).assertEqual(MediaPickerPhase.READY);
+      expect(restored.images.length).assertEqual(1);
+      expect(nextPicker.requestedMaxCount).assertEqual(8);
+      expect(selected.images.length).assertEqual(2);
+      expect(store.removed.length).assertEqual(0);
+    });
   });
 }

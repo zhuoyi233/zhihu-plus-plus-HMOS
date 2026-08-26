@@ -4,6 +4,10 @@ import {
   ContentDraftSaveInput,
   buildPinPublishRequest,
   DraftRepository,
+  ImageUploadFailure,
+  ImageUploadFailureKind,
+  isSafeUploadedZhihuImage,
+  MAX_PIN_IMAGE_COUNT,
   MAX_PIN_TOPIC_COUNT,
   LocalDraftImageReference,
   PinPublishInput,
@@ -27,6 +31,7 @@ export const PIN_TOPIC_LOOKUP_FAILED_MESSAGE: string = '话题建议暂不可用
 export enum PinPublishOperation {
   IDLE = 'idle',
   SAVING_LOCAL = 'saving_local',
+  UPLOADING_IMAGES = 'uploading_images',
   SAVING_REMOTE_DRAFT = 'saving_remote_draft',
   PUBLISHING = 'publishing',
   PUBLISHED = 'published',
@@ -67,6 +72,12 @@ export interface PinPublishTraceIdFactory {
   createTraceId(): string;
 }
 
+/** 最终确认后才由页面注入；发布状态机不读取路径、文件或会话。 */
+export interface PinPublishImageUploader {
+  upload(references: Array<LocalDraftImageReference>): Promise<Array<UploadedZhihuImage>>;
+  cancel(): void;
+}
+
 /**
  * 平台层可以用 setTimeout/clearTimeout 实现；测试通过 fake scheduler 精确推进防抖。
  * 返回值只在当前 scheduler 内使用，避免把定时器句柄泄漏给页面。
@@ -102,6 +113,7 @@ export class PinPublishController {
   private topicErrorMessage?: string;
   private topicSearchGeneration: number = 0;
   private scheduledTopicSearch?: number;
+  private activeImageUploader?: PinPublishImageUploader;
 
   constructor(repository: PinPublishRepository, drafts: DraftRepository, identity: ContentDraftIdentity,
     traceIds: PinPublishTraceIdFactory, scheduler: PinTopicSearchScheduler,
@@ -134,6 +146,8 @@ export class PinPublishController {
     this.cancelScheduledTopicSearch();
     this.topicSearchGeneration += 1;
     this.topicPending = false;
+    this.activeImageUploader?.cancel();
+    this.activeImageUploader = undefined;
     this.repository.cancel();
   }
 
@@ -272,6 +286,67 @@ export class PinPublishController {
         return;
       }
       this.fail(toPublishFailure(error));
+    }
+  }
+
+  /**
+   * 发布前先把未上传图片引用写入本地加密草稿，再上传并以受验证的知乎图片替换引用。
+   * 任一上传失败均不触发远端草稿/发布，用户可在原草稿上重试。
+   */
+  async uploadLocalImages(uploader: PinPublishImageUploader): Promise<boolean> {
+    if (!this.active || this.isBusy()) {
+      return false;
+    }
+    const references = this.content.localImageReferences;
+    if (references.length === 0) {
+      return true;
+    }
+    if (!hasDraftContent(this.content) || this.content.images.length + references.length > MAX_PIN_IMAGE_COUNT) {
+      this.fail(new PublishFailure(PublishFailureKind.INVALID_INPUT), PIN_EMPTY_CONTENT_MESSAGE);
+      return false;
+    }
+    this.operation = PinPublishOperation.SAVING_LOCAL;
+    this.failure = undefined;
+    this.emit();
+    try {
+      await this.drafts.save(this.toDraftSaveInput());
+      if (!this.active) {
+        return false;
+      }
+      this.localDraftSaved = true;
+      this.operation = PinPublishOperation.UPLOADING_IMAGES;
+      this.activeImageUploader = uploader;
+      this.emit();
+      const uploaded = await uploader.upload(references);
+      if (!this.active) {
+        return false;
+      }
+      if (uploaded.length !== references.length || !uploaded.every((image: UploadedZhihuImage): boolean =>
+        isSafeUploadedZhihuImage(image))) {
+        throw new PublishFailure(PublishFailureKind.INVALID_INPUT);
+      }
+      this.content = normalizePinDraftContent({
+        title: this.content.title,
+        html: this.content.html,
+        images: this.content.images.concat(uploaded),
+        localImageReferences: [],
+        topics: this.content.topics
+      });
+      this.localDraftSaved = false;
+      this.remoteDraftSaved = false;
+      this.operation = PinPublishOperation.IDLE;
+      this.failure = undefined;
+      this.emit();
+      return true;
+    } catch (error) {
+      if (this.active) {
+        this.fail(toAttachmentPublishFailure(error));
+      }
+      return false;
+    } finally {
+      if (this.activeImageUploader === uploader) {
+        this.activeImageUploader = undefined;
+      }
     }
   }
 
@@ -442,6 +517,7 @@ export class PinPublishController {
 
   private isBusy(): boolean {
     return this.operation === PinPublishOperation.SAVING_LOCAL ||
+      this.operation === PinPublishOperation.UPLOADING_IMAGES ||
       this.operation === PinPublishOperation.SAVING_REMOTE_DRAFT ||
       this.operation === PinPublishOperation.PUBLISHING;
   }
@@ -573,4 +649,20 @@ function boundAndDedupeSuggestions(suggestions: Array<PinTopicSuggestion>): Arra
 function plainTextLength(html: string): number {
   const withoutTags = html.replace(/<[^>]*>/g, '').replace(/&(?:#(?:x[0-9a-fA-F]+|[0-9]+)|[a-zA-Z][a-zA-Z0-9]+);/g, ' ');
   return Array.from(withoutTags).length;
+}
+
+function toAttachmentPublishFailure(error: Object): PublishFailure {
+  if (!(error instanceof ImageUploadFailure)) {
+    return toPublishFailure(error);
+  }
+  if (error.kind === ImageUploadFailureKind.AUTHENTICATION) return new PublishFailure(PublishFailureKind.AUTHENTICATION);
+  if (error.kind === ImageUploadFailureKind.FORBIDDEN) return new PublishFailure(PublishFailureKind.FORBIDDEN);
+  if (error.kind === ImageUploadFailureKind.RATE_LIMITED) return new PublishFailure(PublishFailureKind.RATE_LIMITED);
+  if (error.kind === ImageUploadFailureKind.TIMEOUT || error.kind === ImageUploadFailureKind.POLL_TIMEOUT) {
+    return new PublishFailure(PublishFailureKind.TIMEOUT);
+  }
+  if (error.kind === ImageUploadFailureKind.CANCELLED) return new PublishFailure(PublishFailureKind.CANCELLED);
+  if (error.kind === ImageUploadFailureKind.SERVER) return new PublishFailure(PublishFailureKind.SERVER);
+  if (error.kind === ImageUploadFailureKind.NETWORK) return new PublishFailure(PublishFailureKind.NETWORK);
+  return new PublishFailure(PublishFailureKind.INVALID_INPUT);
 }

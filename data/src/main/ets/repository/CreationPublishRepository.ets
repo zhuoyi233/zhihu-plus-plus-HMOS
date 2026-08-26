@@ -388,7 +388,7 @@ function validatePinInput(input: PinPublishInput): void {
     input.images.length > MAX_PIN_IMAGE_COUNT || input.topics.length > MAX_PIN_TOPIC_COUNT ||
     !isSafePublishTraceId(input.traceId) ||
     (input.title.trim().length === 0 && input.html.trim().length === 0 && input.images.length === 0) ||
-    !input.images.every((image: UploadedZhihuImage): boolean => isSafeUploadedImage(image)) ||
+    !input.images.every((image: UploadedZhihuImage): boolean => isSafeUploadedZhihuImage(image)) ||
     !input.topics.every((topic: PublishPinTopic): boolean => isSafePinTopic(topic))) {
     throw new PublishFailure(PublishFailureKind.INVALID_INPUT);
   }
@@ -407,7 +407,8 @@ function isSafePublishTraceId(value: string): boolean {
     /^[1-9][0-9]{0,15},[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
 }
 
-function isSafeUploadedImage(image: UploadedZhihuImage): boolean {
+/** 图片上传结果在进入想法媒体或回答内嵌 HTML 前都必须通过同一严格合同。 */
+export function isSafeUploadedZhihuImage(image: UploadedZhihuImage): boolean {
   return isSafeDecimalContentId(image.imageId) && isSafeImageUrl(image.url) && isSafeImageUrl(image.originalUrl) &&
     Number.isSafeInteger(image.width) && image.width > 0 && Number.isSafeInteger(image.height) && image.height > 0 &&
     (image.watermarkUrl === undefined || isSafeImageUrl(image.watermarkUrl));
