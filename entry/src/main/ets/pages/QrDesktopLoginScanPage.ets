@@ -6,6 +6,8 @@ import {
   QrDesktopLoginScanPhase,
   QrDesktopLoginScanViewState
 } from '../scan/QrDesktopLoginScanFlow';
+import { QrDesktopLoginConfirmationPage } from './QrDesktopLoginConfirmationPage';
+import { isConfirmedQrDesktopLoginUrl } from '../scan/QrDesktopLoginConfirmationPolicy';
 
 const INITIAL_STATE: QrDesktopLoginScanViewState = {
   phase: QrDesktopLoginScanPhase.READY,
@@ -32,13 +34,16 @@ class QrDesktopLoginApplicationStateCallback extends ApplicationStateChangeCallb
   }
 }
 
-/** P4-6 生产入口：只完成扫码与明确确认，不执行未冻结的确认网络请求。 */
+/** P4-6 生产入口：扫码后只在用户明确确认时打开受限的知乎电脑登录确认页。 */
 @Component
 export struct QrDesktopLoginScanPage {
   onBack: () => void = (): void => {
   };
   @State private viewState: QrDesktopLoginScanViewState = INITIAL_STATE;
+  @State private showConfirmation: boolean = false;
   private controller?: QrDesktopLoginScanController;
+  /** 仅在确认页首次构建前临时持有，随后由确认页接管；不进入 @State 或路由参数。 */
+  private confirmedUrl?: string;
   private applicationContext?: common.ApplicationContext;
   private applicationStateCallback?: QrDesktopLoginApplicationStateCallback;
 
@@ -63,6 +68,7 @@ export struct QrDesktopLoginScanPage {
   }
 
   aboutToDisappear(): void {
+    this.dismissConfirmation();
     const applicationContext = this.applicationContext;
     const callback = this.applicationStateCallback;
     this.applicationContext = undefined;
@@ -78,6 +84,7 @@ export struct QrDesktopLoginScanPage {
   }
 
   build() {
+    Stack({ alignContent: Alignment.TopStart }) {
     Scroll() {
       Column({ space: $r('app.float.p1_spacing_large') }) {
         Text('扫描电脑端登录码')
@@ -107,7 +114,7 @@ export struct QrDesktopLoginScanPage {
               .width('100%')
               .enabled(this.viewState.confirmEnabled)
               .onClick((): void => {
-                this.controller?.confirm();
+                this.openConfirmation();
               })
             Button('取消')
               .id('p4_qr_desktop_login_cancel')
@@ -127,7 +134,7 @@ export struct QrDesktopLoginScanPage {
             })
         }
 
-        Text('不会显示、保存或记录二维码令牌；当前确认请求合同尚未冻结，因此不会自动发送网络请求。')
+        Text('不会显示、保存或记录二维码令牌；只有确认后才会打开受限的知乎确认页。')
           .fontSize($r('app.float.p1_secondary_font_size'))
           .lineHeight(22)
           .fontColor($r('app.color.secondary_text'))
@@ -144,6 +151,20 @@ export struct QrDesktopLoginScanPage {
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.page_background'))
+
+      if (this.showConfirmation) {
+        QrDesktopLoginConfirmationPage({
+          confirmedUrl: this.confirmedUrl ?? '',
+          onDismiss: (): void => {
+            this.dismissConfirmation();
+          }
+        })
+          .width('100%')
+          .height('100%')
+      }
+    }
+    .width('100%')
+    .height('100%')
   }
 
   private startScan(): void {
@@ -160,5 +181,23 @@ export struct QrDesktopLoginScanPage {
     }
     const scanner: QrScanner = new SystemQrScanner(context);
     this.controller?.scan(scanner);
+  }
+
+  private openConfirmation(): void {
+    const handoff = this.controller?.confirm();
+    const confirmedUrl = this.controller?.takeConfirmedUrl();
+    if (handoff === undefined || !handoff.requiresExplicitConfirmation ||
+      confirmedUrl === undefined || !isConfirmedQrDesktopLoginUrl(confirmedUrl)) {
+      this.confirmedUrl = undefined;
+      return;
+    }
+    this.confirmedUrl = confirmedUrl;
+    this.showConfirmation = true;
+  }
+
+  private dismissConfirmation(): void {
+    this.confirmedUrl = undefined;
+    this.showConfirmation = false;
+    this.controller?.cancel();
   }
 }

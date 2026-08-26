@@ -5,6 +5,7 @@ import deepLinkResolverTest from './DeepLinkResolver.test';
 import httpProbeClientTest from './HttpProbeClient.test';
 import qrLoginScanPolicyTest from './QrLoginScanPolicy.test';
 import qrDesktopLoginScanFlowTest from './QrDesktopLoginScanFlow.test';
+import qrDesktopLoginConfirmationPolicyTest from './QrDesktopLoginConfirmationPolicy.test';
 import readerDocumentTest from './ReaderDocument.test';
 import rdbSchemaTest from './RdbSchema.test';
 import zhihuLoginClientTest from './ZhihuLoginClient.test';
@@ -77,6 +78,7 @@ export default function testsuite(): void {
   httpProbeClientTest();
   qrLoginScanPolicyTest();
   qrDesktopLoginScanFlowTest();
+  qrDesktopLoginConfirmationPolicyTest();
   readerDocumentTest();
   rdbSchemaTest();
   zhihuLoginClientTest();
