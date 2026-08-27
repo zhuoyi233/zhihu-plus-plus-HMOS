@@ -179,9 +179,19 @@ struct ContentDetailPage {
       if (this.keywordBlockVisible) {
         this.keywordBlockDialog()
       }
-      if (this.actionMenuShown) {
-        this.actionMenuSheet()
-      }
+      Column()
+        .bindSheet(this.actionMenuShown, this.actionMenuSheet(), {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.actionMenuShown) {
+              this.actionMenuShown = false;
+            }
+          }
+        })
       if (this.kind === ContentDetailKind.ANSWER || this.kind === ContentDetailKind.ARTICLE) {
         CommentLayer({
           contentType: this.kind === ContentDetailKind.ARTICLE ? 'article' : 'answer',
@@ -710,97 +720,100 @@ struct ContentDetailPage {
 
   @Builder
   private actionMenuSheet() {
-    // P3-9-C：底部菜单弹窗（对齐上游 MyModalBottomSheet）。分享/复制链接可用，
-    // 朗读/总结/导出/沉浸式为占位入口（依赖系统能力或后续切片）。
-    Column() {
-      Blank()
-        .onClick((): void => {
-          this.actionMenuShown = false;
-        })
-      Column({ space: $r('app.float.p1_spacing_small') }) {
-        Row({ space: $r('app.float.p1_spacing_small') }) {
-          Text('更多操作')
-            .fontSize($r('app.float.p1_heading_font_size'))
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.primary_text'))
-            .layoutWeight(1)
-          Button('关闭')
-            .id('p3_detail_menu_close')
-            .fontSize($r('app.float.p1_body_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .backgroundColor(Color.Transparent)
-            .onClick((): void => {
-              this.actionMenuShown = false;
-            })
+    // 分享、复制链接与屏蔽操作放入 API 26 系统半模态；尚未接线的能力不显示占位项。
+    Column({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Text('更多操作')
+          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.primary_text'))
+          .layoutWeight(1)
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(18)
+            .fontColor([$r('app.color.primary_text')])
         }
-        .width('100%')
-
-        Button('复制链接')
-          .id('p3_detail_menu_copy_link')
-          .width('100%')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .id('p3_detail_menu_close')
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('关闭更多操作')
           .onClick((): void => {
             this.actionMenuShown = false;
-            this.copyContentLink();
           })
-
-        if (this.menuStatus.length > 0) {
-          Text(this.menuStatus)
-            .id('p3_detail_menu_status')
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .width('100%')
-        }
-
-        Button('分享')
-          .id('p3_detail_menu_share')
-          .width('100%')
-          .fontSize($r('app.float.p1_body_font_size'))
-          .onClick((): void => {
-            this.actionMenuShown = false;
-            this.copyContentLink();
-          })
-
-        if (this.content !== undefined && contentAuthorName(this.content).length > 0) {
-          Button('屏蔽作者')
-            .id(`p3_${this.kind}_block_author`)
-            .width('100%')
-            .fontSize($r('app.float.p1_body_font_size'))
-            .enabled(!this.blockingBusy && this.blockingAction !== undefined)
-            .onClick((): void => {
-              const content = this.content;
-              const author = content?.value.author;
-              if (author !== undefined) {
-                this.actionMenuShown = false;
-                this.pendingUserBlock = { userId: author.id, userName: author.name };
-              }
-            })
-        }
-
-        Button('屏蔽关键词')
-          .id(`p3_${this.kind}_block_keyword`)
-          .width('100%')
-          .fontSize($r('app.float.p1_body_font_size'))
-          .enabled(!this.blockingBusy && this.blockingAction !== undefined)
-          .onClick((): void => {
-            this.actionMenuShown = false;
-            this.keywordBlockInput = '';
-            this.keywordBlockVisible = true;
-          })
-
       }
       .width('100%')
-      .padding($r('app.float.p1_spacing_medium'))
-      .backgroundColor($r('app.color.surface_background'))
-      .borderRadius({
-        topLeft: $r('app.float.p1_card_radius'),
-        topRight: $r('app.float.p1_card_radius')
-      })
+
+      Button('复制链接', { type: ButtonType.Normal, stateEffect: true })
+        .id('p3_detail_menu_copy_link')
+        .width('100%')
+        .fontSize($r('app.float.p1_body_font_size'))
+        .fontColor($r('app.color.primary_text'))
+        .backgroundColor($r('app.color.control_background'))
+        .borderRadius($r('app.float.p1_card_radius'))
+        .onClick((): void => {
+          this.actionMenuShown = false;
+          this.copyContentLink();
+        })
+
+      if (this.menuStatus.length > 0) {
+        Text(this.menuStatus)
+          .id('p3_detail_menu_status')
+          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .width('100%')
+      }
+
+      Button('分享', { type: ButtonType.Normal, stateEffect: true })
+        .id('p3_detail_menu_share')
+        .width('100%')
+        .fontSize($r('app.float.p1_body_font_size'))
+        .fontColor($r('app.color.primary_text'))
+        .backgroundColor($r('app.color.control_background'))
+        .borderRadius($r('app.float.p1_card_radius'))
+        .onClick((): void => {
+          this.actionMenuShown = false;
+          this.copyContentLink();
+        })
+
+      if (this.content !== undefined && contentAuthorName(this.content).length > 0) {
+        Button('屏蔽作者', { type: ButtonType.Normal, stateEffect: true })
+          .id(`p3_${this.kind}_block_author`)
+          .width('100%')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor($r('app.color.primary_text'))
+          .backgroundColor($r('app.color.control_background'))
+          .borderRadius($r('app.float.p1_card_radius'))
+          .enabled(!this.blockingBusy && this.blockingAction !== undefined)
+          .onClick((): void => {
+            const content = this.content;
+            const author = content?.value.author;
+            if (author !== undefined) {
+              this.actionMenuShown = false;
+              this.pendingUserBlock = { userId: author.id, userName: author.name };
+            }
+          })
+      }
+
+      Button('屏蔽关键词', { type: ButtonType.Normal, stateEffect: true })
+        .id(`p3_${this.kind}_block_keyword`)
+        .width('100%')
+        .fontSize($r('app.float.p1_body_font_size'))
+        .fontColor($r('app.color.primary_text'))
+        .backgroundColor($r('app.color.control_background'))
+        .borderRadius($r('app.float.p1_card_radius'))
+        .enabled(!this.blockingBusy && this.blockingAction !== undefined)
+        .onClick((): void => {
+          this.actionMenuShown = false;
+          this.keywordBlockInput = '';
+          this.keywordBlockVisible = true;
+        })
+
     }
     .id('p3_detail_menu_sheet')
     .width('100%')
-    .height('100%')
-    .backgroundColor('#66000000')
+    .padding($r('app.float.p1_spacing_medium'))
   }
 
   private copyContentLink(): void {
