@@ -170,8 +170,20 @@ struct ContentDetailPage {
       .height('100%')
       .backgroundColor($r('app.color.page_background'))
 
-      if (this.favoriteDialogShown && this.collectionRepository !== undefined && this.session !== undefined) {
-        this.favoriteDialog()
+      if (this.collectionRepository !== undefined && this.session !== undefined) {
+        Column()
+          .bindSheet(this.favoriteDialogShown, this.favoriteDialog(), {
+            height: SheetSize.LARGE,
+            dragBar: true,
+            showClose: false,
+            maskColor: '#66000000',
+            backgroundColor: $r('app.color.surface_background'),
+            onDisappear: (): void => {
+              if (this.favoriteDialogShown) {
+                this.favoriteDialogShown = false;
+              }
+            }
+          })
       }
       if (this.pendingUserBlock !== undefined) {
         this.userBlockDialog()
@@ -220,26 +232,16 @@ struct ContentDetailPage {
 
   @Builder
   private favoriteDialog() {
-    Column() {
-      Blank()
-        .onClick((): void => {
-          this.favoriteDialogShown = false;
-        })
-      CollectionDialogComponent({
-        contentType: this.kind === ContentDetailKind.ARTICLE ? 'article' : 'answer',
-        contentId: this.contentId,
-        repository: this.collectionRepository,
-        session: this.session,
-        navigate: this.navigate,
-        onDismiss: (): void => {
-          this.favoriteDialogShown = false;
-        }
-      })
-        .height('70%')
-    }
-    .width('100%')
-    .height('100%')
-    .backgroundColor('#66000000')
+    CollectionDialogComponent({
+      contentType: this.kind === ContentDetailKind.ARTICLE ? 'article' : 'answer',
+      contentId: this.contentId,
+      repository: this.collectionRepository,
+      session: this.session,
+      navigate: this.navigate,
+      onDismiss: (): void => {
+        this.favoriteDialogShown = false;
+      }
+    })
   }
 
   @Builder

@@ -61,9 +61,17 @@ export struct CollectionDialogComponent {
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
-        Button('关闭')
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(18)
+            .fontColor([$r('app.color.primary_text')])
+        }
           .id('p3_favorite_dialog_close')
-          .fontSize($r('app.float.p1_secondary_font_size'))
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('关闭收藏夹')
           .onClick((): void => this.onDismiss())
       }
       .width('100%')
@@ -138,8 +146,6 @@ export struct CollectionDialogComponent {
     .width('100%')
     .height('100%')
     .padding($r('app.float.p1_page_padding'))
-    .backgroundColor($r('app.color.surface_background'))
-    .borderRadius({ topLeft: $r('app.float.p1_card_radius'), topRight: $r('app.float.p1_card_radius') })
   }
 
   @Builder
