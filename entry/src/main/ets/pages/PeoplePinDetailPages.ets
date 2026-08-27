@@ -707,12 +707,30 @@ export struct PinDetailPage {
   private loadedPin(pin: PinDetail) {
     Column() {
       Column({ space: $r('app.float.p1_spacing_small') }) {
-        Text(`${pin.author.name}的想法`)
-          .id('p2_pin_detail_title')
-          .fontSize($r('app.float.p1_heading_font_size'))
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.primary_text'))
-          .width('100%')
+        Row({ space: $r('app.float.p1_spacing_small') }) {
+          Text(`${pin.author.name}的想法`)
+            .id('p2_pin_detail_title')
+            .fontSize($r('app.float.p1_heading_font_size'))
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.primary_text'))
+            .layoutWeight(1)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          Button({ type: ButtonType.Normal }) {
+            SymbolGlyph($r('sys.symbol.more'))
+              .fontSize(22)
+              .fontColor([$r('app.color.secondary_text')])
+          }
+          .id('p3_pin_detail_more')
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .enabled(!this.blockingBusy && this.blockingAction !== undefined)
+          .accessibilityText('更多想法操作')
+          .bindMenu(this.pinActionMenu(pin))
+        }
+        .width('100%')
         Text(pin.author.headline.length > 0 ? `${pin.author.name} · ${pin.author.headline}` : pin.author.name)
           .id('p2_pin_detail_author')
           .fontSize($r('app.float.p1_body_font_size'))
@@ -747,29 +765,6 @@ export struct PinDetailPage {
           }
           .width('100%')
         }
-        Row({ space: $r('app.float.p1_spacing_small') }) {
-          Button('屏蔽作者')
-            .id('p3_pin_detail_block_author')
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .enabled(!this.blockingBusy && this.blockingAction !== undefined)
-            .onClick((): void => {
-              this.pendingUserBlock = { userId: pin.author.id, userName: pin.author.name };
-            })
-          Button('屏蔽关键词')
-            .id('p3_pin_detail_block_keyword')
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .enabled(!this.blockingBusy && this.blockingAction !== undefined)
-            .onClick((): void => {
-              this.keywordBlockInput = '';
-              this.keywordBlockVisible = true;
-            })
-          Button('屏蔽话题')
-            .id('p3_pin_detail_block_topic')
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .enabled(!this.blockingBusy && this.blockingAction !== undefined && pin.topics.length > 0)
-            .bindMenu(this.pinTopicMenu(pin))
-        }
-        .width('100%')
         if (this.blockingMessage.length > 0) {
           Text(this.blockingMessage)
             .id('p3_pin_detail_blocking_status')
@@ -807,8 +802,22 @@ export struct PinDetailPage {
     this.openedRecordFailed = state.openedRecordFailed;
   }
 
-  private pinTopicMenu(pin: PinDetail): Array<MenuElement> {
-    const menu: Array<MenuElement> = [];
+  private pinActionMenu(pin: PinDetail): Array<MenuElement> {
+    const menu: Array<MenuElement> = [
+      {
+        value: '屏蔽作者',
+        action: (): void => {
+          this.pendingUserBlock = { userId: pin.author.id, userName: pin.author.name };
+        }
+      },
+      {
+        value: '屏蔽关键词',
+        action: (): void => {
+          this.keywordBlockInput = '';
+          this.keywordBlockVisible = true;
+        }
+      }
+    ];
     pin.topics.forEach((topic: PinTopic): void => {
       menu.push({
         value: `屏蔽话题：${topic.name}`,
