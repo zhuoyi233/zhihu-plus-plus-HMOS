@@ -18,6 +18,7 @@ import {
   DomainDecodeError,
   DomainDecodeFailureKind,
   FOLLOWING_FEED_BASE_URL,
+  FOLLOWING_RECOMMEND_FEED_BASE_URL,
   HOT_FEED_BASE_URL,
   HttpFailure,
   HttpFailureKind,
@@ -180,6 +181,8 @@ export default function channelFeedRepositoryTest(): void {
   describe('channelFeedRepositoryTest', () => {
     it('buildsExactInitialUrlsAndCanonicalContentCursors', 0, () => {
       expect(buildChannelFeedRequestUrl(ChannelFeedSource.FOLLOWING).startsWith(FOLLOWING_FEED_BASE_URL)).assertTrue();
+      expect(buildChannelFeedRequestUrl(ChannelFeedSource.FOLLOWING_RECOMMEND)
+        .startsWith(FOLLOWING_RECOMMEND_FEED_BASE_URL)).assertTrue();
       expect(buildChannelFeedRequestUrl(ChannelFeedSource.HOT).startsWith(HOT_FEED_BASE_URL)).assertTrue();
       expect(buildChannelFeedRequestUrl(ChannelFeedSource.DAILY)).assertEqual(
         'https://daily.zhihu.com/api/4/stories/latest'
@@ -200,6 +203,10 @@ export default function channelFeedRepositoryTest(): void {
       expect(isChannelFeedCursorUrl(
         ChannelFeedSource.FOLLOWING,
         'https://www.zhihu.com/api/v3/moments?offset=10'
+      )).assertTrue();
+      expect(isChannelFeedCursorUrl(
+        ChannelFeedSource.FOLLOWING_RECOMMEND,
+        'https://api.zhihu.com/moments_v3?feed_type=recommend&offset=10'
       )).assertTrue();
       expect(isChannelFeedCursorUrl(
         ChannelFeedSource.FOLLOWING,
@@ -320,6 +327,7 @@ export default function channelFeedRepositoryTest(): void {
     it('decodesDailyAndStopsRepeatedDateCursor', 0, async () => {
       const factory = new SequenceChannelTransportFactory([
         new ChannelOutcome(new TestHttpResponse(200, DAILY_PAGE)),
+        new ChannelOutcome(new TestHttpResponse(200, DAILY_PAGE)),
         new ChannelOutcome(new TestHttpResponse(200, DAILY_PAGE))
       ]);
       const repository = new DefaultChannelFeedRepository(new ZhihuHttpClient(undefined, factory));
@@ -334,6 +342,10 @@ export default function channelFeedRepositoryTest(): void {
       expect(older.items.length).assertEqual(0);
       expect(older.cursor.isEnd).assertTrue();
       expect(older.cursor.next).assertUndefined();
+
+      const selectedDate = await repository.loadPage(ChannelFeedSource.DAILY, '20260810', true);
+      expect(selectedDate.items.length).assertEqual(1);
+      expect(factory.requests[2].url).assertEqual('https://daily.zhihu.com/api/4/stories/before/20260810');
     });
 
     it('fallsBackOnlyWhenPrimaryHostResolutionFails', 0, async () => {

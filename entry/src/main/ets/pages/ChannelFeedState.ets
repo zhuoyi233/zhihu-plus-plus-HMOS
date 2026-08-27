@@ -5,7 +5,8 @@ import {
   ChannelFeedRepository,
   ChannelFeedSource,
   HttpFailure,
-  HttpFailureKind
+  HttpFailureKind,
+  isDailyFeedDateCursor
 } from 'data';
 
 export enum ChannelFeedPhase {
@@ -115,6 +116,22 @@ export class ChannelFeedController {
     return this.refresh();
   }
 
+  /** 以用户选择的日期重建日报列表，保留普通分页与日期跳转的状态边界。 */
+  loadDate(date: string): Promise<void> {
+    if (this.source !== ChannelFeedSource.DAILY || !isDailyFeedDateCursor(date) || !this.active) {
+      return Promise.resolve();
+    }
+    // 日报的“选日期”是显式跳转操作，优先级高于首屏加载、刷新和触底分页。
+    // 先取消旧请求，避免旧页覆盖指定日期的结果。
+    if (this.phase === ChannelFeedPhase.INITIAL_LOADING || this.refreshing || this.loadingMore) {
+      this.generation += 1;
+      this.refreshing = false;
+      this.loadingMore = false;
+      this.repository.cancel();
+    }
+    return this.loadFirstPage(false, date, true);
+  }
+
   removeItem(identity: string): void {
     if (!this.active) {
       return;
@@ -165,7 +182,7 @@ export class ChannelFeedController {
     }
   }
 
-  private async loadFirstPage(keepVisibleItems: boolean): Promise<void> {
+  private async loadFirstPage(keepVisibleItems: boolean, cursor?: string, reset: boolean = false): Promise<void> {
     const generation = ++this.generation;
     this.refreshing = keepVisibleItems;
     this.loadingMore = false;
@@ -178,7 +195,7 @@ export class ChannelFeedController {
     }
     this.emit();
     try {
-      const page = await this.repository.loadPage(this.source);
+      const page = await this.repository.loadPage(this.source, cursor, reset);
       if (!this.isCurrent(generation)) {
         return;
       }
@@ -213,7 +230,8 @@ export class ChannelFeedController {
       authenticationFailure = true;
       authenticationStatus = error.status;
     }
-    const sessionRequired = this.source === ChannelFeedSource.FOLLOWING || this.source === ChannelFeedSource.HOT;
+    const sessionRequired = this.source === ChannelFeedSource.FOLLOWING ||
+      this.source === ChannelFeedSource.FOLLOWING_RECOMMEND || this.source === ChannelFeedSource.HOT;
     this.requiresLogin = sessionRequired && authenticationFailure &&
       (authenticationStatus === undefined || authenticationStatus === 401);
     if (authenticationFailure && authenticationStatus === 403) {
@@ -258,6 +276,8 @@ export function channelFeedTitle(source: ChannelFeedSource): string {
   switch (source) {
     case ChannelFeedSource.FOLLOWING:
       return '关注';
+    case ChannelFeedSource.FOLLOWING_RECOMMEND:
+      return '关注推荐';
     case ChannelFeedSource.HOT:
       return '热榜';
     case ChannelFeedSource.DAILY:

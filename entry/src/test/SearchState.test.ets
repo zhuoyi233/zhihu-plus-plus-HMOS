@@ -7,7 +7,11 @@ import {
   SearchResultItem,
   SearchResultPage
 } from 'data';
-import { searchResultDestination } from '../main/ets/pages/SearchPage';
+import {
+  filterSearchResults,
+  searchResultDestination,
+  SearchResultFilter
+} from '../main/ets/pages/SearchPage';
 import { mergeSearchResults, SearchController, SearchPhase } from '../main/ets/pages/SearchState';
 
 interface PendingSearch {
@@ -199,6 +203,18 @@ export default function searchStateTest(): void {
       expect(searchResultDestination(merged[0]).name).assertEqual('Answer');
       expect(searchResultDestination(merged[1]).name).assertEqual('Article');
       expect(searchResultDestination(result('question', FeedTargetKind.QUESTION)).name).assertEqual('Question');
+    });
+
+    it('filtersLoadedGeneralResultsByVisibleResultTab', 0, () => {
+      const results: Array<SearchResultItem> = [
+        result('question', FeedTargetKind.QUESTION),
+        result('answer', FeedTargetKind.ANSWER),
+        result('article', FeedTargetKind.ARTICLE)
+      ];
+      expect(filterSearchResults(results, SearchResultFilter.ALL).length).assertEqual(3);
+      expect(filterSearchResults(results, SearchResultFilter.QUESTION)[0].contentId).assertEqual('question');
+      expect(filterSearchResults(results, SearchResultFilter.ANSWER)[0].contentId).assertEqual('answer');
+      expect(filterSearchResults(results, SearchResultFilter.ARTICLE)[0].contentId).assertEqual('article');
     });
   });
 }

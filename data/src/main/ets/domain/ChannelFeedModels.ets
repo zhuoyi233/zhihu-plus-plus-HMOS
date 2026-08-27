@@ -2,6 +2,7 @@ import { FeedItem, PageCursor } from './DomainModels';
 
 export enum ChannelFeedSource {
   FOLLOWING = 'following',
+  FOLLOWING_RECOMMEND = 'following_recommend',
   HOT = 'hot',
   DAILY = 'daily'
 }

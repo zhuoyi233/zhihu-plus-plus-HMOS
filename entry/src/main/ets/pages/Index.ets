@@ -79,6 +79,7 @@ import {
 import { PinDraftInboxPage } from './PinDraftInboxPage';
 import { LoginPage } from './LoginPage';
 import { ChannelFeedPage } from './ChannelFeedPage';
+import { FollowingFeedPage } from './FollowingFeedPage';
 import { DailyStoryDetailPage } from './DailyStoryDetailPage';
 import { PeopleDetailPage, PinDetailPage } from './PeoplePinDetailPages';
 import { BlockingRulesPage } from './BlockingRulesPage';
@@ -104,6 +105,7 @@ struct Index {
   @State private homeRepository?: FeedRepository = undefined;
   @State private searchRepository?: SearchRepository = undefined;
   @State private followingRepository?: ChannelFeedRepository = undefined;
+  @State private followingRecommendRepository?: ChannelFeedRepository = undefined;
   @State private hotRepository?: ChannelFeedRepository = undefined;
   @State private dailyRepository?: ChannelFeedRepository = undefined;
   @State private dailyStoryRepository?: DailyStoryRepository = undefined;
@@ -153,6 +155,7 @@ struct Index {
       this.homeRepository = new DefaultFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.searchRepository = new DefaultSearchRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.followingRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
+      this.followingRecommendRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.hotRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.dailyRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(), blockingMatcher);
       this.dailyStoryRepository = new DefaultDailyStoryRepository(new ZhihuHttpClient());
@@ -199,8 +202,8 @@ struct Index {
             this.dailyContent(reloadToken, navigate),
           dailyStoryContent: (id: string, navigate: (destination: P1Destination) => void): void =>
             this.dailyStoryContent(id, navigate),
-          searchContent: (query: string, navigate: (destination: P1Destination) => void): void =>
-            this.searchContent(query, navigate),
+          searchContent: (query: string, navigate: (destination: P1Destination) => void, onBack: () => void): void =>
+            this.searchContent(query, navigate, onBack),
           questionContent: (id: string, navigate: (destination: P1Destination) => void): void =>
             this.questionContent(id, navigate),
           answerContent: (id: string, navigate: (destination: P1Destination) => void): void =>
@@ -264,9 +267,9 @@ struct Index {
 
   @Builder
   followingContent(reloadToken: number, navigate: (destination: P1Destination) => void) {
-    ChannelFeedPage({
-      source: ChannelFeedSource.FOLLOWING,
-      repository: this.followingRepository,
+    FollowingFeedPage({
+      recommendRepository: this.followingRecommendRepository,
+      dynamicRepository: this.followingRepository,
       reloadToken: reloadToken,
       navigate: navigate,
       rules: this.blockingRuleStore,
@@ -305,11 +308,12 @@ struct Index {
   }
 
   @Builder
-  searchContent(query: string, navigate: (destination: P1Destination) => void) {
+  searchContent(query: string, navigate: (destination: P1Destination) => void, onBack: () => void) {
     SearchPage({
       initialQuery: query,
       repository: this.searchRepository,
-      navigate: navigate
+      navigate: navigate,
+      onBack: onBack
     });
   }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
   ChannelContentItem,
+  ChannelDailyStoryItem,
   ChannelFeedItem,
   ChannelFeedItemKind,
   ChannelFeedPage,
@@ -26,12 +27,14 @@ interface PendingChannelRequest {
 class ControlledChannelRepository implements ChannelFeedRepository {
   readonly sources: Array<ChannelFeedSource> = [];
   readonly cursors: Array<string | undefined> = [];
+  readonly resetFlags: Array<boolean> = [];
   private readonly pending: Array<PendingChannelRequest> = [];
   cancelCount: number = 0;
 
-  loadPage(source: ChannelFeedSource, cursor?: string): Promise<ChannelFeedPage> {
+  loadPage(source: ChannelFeedSource, cursor?: string, reset: boolean = false): Promise<ChannelFeedPage> {
     this.sources.push(source);
     this.cursors.push(cursor);
+    this.resetFlags.push(reset);
     return new Promise<ChannelFeedPage>((resolve: (page: ChannelFeedPage) => void,
       reject: (error: HttpFailure) => void): void => {
       this.pending.push({ resolve: resolve, reject: reject });
@@ -109,6 +112,45 @@ export default function channelFeedStateTest(): void {
       repository.succeed(2, page([daily('2')], undefined, true));
       await retried;
       expect(controller.snapshot().items.length).assertEqual(2);
+    });
+
+    it('reloadsDailyFeedFromSelectedDateWithFreshPaginationState', 0, async () => {
+      const repository = new ControlledChannelRepository();
+      const controller = new ChannelFeedController(ChannelFeedSource.DAILY, repository);
+      controller.activate();
+      const initial = controller.loadInitial();
+      repository.succeed(0, page([daily('latest')], '20260810'));
+      await initial;
+
+      const selected = controller.loadDate('20260808');
+      expect(repository.cursors[1]).assertEqual('20260808');
+      expect(repository.resetFlags[1]).assertTrue();
+      repository.succeed(1, page([daily('selected')], '20260807'));
+      await selected;
+
+      expect(controller.snapshot().phase).assertEqual(ChannelFeedPhase.READY);
+      expect((controller.snapshot().items[0] as ChannelDailyStoryItem).story.id).assertEqual('selected');
+    });
+
+    it('prioritizesSelectedDailyDateOverInFlightPagination', 0, async () => {
+      const repository = new ControlledChannelRepository();
+      const controller = new ChannelFeedController(ChannelFeedSource.DAILY, repository);
+      controller.activate();
+      const initial = controller.loadInitial();
+      repository.succeed(0, page([daily('latest')], '20260810'));
+      await initial;
+
+      const loadingMore = controller.loadMore();
+      const selected = controller.loadDate('20260808');
+      expect(repository.cancelCount).assertEqual(1);
+      expect(repository.cursors[2]).assertEqual('20260808');
+      expect(repository.resetFlags[2]).assertTrue();
+
+      repository.succeed(1, page([daily('stale')], undefined, true));
+      await loadingMore;
+      repository.succeed(2, page([daily('selected')], undefined, true));
+      await selected;
+      expect((controller.snapshot().items[0] as ChannelDailyStoryItem).story.id).assertEqual('selected');
     });
 
     it('continuesAfterEmptyNonTerminalPage', 0, async () => {

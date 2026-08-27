@@ -29,7 +29,8 @@ export struct P1Shell {
     this.emptyContent;
   @BuilderParam technicalLabContent: (navigate: (destination: P1Destination) => void) => void =
     this.emptyTechnicalLab;
-  @BuilderParam searchContent: (query: string, navigate: (destination: P1Destination) => void) => void =
+  @BuilderParam searchContent: (query: string, navigate: (destination: P1Destination) => void,
+    onBack: () => void) => void =
     this.emptySearch;
   @BuilderParam questionContent: (id: string, navigate: (destination: P1Destination) => void) => void =
     this.emptyContent;
@@ -115,7 +116,7 @@ export struct P1Shell {
   }
 
   @Builder
-  emptySearch(_query: string, _navigate: (destination: P1Destination) => void) {
+  emptySearch(_query: string, _navigate: (destination: P1Destination) => void, _onBack: () => void) {
     Blank();
   }
 
@@ -209,10 +210,13 @@ export struct P1Shell {
       NavDestination() {
         this.searchContent(
           destination.query,
-          (destination: P1Destination): void => this.navigate(destination)
+          (destination: P1Destination): void => this.navigate(destination),
+          (): void => {
+            this.pathStack.pop();
+          }
         );
       }
-      .title('搜索')
+      .hideTitleBar(true)
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.FOLLOWING) {
       NavDestination() {

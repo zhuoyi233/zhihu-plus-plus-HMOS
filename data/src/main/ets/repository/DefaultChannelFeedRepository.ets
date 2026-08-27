@@ -20,6 +20,7 @@ import { ChannelFeedRepository } from './ChannelFeedRepository';
 
 const CHANNEL_INCLUDE_QUERY = `include=${encodeURIComponent(HOME_FEED_INCLUDE).replace(/\*/g, '%2A')}`;
 export const FOLLOWING_FEED_BASE_URL = 'https://www.zhihu.com/api/v3/moments?limit=10&desktop=true';
+export const FOLLOWING_RECOMMEND_FEED_BASE_URL = 'https://api.zhihu.com/moments_v3?feed_type=recommend';
 export const HOT_FEED_BASE_URL =
   'https://www.zhihu.com/api/v3/feed/topstory/hot-lists/total?limit=50&mobile=true';
 export const DAILY_PRIMARY_BASE_URL = 'https://daily.zhihu.com/api/4/stories';
@@ -52,7 +53,13 @@ export class ChannelFeedRepositoryFailure extends Error {
 }
 
 function contentBaseUrl(source: ChannelFeedSource): string {
-  return source === ChannelFeedSource.FOLLOWING ? FOLLOWING_FEED_BASE_URL : HOT_FEED_BASE_URL;
+  if (source === ChannelFeedSource.FOLLOWING) {
+    return FOLLOWING_FEED_BASE_URL;
+  }
+  if (source === ChannelFeedSource.FOLLOWING_RECOMMEND) {
+    return FOLLOWING_RECOMMEND_FEED_BASE_URL;
+  }
+  return HOT_FEED_BASE_URL;
 }
 
 export function isChannelFeedCursorUrl(source: ChannelFeedSource, cursor: string): boolean {
@@ -61,6 +68,9 @@ export function isChannelFeedCursorUrl(source: ChannelFeedSource, cursor: string
   }
   if (source === ChannelFeedSource.FOLLOWING) {
     return /^https:\/\/www\.zhihu\.com\/api\/v3\/moments(?:\?[^#]*)?$/.test(cursor);
+  }
+  if (source === ChannelFeedSource.FOLLOWING_RECOMMEND) {
+    return /^https:\/\/api\.zhihu\.com\/moments_v3(?:\?[^#]*)?$/.test(cursor);
   }
   return /^https:\/\/www\.zhihu\.com\/api\/v3\/feed\/topstory\/hot-lists\/total(?:\?[^#]*)?$/.test(cursor);
 }
@@ -158,14 +168,14 @@ export class DefaultChannelFeedRepository implements ChannelFeedRepository {
     this.httpClient.cancel();
   }
 
-  async loadPage(source: ChannelFeedSource, cursor?: string): Promise<ChannelFeedPage> {
-    if (cursor !== undefined && this.activeSource !== source) {
+  async loadPage(source: ChannelFeedSource, cursor?: string, reset: boolean = false): Promise<ChannelFeedPage> {
+    if (cursor !== undefined && !reset && this.activeSource !== source) {
       throw new ChannelFeedRepositoryFailure(ChannelFeedRepositoryFailureKind.SOURCE_CHANGED);
     }
     const requestGeneration = this.generation;
     const requestUrl = buildChannelFeedRequestUrl(source, cursor);
     const cursorKey = canonicalChannelFeedCursorKey(source, cursor);
-    if (cursor !== undefined && this.requestedCursors.has(cursorKey)) {
+    if (cursor !== undefined && !reset && this.requestedCursors.has(cursorKey)) {
       throw new ChannelFeedRepositoryFailure(ChannelFeedRepositoryFailureKind.REPEATED_CURSOR);
     }
 
@@ -198,8 +208,8 @@ export class DefaultChannelFeedRepository implements ChannelFeedRepository {
       }
     }
     const nextKey = next === undefined ? undefined : canonicalChannelFeedCursorKey(source, next);
-    const requested = cursor === undefined ? new Set<string>() : cloneStringSet(this.requestedCursors);
-    const delivered = cursor === undefined ? new Set<string>() : cloneStringSet(this.deliveredItemIdentities);
+    const requested = cursor === undefined || reset ? new Set<string>() : cloneStringSet(this.requestedCursors);
+    const delivered = cursor === undefined || reset ? new Set<string>() : cloneStringSet(this.deliveredItemIdentities);
     requested.add(cursorKey);
     const items = visibleItems.filter((item: ChannelFeedItem): boolean => {
       const identity = channelFeedItemIdentity(item);
