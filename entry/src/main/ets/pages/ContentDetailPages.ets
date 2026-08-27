@@ -159,9 +159,7 @@ struct ContentDetailPage {
             }
             .layoutWeight(1)
             .width('100%')
-            if (this.kind === ContentDetailKind.ANSWER || this.kind === ContentDetailKind.ARTICLE) {
-              this.bottomActionBar()
-            }
+            this.bottomActionBar()
           }
           .width('100%')
           .height('100%')
@@ -305,32 +303,6 @@ struct ContentDetailPage {
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
         }
-
-        Row({ space: $r('app.float.p1_spacing_small') }) {
-          if (contentAuthorName(content).length > 0) {
-            Button('屏蔽作者')
-              .id(`p3_${content.kind}_block_author`)
-              .fontSize($r('app.float.p1_secondary_font_size'))
-              .enabled(!this.blockingBusy && this.blockingAction !== undefined)
-              .onClick((): void => {
-                const author = content.value.author;
-                if (author !== undefined) {
-                  this.pendingUserBlock = { userId: author.id, userName: author.name };
-                }
-              })
-          }
-
-          Button('屏蔽关键词')
-            .id(`p3_${content.kind}_block_keyword`)
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .enabled(!this.blockingBusy && this.blockingAction !== undefined)
-            .onClick((): void => {
-              this.keywordBlockInput = '';
-              this.keywordBlockVisible = true;
-            })
-        }
-        .width('100%')
-        .justifyContent(FlexAlign.Start)
 
         if (this.blockingMessage.length > 0) {
           Text(this.blockingMessage)
@@ -480,6 +452,19 @@ struct ContentDetailPage {
           }
           Blank()
             .layoutWeight(1)
+          Button({ type: ButtonType.Normal }) {
+            SymbolGlyph($r('sys.symbol.more'))
+              .fontSize(22)
+              .fontColor([$r('app.color.secondary_text')])
+          }
+          .id('p3_question_detail_more')
+          .width(50)
+          .height(50)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('更多问题操作')
+          .onClick((): void => {
+            this.actionMenuShown = true;
+          })
           Button('写回答')
             .id('p4_question_write_answer')
             .fontSize($r('app.float.p1_secondary_font_size'))
@@ -776,17 +761,33 @@ struct ContentDetailPage {
             this.copyContentLink();
           })
 
-        Button('朗读（开发中）')
-          .id('p3_detail_menu_tts')
-          .width('100%')
-          .fontSize($r('app.float.p1_body_font_size'))
-          .enabled(false)
+        if (this.content !== undefined && contentAuthorName(this.content).length > 0) {
+          Button('屏蔽作者')
+            .id(`p3_${this.kind}_block_author`)
+            .width('100%')
+            .fontSize($r('app.float.p1_body_font_size'))
+            .enabled(!this.blockingBusy && this.blockingAction !== undefined)
+            .onClick((): void => {
+              const content = this.content;
+              const author = content?.value.author;
+              if (author !== undefined) {
+                this.actionMenuShown = false;
+                this.pendingUserBlock = { userId: author.id, userName: author.name };
+              }
+            })
+        }
 
-        Button('导出文章（开发中）')
-          .id('p3_detail_menu_export')
+        Button('屏蔽关键词')
+          .id(`p3_${this.kind}_block_keyword`)
           .width('100%')
           .fontSize($r('app.float.p1_body_font_size'))
-          .enabled(false)
+          .enabled(!this.blockingBusy && this.blockingAction !== undefined)
+          .onClick((): void => {
+            this.actionMenuShown = false;
+            this.keywordBlockInput = '';
+            this.keywordBlockVisible = true;
+          })
+
       }
       .width('100%')
       .padding($r('app.float.p1_spacing_medium'))
