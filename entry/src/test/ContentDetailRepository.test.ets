@@ -126,6 +126,7 @@ export default function contentDetailRepositoryTest(): void {
       expect(question.answerCount).assertEqual(8);
       expect(question.url).assertEqual('https://www.zhihu.com/question/123');
       expect(answer.author?.headline).assertEqual('回答者签名');
+      expect(answer.questionTitle).assertEqual('回答所属问题');
       expect(answer.voteupCount).assertEqual(21);
       expect(answer.url).assertEqual('https://www.zhihu.com/question/456/answer/9007199254740993');
       expect(article.commentCount).assertEqual(5);
@@ -208,7 +209,7 @@ export default function contentDetailRepositoryTest(): void {
 const QUESTION_JSON = '{"id":123,"title":"完整问题标题","detail":"<p>问题补充</p>",' +
   '"answer_count":8,"comment_count":3,"follower_count":13,"created":1,"updated_time":2,' +
   '"author":{"id":"author-q","name":"提问者","headline":"提问者签名"}}';
-const ANSWER_JSON = '{"id":9007199254740993,"question":{"id":456},' +
+const ANSWER_JSON = '{"id":9007199254740993,"question":{"id":456,"title":"回答所属问题"},' +
   '"content":"<p>回答正文</p>","excerpt":"摘要","voteup_count":21,"comment_count":4,' +
   '"created_time":3,"updated_time":4,' +
   '"author":{"id":"author-a","name":"回答者","headline":"回答者签名"}}';

@@ -210,6 +210,7 @@ export function decodeAnswer(json: string): Answer {
   return {
     id: requiredId(object.get('id'), 'answer.id'),
     questionId: requiredId(question?.get('id'), 'answer.question.id'),
+    questionTitle: optionalText(question?.get('title') ?? question?.get('name')),
     contentHtml: textOrEmpty(object.get('content'), 'answer.content'),
     excerpt: textOrEmpty(object.get('excerpt'), 'answer.excerpt'),
     url: textOrEmpty(object.get('url'), 'answer.url'),

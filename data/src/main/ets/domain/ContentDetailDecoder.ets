@@ -307,6 +307,7 @@ export function decodeAnswerDetail(json: string, expectedId: string): Answer {
   return {
     id: id,
     questionId: questionId,
+    questionTitle: optionalText(question?.get('title') ?? question?.get('name')),
     contentHtml: textOrEmpty(wire.get('content'), 'answer.content'),
     excerpt: textOrEmpty(wire.get('excerpt'), 'answer.excerpt'),
     url: `https://www.zhihu.com/question/${questionId}/answer/${id}`,

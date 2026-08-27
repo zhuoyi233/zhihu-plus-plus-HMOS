@@ -274,6 +274,7 @@ function cloneLoadedContent(content: LoadedContentDetail): LoadedContentDetail {
         value: {
           id: content.value.id,
           questionId: content.value.questionId,
+          questionTitle: content.value.questionTitle,
           contentHtml: content.value.contentHtml,
           excerpt: content.value.excerpt,
           url: content.value.url,

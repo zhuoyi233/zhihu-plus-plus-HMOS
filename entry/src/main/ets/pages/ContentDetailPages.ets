@@ -287,14 +287,24 @@ struct ContentDetailPage {
   private loadedContent(content: LoadedContentDetail) {
     Column() {
       Column({ space: $r('app.float.p1_spacing_small') }) {
-        // 标题由 NavDestination 系统栏 + 顶栏折叠标题行提供，正文头部不再重复显示。
-
         // 作者行仅问题页保留（回答/文章的顶栏折叠作者行已含头像+名字+签名，避免重复）。
         if (content.kind === ContentDetailKind.QUESTION && contentAuthorName(content).length > 0) {
           Text(contentAuthorLine(content))
             .id(`p2_${content.kind}_detail_author`)
             .fontSize($r('app.float.p1_body_font_size'))
             .fontColor($r('app.color.primary_text'))
+            .width('100%')
+        }
+
+        // 主标题保留在正文信息头：回答显示所属问题，文章显示文章标题，避免仅依赖通用路由标题。
+        if (contentContextTitle(content).length > 0) {
+          Text(contentContextTitle(content))
+            .id(`p2_${content.kind}_detail_context_title`)
+            .fontSize($r('app.float.p1_heading_font_size'))
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.primary_text'))
+            .maxLines(3)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%')
         }
 
@@ -1115,6 +1125,14 @@ export function contentTitle(content: LoadedContentDetail): string {
     case ContentDetailKind.ARTICLE:
       return content.value.title;
   }
+}
+
+/** 详情正文信息头的主标题：回答使用所属问题，问题/文章使用自身标题。 */
+export function contentContextTitle(content: LoadedContentDetail): string {
+  if (content.kind === ContentDetailKind.ANSWER) {
+    return content.value.questionTitle?.trim() ?? '';
+  }
+  return contentTitle(content).trim();
 }
 
 export function contentHtml(content: LoadedContentDetail): string {

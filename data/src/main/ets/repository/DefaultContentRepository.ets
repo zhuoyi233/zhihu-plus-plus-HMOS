@@ -12,7 +12,7 @@ export const QUESTION_DETAIL_INCLUDE =
     'relationship.is_following,topics';
 export const ANSWER_DETAIL_INCLUDE =
   '.settings,content,editable_content,paid_info,can_comment,excerpt,thanks_count,voteup_count,comment_count,' +
-    'visited_count,attachment,reaction,ip_info,pagination_info,endorsements,question.topics,' +
+    'visited_count,attachment,reaction,ip_info,pagination_info,endorsements,question.title,question.topics,' +
     'reaction.relation.voting,author.badge_v2,settings.table_of_contents.enabled';
 export const ARTICLE_DETAIL_INCLUDE =
   'content,topics,paid_info,can_comment,excerpt,thanks_count,voteup_count,comment_count,visited_count,' +

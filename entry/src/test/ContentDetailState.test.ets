@@ -15,6 +15,7 @@ import {
 } from '../main/ets/pages/ContentDetailState';
 import {
   contentAuthorLine,
+  contentContextTitle,
   contentEmptyMessage,
   contentHtml,
   contentStatistics,
@@ -90,6 +91,7 @@ export default function contentDetailStateTest(): void {
       expect(answer?.kind).assertEqual(ContentDetailKind.ANSWER);
       if (answer !== undefined) {
         expect(contentTitle(answer)).assertEqual('回答');
+        expect(contentContextTitle(answer)).assertEqual('回答所属问题');
         expect(contentAuthorLine(answer)).assertEqual('回答者 · 回答签名');
         expect(contentStatistics(answer)).assertEqual('10 赞同 · 2 条评论');
         expect(contentHtml(answer)).assertEqual('<p>回答正文</p>');
@@ -101,6 +103,7 @@ export default function contentDetailStateTest(): void {
       expect(article?.kind).assertEqual(ContentDetailKind.ARTICLE);
       if (article !== undefined) {
         expect(contentTitle(article)).assertEqual('完整文章标题');
+        expect(contentContextTitle(article)).assertEqual('完整文章标题');
         expect(contentStatistics(article)).assertEqual('20 赞同 · 4 条评论');
       }
     });
@@ -248,6 +251,7 @@ function answerFixture(): Answer {
   return {
     id: '2',
     questionId: '1',
+    questionTitle: '回答所属问题',
     contentHtml: '<p>回答正文</p>',
     excerpt: '摘要',
     url: 'https://www.zhihu.com/question/1/answer/2',

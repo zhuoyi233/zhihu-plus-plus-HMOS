@@ -66,6 +66,8 @@ export interface AnswerEndorsementDisplay {
 export interface Answer {
   id: string;
   questionId: string;
+  /** 回答所属问题标题；详情接口未返回时缺省。 */
+  questionTitle?: string;
   contentHtml: string;
   excerpt: string;
   url: string;
