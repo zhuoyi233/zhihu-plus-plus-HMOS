@@ -127,9 +127,17 @@ export struct CommentLayer {
     Column({ space: $r('app.float.p1_spacing_small') }) {
       Row({ space: $r('app.float.p1_spacing_small') }) {
         if (this.activeRoot !== undefined) {
-          Button('← 返回')
+          Button({ type: ButtonType.Normal, stateEffect: true }) {
+            SymbolGlyph($r('sys.symbol.chevron_left'))
+              .fontSize(20)
+              .fontColor([$r('app.color.primary_text')])
+          }
             .id('p3_comments_back')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .width(40)
+            .height(40)
+            .padding(0)
+            .backgroundColor(Color.Transparent)
+            .accessibilityText('返回评论')
             .onClick((): void => {
               this.controller?.closeChildComments();
             })
@@ -149,9 +157,17 @@ export struct CommentLayer {
             this.sortChip(CommentSortOrder.TIME, '最新', 'p3_comments_sort_time')
           }
         }
-        Button('✕')
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(18)
+            .fontColor([$r('app.color.primary_text')])
+        }
           .id('p3_comments_close')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('关闭评论')
           .onClick((): void => {
             this.onDismiss();
           })
