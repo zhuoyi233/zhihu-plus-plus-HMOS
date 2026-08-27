@@ -93,33 +93,32 @@ export struct CommentLayer {
   }
 
   build() {
-    Stack() {
-      Column() {
-        Blank()
-          .onClick((): void => {
+    Column()
+      .bindSheet(this.showComments, this.commentSheet(), {
+        height: SheetSize.LARGE,
+        dragBar: true,
+        showClose: false,
+        maskColor: '#66000000',
+        backgroundColor: $r('app.color.surface_background'),
+        onDisappear: (): void => {
+          if (this.showComments) {
             this.onDismiss();
-          })
-      }
-      .width('100%')
-      .height('100%')
-      .backgroundColor('#66000000')
-
-      Column() {
-        this.sheetHeader()
-        this.sheetBody()
-        if (this.phase === CommentPhase.READY || this.phase === CommentPhase.EMPTY) {
-          this.inputBar()
+          }
         }
+      })
+  }
+
+  @Builder
+  private commentSheet() {
+    Column() {
+      this.sheetHeader()
+      this.sheetBody()
+      if (this.phase === CommentPhase.READY || this.phase === CommentPhase.EMPTY) {
+        this.inputBar()
       }
-      .width('100%')
-      .height('86%')
-      .align(Alignment.Bottom)
-      .backgroundColor($r('app.color.surface_background'))
-      .borderRadius({ topLeft: $r('app.float.p1_card_radius'), topRight: $r('app.float.p1_card_radius') })
     }
     .width('100%')
     .height('100%')
-    .visibility(this.showComments ? Visibility.Visible : Visibility.None)
   }
 
   @Builder
