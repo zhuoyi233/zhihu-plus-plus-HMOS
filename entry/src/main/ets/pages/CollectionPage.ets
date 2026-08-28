@@ -61,95 +61,122 @@ export struct CollectionPage {
   }
 
   build() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+    Stack({ alignContent: Alignment.BottomEnd }) {
+      Column({ space: $r('app.float.p1_spacing_medium') }) {
+        Row({ space: $r('app.float.p1_spacing_small') }) {
         Text('收藏夹')
           .fontSize($r('app.float.p1_heading_font_size'))
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
-        Button(this.busy ? '处理中…' : '新建收藏夹')
+        }
+        .width('100%')
+
+        if (this.phase === CollectionPhase.IDLE || this.phase === CollectionPhase.LOADING) {
+          this.statusPanel('正在加载收藏夹…', false, 'p3_collections_loading')
+        } else if (this.phase === CollectionPhase.ERROR) {
+          this.statusPanel(this.errorMessage, true, 'p3_collections_error')
+        } else if (this.phase === CollectionPhase.EMPTY) {
+          this.statusPanel('还没有收藏夹，点击右下角新建', true, 'p3_collections_empty')
+        } else {
+          if (this.errorMessage.length > 0) {
+            Row({ space: $r('app.float.p1_spacing_small') }) {
+              Text(this.errorMessage)
+                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+                .layoutWeight(1)
+              if (this.requiresLogin) {
+                Button('去登录')
+                  .id('p3_collections_login')
+                  .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
+              } else {
+                Button('重试')
+                  .id('p3_collections_retry_more')
+                  .onClick(() => this.controller?.retry())
+              }
+            }
+            .width('100%')
+            .padding($r('app.float.p1_spacing_small'))
+            .borderRadius($r('app.float.p1_card_radius'))
+            .backgroundColor($r('app.color.surface_background'))
+          }
+
+          List({ space: 10 }) {
+            ForEach(this.items, (collection: CollectionSummary) => {
+              ListItem() {
+                this.collectionCard(collection)
+              }
+            }, (collection: CollectionSummary): string => collection.id)
+
+            if (this.loadingMore || this.canLoadMore) {
+              ListItem() {
+                Button(this.loadingMore ? '正在加载更多…' : '加载更多')
+                  .id('p3_collections_load_more')
+                  .width('100%')
+                  .fontSize($r('app.float.p1_secondary_font_size'))
+                  .enabled(!this.loadingMore && !this.busy)
+                  .onClick(() => this.controller?.loadMore())
+              }
+            }
+          }
+          .id('p3_collections_list')
+          .width('100%')
+          .layoutWeight(1)
+          .edgeEffect(EdgeEffect.Spring)
+          .onReachEnd(() => this.controller?.loadMore())
+        }
+
+        if (this.pendingDelete !== undefined) {
+          this.deleteConfirmation()
+        }
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+      .height('100%')
+      .padding({
+        left: $r('app.float.p1_page_padding'),
+        right: $r('app.float.p1_page_padding'),
+        top: $r('app.float.p1_spacing_medium'),
+        bottom: $r('app.float.p1_page_padding')
+      })
+      .backgroundColor($r('app.color.page_background'))
+
+      if (this.phase === CollectionPhase.READY || this.phase === CollectionPhase.EMPTY) {
+        Button(this.busy ? '处理中…' : '新建', { type: ButtonType.Capsule })
           .id('p3_collections_create_button')
+          .width(96)
+          .height(48)
           .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor(Color.White)
+          .backgroundColor($r('app.color.brand_primary'))
+          .margin({
+            right: $r('app.float.p1_page_padding'),
+            bottom: $r('app.float.p1_page_padding')
+          })
+          .accessibilityText('新建收藏夹')
           .enabled(!this.busy)
           .onClick((): void => {
             this.openCreateDialog();
           })
       }
-      .width('100%')
 
-      if (this.phase === CollectionPhase.IDLE || this.phase === CollectionPhase.LOADING) {
-        this.statusPanel('正在加载收藏夹…', false, 'p3_collections_loading')
-      } else if (this.phase === CollectionPhase.ERROR) {
-        this.statusPanel(this.errorMessage, true, 'p3_collections_error')
-      } else if (this.phase === CollectionPhase.EMPTY) {
-        this.statusPanel('还没有收藏夹，点击右上角新建', true, 'p3_collections_empty')
-      } else {
-        if (this.errorMessage.length > 0) {
-          Row({ space: $r('app.float.p1_spacing_small') }) {
-            Text(this.errorMessage)
-              .fontSize($r('app.float.p1_secondary_font_size'))
-              .fontColor($r('app.color.secondary_text'))
-              .layoutWeight(1)
-            if (this.requiresLogin) {
-              Button('去登录')
-                .id('p3_collections_login')
-                .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
-            } else {
-              Button('重试')
-                .id('p3_collections_retry_more')
-                .onClick(() => this.controller?.retry())
+      Column()
+        .bindSheet(this.showCreateDialog, this.createDialog(), {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.showCreateDialog) {
+              this.showCreateDialog = false;
             }
           }
-          .width('100%')
-          .padding($r('app.float.p1_spacing_small'))
-          .borderRadius($r('app.float.p1_card_radius'))
-          .backgroundColor($r('app.color.surface_background'))
-        }
-
-        List({ space: 10 }) {
-          ForEach(this.items, (collection: CollectionSummary) => {
-            ListItem() {
-              this.collectionCard(collection)
-            }
-          }, (collection: CollectionSummary): string => collection.id)
-
-          if (this.loadingMore || this.canLoadMore) {
-            ListItem() {
-              Button(this.loadingMore ? '正在加载更多…' : '加载更多')
-                .id('p3_collections_load_more')
-                .width('100%')
-                .fontSize($r('app.float.p1_secondary_font_size'))
-                .enabled(!this.loadingMore && !this.busy)
-                .onClick(() => this.controller?.loadMore())
-            }
-          }
-        }
-        .id('p3_collections_list')
-        .width('100%')
-        .layoutWeight(1)
-        .edgeEffect(EdgeEffect.Spring)
-        .onReachEnd(() => this.controller?.loadMore())
-      }
-
-      if (this.showCreateDialog) {
-        this.createDialog()
-      }
-      if (this.pendingDelete !== undefined) {
-        this.deleteConfirmation()
-      }
+        })
     }
     .id('p3_collections_page')
-    .alignItems(HorizontalAlign.Start)
     .width('100%')
     .height('100%')
-    .padding({
-      left: $r('app.float.p1_page_padding'),
-      right: $r('app.float.p1_page_padding'),
-      top: $r('app.float.p1_spacing_medium'),
-      bottom: $r('app.float.p1_page_padding')
-    })
-    .backgroundColor($r('app.color.page_background'))
   }
 
   @Builder
