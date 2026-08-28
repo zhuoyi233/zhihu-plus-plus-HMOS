@@ -42,6 +42,9 @@ import { CollectionDialogComponent } from './CollectionDialogComponent';
 import { CommentLayer } from './CommentLayer';
 import { NativeContentDocument } from './NativeContentDocument';
 import { stageAnswerEditSeed } from './AnswerEditSeedStore';
+import { getAbilityContext } from '../entryability/AbilityContextHolder';
+import { createSystemShareService } from '../platform/SystemShareService';
+import { ShareOutcome, SharePayloadKind, ShareTextPayload } from '../platform/ShareContracts';
 
 @Component
 struct ContentDetailPage {
@@ -834,6 +837,18 @@ struct ContentDetailPage {
       }
       .width('100%')
 
+      Button('分享', { type: ButtonType.Normal, stateEffect: true })
+        .id('p3_detail_menu_share')
+        .width('100%')
+        .fontSize($r('app.float.p1_body_font_size'))
+        .fontColor($r('app.color.primary_text'))
+        .backgroundColor($r('app.color.control_background'))
+        .borderRadius($r('app.float.p1_card_radius'))
+        .onClick((): void => {
+          this.actionMenuShown = false;
+          this.shareContentLink();
+        })
+
       Button('复制链接', { type: ButtonType.Normal, stateEffect: true })
         .id('p3_detail_menu_copy_link')
         .width('100%')
@@ -853,18 +868,6 @@ struct ContentDetailPage {
           .fontColor($r('app.color.secondary_text'))
           .width('100%')
       }
-
-      Button('分享', { type: ButtonType.Normal, stateEffect: true })
-        .id('p3_detail_menu_share')
-        .width('100%')
-        .fontSize($r('app.float.p1_body_font_size'))
-        .fontColor($r('app.color.primary_text'))
-        .backgroundColor($r('app.color.control_background'))
-        .borderRadius($r('app.float.p1_card_radius'))
-        .onClick((): void => {
-          this.actionMenuShown = false;
-          this.copyContentLink();
-        })
 
       if (this.kind === ContentDetailKind.ANSWER || this.kind === ContentDetailKind.ARTICLE) {
         Button('沉浸式阅读', { type: ButtonType.Normal, stateEffect: true })
@@ -938,6 +941,27 @@ struct ContentDetailPage {
     } catch (_error) {
       this.menuStatus = '复制失败，请重试';
     }
+  }
+
+  /** 详情分享只交给 HarmonyOS 系统面板，且仅传通过平台白名单校验的内容 URL。 */
+  private shareContentLink(): void {
+    const content = this.content;
+    const context = getAbilityContext();
+    if (content === undefined || context === undefined || content.value.url.trim().length === 0) {
+      this.menuStatus = '暂时无法打开分享面板';
+      return;
+    }
+    const payload: ShareTextPayload = {
+      kind: SharePayloadKind.TEXT,
+      title: contentDetailPageTitle(content.kind),
+      summary: '来自知乎++的受信内容链接',
+      contentUrl: content.value.url
+    };
+    createSystemShareService(context).share(payload).then((outcome: ShareOutcome): void => {
+      this.menuStatus = outcome === ShareOutcome.CANCELLED ? '' : '已打开系统分享面板';
+    }).catch((): void => {
+      this.menuStatus = '暂时无法打开分享面板';
+    });
   }
 
   @Builder

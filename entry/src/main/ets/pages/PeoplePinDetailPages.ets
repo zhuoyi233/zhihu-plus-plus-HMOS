@@ -28,6 +28,9 @@ import { FollowController, FollowViewState } from './ContentInteractionState';
 import { PeopleContentController, PeopleContentPhase, PeopleContentViewState } from './PeopleContentState';
 import { CommentLayer } from './CommentLayer';
 import { NativeContentDocument } from './NativeContentDocument';
+import { getAbilityContext } from '../entryability/AbilityContextHolder';
+import { createSystemShareService } from '../platform/SystemShareService';
+import { ShareOutcome, SharePayloadKind, ShareTextPayload } from '../platform/ShareContracts';
 import {
   BlockingActionController,
   BlockingActionViewState,
@@ -754,6 +757,7 @@ export struct PinDetailPage {
   @State private showComments: boolean = false;
   @State private commentRootDraft: string = '';
   @State private commentReplyDraft: string = '';
+  @State private shareStatus: string = '';
   @State private blockingMessage: string = '';
   @State private blockingBusy: boolean = false;
   private controller?: PinDetailController;
@@ -793,6 +797,7 @@ export struct PinDetailPage {
     this.showComments = false;
     this.commentRootDraft = '';
     this.commentReplyDraft = '';
+    this.shareStatus = '';
   }
 
   private createBlockingAction(): void {
@@ -970,6 +975,13 @@ export struct PinDetailPage {
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
         }
+        if (this.shareStatus.length > 0) {
+          Text(this.shareStatus)
+            .id('p3_pin_detail_share_status')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
+        }
         if (this.openedRecordFailed) {
           Text('本次打开记录未能保存，阅读不受影响')
             .id('p2_pin_detail_opened_record_failed')
@@ -999,6 +1011,27 @@ export struct PinDetailPage {
     this.errorMessage = state.errorMessage ?? '';
     this.requiresLogin = state.requiresLogin;
     this.openedRecordFailed = state.openedRecordFailed;
+  }
+
+  /** 想法分享只转交 HarmonyOS 系统面板，链接由共享服务执行白名单校验。 */
+  private sharePinLink(): void {
+    const pin = this.pin;
+    const context = getAbilityContext();
+    if (pin === undefined || context === undefined || pin.url.trim().length === 0) {
+      this.shareStatus = '暂时无法打开分享面板';
+      return;
+    }
+    const payload: ShareTextPayload = {
+      kind: SharePayloadKind.TEXT,
+      title: '想法',
+      summary: '来自知乎++的受信想法链接',
+      contentUrl: pin.url
+    };
+    createSystemShareService(context).share(payload).then((outcome: ShareOutcome): void => {
+      this.shareStatus = outcome === ShareOutcome.CANCELLED ? '' : '已打开系统分享面板';
+    }).catch((): void => {
+      this.shareStatus = '暂时无法打开分享面板';
+    });
   }
 
   @Builder
@@ -1067,6 +1100,14 @@ export struct PinDetailPage {
           })
       }
       .width('100%')
+      Button('分享')
+        .id('p3_pin_detail_share')
+        .width('100%')
+        .enabled(this.pin !== undefined)
+        .onClick((): void => {
+          this.pinActionsSheetShown = false;
+          this.sharePinLink();
+        })
       Button('屏蔽作者')
         .id('p3_pin_detail_block_user')
         .width('100%')
