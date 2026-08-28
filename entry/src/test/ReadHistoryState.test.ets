@@ -314,15 +314,15 @@ export default function readHistoryStateTest(): void {
 
     it('groupsAndMergesItemsInStableOrder', 0, () => {
       const local: Array<ReadHistoryItem> = [
-        { contentKey: 'answer:1', kind: ReadHistoryContentKind.ANSWER, id: '1', openedAt: 10,
+        { contentKey: 'answer:1', kind: ReadHistoryContentKind.ANSWER, id: '1', openedAt: Date.UTC(2026, 7, 28, 12),
           deletable: true, inOnline: false },
-        { contentKey: 'question:2', kind: ReadHistoryContentKind.QUESTION, id: '2', openedAt: 5,
+        { contentKey: 'question:2', kind: ReadHistoryContentKind.QUESTION, id: '2', openedAt: Date.UTC(2026, 7, 27, 8),
           deletable: true, inOnline: false }
       ];
       const online: Array<ReadHistoryItem> = [
-        { contentKey: 'answer:1', kind: ReadHistoryContentKind.ANSWER, id: '1', openedAt: 8,
+        { contentKey: 'answer:1', kind: ReadHistoryContentKind.ANSWER, id: '1', openedAt: Date.UTC(2026, 7, 28, 9),
           title: '在线回答', deletable: false, inOnline: true },
-        { contentKey: 'pin:3', kind: ReadHistoryContentKind.PIN, id: '3', openedAt: 7,
+        { contentKey: 'pin:3', kind: ReadHistoryContentKind.PIN, id: '3', openedAt: Date.UTC(2026, 7, 27, 10),
           deletable: false, inOnline: true }
       ];
       const merged = mergeReadHistoryItems(local, online);
@@ -332,12 +332,10 @@ export default function readHistoryStateTest(): void {
       expect(mergedAnswer?.inOnline).assertTrue();
       expect(mergedAnswer?.title).assertEqual('在线回答');
       const groups = groupReadHistoryItems(merged);
-      expect(groups.map((group): ReadHistoryContentKind => group.kind)).assertDeepEquals([
-        ReadHistoryContentKind.QUESTION,
-        ReadHistoryContentKind.ANSWER,
-        ReadHistoryContentKind.PIN
-      ]);
-      expect(groups[1].items[0].contentKey).assertEqual('answer:1');
+      expect(groups.map((group): string => group.dayKey)).assertDeepEquals(['2026-08-28', '2026-08-27']);
+      expect(groups[0].items[0].contentKey).assertEqual('answer:1');
+      expect(groups[1].items.map((item: ReadHistoryItem): string => item.contentKey))
+        .assertDeepEquals(['pin:3', 'question:2']);
     });
 
     it('filtersMergedHistoryByRequestedSourceWithoutDroppingSharedRecords', 0, () => {

@@ -134,7 +134,7 @@ export struct ReadHistoryPage {
               ListItem() {
                 this.groupSection(group)
               }
-            }, (group: ReadHistoryGroup): string => group.kind)
+            }, (group: ReadHistoryGroup): string => group.dayKey)
             if ((this.viewState.canLoadMore || this.viewState.loadingMore) &&
               this.selectedSourceFilter !== ReadHistorySourceFilter.LOCAL) {
               ListItem() {
@@ -368,8 +368,8 @@ export struct ReadHistoryPage {
   @Builder
   private groupSection(group: ReadHistoryGroup) {
     Column({ space: $r('app.float.p1_spacing_small') }) {
-      Text(readHistoryKindLabel(group.kind))
-        .id(`p3_read_history_group_${group.kind}`)
+      Text(group.label)
+        .id(`p3_read_history_group_${group.dayKey}`)
         .fontSize($r('app.float.p1_secondary_font_size'))
         .fontColor($r('app.color.brand_primary'))
         .width('100%')
@@ -387,7 +387,7 @@ export struct ReadHistoryPage {
         Text(this.itemTitle(item))
           .fontSize($r('app.float.p1_body_font_size'))
           .width('100%')
-        Text(`${this.displayTime(item.openedAt)} · ${readHistorySourceLabel(item)}`)
+        Text(`${readHistoryKindLabel(item.kind)} · ${this.displayTime(item.openedAt)} · ${readHistorySourceLabel(item)}`)
           .fontSize($r('app.float.p1_caption_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .width('100%')
@@ -468,7 +468,8 @@ export struct ReadHistoryPage {
 
   private displayTime(openedAt: number): string {
     try {
-      return new Date(openedAt).toISOString().replace('T', ' ').substring(0, 19);
+      const value = new Date(openedAt);
+      return `${`${value.getHours()}`.padStart(2, '0')}:${`${value.getMinutes()}`.padStart(2, '0')}`;
     } catch (_error) {
       return '时间未知';
     }

@@ -42,7 +42,8 @@ export interface ReadHistoryItem {
 }
 
 export interface ReadHistoryGroup {
-  kind: ReadHistoryContentKind;
+  dayKey: string;
+  label: string;
   items: Array<ReadHistoryItem>;
 }
 
@@ -163,20 +164,38 @@ export function filterReadHistoryItems(items: Array<ReadHistoryItem>,
 }
 
 export function groupReadHistoryItems(items: Array<ReadHistoryItem>): Array<ReadHistoryGroup> {
-  const groups: Array<ReadHistoryGroup> = [];
-  const orderedKinds: Array<ReadHistoryContentKind> = [
-    ReadHistoryContentKind.QUESTION,
-    ReadHistoryContentKind.ANSWER,
-    ReadHistoryContentKind.ARTICLE,
-    ReadHistoryContentKind.PIN
-  ];
-  orderedKinds.forEach((kind: ReadHistoryContentKind): void => {
-    const groupItems = items.filter((item: ReadHistoryItem): boolean => item.kind === kind);
-    if (groupItems.length > 0) {
-      groups.push({ kind: kind, items: groupItems });
+  const groups = new Map<string, ReadHistoryGroup>();
+  const orderedKeys: Array<string> = [];
+  const orderedItems = items.slice().sort((left: ReadHistoryItem, right: ReadHistoryItem): number =>
+    right.openedAt - left.openedAt);
+  orderedItems.forEach((item: ReadHistoryItem): void => {
+    const dayKey = readHistoryDayKey(item.openedAt);
+    const current = groups.get(dayKey);
+    if (current === undefined) {
+      groups.set(dayKey, { dayKey: dayKey, label: readHistoryDayLabel(item.openedAt), items: [item] });
+      orderedKeys.push(dayKey);
+      return;
+    }
+    current.items.push(item);
+  });
+  const result: Array<ReadHistoryGroup> = [];
+  orderedKeys.forEach((key: string): void => {
+    const group = groups.get(key);
+    if (group !== undefined) {
+      result.push(group);
     }
   });
-  return groups;
+  return result;
+}
+
+function readHistoryDayKey(openedAt: number): string {
+  const value = new Date(openedAt);
+  return `${value.getFullYear()}-${`${value.getMonth() + 1}`.padStart(2, '0')}-${`${value.getDate()}`.padStart(2, '0')}`;
+}
+
+function readHistoryDayLabel(openedAt: number): string {
+  const value = new Date(openedAt);
+  return `${value.getFullYear()}年${value.getMonth() + 1}月${value.getDate()}日`;
 }
 
 export function mergeReadHistoryItems(local: Array<ReadHistoryItem>,
