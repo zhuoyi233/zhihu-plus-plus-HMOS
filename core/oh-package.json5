@@ -4,6 +4,6 @@
   "description": "Zhihu++ shared policies, navigation, startup and logging.",
   "main": "Index.ets",
   "author": "",
-  "license": "Apache-2.0",
+  "license": "AGPL-3.0",
   "dependencies": {}
 }

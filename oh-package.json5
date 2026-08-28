@@ -1,6 +1,7 @@
 {
   "modelVersion": "6.1.1",
   "description": "Zhihu++ HarmonyOS client.",
+  "license": "AGPL-3.0",
   "dependencies": {},
   "devDependencies": {
     "@ohos/hypium": "1.0.25",

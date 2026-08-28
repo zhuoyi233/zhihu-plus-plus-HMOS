@@ -4,7 +4,7 @@
   "description": "Zhihu++ native reader parsing, data source and media loading.",
   "main": "Index.ets",
   "author": "",
-  "license": "Apache-2.0",
+  "license": "AGPL-3.0",
   "dependencies": {
     "core": "file:../core"
   }

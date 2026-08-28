@@ -4,7 +4,7 @@
   "description": "Zhihu++ HarmonyOS application entry module.",
   "main": "",
   "author": "",
-  "license": "",
+  "license": "AGPL-3.0",
   "dependencies": {
     "core": "file:../core",
     "data": "file:../data",
