@@ -446,6 +446,7 @@ struct Index {
       repository: this.pinRepository,
       session: this.session,
       openedContentStore: this.openedContentStore,
+      commentRepository: this.commentRepository,
       navigate: navigate,
       rules: this.blockingRuleStore,
       history: this.blockedFeedHistoryStore,

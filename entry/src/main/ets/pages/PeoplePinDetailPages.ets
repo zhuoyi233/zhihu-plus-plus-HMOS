@@ -2,6 +2,7 @@ import { P1Destination, P1DestinationName } from 'core';
 import {
   BlockedFeedHistoryGateway,
   BlockingRuleGateway,
+  CommentRepository,
   FollowMutationResult,
   FollowRepository,
   LoginSessionGateway,
@@ -25,6 +26,7 @@ import {
 } from './PeoplePinDetailState';
 import { FollowController, FollowViewState } from './ContentInteractionState';
 import { PeopleContentController, PeopleContentPhase, PeopleContentViewState } from './PeopleContentState';
+import { CommentLayer } from './CommentLayer';
 import { NativeContentDocument } from './NativeContentDocument';
 import {
   BlockingActionController,
@@ -734,6 +736,7 @@ export struct PinDetailPage {
   repository: PinRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
+  commentRepository: CommentRepository | undefined = undefined;
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
@@ -748,6 +751,9 @@ export struct PinDetailPage {
   @State private keywordBlockVisible: boolean = false;
   @State private keywordBlockInput: string = '';
   @State private pinActionsSheetShown: boolean = false;
+  @State private showComments: boolean = false;
+  @State private commentRootDraft: string = '';
+  @State private commentReplyDraft: string = '';
   @State private blockingMessage: string = '';
   @State private blockingBusy: boolean = false;
   private controller?: PinDetailController;
@@ -784,6 +790,9 @@ export struct PinDetailPage {
     this.keywordBlockVisible = false;
     this.keywordBlockInput = '';
     this.pinActionsSheetShown = false;
+    this.showComments = false;
+    this.commentRootDraft = '';
+    this.commentReplyDraft = '';
   }
 
   private createBlockingAction(): void {
@@ -840,6 +849,27 @@ export struct PinDetailPage {
             }
           }
         })
+      if (this.commentRepository !== undefined && this.session !== undefined) {
+        CommentLayer({
+          contentType: 'pin',
+          contentId: this.contentId,
+          repository: this.commentRepository,
+          session: this.session,
+          navigate: this.navigate,
+          showComments: this.showComments,
+          rootDraft: this.commentRootDraft,
+          replyDraft: this.commentReplyDraft,
+          onRootDraftChange: (value: string): void => {
+            this.commentRootDraft = value;
+          },
+          onReplyDraftChange: (value: string): void => {
+            this.commentReplyDraft = value;
+          },
+          onDismiss: (): void => {
+            this.showComments = false;
+          }
+        })
+      }
     }
     .id('p2_pin_detail_page')
     .width('100%')
@@ -957,6 +987,7 @@ export struct PinDetailPage {
         emptyMessage: '这条想法暂时没有正文'
       })
         .layoutWeight(1)
+      this.bottomActionBar(pin)
     }
     .width('100%')
     .height('100%')
@@ -968,6 +999,47 @@ export struct PinDetailPage {
     this.errorMessage = state.errorMessage ?? '';
     this.requiresLogin = state.requiresLogin;
     this.openedRecordFailed = state.openedRecordFailed;
+  }
+
+  @Builder
+  private bottomActionBar(pin: PinDetail) {
+    Row() {
+      Text('参与讨论')
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .layoutWeight(1)
+      Button({ type: ButtonType.Normal, stateEffect: true }) {
+        Row({ space: $r('app.float.p1_spacing_small') }) {
+          SymbolGlyph($r('sys.symbol.message'))
+            .fontSize(22)
+            .fontColor([$r('app.color.secondary_text')])
+          Text(`${pin.commentCount}`)
+            .fontSize($r('app.float.p1_body_font_size'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.secondary_text'))
+        }
+        .padding({ left: 8, right: 8, top: 6, bottom: 6 })
+      }
+      .id('p3_pin_detail_comment_bar')
+      .height(50)
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .accessibilityText(`查看 ${pin.commentCount} 条评论`)
+      .enabled(this.commentRepository !== undefined && this.session !== undefined)
+      .onClick((): void => {
+        this.showComments = true;
+      })
+    }
+    .id('p3_pin_detail_bottom_actions')
+    .width('100%')
+    .padding({
+      left: $r('app.float.p1_page_padding'),
+      right: $r('app.float.p1_page_padding'),
+      top: $r('app.float.p1_spacing_small'),
+      bottom: $r('app.float.p1_spacing_small')
+    })
+    .backgroundColor($r('app.color.surface_background'))
+    .border({ width: { top: 0.5 }, color: $r('app.color.divider_color') })
   }
 
   @Builder
