@@ -29,7 +29,10 @@ export struct CollectionPage {
   @State private createTitle: string = '';
   @State private createDescription: string = '';
   @State private createIsPublic: boolean = false;
+  @State private actionTarget?: CollectionSummary = undefined;
+  @State private showActionSheet: boolean = false;
   @State private pendingDelete?: CollectionSummary = undefined;
+  @State private showDeleteSheet: boolean = false;
   private controller?: CollectionController;
 
   aboutToAppear(): void {
@@ -59,6 +62,10 @@ export struct CollectionPage {
   aboutToDisappear(): void {
     this.controller?.deactivate();
     this.controller = undefined;
+    this.actionTarget = undefined;
+    this.showActionSheet = false;
+    this.pendingDelete = undefined;
+    this.showDeleteSheet = false;
   }
 
   build() {
@@ -140,9 +147,6 @@ export struct CollectionPage {
           .onReachEnd(() => this.controller?.loadMore())
         }
 
-        if (this.pendingDelete !== undefined) {
-          this.deleteConfirmation()
-        }
       }
       .alignItems(HorizontalAlign.Start)
       .width('100%')
@@ -187,6 +191,34 @@ export struct CollectionPage {
             }
           }
         })
+      Column()
+        .bindSheet(this.showActionSheet, this.collectionActionSheet(), {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.showActionSheet) {
+              this.showActionSheet = false;
+            }
+            this.actionTarget = undefined;
+          }
+        })
+      Column()
+        .bindSheet(this.showDeleteSheet, this.deleteConfirmation(), {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.showDeleteSheet) {
+              this.showDeleteSheet = false;
+            }
+            this.pendingDelete = undefined;
+          }
+        })
     }
     .id('p3_collections_page')
     .width('100%')
@@ -205,6 +237,19 @@ export struct CollectionPage {
         Text(collection.isPublic ? '公开' : '私密')
           .fontSize($r('app.float.p1_caption_font_size'))
           .fontColor($r('app.color.secondary_text'))
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.more'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+          .id(`p3_collections_actions_${collection.id}`)
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('收藏夹操作')
+          .enabled(!this.busy)
+          .onClick((): void => this.openActionSheet(collection))
       }
       .width('100%')
 
@@ -221,29 +266,69 @@ export struct CollectionPage {
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
 
-      Row({ space: $r('app.float.p1_spacing_small') }) {
-        Button('打开')
-          .id(`p3_collections_open_${collection.id}`)
-          .fontSize($r('app.float.p1_secondary_font_size'))
-          .enabled(!this.busy)
-          .onClick((): void => {
-            this.navigate({ name: P1DestinationName.COLLECTION, id: collection.id });
-          })
-        Button('删除')
-          .id(`p3_collections_delete_${collection.id}`)
-          .fontSize($r('app.float.p1_secondary_font_size'))
-          .enabled(!this.busy)
-          .onClick((): void => {
-            this.pendingDelete = collection;
-          })
-      }
-      .width('100%')
     }
     .alignItems(HorizontalAlign.Start)
     .width('100%')
     .padding($r('app.float.p1_card_padding'))
     .borderRadius($r('app.float.p1_card_radius'))
     .backgroundColor($r('app.color.card_background'))
+    .enabled(!this.busy)
+    .onClick((): void => this.openCollection(collection))
+  }
+
+  @Builder
+  private collectionActionSheet() {
+    Column({ space: $r('app.float.p1_spacing_medium') }) {
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Text(this.actionTarget?.title ?? '收藏夹操作')
+          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.primary_text'))
+          .layoutWeight(1)
+          .maxLines(1)
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+          .id('p3_collections_actions_close')
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('关闭收藏夹操作')
+          .onClick((): void => this.closeActionSheet())
+      }
+      .width('100%')
+      Button('打开')
+        .id(`p3_collections_open_${this.actionTarget?.id ?? ''}`)
+        .width('100%')
+        .enabled(this.actionTarget !== undefined && !this.busy)
+        .onClick((): void => {
+          const target = this.actionTarget;
+          this.closeActionSheet();
+          if (target !== undefined) {
+            this.openCollection(target);
+          }
+        })
+      Button('删除收藏夹')
+        .id(`p3_collections_delete_${this.actionTarget?.id ?? ''}`)
+        .width('100%')
+        .fontColor($r('app.color.error_text'))
+        .backgroundColor(Color.Transparent)
+        .enabled(this.actionTarget !== undefined && !this.busy)
+        .onClick((): void => {
+          const target = this.actionTarget;
+          this.closeActionSheet();
+          if (target !== undefined) {
+            this.pendingDelete = target;
+            this.showDeleteSheet = true;
+          }
+        })
+    }
+    .width('100%')
+    .padding($r('app.float.p1_spacing_medium'))
+    .backgroundColor($r('app.color.surface_background'))
   }
 
   @Builder
@@ -357,6 +442,7 @@ export struct CollectionPage {
           .layoutWeight(1)
           .enabled(!this.busy)
           .onClick((): void => {
+            this.showDeleteSheet = false;
             this.pendingDelete = undefined;
           })
         Button('确认删除')
@@ -365,6 +451,7 @@ export struct CollectionPage {
           .enabled(!this.busy)
           .onClick((): void => {
             const target = this.pendingDelete;
+            this.showDeleteSheet = false;
             this.pendingDelete = undefined;
             if (target !== undefined) {
               this.controller?.deleteCollection(target.id);
@@ -388,6 +475,20 @@ export struct CollectionPage {
 
   private closeCreateDialog(): void {
     this.showCreateDialog = false;
+  }
+
+  private openCollection(collection: CollectionSummary): void {
+    this.navigate({ name: P1DestinationName.COLLECTION, id: collection.id });
+  }
+
+  private openActionSheet(collection: CollectionSummary): void {
+    this.actionTarget = collection;
+    this.showActionSheet = true;
+  }
+
+  private closeActionSheet(): void {
+    this.showActionSheet = false;
+    this.actionTarget = undefined;
   }
 
   private submitCreate(): void {
