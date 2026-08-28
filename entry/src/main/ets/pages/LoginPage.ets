@@ -119,12 +119,20 @@ export struct LoginPage {
       Scroll() {
         Column({ space: $r('app.float.p1_spacing_large') }) {
           Row({ space: $r('app.float.p1_spacing_small') }) {
-            Button('返回')
+            Button({ type: ButtonType.Normal, stateEffect: true }) {
+              SymbolGlyph($r('sys.symbol.chevron_left'))
+                .fontSize(20)
+                .fontColor([$r('app.color.primary_text')])
+            }
               .id('p2_login_back')
+              .width(40)
+              .height(40)
+              .padding(0)
+              .backgroundColor(Color.Transparent)
               .accessibilityText('返回上一页')
               .onClick(() => this.onBack())
             Text('账号与登录')
-              .fontSize($r('app.float.p1_display_font_size'))
+              .fontSize($r('app.float.p1_heading_font_size'))
               .fontWeight(FontWeight.Bold)
               .fontColor($r('app.color.primary_text'))
               .layoutWeight(1)
@@ -155,15 +163,16 @@ export struct LoginPage {
               .onClick(() => this.controller?.retryRetainedSession())
           }
 
-          Row({ space: $r('app.float.p1_spacing_small') }) {
-            this.modeTab(LOGIN_MODE_PHONE, '手机号')
-            this.modeTab(LOGIN_MODE_QR, '扫码')
-            this.modeTab(LOGIN_MODE_WEB, '网页')
+          Scroll() {
+            Row({ space: $r('app.float.p1_spacing_medium') }) {
+              this.modeTab(LOGIN_MODE_PHONE, '手机号')
+              this.modeTab(LOGIN_MODE_QR, '扫码')
+              this.modeTab(LOGIN_MODE_WEB, '网页')
+            }
           }
           .width('100%')
-          .padding(4)
-          .borderRadius($r('app.float.p1_card_radius'))
-          .backgroundColor($r('app.color.surface_background'))
+          .scrollable(ScrollDirection.Horizontal)
+          .scrollBar(BarState.Off)
 
           if (this.selectedMode === LOGIN_MODE_PHONE) {
             Column({ space: $r('app.float.p1_spacing_medium') }) {
@@ -357,16 +366,20 @@ export struct LoginPage {
 
   @Builder
   modeTab(index: number, label: string) {
-    Text(label)
+    Column({ space: 4 }) {
+      Text(label)
+        .fontSize($r('app.float.p1_body_font_size'))
+        .fontColor(this.selectedMode === index ? $r('app.color.brand_primary') : $r('app.color.secondary_text'))
+        .fontWeight(this.selectedMode === index ? FontWeight.Medium : FontWeight.Regular)
+      Blank()
+        .height(2)
+        .width('100%')
+        .backgroundColor(this.selectedMode === index ? $r('app.color.brand_primary') : Color.Transparent)
+    }
+      .width(72)
       .id(index === LOGIN_MODE_PHONE ? 'p3_login_mode_phone' :
         index === LOGIN_MODE_QR ? 'p3_login_mode_qr' : 'p3_login_mode_web')
-      .fontSize($r('app.float.p1_body_font_size'))
-      .fontColor(this.selectedMode === index ? Color.White : $r('app.color.secondary_text'))
-      .textAlign(TextAlign.Center)
-      .layoutWeight(1)
-      .padding({ top: 8, bottom: 8 })
-      .borderRadius(18)
-      .backgroundColor(this.selectedMode === index ? $r('app.color.brand_primary') : Color.Transparent)
+      .padding({ left: $r('app.float.p1_spacing_small'), right: $r('app.float.p1_spacing_small'), top: 8, bottom: 4 })
       .onClick((): void => {
         this.selectedMode = index;
       })
