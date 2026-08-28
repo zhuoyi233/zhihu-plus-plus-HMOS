@@ -89,6 +89,7 @@ export struct PeopleDetailPage {
   history: BlockedFeedHistoryGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
+  onBack: () => void = (): void => {};
   @State private phase: ReadOnlyDetailPhase = ReadOnlyDetailPhase.IDLE;
   @State private profile: PeopleProfile | undefined = undefined;
   @State private errorMessage: string = '';
@@ -101,6 +102,8 @@ export struct PeopleDetailPage {
   @State private contentRequiresLogin: boolean = false;
   @State private contentErrorMessage: string = '';
   @State private pendingUserBlock?: BlockingUserCandidate = undefined;
+  @State private profileActionsSheetShown: boolean = false;
+  @State private userBlockSheetShown: boolean = false;
   @State private blockingMessage: string = '';
   @State private blockingBusy: boolean = false;
   @State private following: boolean = false;
@@ -143,6 +146,8 @@ export struct PeopleDetailPage {
     this.contentController = undefined;
     this.blockingAction = undefined;
     this.pendingUserBlock = undefined;
+    this.profileActionsSheetShown = false;
+    this.userBlockSheetShown = false;
     this.followController = undefined;
   }
 
@@ -160,6 +165,7 @@ export struct PeopleDetailPage {
 
   build() {
     Column() {
+      this.pageHeader()
       if (this.phase === ReadOnlyDetailPhase.IDLE || this.phase === ReadOnlyDetailPhase.LOADING) {
         ReadOnlyDetailStatusPanel({
           kind: 'people',
@@ -180,14 +186,84 @@ export struct PeopleDetailPage {
       } else if (this.profile !== undefined) {
         this.loadedProfile(this.profile)
       }
-      if (this.pendingUserBlock !== undefined) {
-        this.userBlockDialog()
-      }
+      Column()
+        .bindSheet(this.profileActionsSheetShown, this.profileActionsSheet(), {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.profileActionsSheetShown) {
+              this.profileActionsSheetShown = false;
+            }
+          }
+        })
+      Column()
+        .bindSheet(this.userBlockSheetShown, this.userBlockDialog(), {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.userBlockSheetShown) {
+              this.userBlockSheetShown = false;
+            }
+            this.pendingUserBlock = undefined;
+          }
+        })
     }
     .id('p2_people_detail_page')
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.page_background'))
+  }
+
+  @Builder
+  private pageHeader() {
+    Row({ space: $r('app.float.p1_spacing_small') }) {
+      Button({ type: ButtonType.Normal, stateEffect: true }) {
+        SymbolGlyph($r('sys.symbol.chevron_left'))
+          .fontSize(20)
+          .fontColor([$r('app.color.primary_text')])
+      }
+        .id('p3_people_detail_back')
+        .width(40)
+        .height(40)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .accessibilityText('返回')
+        .onClick((): void => this.onBack())
+      Text(this.profile?.name ?? '用户主页')
+        .id('p3_people_detail_page_title')
+        .fontSize($r('app.float.p1_heading_font_size'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.primary_text'))
+        .layoutWeight(1)
+        .maxLines(1)
+      Button({ type: ButtonType.Normal, stateEffect: true }) {
+        SymbolGlyph($r('sys.symbol.more'))
+          .fontSize(20)
+          .fontColor([$r('app.color.primary_text')])
+      }
+        .id('p3_people_detail_actions')
+        .width(40)
+        .height(40)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .accessibilityText('用户主页操作')
+        .enabled(this.profile !== undefined)
+        .onClick((): void => {
+          this.profileActionsSheetShown = true;
+        })
+    }
+    .width('100%')
+    .padding({
+      left: $r('app.float.p1_page_padding'),
+      right: $r('app.float.p1_page_padding'),
+      top: $r('app.float.p1_spacing_medium')
+    })
   }
 
   @Builder
@@ -251,11 +327,11 @@ export struct PeopleDetailPage {
         .backgroundColor($r('app.color.surface_background'))
         .borderRadius(16)
 
-        Row({ space: $r('app.float.p1_spacing_small') }) {
-          if (this.followController !== undefined) {
+        if (this.followController !== undefined) {
+          Row({ space: $r('app.float.p1_spacing_small') }) {
             Button(this.following ? '已关注' : '关注', { type: ButtonType.Capsule })
               .id('p3_people_follow')
-              .layoutWeight(1)
+              .width('100%')
               .fontSize($r('app.float.p1_body_font_size'))
               .fontColor(this.following ? $r('app.color.brand_primary') : $r('app.color.on_brand'))
               .backgroundColor(this.following
@@ -266,24 +342,9 @@ export struct PeopleDetailPage {
                 this.followController?.toggleFollow();
               })
           }
-          Button('屏蔽该用户')
-            .id('p3_people_detail_block_user')
-            .layoutWeight(1)
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .enabled(!this.blockingBusy && this.blockingAction !== undefined)
-            .onClick((): void => {
-              this.pendingUserBlock = { userId: profile.id, userName: profile.name };
-            })
-          Button('收藏夹')
-            .id('p3_people_detail_collections')
-            .layoutWeight(1)
-            .fontSize($r('app.float.p1_body_font_size'))
-            .onClick((): void => {
-              this.navigate({ name: P1DestinationName.COLLECTIONS, id: this.identifier });
-            })
+          .id('p3_people_action_row')
+          .width('100%')
         }
-        .id('p3_people_action_row')
-        .width('100%')
 
         if (this.followErrorMessage.length > 0) {
           Row({ space: $r('app.float.p1_spacing_small') }) {
@@ -321,7 +382,7 @@ export struct PeopleDetailPage {
     }
     .scrollBar(BarState.Auto)
     .width('100%')
-    .height('100%')
+    .layoutWeight(1)
   }
 
   @Builder
@@ -535,6 +596,60 @@ export struct PeopleDetailPage {
   }
 
   @Builder
+  private profileActionsSheet() {
+    Column({ space: $r('app.float.p1_spacing_medium') }) {
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Text(this.profile?.name ?? '用户主页操作')
+          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.primary_text'))
+          .layoutWeight(1)
+          .maxLines(1)
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+          .id('p3_people_detail_actions_close')
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('关闭用户主页操作')
+          .onClick((): void => {
+            this.profileActionsSheetShown = false;
+          })
+      }
+      .width('100%')
+      Button('查看收藏夹')
+        .id('p3_people_detail_collections')
+        .width('100%')
+        .enabled(this.profile !== undefined)
+        .onClick((): void => {
+          this.profileActionsSheetShown = false;
+          this.navigate({ name: P1DestinationName.COLLECTIONS, id: this.identifier });
+        })
+      Button('屏蔽该用户')
+        .id('p3_people_detail_block_user')
+        .width('100%')
+        .fontColor($r('app.color.error_text'))
+        .backgroundColor(Color.Transparent)
+        .enabled(!this.blockingBusy && this.blockingAction !== undefined && this.profile !== undefined)
+        .onClick((): void => {
+          const profile = this.profile;
+          this.profileActionsSheetShown = false;
+          if (profile !== undefined) {
+            this.pendingUserBlock = { userId: profile.id, userName: profile.name };
+            this.userBlockSheetShown = true;
+          }
+        })
+    }
+    .width('100%')
+    .padding($r('app.float.p1_spacing_medium'))
+    .backgroundColor($r('app.color.surface_background'))
+  }
+
+  @Builder
   private userBlockDialog() {
     Column({ space: $r('app.float.p1_spacing_small') }) {
       Text(`确定要屏蔽用户「${this.pendingUserBlock?.userName ?? ''}」吗？`)
@@ -549,6 +664,7 @@ export struct PeopleDetailPage {
           .layoutWeight(1)
           .enabled(!this.blockingBusy)
           .onClick((): void => {
+            this.userBlockSheetShown = false;
             this.pendingUserBlock = undefined;
           })
         Button('确定屏蔽')
@@ -572,6 +688,7 @@ export struct PeopleDetailPage {
     if (pending === undefined || action === undefined || profile === undefined) {
       return;
     }
+    this.userBlockSheetShown = false;
     this.pendingUserBlock = undefined;
     action.blockUser(pending.userId, pending.userName, {
       contentTitle: `${profile.name}的主页`,
