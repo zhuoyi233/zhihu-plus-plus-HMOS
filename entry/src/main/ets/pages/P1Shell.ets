@@ -52,8 +52,8 @@ export struct P1Shell {
     this.emptyContent;
   @BuilderParam collectionsContent: (id: string, navigate: (destination: P1Destination) => void,
     onBack: () => void) => void = this.emptyCollections;
-  @BuilderParam collectionContentContent: (id: string, navigate: (destination: P1Destination) => void) => void =
-    this.emptyContent;
+  @BuilderParam collectionContentContent: (id: string, navigate: (destination: P1Destination) => void,
+    onBack: () => void) => void = this.emptyCollectionContent;
   @BuilderParam notificationContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
   @BuilderParam notificationSettingsContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
   @BuilderParam blockingRulesContent: (onBack: () => void) => void = this.emptyProbe;
@@ -145,6 +145,11 @@ export struct P1Shell {
 
   @Builder
   emptyCollections(_id: string, _navigate: (destination: P1Destination) => void, _onBack: () => void) {
+    Blank();
+  }
+
+  @Builder
+  emptyCollectionContent(_id: string, _navigate: (destination: P1Destination) => void, _onBack: () => void) {
     Blank();
   }
 
@@ -370,10 +375,13 @@ export struct P1Shell {
       NavDestination() {
         this.collectionContentContent(
           destination.id,
-          (destination: P1Destination): void => this.navigate(destination)
+          (destination: P1Destination): void => this.navigate(destination),
+          (): void => {
+            this.pathStack.pop();
+          }
         );
       }
-      .title('收藏夹内容')
+      .hideTitleBar(true)
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.NOTIFICATION) {
       NavDestination() {

@@ -224,8 +224,8 @@ struct Index {
           pinContent: (id: string, navigate: (destination: P1Destination) => void): void => this.pinContent(id, navigate),
           collectionsContent: (id: string, navigate: (destination: P1Destination) => void,
             onBack: () => void): void => this.collectionsContent(id, navigate, onBack),
-          collectionContentContent: (id: string, navigate: (destination: P1Destination) => void): void =>
-            this.collectionContentContent(id, navigate),
+          collectionContentContent: (id: string, navigate: (destination: P1Destination) => void,
+            onBack: () => void): void => this.collectionContentContent(id, navigate, onBack),
           notificationContent: (navigate: (destination: P1Destination) => void): void =>
             this.notificationContent(navigate),
           notificationSettingsContent: (navigate: (destination: P1Destination) => void): void =>
@@ -459,12 +459,13 @@ struct Index {
   }
 
   @Builder
-  collectionContentContent(id: string, navigate: (destination: P1Destination) => void) {
+  collectionContentContent(id: string, navigate: (destination: P1Destination) => void, onBack: () => void) {
     CollectionContentPage({
       collectionId: id,
       repository: this.collectionRepository,
       session: this.session,
-      navigate: navigate
+      navigate: navigate,
+      onBack: onBack
     });
   }
 

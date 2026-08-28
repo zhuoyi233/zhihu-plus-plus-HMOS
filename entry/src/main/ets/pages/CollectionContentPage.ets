@@ -19,6 +19,7 @@ export struct CollectionContentPage {
   session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
+  onBack: () => void = (): void => {};
   @State private phase: CollectionContentPhase = CollectionContentPhase.IDLE;
   @State private collection?: CollectionSummary = undefined;
   @State private items: Array<CollectionContentItem> = [];
@@ -59,6 +60,7 @@ export struct CollectionContentPage {
 
   build() {
     Column({ space: $r('app.float.p1_spacing_medium') }) {
+      this.pageHeader()
       if (this.phase === CollectionContentPhase.IDLE || this.phase === CollectionContentPhase.LOADING) {
         this.statusPanel('正在加载收藏夹内容…', false, 'p3_collection_content_loading')
       } else if (this.phase === CollectionContentPhase.ERROR) {
@@ -125,6 +127,31 @@ export struct CollectionContentPage {
       bottom: $r('app.float.p1_page_padding')
     })
     .backgroundColor($r('app.color.page_background'))
+  }
+
+  @Builder
+  private pageHeader() {
+    Row({ space: $r('app.float.p1_spacing_small') }) {
+      Button({ type: ButtonType.Normal, stateEffect: true }) {
+        SymbolGlyph($r('sys.symbol.chevron_left'))
+          .fontSize(20)
+          .fontColor([$r('app.color.primary_text')])
+      }
+        .id('p3_collection_content_back')
+        .width(40)
+        .height(40)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .accessibilityText('返回')
+        .onClick((): void => this.onBack())
+      Text('收藏夹内容')
+        .id('p3_collection_content_page_title')
+        .fontSize($r('app.float.p1_heading_font_size'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.primary_text'))
+        .layoutWeight(1)
+    }
+    .width('100%')
   }
 
   @Builder
