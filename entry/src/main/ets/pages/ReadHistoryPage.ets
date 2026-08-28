@@ -43,7 +43,9 @@ export struct ReadHistoryPage {
   @State private confirmClear: boolean = false;
   @State private sourceFilterSheetShown: boolean = false;
   @State private historyActionsSheetShown: boolean = false;
+  @State private itemActionsSheetShown: boolean = false;
   @State private selectedSourceFilter: ReadHistorySourceFilter = ReadHistorySourceFilter.ALL;
+  @State private itemActionTarget: ReadHistoryItem | undefined = undefined;
   private controller?: ReadHistoryController;
 
   aboutToAppear(): void {
@@ -83,6 +85,8 @@ export struct ReadHistoryPage {
     this.confirmClear = false;
     this.sourceFilterSheetShown = false;
     this.historyActionsSheetShown = false;
+    this.itemActionsSheetShown = false;
+    this.itemActionTarget = undefined;
   }
 
   build() {
@@ -183,6 +187,20 @@ export struct ReadHistoryPage {
             if (this.historyActionsSheetShown) {
               this.historyActionsSheetShown = false;
             }
+          }
+        })
+      Column()
+        .bindSheet(this.itemActionsSheetShown, this.itemActionsSheet(), {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.itemActionsSheetShown) {
+              this.itemActionsSheetShown = false;
+            }
+            this.itemActionTarget = undefined;
           }
         })
       Column()
@@ -392,24 +410,83 @@ export struct ReadHistoryPage {
           .fontColor($r('app.color.secondary_text'))
           .width('100%')
       }
+      .id(`p2_read_history_open_${item.contentKey}`)
       .layoutWeight(1)
-      Button('打开')
-        .id(`p2_read_history_open_${item.contentKey}`)
-        .enabled(!this.viewState.busy)
-        .onClick((): void => this.onOpen(readHistoryOpenTarget(item)))
+      .enabled(!this.viewState.busy)
+      .onClick((): void => this.onOpen(readHistoryOpenTarget(item)))
       if (item.deletable) {
-        Button('删除')
-          .id(`p2_read_history_delete_${item.contentKey}`)
-          .enabled(!this.viewState.busy)
-          .onClick((): void => {
-            this.controller?.delete(item.contentKey);
-          })
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.more'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+        .id(`p3_read_history_item_actions_${item.contentKey}`)
+        .width(40)
+        .height(40)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .accessibilityText('已读记录操作')
+        .enabled(!this.viewState.busy)
+        .onClick((): void => this.openItemActions(item))
       }
     }
     .width('100%')
     .padding($r('app.float.p1_spacing_medium'))
     .backgroundColor($r('app.color.card_background'))
     .borderRadius($r('app.float.p1_card_radius'))
+  }
+
+  @Builder
+  private itemActionsSheet() {
+    Column({ space: $r('app.float.p1_spacing_medium') }) {
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Text(this.itemActionTarget === undefined ? '记录操作' : this.itemTitle(this.itemActionTarget))
+          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.primary_text'))
+          .layoutWeight(1)
+          .maxLines(1)
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+        .id('p3_read_history_item_actions_close')
+        .width(40)
+        .height(40)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .accessibilityText('关闭已读记录操作')
+        .onClick((): void => this.closeItemActions())
+      }
+      .width('100%')
+      Button('打开')
+        .id(`p3_read_history_open_${this.itemActionTarget?.contentKey ?? ''}`)
+        .width('100%')
+        .enabled(this.itemActionTarget !== undefined && !this.viewState.busy)
+        .onClick((): void => {
+          const target = this.itemActionTarget;
+          this.closeItemActions();
+          if (target !== undefined) {
+            this.onOpen(readHistoryOpenTarget(target));
+          }
+        })
+      Button('删除本地记录')
+        .id(`p3_read_history_delete_${this.itemActionTarget?.contentKey ?? ''}`)
+        .width('100%')
+        .fontColor($r('app.color.error_text'))
+        .backgroundColor(Color.Transparent)
+        .enabled(this.itemActionTarget !== undefined && this.itemActionTarget.deletable && !this.viewState.busy)
+        .onClick((): void => {
+          const target = this.itemActionTarget;
+          this.closeItemActions();
+          if (target !== undefined) {
+            this.controller?.delete(target.contentKey);
+          }
+        })
+    }
+    .width('100%')
+    .padding($r('app.float.p1_page_padding'))
   }
 
   @Builder
@@ -452,6 +529,16 @@ export struct ReadHistoryPage {
 
   private hasLocalItems(): boolean {
     return this.viewState.items.some((item: ReadHistoryItem): boolean => item.deletable);
+  }
+
+  private openItemActions(item: ReadHistoryItem): void {
+    this.itemActionTarget = item;
+    this.itemActionsSheetShown = true;
+  }
+
+  private closeItemActions(): void {
+    this.itemActionsSheetShown = false;
+    this.itemActionTarget = undefined;
   }
 
   private emptyHistoryMessage(): string {
