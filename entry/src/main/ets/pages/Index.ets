@@ -231,7 +231,7 @@ struct Index {
           notificationSettingsContent: (navigate: (destination: P1Destination) => void): void =>
             this.notificationSettingsContent(navigate),
           blockingRulesContent: (): void => this.blockingRulesContent(),
-          blockedFeedHistoryContent: (): void => this.blockedFeedHistoryContent(),
+          blockedFeedHistoryContent: (onBack: () => void): void => this.blockedFeedHistoryContent(onBack),
           readHistoryContent: (navigate: (destination: P1Destination) => void, onBack: () => void): void =>
             this.readHistoryContent(navigate, onBack),
           loginContent: (onBack: () => void, onAuthenticated: () => void, onScanDesktopLogin: () => void): void =>
@@ -489,8 +489,8 @@ struct Index {
   }
 
   @Builder
-  blockedFeedHistoryContent() {
-    BlockedFeedHistoryPage({ history: this.blockedFeedHistoryStore });
+  blockedFeedHistoryContent(onBack: () => void) {
+    BlockedFeedHistoryPage({ history: this.blockedFeedHistoryStore, onBack: onBack });
   }
 
   @Builder

@@ -56,7 +56,7 @@ export struct P1Shell {
   @BuilderParam notificationContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
   @BuilderParam notificationSettingsContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
   @BuilderParam blockingRulesContent: () => void = this.emptyPage;
-  @BuilderParam blockedFeedHistoryContent: () => void = this.emptyPage;
+  @BuilderParam blockedFeedHistoryContent: (onBack: () => void) => void = this.emptyPage;
   @BuilderParam readHistoryContent: (navigate: (destination: P1Destination) => void, onBack: () => void) => void =
     this.emptyHome;
   @BuilderParam loginContent: (onBack: () => void, onAuthenticated: () => void,
@@ -179,9 +179,11 @@ export struct P1Shell {
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.BLOCKED_FEED_HISTORY) {
       NavDestination() {
-        this.blockedFeedHistoryContent();
+        this.blockedFeedHistoryContent((): void => {
+          this.pathStack.pop();
+        });
       }
-      .title('屏蔽记录')
+      .hideTitleBar(true)
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.READ_HISTORY) {
       NavDestination() {
