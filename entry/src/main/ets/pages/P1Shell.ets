@@ -57,7 +57,8 @@ export struct P1Shell {
   @BuilderParam notificationSettingsContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
   @BuilderParam blockingRulesContent: () => void = this.emptyPage;
   @BuilderParam blockedFeedHistoryContent: () => void = this.emptyPage;
-  @BuilderParam readHistoryContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
+  @BuilderParam readHistoryContent: (navigate: (destination: P1Destination) => void, onBack: () => void) => void =
+    this.emptyHome;
   @BuilderParam loginContent: (onBack: () => void, onAuthenticated: () => void,
     onScanDesktopLogin: () => void) => void = this.emptyLogin;
   @BuilderParam readerProbeContent: (onBack: () => void) => void = this.emptyProbe;
@@ -184,9 +185,11 @@ export struct P1Shell {
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.READ_HISTORY) {
       NavDestination() {
-        this.readHistoryContent((destination: P1Destination): void => this.navigate(destination));
+        this.readHistoryContent((nextDestination: P1Destination): void => this.navigate(nextDestination), (): void => {
+          this.pathStack.pop();
+        });
       }
-      .title('已读记录')
+      .hideTitleBar(true)
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.TECHNICAL_LAB) {
       NavDestination() {

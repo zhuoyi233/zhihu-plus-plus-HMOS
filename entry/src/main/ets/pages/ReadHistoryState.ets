@@ -23,6 +23,12 @@ export enum ReadHistoryContentKind {
   PIN = 'pin'
 }
 
+export enum ReadHistorySourceFilter {
+  ALL = 'all',
+  LOCAL = 'local',
+  ONLINE = 'online'
+}
+
 export interface ReadHistoryItem {
   contentKey: string;
   kind: ReadHistoryContentKind;
@@ -133,6 +139,27 @@ export function readHistorySourceLabel(item: ReadHistoryItem): string {
     return '本地+在线';
   }
   return item.deletable ? '本地' : '在线';
+}
+
+export function readHistorySourceFilterLabel(filter: ReadHistorySourceFilter): string {
+  if (filter === ReadHistorySourceFilter.LOCAL) {
+    return '本地记录';
+  }
+  if (filter === ReadHistorySourceFilter.ONLINE) {
+    return '在线记录';
+  }
+  return '全部记录';
+}
+
+export function filterReadHistoryItems(items: Array<ReadHistoryItem>,
+  filter: ReadHistorySourceFilter): Array<ReadHistoryItem> {
+  if (filter === ReadHistorySourceFilter.LOCAL) {
+    return items.filter((item: ReadHistoryItem): boolean => item.deletable);
+  }
+  if (filter === ReadHistorySourceFilter.ONLINE) {
+    return items.filter((item: ReadHistoryItem): boolean => item.inOnline);
+  }
+  return items.slice();
 }
 
 export function groupReadHistoryItems(items: Array<ReadHistoryItem>): Array<ReadHistoryGroup> {

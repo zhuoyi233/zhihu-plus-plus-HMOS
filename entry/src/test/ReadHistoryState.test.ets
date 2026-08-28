@@ -11,6 +11,7 @@ import {
 } from 'data';
 import {
   decodeReadHistoryItem,
+  filterReadHistoryItems,
   groupReadHistoryItems,
   mergeReadHistoryItems,
   ReadHistoryContentKind,
@@ -18,7 +19,9 @@ import {
   ReadHistoryItem,
   readHistoryKindLabel,
   readHistoryOpenTarget,
-  ReadHistoryPhase
+  ReadHistoryPhase,
+  ReadHistorySourceFilter,
+  readHistorySourceFilterLabel
 } from '../main/ets/pages/ReadHistoryState';
 
 class FakeReadHistory implements ReadHistoryGateway {
@@ -335,6 +338,25 @@ export default function readHistoryStateTest(): void {
         ReadHistoryContentKind.PIN
       ]);
       expect(groups[1].items[0].contentKey).assertEqual('answer:1');
+    });
+
+    it('filtersMergedHistoryByRequestedSourceWithoutDroppingSharedRecords', 0, () => {
+      const items: Array<ReadHistoryItem> = [
+        { contentKey: 'question:1', kind: ReadHistoryContentKind.QUESTION, id: '1', openedAt: 30,
+          deletable: true, inOnline: false },
+        { contentKey: 'answer:2', kind: ReadHistoryContentKind.ANSWER, id: '2', openedAt: 20,
+          deletable: true, inOnline: true },
+        { contentKey: 'article:3', kind: ReadHistoryContentKind.ARTICLE, id: '3', openedAt: 10,
+          deletable: false, inOnline: true }
+      ];
+      expect(filterReadHistoryItems(items, ReadHistorySourceFilter.ALL).length).assertEqual(3);
+      expect(filterReadHistoryItems(items, ReadHistorySourceFilter.LOCAL)
+        .map((item: ReadHistoryItem): string => item.contentKey)).assertDeepEquals(['question:1', 'answer:2']);
+      expect(filterReadHistoryItems(items, ReadHistorySourceFilter.ONLINE)
+        .map((item: ReadHistoryItem): string => item.contentKey)).assertDeepEquals(['answer:2', 'article:3']);
+      expect(readHistorySourceFilterLabel(ReadHistorySourceFilter.ALL)).assertEqual('全部记录');
+      expect(readHistorySourceFilterLabel(ReadHistorySourceFilter.LOCAL)).assertEqual('本地记录');
+      expect(readHistorySourceFilterLabel(ReadHistorySourceFilter.ONLINE)).assertEqual('在线记录');
     });
   });
 }
