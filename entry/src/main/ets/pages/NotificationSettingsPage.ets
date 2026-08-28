@@ -5,6 +5,8 @@ import {
   NOTIFICATION_KINDS,
   notificationKindInfo
 } from 'data';
+import { common } from '@kit.AbilityKit';
+import notificationManager from '@ohos.notificationManager';
 
 @Component
 export struct NotificationSettingsPage {
@@ -19,8 +21,11 @@ export struct NotificationSettingsPage {
   };
   @State private loaded: boolean = false;
   @State private saveStatus: string = '';
+  @State private systemNotificationStatus: string = '正在读取系统通知状态…';
+  @State private systemNotificationSettingsOpening: boolean = false;
 
   aboutToAppear(): void {
+    this.refreshSystemNotificationStatus();
     const settings = this.settings;
     if (settings === undefined) {
       this.saveStatus = '通知设置数据源未配置';
@@ -70,6 +75,35 @@ export struct NotificationSettingsPage {
               this.updatePreferences(withUnreadBadge(this.preferences, checked));
             }
           )
+        }
+        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+        .padding($r('app.float.p1_card_padding'))
+        .borderRadius($r('app.float.p1_card_radius'))
+        .backgroundColor($r('app.color.surface_background'))
+
+        Column({ space: $r('app.float.p1_spacing_small') }) {
+          Text('系统通知')
+            .fontSize($r('app.float.p1_heading_font_size'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.primary_text'))
+          Text('通知授权和提醒方式由 HarmonyOS 在应用级统一管理，不按消息类型复制 Android 通知渠道。')
+            .fontSize($r('app.float.p1_caption_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
+          Text(this.systemNotificationStatus)
+            .id('p3_notifications_settings_system_status')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
+          Button(this.systemNotificationSettingsOpening ? '正在打开系统通知设置…' : '管理系统通知')
+            .id('p3_notifications_settings_system_open')
+            .width('100%')
+            .fontSize($r('app.float.p1_body_font_size'))
+            .enabled(!this.systemNotificationSettingsOpening)
+            .onClick((): void => {
+              this.openSystemNotificationSettings();
+            })
         }
         .alignItems(HorizontalAlign.Start)
         .width('100%')
@@ -152,6 +186,35 @@ export struct NotificationSettingsPage {
     }).catch((_error: Error): void => {
       this.saveStatus = '保存通知设置失败';
     });
+  }
+
+  private async refreshSystemNotificationStatus(): Promise<void> {
+    try {
+      const enabled = await notificationManager.isNotificationEnabled();
+      this.systemNotificationStatus = enabled ? '系统通知已允许' : '系统通知尚未允许';
+    } catch (_error) {
+      this.systemNotificationStatus = '暂时无法读取系统通知状态';
+    }
+  }
+
+  private async openSystemNotificationSettings(): Promise<void> {
+    if (this.systemNotificationSettingsOpening) {
+      return;
+    }
+    const hostContext = this.getUIContext().getHostContext();
+    if (hostContext === undefined) {
+      this.systemNotificationStatus = '无法打开系统通知设置';
+      return;
+    }
+    this.systemNotificationSettingsOpening = true;
+    try {
+      await notificationManager.openNotificationSettingsWithResult(hostContext as common.UIAbilityContext);
+      await this.refreshSystemNotificationStatus();
+    } catch (_error) {
+      this.systemNotificationStatus = '无法打开系统通知设置，请稍后重试';
+    } finally {
+      this.systemNotificationSettingsOpening = false;
+    }
   }
 
   private displayEnabled(kind: NotificationKind): boolean {
