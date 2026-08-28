@@ -1,5 +1,6 @@
 import { AppPreferencesStore, AppThemeMode, LoginSessionGateway, SessionStatus } from 'data';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
+import bundleManager from '@ohos.bundle.bundleManager';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import {
   decodeP1Destination,
@@ -74,6 +75,8 @@ export struct P1Shell {
   session: LoginSessionGateway | undefined = undefined;
   @State private themeMode: AppThemeMode = AppThemeMode.SYSTEM;
   @State private themePersistenceStatus: string = '正在读取主题设置…';
+  @State private installedVersionLabel: string = '正在读取已安装版本…';
+  @State private aboutVersionSheetShown: boolean = false;
   @State private homeReloadToken: number = 0;
   @State private followingReloadToken: number = 0;
   @State private hotReloadToken: number = 0;
@@ -89,6 +92,7 @@ export struct P1Shell {
     this.themeMounted = true;
     this.themePersistenceStatus = '正在读取主题设置…';
     this.restoreThemeMode();
+    this.refreshInstalledVersionLabel();
     this.unsubscribeStartupDestination?.();
     const listener: StartupDestinationListener = (destination: P1Destination): void => {
       this.navigate(destination);
@@ -660,6 +664,13 @@ export struct P1Shell {
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
           Column() {
+            AppNavigationRow({ title: '应用与版本', description: this.installedVersionLabel,
+              testId: 'p3_open_about_version', grouped: true,
+              onRowClick: (): void => {
+                this.refreshInstalledVersionLabel();
+                this.aboutVersionSheetShown = true;
+              } });
+            Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '技术实验室', description: '仅用于本机诊断与验证', testId: 'p1_open_technical_lab', grouped: true,
               onRowClick: (): void => this.navigate({ name: P1DestinationName.TECHNICAL_LAB }) });
             Text('页面内容由 Navigation 约束在系统安全区内，背景延伸覆盖状态栏和底部系统区域。')
@@ -685,6 +696,19 @@ export struct P1Shell {
       .height('100%')
       .align(Alignment.TopStart)
       .backgroundColor($r('app.color.page_background'))
+      Column()
+        .bindSheet(this.aboutVersionSheetShown, this.aboutVersionSheet(), {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.aboutVersionSheetShown) {
+              this.aboutVersionSheetShown = false;
+            }
+          }
+        })
     }
     .id('p1_settings_top_start_container')
     .width('100%')
@@ -704,6 +728,59 @@ export struct P1Shell {
       .onClick(() => {
         this.selectThemeMode(mode);
       })
+  }
+
+  @Builder
+  private aboutVersionSheet() {
+    Column({ space: $r('app.float.p1_spacing_medium') }) {
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Text('应用与版本')
+          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.primary_text'))
+          .layoutWeight(1)
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+          .id('p3_about_version_close')
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('关闭应用与版本')
+          .onClick((): void => {
+            this.aboutVersionSheetShown = false;
+          })
+      }
+      .width('100%')
+      Text('知乎++ HarmonyOS 版')
+        .id('p3_about_version_app_name')
+        .fontSize($r('app.float.p1_body_font_size'))
+        .fontColor($r('app.color.primary_text'))
+        .width('100%')
+      Text(this.installedVersionLabel)
+        .id('p3_about_version_value')
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
+      Text('版本信息来自当前已安装的 HAP，便于核对本机安装结果。')
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
+    }
+    .width('100%')
+    .padding($r('app.float.p1_page_padding'))
+  }
+
+  private refreshInstalledVersionLabel(): void {
+    try {
+      const bundle = bundleManager.getBundleInfoForSelfSync(bundleManager.BundleFlag.GET_BUNDLE_INFO_DEFAULT);
+      this.installedVersionLabel = `版本 ${bundle.versionName}（版本号 ${bundle.versionCode}）`;
+    } catch (_error) {
+      this.installedVersionLabel = '暂时无法读取已安装版本';
+    }
   }
 
   private accountSummary(): string {
