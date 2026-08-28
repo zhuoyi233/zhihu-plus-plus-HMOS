@@ -89,6 +89,8 @@ struct ContentDetailPage {
   @State private actionMenuShown: boolean = false;
   /** P3-9-C：菜单操作反馈（复制链接结果等）。 */
   @State private menuStatus: string = '';
+  /** 沉浸式阅读仅收起页面 Chrome，不改变正文、互动或滚动状态。 */
+  @State private immersiveReading: boolean = false;
   private controller?: ContentDetailController;
   private blockingAction?: BlockingActionController;
   private voteController?: ContentVoteController;
@@ -132,6 +134,7 @@ struct ContentDetailPage {
     this.commentRootDraft = '';
     this.commentReplyDraft = '';
     this.topBarScrolled = false;
+    this.immersiveReading = false;
   }
 
   private createBlockingAction(): void {
@@ -149,7 +152,9 @@ struct ContentDetailPage {
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       Column() {
-        this.pageHeader()
+        if (!this.immersiveReading) {
+          this.pageHeader()
+        }
         if (this.phase === ContentDetailPhase.LOADING || this.phase === ContentDetailPhase.IDLE) {
           this.statusPanel('正在加载内容…', false)
         } else if (this.phase === ContentDetailPhase.ERROR) {
@@ -157,13 +162,17 @@ struct ContentDetailPage {
         } else if (this.content !== undefined) {
           Column() {
             // P3-9-B：顶栏作为占位（非覆盖），正文在其下方，避免作者行与标题/统计重叠。
-            this.detailTopBar(this.content)
+            if (!this.immersiveReading) {
+              this.detailTopBar(this.content)
+            }
             Column() {
               this.loadedContent(this.content)
             }
             .layoutWeight(1)
             .width('100%')
-            this.bottomActionBar()
+            if (!this.immersiveReading) {
+              this.bottomActionBar()
+            }
           }
           .width('100%')
           .height('100%')
@@ -173,6 +182,10 @@ struct ContentDetailPage {
       .width('100%')
       .height('100%')
       .backgroundColor($r('app.color.page_background'))
+
+      if (this.immersiveReading) {
+        this.immersiveExitControl()
+      }
 
       if (this.collectionRepository !== undefined && this.session !== undefined) {
         Column()
@@ -324,6 +337,30 @@ struct ContentDetailPage {
   }
 
   @Builder
+  private immersiveExitControl() {
+    Button({ type: ButtonType.Normal, stateEffect: true }) {
+      SymbolGlyph($r('sys.symbol.xmark'))
+        .fontSize(20)
+        .fontColor([$r('app.color.primary_text')])
+    }
+      .id(`p3_${this.kind}_detail_exit_immersive`)
+      .width(40)
+      .height(40)
+      .padding(0)
+      .backgroundColor($r('app.color.surface_background'))
+      .borderRadius(20)
+      .accessibilityText('退出沉浸式阅读')
+      .align(Alignment.TopStart)
+      .margin({
+        left: $r('app.float.p1_page_padding'),
+        top: $r('app.float.p1_spacing_medium')
+      })
+      .onClick((): void => {
+        this.immersiveReading = false;
+      })
+  }
+
+  @Builder
   private loadedContent(content: LoadedContentDetail) {
     Column() {
       Column({ space: $r('app.float.p1_spacing_small') }) {
@@ -387,7 +424,7 @@ struct ContentDetailPage {
       .padding({
         left: $r('app.float.p1_page_padding'),
         right: $r('app.float.p1_page_padding'),
-        top: $r('app.float.p1_spacing_medium'),
+        top: this.immersiveReading ? 56 : $r('app.float.p1_spacing_medium'),
         bottom: $r('app.float.p1_spacing_medium')
       })
       .backgroundColor($r('app.color.surface_background'))
@@ -828,6 +865,20 @@ struct ContentDetailPage {
           this.actionMenuShown = false;
           this.copyContentLink();
         })
+
+      if (this.kind === ContentDetailKind.ANSWER || this.kind === ContentDetailKind.ARTICLE) {
+        Button('沉浸式阅读', { type: ButtonType.Normal, stateEffect: true })
+          .id(`p3_${this.kind}_detail_immersive`)
+          .width('100%')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor($r('app.color.primary_text'))
+          .backgroundColor($r('app.color.control_background'))
+          .borderRadius($r('app.float.p1_card_radius'))
+          .onClick((): void => {
+            this.actionMenuShown = false;
+            this.immersiveReading = true;
+          })
+      }
 
       if (this.content !== undefined && contentAuthorName(this.content).length > 0) {
         Button('屏蔽作者', { type: ButtonType.Normal, stateEffect: true })
