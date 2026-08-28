@@ -388,7 +388,7 @@ struct ContentDetailPage {
             .width('100%')
         }
 
-        Text(contentStatistics(content))
+        Text(this.displayedContentStatistics(content))
           .id(`p2_${content.kind}_detail_statistics`)
           .fontSize($r('app.float.p1_secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
@@ -1130,6 +1130,13 @@ struct ContentDetailPage {
     this.interactionErrorMessage = state.errorMessage ?? '';
     this.interactionRequiresLogin = state.requiresLogin;
   }
+
+  /** 互动状态机激活后，信息头与底栏使用同一份实时计数；初次加载前保留接口原始值。 */
+  private displayedContentStatistics(content: LoadedContentDetail): string {
+    return contentStatistics(content,
+      this.voteController === undefined ? undefined : this.voteupCount,
+      this.followController === undefined ? undefined : this.followerCount);
+  }
 }
 
 @Component
@@ -1396,13 +1403,13 @@ export function contentAuthorLine(content: LoadedContentDetail): string {
   return author.headline.trim().length > 0 ? `${author.name} · ${author.headline}` : author.name;
 }
 
-export function contentStatistics(content: LoadedContentDetail): string {
+export function contentStatistics(content: LoadedContentDetail, voteupCount?: number, followerCount?: number): string {
   switch (content.kind) {
     case ContentDetailKind.QUESTION:
-      return `${content.value.answerCount} 个回答 · ${content.value.followerCount} 人关注 · ` +
+      return `${content.value.answerCount} 个回答 · ${followerCount ?? content.value.followerCount} 人关注 · ` +
         `${content.value.commentCount} 条评论`;
     case ContentDetailKind.ANSWER:
     case ContentDetailKind.ARTICLE:
-      return `${content.value.voteupCount} 赞同 · ${content.value.commentCount} 条评论`;
+      return `${voteupCount ?? content.value.voteupCount} 赞同 · ${content.value.commentCount} 条评论`;
   }
 }

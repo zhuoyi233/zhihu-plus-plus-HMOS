@@ -94,6 +94,7 @@ export default function contentDetailStateTest(): void {
         expect(contentContextTitle(answer)).assertEqual('回答所属问题');
         expect(contentAuthorLine(answer)).assertEqual('回答者 · 回答签名');
         expect(contentStatistics(answer)).assertEqual('10 赞同 · 2 条评论');
+        expect(contentStatistics(answer, 42)).assertEqual('42 赞同 · 2 条评论');
         expect(contentHtml(answer)).assertEqual('<p>回答正文</p>');
         expect(contentEmptyMessage(answer)).assertEqual('摘要');
       }
@@ -119,6 +120,9 @@ export default function contentDetailStateTest(): void {
 
       const first = controller.snapshot();
       expect(first.phase).assertEqual(ContentDetailPhase.READY);
+      if (first.content !== undefined) {
+        expect(contentStatistics(first.content, undefined, 34)).assertEqual('3 个回答 · 34 人关注 · 4 条评论');
+      }
       if (first.content !== undefined && first.content.value.author !== undefined) {
         first.content.value.author.name = '被外部篡改';
       }
