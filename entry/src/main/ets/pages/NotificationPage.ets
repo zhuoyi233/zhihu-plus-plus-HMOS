@@ -163,15 +163,31 @@ export struct NotificationPage {
           .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
         if (this.unreadTotal > 0) {
-          Button('全部已读')
+          Button({ type: ButtonType.Normal, stateEffect: true }) {
+            SymbolGlyph($r('sys.symbol.checkmark'))
+              .fontSize(20)
+              .fontColor([$r('app.color.primary_text')])
+          }
             .id('p3_notifications_mark_all_read')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .width(40)
+            .height(40)
+            .padding(0)
+            .backgroundColor(Color.Transparent)
+            .accessibilityText('全部标记为已读')
             .enabled(!this.busy)
             .onClick(() => this.controller?.markAllRead())
         }
-        Button('通知设置')
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.gearshape'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
           .id('p3_notifications_settings_entry')
-          .fontSize($r('app.float.p1_secondary_font_size'))
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('打开通知设置')
           .onClick((): void => {
             this.navigate({ name: P1DestinationName.NOTIFICATION_SETTINGS });
           })
