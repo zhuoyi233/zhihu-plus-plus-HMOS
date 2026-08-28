@@ -77,6 +77,7 @@ export struct P1Shell {
   @State private themePersistenceStatus: string = '正在读取主题设置…';
   @State private installedVersionLabel: string = '正在读取已安装版本…';
   @State private aboutVersionSheetShown: boolean = false;
+  @State private projectLicenseSheetShown: boolean = false;
   @State private homeReloadToken: number = 0;
   @State private followingReloadToken: number = 0;
   @State private hotReloadToken: number = 0;
@@ -671,6 +672,12 @@ export struct P1Shell {
                 this.aboutVersionSheetShown = true;
               } });
             Divider().color($r('app.color.divider_color'))
+            AppNavigationRow({ title: '项目协议', description: 'GNU Affero General Public License v3.0',
+              testId: 'p3_open_project_license', grouped: true,
+              onRowClick: (): void => {
+                this.projectLicenseSheetShown = true;
+              } });
+            Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '技术实验室', description: '仅用于本机诊断与验证', testId: 'p1_open_technical_lab', grouped: true,
               onRowClick: (): void => this.navigate({ name: P1DestinationName.TECHNICAL_LAB }) });
             Text('页面内容由 Navigation 约束在系统安全区内，背景延伸覆盖状态栏和底部系统区域。')
@@ -706,6 +713,19 @@ export struct P1Shell {
           onDisappear: (): void => {
             if (this.aboutVersionSheetShown) {
               this.aboutVersionSheetShown = false;
+            }
+          }
+        })
+      Column()
+        .bindSheet(this.projectLicenseSheetShown, this.projectLicenseSheet(), {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.projectLicenseSheetShown) {
+              this.projectLicenseSheetShown = false;
             }
           }
         })
@@ -767,6 +787,50 @@ export struct P1Shell {
         .width('100%')
       Text('版本信息来自当前已安装的 HAP，便于核对本机安装结果。')
         .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
+    }
+    .width('100%')
+    .padding($r('app.float.p1_page_padding'))
+  }
+
+  @Builder
+  private projectLicenseSheet() {
+    Column({ space: $r('app.float.p1_spacing_medium') }) {
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Text('项目协议')
+          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.primary_text'))
+          .layoutWeight(1)
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+          .id('p3_project_license_close')
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('关闭项目协议')
+          .onClick((): void => {
+            this.projectLicenseSheetShown = false;
+          })
+      }
+      .width('100%')
+      Text('GNU Affero General Public License v3.0')
+        .id('p3_project_license_name')
+        .fontSize($r('app.float.p1_body_font_size'))
+        .fontColor($r('app.color.primary_text'))
+        .width('100%')
+      Text('本项目以 GNU AGPL v3.0 许可发布。使用、修改或分发时应遵守该协议；对修改后的版本提供网络服务时，也应按协议向相应用户提供源代码。')
+        .id('p3_project_license_summary')
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
+      Text('完整法律条款以项目随源代码分发的 LICENSE 文件为准。')
+        .fontSize($r('app.float.p1_caption_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
     }
