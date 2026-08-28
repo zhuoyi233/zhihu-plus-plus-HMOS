@@ -227,8 +227,8 @@ struct Index {
             onBack: () => void): void => this.collectionsContent(id, navigate, onBack),
           collectionContentContent: (id: string, navigate: (destination: P1Destination) => void,
             onBack: () => void): void => this.collectionContentContent(id, navigate, onBack),
-          notificationContent: (navigate: (destination: P1Destination) => void): void =>
-            this.notificationContent(navigate),
+          notificationContent: (navigate: (destination: P1Destination) => void, onBack: () => void): void =>
+            this.notificationContent(navigate, onBack),
           notificationSettingsContent: (navigate: (destination: P1Destination) => void): void =>
             this.notificationSettingsContent(navigate),
           blockingRulesContent: (onBack: () => void): void => this.blockingRulesContent(onBack),
@@ -476,12 +476,13 @@ struct Index {
   }
 
   @Builder
-  notificationContent(navigate: (destination: P1Destination) => void) {
+  notificationContent(navigate: (destination: P1Destination) => void, onBack: () => void) {
     NotificationPage({
       repository: this.notificationRepository,
       settings: this.notificationSettings,
       session: this.session,
-      navigate: navigate
+      navigate: navigate,
+      onBack: onBack
     });
   }
 

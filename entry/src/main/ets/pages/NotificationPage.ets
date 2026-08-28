@@ -117,6 +117,7 @@ export struct NotificationPage {
   settings: NotificationSettingsGateway | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {};
+  onBack: () => void = (): void => {};
   @State private phase: NotificationPhase = NotificationPhase.IDLE;
   @State private selectedCategory: NotificationCategory = NotificationCategory.DEFAULT;
   @State private items: Array<NotificationItem> = [];
@@ -157,6 +158,18 @@ export struct NotificationPage {
   build() {
     Column({ space: $r('app.float.p1_spacing_medium') }) {
       Row({ space: $r('app.float.p1_spacing_small') }) {
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.chevron_left'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+          .id('p3_notifications_back')
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('返回')
+          .onClick((): void => this.onBack())
         Text('通知')
           .fontSize($r('app.float.p1_heading_font_size'))
           .fontWeight(FontWeight.Bold)
@@ -265,31 +278,43 @@ export struct NotificationPage {
 
   @Builder
   private categoryBar() {
-    Row({ space: $r('app.float.p1_spacing_small') }) {
-      ForEach(NOTIFICATION_CATEGORY_ORDER, (category: NotificationCategory) => {
-        Column({ space: 2 }) {
-          Text(notificationCategoryInfo(category).detailTitle)
-            .fontSize($r('app.float.p1_body_font_size'))
-            .fontColor(this.selectedCategory === category ?
-              $r('app.color.brand_primary') : $r('app.color.secondary_text'))
-            .fontWeight(this.selectedCategory === category ? FontWeight.Medium : FontWeight.Normal)
-          Text(this.categoryBadge(category))
-            .fontSize($r('app.float.p1_caption_font_size'))
-            .fontColor($r('app.color.error_text'))
-        }
-        .id(`p3_notifications_category_${category}`)
-        .layoutWeight(1)
-        .alignItems(HorizontalAlign.Center)
-        .padding($r('app.float.p1_spacing_small'))
-        .borderRadius($r('app.float.p1_card_radius'))
-        .backgroundColor(this.selectedCategory === category ?
-          $r('app.color.surface_background') : $r('app.color.page_background'))
-        .onClick((): void => {
-          this.controller?.selectCategory(category);
-        })
-      }, (category: NotificationCategory): string => category)
+    Scroll() {
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        ForEach(NOTIFICATION_CATEGORY_ORDER, (category: NotificationCategory) => {
+          Button({ type: ButtonType.Normal, stateEffect: true }) {
+            Row({ space: 4 }) {
+              Text(notificationCategoryInfo(category).detailTitle)
+                .fontSize($r('app.float.p1_body_font_size'))
+                .fontColor(this.selectedCategory === category ?
+                  $r('app.color.brand_primary') : $r('app.color.primary_text'))
+                .fontWeight(this.selectedCategory === category ? FontWeight.Medium : FontWeight.Normal)
+              if (this.categoryBadge(category).length > 0) {
+                Text(this.categoryBadge(category))
+                  .fontSize($r('app.float.p1_caption_font_size'))
+                  .fontColor($r('app.color.error_text'))
+              }
+            }
+          }
+          .id(`p3_notifications_category_${category}`)
+          .height(44)
+          .padding({ left: $r('app.float.p1_spacing_medium'), right: $r('app.float.p1_spacing_medium') })
+          .backgroundColor(Color.Transparent)
+          .border({
+            width: { bottom: this.selectedCategory === category ? 2 : 0 },
+            color: $r('app.color.brand_primary')
+          })
+          .onClick((): void => {
+            this.controller?.selectCategory(category);
+          })
+        }, (category: NotificationCategory): string => category)
+      }
+      .padding({ left: $r('app.float.p1_spacing_small'), right: $r('app.float.p1_spacing_small') })
     }
+    .id('p3_notifications_category_bar')
+    .scrollable(ScrollDirection.Horizontal)
+    .scrollBar(BarState.Off)
     .width('100%')
+    .height(44)
   }
 
   @Builder

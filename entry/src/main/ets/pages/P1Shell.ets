@@ -54,7 +54,8 @@ export struct P1Shell {
     onBack: () => void) => void = this.emptyCollections;
   @BuilderParam collectionContentContent: (id: string, navigate: (destination: P1Destination) => void,
     onBack: () => void) => void = this.emptyCollectionContent;
-  @BuilderParam notificationContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
+  @BuilderParam notificationContent: (navigate: (destination: P1Destination) => void, onBack: () => void) => void =
+    this.emptyHome;
   @BuilderParam notificationSettingsContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
   @BuilderParam blockingRulesContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam blockedFeedHistoryContent: (onBack: () => void) => void = this.emptyPage;
@@ -418,9 +419,14 @@ export struct P1Shell {
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.NOTIFICATION) {
       NavDestination() {
-        this.notificationContent((destination: P1Destination): void => this.navigate(destination));
+        this.notificationContent(
+          (destination: P1Destination): void => this.navigate(destination),
+          (): void => {
+            this.pathStack.pop();
+          }
+        );
       }
-      .title('通知')
+      .hideTitleBar(true)
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.NOTIFICATION_SETTINGS) {
       NavDestination() {
