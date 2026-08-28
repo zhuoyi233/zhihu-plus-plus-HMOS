@@ -13,6 +13,7 @@ export struct VideoPlaybackPage {
   contentId: string = '';
   sourceResolver: VideoSourceResolver | undefined = undefined;
   player: VideoPlayerAdapter | undefined = undefined;
+  onBack: () => void = (): void => {};
   @State private viewState: VideoPlaybackPageViewState = {
     playback: { phase: VideoPlaybackPhase.IDLE, generation: 0, positionMs: 0, durationMs: 0 },
     message: '正在准备视频…'
@@ -34,67 +35,84 @@ export struct VideoPlaybackPage {
   }
 
   build() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
-      Stack({ alignContent: Alignment.Center }) {
-        XComponent({ id: 'p4_video_surface', type: XComponentType.SURFACE, controller: this.surfaceController })
-          .id('p4_video_surface')
-          .width('100%')
-          .height('100%')
-          .onLoad((): void => this.onSurfaceReady())
-          .onDestroy((): void => this.onSurfaceDestroyed())
-        if (!this.surfaceReady) {
-          Text('正在初始化视频画面')
-            .id('p4_video_surface_placeholder')
-            .fontSize($r('app.float.p1_body_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .textAlign(TextAlign.Center)
-            .padding($r('app.float.p1_card_padding'))
-        }
-      }
-      .width('100%')
-      .height(220)
-      .borderRadius($r('app.float.p1_card_radius'))
-      .backgroundColor($r('app.color.surface_background'))
-
-      Text(`视频 ID：${this.contentId}`)
-        .id('p4_video_content_id')
-        .fontSize($r('app.float.p1_secondary_font_size'))
-        .fontColor($r('app.color.secondary_text'))
-
-      Text(this.viewState.message)
-        .id('p4_video_playback_status')
-        .fontSize($r('app.float.p1_body_font_size'))
-        .fontColor($r('app.color.primary_text'))
-
-      if (this.viewState.playback.durationMs > 0) {
-        Text(`${this.formatDuration(this.viewState.playback.positionMs)} / ${this.formatDuration(this.viewState.playback.durationMs)}`)
-          .id('p4_video_playback_progress')
-          .fontSize($r('app.float.p1_secondary_font_size'))
-          .fontColor($r('app.color.secondary_text'))
-        Slider({
-          value: this.viewState.playback.positionMs,
-          min: 0,
-          max: this.viewState.playback.durationMs,
-          step: 1000
-        })
-          .id('p4_video_playback_seek')
-          .width('100%')
-          .enabled(this.canSeek())
-          .onChange((value: number): void => this.controller?.seek(Math.floor(value)))
-      }
-
-      Button(this.playButtonLabel())
-        .id('p4_video_playback_toggle')
+    Stack({ alignContent: Alignment.TopStart }) {
+      XComponent({ id: 'p4_video_surface', type: XComponentType.SURFACE, controller: this.surfaceController })
+        .id('p4_video_surface')
         .width('100%')
-        .fontSize($r('app.float.p1_body_font_size'))
-        .enabled(this.canTogglePlayback())
-        .onClick((): void => this.togglePlayback())
+        .height('100%')
+        .onLoad((): void => this.onSurfaceReady())
+        .onDestroy((): void => this.onSurfaceDestroyed())
+      if (!this.surfaceReady) {
+        Text('正在初始化视频画面')
+          .id('p4_video_surface_placeholder')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor(Color.White)
+          .textAlign(TextAlign.Center)
+          .padding($r('app.float.p1_card_padding'))
+          .align(Alignment.Center)
+      }
+
+      Button({ type: ButtonType.Normal, stateEffect: true }) {
+        SymbolGlyph($r('sys.symbol.chevron_left'))
+          .fontSize(22)
+          .fontColor([Color.White])
+      }
+        .id('p4_video_back')
+        .width(48)
+        .height(48)
+        .margin({ left: $r('app.float.p1_page_padding'), top: $r('app.float.p1_spacing_medium') })
+        .padding(0)
+        .backgroundColor(Color.Black)
+        .borderRadius(24)
+        .accessibilityText('返回')
+        .onClick((): void => this.onBack())
+
+      Column({ space: $r('app.float.p1_spacing_small') }) {
+        Text(`视频 ID：${this.contentId}`)
+          .id('p4_video_content_id')
+          .fontSize($r('app.float.p1_caption_font_size'))
+          .fontColor(Color.White)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+        Text(this.viewState.message)
+          .id('p4_video_playback_status')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor(Color.White)
+          .width('100%')
+        if (this.viewState.playback.durationMs > 0) {
+          Text(`${this.formatDuration(this.viewState.playback.positionMs)} / ${this.formatDuration(this.viewState.playback.durationMs)}`)
+            .id('p4_video_playback_progress')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor(Color.White)
+            .width('100%')
+          Slider({
+            value: this.viewState.playback.positionMs,
+            min: 0,
+            max: this.viewState.playback.durationMs,
+            step: 1000
+          })
+            .id('p4_video_playback_seek')
+            .width('100%')
+            .enabled(this.canSeek())
+            .onChange((value: number): void => this.controller?.seek(Math.floor(value)))
+        }
+        Button(this.playButtonLabel())
+          .id('p4_video_playback_toggle')
+          .width('100%')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .enabled(this.canTogglePlayback())
+          .onClick((): void => this.togglePlayback())
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+      .padding($r('app.float.p1_page_padding'))
+      .backgroundColor(Color.Black)
+      .align(Alignment.BottomStart)
     }
-    .alignItems(HorizontalAlign.Start)
     .width('100%')
     .height('100%')
-    .padding($r('app.float.p1_card_padding'))
-    .backgroundColor($r('app.color.page_background'))
+    .backgroundColor(Color.Black)
   }
 
   private togglePlayback(): void {

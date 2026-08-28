@@ -38,8 +38,8 @@ export struct P1Shell {
     this.emptyDetailContent;
   @BuilderParam articleContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void) => void =
     this.emptyDetailContent;
-  @BuilderParam videoContent: (id: string, navigate: (destination: P1Destination) => void) => void =
-    this.emptyContent;
+  @BuilderParam videoContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void) => void =
+    this.emptyDetailContent;
   @BuilderParam writeAnswerContent: (questionId: string, answerId: string | undefined,
     navigate: (destination: P1Destination) => void, onBack: () => void) => void = this.emptyWriteAnswer;
   @BuilderParam writePinContent: (draftId: string, navigate: (destination: P1Destination) => void,
@@ -324,10 +324,13 @@ export struct P1Shell {
       NavDestination() {
         this.videoContent(
           destination.id,
-          (destination: P1Destination): void => this.navigate(destination)
+          (destination: P1Destination): void => this.navigate(destination),
+          (): void => {
+            this.pathStack.pop();
+          }
         );
       }
-      .title('视频')
+      .hideTitleBar(true)
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.WRITE_ANSWER) {
       NavDestination() {

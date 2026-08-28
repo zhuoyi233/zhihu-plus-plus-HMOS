@@ -210,8 +210,8 @@ struct Index {
             this.answerContent(id, navigate, onBack),
           articleContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void): void =>
             this.articleContent(id, navigate, onBack),
-          videoContent: (id: string, navigate: (destination: P1Destination) => void): void =>
-            this.videoContent(id, navigate),
+          videoContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void): void =>
+            this.videoContent(id, navigate, onBack),
           writeAnswerContent: (questionId: string, answerId: string | undefined,
             navigate: (destination: P1Destination) => void, onBack: () => void): void =>
             this.writeAnswerContent(questionId, answerId, navigate, onBack),
@@ -373,8 +373,8 @@ struct Index {
   }
 
   @Builder
-  videoContent(id: string, _navigate: (destination: P1Destination) => void) {
-    VideoPlaybackPage({ contentId: id });
+  videoContent(id: string, _navigate: (destination: P1Destination) => void, onBack: () => void) {
+    VideoPlaybackPage({ contentId: id, onBack: onBack });
   }
 
   @Builder
