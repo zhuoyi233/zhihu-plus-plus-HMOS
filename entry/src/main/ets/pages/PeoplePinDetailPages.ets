@@ -728,6 +728,7 @@ export struct PinDetailPage {
   history: BlockedFeedHistoryGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
+  onBack: () => void = (): void => {};
   @State private phase: ReadOnlyDetailPhase = ReadOnlyDetailPhase.IDLE;
   @State private pin: PinDetail | undefined = undefined;
   @State private errorMessage: string = '';
@@ -736,6 +737,7 @@ export struct PinDetailPage {
   @State private pendingUserBlock?: BlockingUserCandidate = undefined;
   @State private keywordBlockVisible: boolean = false;
   @State private keywordBlockInput: string = '';
+  @State private pinActionsSheetShown: boolean = false;
   @State private blockingMessage: string = '';
   @State private blockingBusy: boolean = false;
   private controller?: PinDetailController;
@@ -771,6 +773,7 @@ export struct PinDetailPage {
     this.pendingUserBlock = undefined;
     this.keywordBlockVisible = false;
     this.keywordBlockInput = '';
+    this.pinActionsSheetShown = false;
   }
 
   private createBlockingAction(): void {
@@ -787,6 +790,7 @@ export struct PinDetailPage {
 
   build() {
     Column() {
+      this.pageHeader()
       if (this.phase === ReadOnlyDetailPhase.IDLE || this.phase === ReadOnlyDetailPhase.LOADING) {
         ReadOnlyDetailStatusPanel({
           kind: 'pin',
@@ -813,6 +817,19 @@ export struct PinDetailPage {
       if (this.keywordBlockVisible) {
         this.keywordBlockDialog()
       }
+      Column()
+        .bindSheet(this.pinActionsSheetShown, this.pinActionsSheet(), {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.pinActionsSheetShown) {
+              this.pinActionsSheetShown = false;
+            }
+          }
+        })
     }
     .id('p2_pin_detail_page')
     .width('100%')
@@ -821,33 +838,57 @@ export struct PinDetailPage {
   }
 
   @Builder
+  private pageHeader() {
+    Row({ space: $r('app.float.p1_spacing_small') }) {
+      Button({ type: ButtonType.Normal, stateEffect: true }) {
+        SymbolGlyph($r('sys.symbol.chevron_left'))
+          .fontSize(20)
+          .fontColor([$r('app.color.primary_text')])
+      }
+        .id('p3_pin_detail_back')
+        .width(40)
+        .height(40)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .accessibilityText('返回')
+        .onClick((): void => this.onBack())
+      Text(this.pin?.author.name ?? '想法')
+        .id('p3_pin_detail_page_title')
+        .fontSize($r('app.float.p1_heading_font_size'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.primary_text'))
+        .layoutWeight(1)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      Button({ type: ButtonType.Normal, stateEffect: true }) {
+        SymbolGlyph($r('sys.symbol.more'))
+          .fontSize(20)
+          .fontColor([$r('app.color.primary_text')])
+      }
+        .id('p3_pin_detail_more')
+        .width(40)
+        .height(40)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .accessibilityText('更多想法操作')
+        .enabled(this.pin !== undefined && !this.blockingBusy && this.blockingAction !== undefined)
+        .onClick((): void => {
+          this.pinActionsSheetShown = true;
+        })
+    }
+    .width('100%')
+    .padding({
+      left: $r('app.float.p1_page_padding'),
+      right: $r('app.float.p1_page_padding'),
+      top: $r('app.float.p1_spacing_medium')
+    })
+    .backgroundColor($r('app.color.surface_background'))
+  }
+
+  @Builder
   private loadedPin(pin: PinDetail) {
     Column() {
       Column({ space: $r('app.float.p1_spacing_small') }) {
-        Row({ space: $r('app.float.p1_spacing_small') }) {
-          Text(`${pin.author.name}的想法`)
-            .id('p2_pin_detail_title')
-            .fontSize($r('app.float.p1_heading_font_size'))
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.primary_text'))
-            .layoutWeight(1)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-          Button({ type: ButtonType.Normal }) {
-            SymbolGlyph($r('sys.symbol.more'))
-              .fontSize(22)
-              .fontColor([$r('app.color.secondary_text')])
-          }
-          .id('p3_pin_detail_more')
-          .width(40)
-          .height(40)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .enabled(!this.blockingBusy && this.blockingAction !== undefined)
-          .accessibilityText('更多想法操作')
-          .bindMenu(this.pinActionMenu(pin))
-        }
-        .width('100%')
         Text(pin.author.headline.length > 0 ? `${pin.author.name} · ${pin.author.headline}` : pin.author.name)
           .id('p2_pin_detail_author')
           .fontSize($r('app.float.p1_body_font_size'))
@@ -919,35 +960,76 @@ export struct PinDetailPage {
     this.openedRecordFailed = state.openedRecordFailed;
   }
 
-  private pinActionMenu(pin: PinDetail): Array<MenuElement> {
-    const menu: Array<MenuElement> = [
-      {
-        value: '屏蔽作者',
-        action: (): void => {
-          this.pendingUserBlock = { userId: pin.author.id, userName: pin.author.name };
+  @Builder
+  private pinActionsSheet() {
+    Column({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Text('更多操作')
+          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.primary_text'))
+          .layoutWeight(1)
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
         }
-      },
-      {
-        value: '屏蔽关键词',
-        action: (): void => {
+          .id('p3_pin_detail_actions_close')
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('关闭更多想法操作')
+          .onClick((): void => {
+            this.pinActionsSheetShown = false;
+          })
+      }
+      .width('100%')
+      Button('屏蔽作者')
+        .id('p3_pin_detail_block_user')
+        .width('100%')
+        .fontColor($r('app.color.error_text'))
+        .backgroundColor(Color.Transparent)
+        .enabled(!this.blockingBusy && this.blockingAction !== undefined && this.pin !== undefined)
+        .onClick((): void => {
+          const pin = this.pin;
+          this.pinActionsSheetShown = false;
+          if (pin !== undefined) {
+            this.pendingUserBlock = { userId: pin.author.id, userName: pin.author.name };
+          }
+        })
+      Button('屏蔽关键词')
+        .id('p3_pin_detail_block_keyword')
+        .width('100%')
+        .enabled(!this.blockingBusy && this.blockingAction !== undefined)
+        .onClick((): void => {
+          this.pinActionsSheetShown = false;
           this.keywordBlockInput = '';
           this.keywordBlockVisible = true;
-        }
+        })
+      if (this.pin !== undefined) {
+        ForEach(this.pin.topics, (topic: PinTopic) => {
+          Button(`屏蔽话题：${topic.name}`)
+            .id(`p3_pin_detail_block_topic_${topic.id}`)
+            .width('100%')
+            .enabled(!this.blockingBusy && this.blockingAction !== undefined)
+            .onClick((): void => {
+              const pin = this.pin;
+              if (pin === undefined) {
+                return;
+              }
+              this.pinActionsSheetShown = false;
+              this.blockingAction?.blockTopic(topic.id, topic.name, {
+                contentTitle: `${pin.author.name}的想法`,
+                contentKind: 'pin',
+                contentId: pin.id
+              });
+            })
+        }, (topic: PinTopic): string => topic.id)
       }
-    ];
-    pin.topics.forEach((topic: PinTopic): void => {
-      menu.push({
-        value: `屏蔽话题：${topic.name}`,
-        action: (): void => {
-          this.blockingAction?.blockTopic(topic.id, topic.name, {
-            contentTitle: `${pin.author.name}的想法`,
-            contentKind: 'pin',
-            contentId: pin.id
-          });
-        }
-      });
-    });
-    return menu;
+    }
+    .width('100%')
+    .padding($r('app.float.p1_spacing_medium'))
   }
 
   @Builder

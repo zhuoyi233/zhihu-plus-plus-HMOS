@@ -221,7 +221,8 @@ struct Index {
             this.pinDraftInboxContent(navigate, onBack),
           peopleContent: (id: string, navigate: (destination: P1Destination) => void,
             onBack: () => void): void => this.peopleContent(id, navigate, onBack),
-          pinContent: (id: string, navigate: (destination: P1Destination) => void): void => this.pinContent(id, navigate),
+          pinContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void): void =>
+            this.pinContent(id, navigate, onBack),
           collectionsContent: (id: string, navigate: (destination: P1Destination) => void,
             onBack: () => void): void => this.collectionsContent(id, navigate, onBack),
           collectionContentContent: (id: string, navigate: (destination: P1Destination) => void,
@@ -439,7 +440,7 @@ struct Index {
   }
 
   @Builder
-  pinContent(id: string, navigate: (destination: P1Destination) => void) {
+  pinContent(id: string, navigate: (destination: P1Destination) => void, onBack: () => void) {
     PinDetailPage({
       contentId: id,
       repository: this.pinRepository,
@@ -447,7 +448,8 @@ struct Index {
       openedContentStore: this.openedContentStore,
       navigate: navigate,
       rules: this.blockingRuleStore,
-      history: this.blockedFeedHistoryStore
+      history: this.blockedFeedHistoryStore,
+      onBack: onBack
     });
   }
 

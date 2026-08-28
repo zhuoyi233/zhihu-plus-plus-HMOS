@@ -48,8 +48,8 @@ export struct P1Shell {
     this.emptyPinDraftInbox;
   @BuilderParam peopleContent: (id: string, navigate: (destination: P1Destination) => void,
     onBack: () => void) => void = this.emptyPeople;
-  @BuilderParam pinContent: (id: string, navigate: (destination: P1Destination) => void) => void =
-    this.emptyContent;
+  @BuilderParam pinContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void) => void =
+    this.emptyPinContent;
   @BuilderParam collectionsContent: (id: string, navigate: (destination: P1Destination) => void,
     onBack: () => void) => void = this.emptyCollections;
   @BuilderParam collectionContentContent: (id: string, navigate: (destination: P1Destination) => void,
@@ -129,6 +129,11 @@ export struct P1Shell {
 
   @Builder
   emptyDetailContent(_id: string, _navigate: (destination: P1Destination) => void, _onBack: () => void) {
+    Blank();
+  }
+
+  @Builder
+  emptyPinContent(_id: string, _navigate: (destination: P1Destination) => void, _onBack: () => void) {
     Blank();
   }
 
@@ -376,10 +381,13 @@ export struct P1Shell {
       NavDestination() {
         this.pinContent(
           destination.id,
-          (destination: P1Destination): void => this.navigate(destination)
+          (destination: P1Destination): void => this.navigate(destination),
+          (): void => {
+            this.pathStack.pop();
+          }
         );
       }
-      .title('想法')
+      .hideTitleBar(true)
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.COLLECTIONS) {
       NavDestination() {
