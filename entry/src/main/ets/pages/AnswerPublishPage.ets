@@ -460,15 +460,28 @@ export struct AnswerPublishPage {
   build() {
     Column({ space: $r('app.float.p1_spacing_medium') }) {
       Row({ space: $r('app.float.p1_spacing_small') }) {
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.chevron_left'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+          .id('p4_answer_page_exit')
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('返回')
+          .onClick((): void => this.exitEditor())
         Text(this.viewState.answerId === undefined ? '撰写回答' : '编辑回答')
           .id('p4_answer_page_title')
           .layoutWeight(1)
           .fontSize($r('app.float.p1_heading_font_size'))
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.primary_text'))
-        Button('退出')
-          .id('p4_answer_page_exit')
-          .onClick((): void => this.exitEditor())
+        Button('发布')
+          .id('p4_answer_page_publish')
+          .enabled(this.viewState.canPublish)
+          .onClick((): void => this.requestPublishConfirmation())
       }
       .width('100%')
 
@@ -510,19 +523,11 @@ export struct AnswerPublishPage {
         }
         .width('100%')
 
-        Row({ space: $r('app.float.p1_spacing_small') }) {
-          Button('保存草稿')
-            .id('p4_answer_page_save_draft')
-            .layoutWeight(1)
-            .enabled(this.viewState.canSaveDraft)
-            .onClick((): void => this.coordinator?.saveLocalDraft())
-        Button('发布回答')
-            .id('p4_answer_page_publish')
-            .layoutWeight(1)
-            .enabled(this.viewState.canPublish)
-            .onClick((): void => this.requestPublishConfirmation())
-        }
-        .width('100%')
+        Button('保存草稿')
+          .id('p4_answer_page_save_draft')
+          .width('100%')
+          .enabled(this.viewState.canSaveDraft)
+          .onClick((): void => this.coordinator?.saveLocalDraft())
 
         if (this.viewState.canContinueEditing) {
           Button('编辑已有回答')

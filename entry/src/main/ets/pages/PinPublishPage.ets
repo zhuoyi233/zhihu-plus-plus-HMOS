@@ -303,16 +303,31 @@ export struct PinPublishPage {
   @Builder
   private header() {
     Row({ space: $r('app.float.p1_spacing_small') }) {
-      Text('发布想法')
-        .fontSize($r('app.float.p1_heading_font_size'))
-        .fontWeight(FontWeight.Medium)
-        .layoutWeight(1)
-      Button('取消')
+      Button({ type: ButtonType.Normal, stateEffect: true }) {
+        SymbolGlyph($r('sys.symbol.chevron_left'))
+          .fontSize(20)
+          .fontColor([$r('app.color.primary_text')])
+      }
         .id('p4_pin_publish_cancel')
+        .width(40)
+        .height(40)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .accessibilityText('返回')
         .enabled(this.viewState.phase !== PinPublishPagePhase.RELEASED)
         .onClick((): void => {
           this.controller?.cancel();
           this.onBack();
+        })
+      Text('发想法')
+        .fontSize($r('app.float.p1_heading_font_size'))
+        .fontWeight(FontWeight.Medium)
+        .layoutWeight(1)
+      Button(this.publishLabel())
+        .id('p4_pin_publish_submit')
+        .enabled(this.viewState.canPublish)
+        .onClick((): void => {
+          this.requestPublishConfirmation();
         })
     }
     .width('100%')
@@ -353,23 +368,13 @@ export struct PinPublishPage {
         restoredLocalImageReferences: this.viewState.content.localImageReferences
       })
       this.topicEditor()
-      Row({ space: $r('app.float.p1_spacing_small') }) {
-        Button('保存草稿')
-          .id('p4_pin_publish_save_draft')
-          .layoutWeight(1)
-          .enabled(this.viewState.canSaveDraft)
-          .onClick((): void => {
-            this.controller?.saveLocalDraft().then((): void => {}, (): void => {});
-          })
-        Button(this.publishLabel())
-          .id('p4_pin_publish_submit')
-          .layoutWeight(1)
-          .enabled(this.viewState.canPublish)
-          .onClick((): void => {
-            this.requestPublishConfirmation();
-          })
-      }
-      .width('100%')
+      Button('保存草稿')
+        .id('p4_pin_publish_save_draft')
+        .width('100%')
+        .enabled(this.viewState.canSaveDraft)
+        .onClick((): void => {
+          this.controller?.saveLocalDraft().then((): void => {}, (): void => {});
+        })
     }
     .width('100%')
   }

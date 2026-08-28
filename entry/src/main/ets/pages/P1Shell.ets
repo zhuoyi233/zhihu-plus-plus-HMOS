@@ -298,7 +298,7 @@ export struct P1Shell {
           }
         );
       }
-      .title(destination.answerId === undefined ? '写回答' : '编辑回答')
+      .hideTitleBar(true)
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.WRITE_PIN) {
       NavDestination() {
@@ -310,7 +310,7 @@ export struct P1Shell {
           }
         );
       }
-      .title('发布想法')
+      .hideTitleBar(true)
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.PIN_DRAFTS) {
       NavDestination() {
