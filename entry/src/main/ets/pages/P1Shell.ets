@@ -543,91 +543,122 @@ export struct P1Shell {
     Stack({ alignContent: Alignment.TopStart }) {
       Scroll() {
         Column({ space: $r('app.float.p1_spacing_large') }) {
-        AppPageHeader({ title: '我的' });
-        Column({ space: $r('app.float.p1_spacing_small') }) {
-          Text('主题模式')
-            .fontSize($r('app.float.p1_heading_font_size'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.primary_text'))
+          AppPageHeader({ title: '我的' });
 
-          Text('切换会立即更新颜色资源；“跟随系统”会响应系统深浅色。')
+          Text('账号')
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
-
-          Column({ space: $r('app.float.p1_spacing_small') }) {
-            this.themeButton('跟随系统', AppThemeMode.SYSTEM, 'p1_theme_system');
-            this.themeButton('浅色', AppThemeMode.LIGHT, 'p1_theme_light');
-            this.themeButton('深色', AppThemeMode.DARK, 'p1_theme_dark');
+            .width('100%')
+          Column() {
+            AppNavigationRow({ title: '账号与登录', description: this.accountSummary(), testId: 'p2_open_login', grouped: true,
+              onRowClick: (): void => this.navigate({ name: P1DestinationName.LOGIN }) });
           }
           .width('100%')
+          .borderRadius($r('app.float.p1_card_radius'))
+          .backgroundColor($r('app.color.surface_background'))
 
-          Text(this.themePersistenceStatus)
-            .id('p1_theme_persistence_status')
+          Text('创作')
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
-        }
-        .alignItems(HorizontalAlign.Start)
-        .width('100%')
-        .padding($r('app.float.p1_card_padding'))
-        .borderRadius($r('app.float.p1_card_radius'))
-        .backgroundColor($r('app.color.surface_background'))
+            .width('100%')
+          Column() {
+            AppNavigationRow({ title: '发布想法', description: '创建一条新的想法', testId: 'p4_open_pin_publish', grouped: true,
+              onRowClick: (): void => this.openPinComposer() });
+            Divider().color($r('app.color.divider_color'))
+            AppNavigationRow({ title: '想法草稿', description: '继续编辑本地保存的草稿', testId: 'p4_open_pin_drafts', grouped: true,
+              onRowClick: (): void => this.navigate({ name: P1DestinationName.PIN_DRAFTS }) });
+          }
+          .width('100%')
+          .borderRadius($r('app.float.p1_card_radius'))
+          .backgroundColor($r('app.color.surface_background'))
 
-        Column({ space: $r('app.float.p1_spacing_small') }) {
-          Text('字体缩放预览')
-            .fontSize($r('app.float.p1_heading_font_size'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.primary_text'))
-
-          Text('标题文字会跟随系统字体大小')
-            .id('p1_font_scale_heading')
-            .fontSize($r('app.float.p1_heading_font_size'))
-            .fontColor($r('app.color.primary_text'))
-
-          Text('正文使用 fp 字体单位，支持换行且不限制最大行数。')
-            .id('p1_font_scale_body')
-            .fontSize($r('app.float.p1_body_font_size'))
+          Text('内容与隐私')
+            .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
-        }
-        .alignItems(HorizontalAlign.Start)
-        .width('100%')
-        .padding($r('app.float.p1_card_padding'))
-        .borderRadius($r('app.float.p1_card_radius'))
-        .backgroundColor($r('app.color.surface_background'))
+            .width('100%')
+          Column() {
+            AppNavigationRow({ title: '我的收藏夹', description: '查看自己的知乎收藏夹', testId: 'p3_open_my_collections', grouped: true,
+              onRowClick: (): void => this.openMyCollections() });
+            Divider().color($r('app.color.divider_color'))
+            AppNavigationRow({ title: '已读记录', description: '查看已打开的内容', testId: 'p2_open_read_history', grouped: true,
+              onRowClick: (): void => this.navigate({ name: P1DestinationName.READ_HISTORY }) });
+            Divider().color($r('app.color.divider_color'))
+            AppNavigationRow({ title: '内容屏蔽', description: '管理作者与关键词屏蔽规则', testId: 'p2_open_blocking_rules', grouped: true,
+              onRowClick: (): void => this.navigate({ name: P1DestinationName.BLOCKING_RULES }) });
+            Divider().color($r('app.color.divider_color'))
+            AppNavigationRow({ title: '屏蔽记录', description: '查看最近隐藏的内容', testId: 'p3_open_blocked_feed_history', grouped: true,
+              onRowClick: (): void => this.navigate({ name: P1DestinationName.BLOCKED_FEED_HISTORY }) });
+          }
+          .width('100%')
+          .borderRadius($r('app.float.p1_card_radius'))
+          .backgroundColor($r('app.color.surface_background'))
 
-        Text('页面内容由 Navigation 约束在系统安全区内，背景延伸覆盖状态栏和底部系统区域。')
-          .id('p1_safe_area_description')
-          .fontSize($r('app.float.p1_secondary_font_size'))
-          .fontColor($r('app.color.secondary_text'))
+          Text('通知与外观')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
+          Column({ space: $r('app.float.p1_spacing_small') }) {
+            AppNavigationRow({ title: '通知', description: '查看互动和系统消息', testId: 'p3_open_notifications', grouped: true,
+              onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION }) });
+            Divider().color($r('app.color.divider_color'))
+            AppNavigationRow({ title: '通知设置', description: '设置提醒和推送偏好', testId: 'p3_open_notification_settings', grouped: true,
+              onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION_SETTINGS }) });
+            Divider().color($r('app.color.divider_color'))
+            Column({ space: $r('app.float.p1_spacing_small') }) {
+              Text('主题模式')
+                .fontSize($r('app.float.p1_body_font_size'))
+                .fontColor($r('app.color.primary_text'))
+              Text('跟随系统会响应系统深浅色。')
+                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+              Row({ space: $r('app.float.p1_spacing_small') }) {
+                this.themeButton('跟随系统', AppThemeMode.SYSTEM, 'p1_theme_system');
+                this.themeButton('浅色', AppThemeMode.LIGHT, 'p1_theme_light');
+                this.themeButton('深色', AppThemeMode.DARK, 'p1_theme_dark');
+              }
+              .width('100%')
+              Text(this.themePersistenceStatus)
+                .id('p1_theme_persistence_status')
+                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+              Text('标题文字会跟随系统字体大小')
+                .id('p1_font_scale_heading')
+                .fontSize($r('app.float.p1_heading_font_size'))
+                .fontColor($r('app.color.primary_text'))
+              Text('正文使用 fp 字体单位，支持换行且不限制最大行数。')
+                .id('p1_font_scale_body')
+                .fontSize($r('app.float.p1_body_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+            }
+            .alignItems(HorizontalAlign.Start)
+            .width('100%')
+            .padding($r('app.float.p1_card_padding'))
+          }
+          .width('100%')
+          .borderRadius($r('app.float.p1_card_radius'))
+          .backgroundColor($r('app.color.surface_background'))
 
-        AppNavigationRow({ title: '账号与登录', description: '管理当前知乎账号的登录状态', testId: 'p2_open_login',
-          onRowClick: (): void => this.navigate({ name: P1DestinationName.LOGIN }) });
-
-        AppNavigationRow({ title: '发布想法', description: '创建一条新的想法', testId: 'p4_open_pin_publish',
-          onRowClick: (): void => this.openPinComposer() });
-
-        AppNavigationRow({ title: '想法草稿', description: '继续编辑本地保存的草稿', testId: 'p4_open_pin_drafts',
-          onRowClick: (): void => this.navigate({ name: P1DestinationName.PIN_DRAFTS }) });
-
-        AppNavigationRow({ title: '内容屏蔽', description: '管理作者与关键词屏蔽规则', testId: 'p2_open_blocking_rules',
-          onRowClick: (): void => this.navigate({ name: P1DestinationName.BLOCKING_RULES }) });
-
-        AppNavigationRow({ title: '屏蔽记录', description: '查看最近隐藏的内容', testId: 'p3_open_blocked_feed_history',
-          onRowClick: (): void => this.navigate({ name: P1DestinationName.BLOCKED_FEED_HISTORY }) });
-
-        AppNavigationRow({ title: '已读记录', description: '查看已打开的内容', testId: 'p2_open_read_history',
-          onRowClick: (): void => this.navigate({ name: P1DestinationName.READ_HISTORY }) });
-
-        AppNavigationRow({ title: '我的收藏夹', description: '查看自己的知乎收藏夹', testId: 'p3_open_my_collections',
-          onRowClick: (): void => this.openMyCollections() });
-
-        AppNavigationRow({ title: '通知', description: '查看互动和系统消息', testId: 'p3_open_notifications',
-          onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION }) });
-
-        AppNavigationRow({ title: '通知设置', description: '设置提醒和推送偏好', testId: 'p3_open_notification_settings',
-          onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION_SETTINGS }) });
-
-        AppNavigationRow({ title: '技术实验室', description: '仅用于本机诊断与验证', testId: 'p1_open_technical_lab',
-          onRowClick: (): void => this.navigate({ name: P1DestinationName.TECHNICAL_LAB }) });
+          Text('关于与诊断')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
+          Column() {
+            AppNavigationRow({ title: '技术实验室', description: '仅用于本机诊断与验证', testId: 'p1_open_technical_lab', grouped: true,
+              onRowClick: (): void => this.navigate({ name: P1DestinationName.TECHNICAL_LAB }) });
+            Text('页面内容由 Navigation 约束在系统安全区内，背景延伸覆盖状态栏和底部系统区域。')
+              .id('p1_safe_area_description')
+              .fontSize($r('app.float.p1_caption_font_size'))
+              .fontColor($r('app.color.secondary_text'))
+              .width('100%')
+              .padding({
+                left: $r('app.float.p1_card_padding'),
+                right: $r('app.float.p1_card_padding'),
+                bottom: $r('app.float.p1_card_padding')
+              })
+          }
+          .width('100%')
+          .borderRadius($r('app.float.p1_card_radius'))
+          .backgroundColor($r('app.color.surface_background'))
         }
         .width('100%')
         .padding($r('app.float.p1_page_padding'))
@@ -649,13 +680,22 @@ export struct P1Shell {
   themeButton(label: string, mode: AppThemeMode, testId: string) {
     Button(label)
       .id(testId)
-      .width('100%')
+      .layoutWeight(1)
       .fontSize($r('app.float.p1_secondary_font_size'))
       .fontColor(this.themeMode === mode ? $r('app.color.on_brand') : $r('app.color.primary_text'))
       .backgroundColor(this.themeMode === mode ? $r('app.color.brand_primary') : $r('app.color.control_background'))
       .onClick(() => {
         this.selectThemeMode(mode);
       })
+  }
+
+  private accountSummary(): string {
+    const state = this.session?.getState();
+    if (state?.status !== SessionStatus.AUTHENTICATED) {
+      return '管理当前知乎账号的登录状态';
+    }
+    const profileName = state.profile?.name.trim() ?? '';
+    return profileName.length > 0 ? `已登录：${profileName}` : '已登录';
   }
 
   @Builder

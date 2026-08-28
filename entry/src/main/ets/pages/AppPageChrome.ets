@@ -92,6 +92,7 @@ export struct AppNavigationRow {
   trailingText: string = '';
   testId: string = '';
   rowAccessibilityText: string = '';
+  grouped: boolean = false;
   onRowClick: () => void = (): void => {
   };
 
@@ -133,8 +134,8 @@ export struct AppNavigationRow {
     .id(this.testId)
     .width('100%')
     .padding($r('app.float.p1_card_padding'))
-    .backgroundColor($r('app.color.surface_background'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .backgroundColor(this.grouped ? Color.Transparent : $r('app.color.surface_background'))
+    .borderRadius(this.grouped ? 0 : $r('app.float.p1_card_radius'))
     .accessibilityText(this.rowAccessibilityText.length > 0 ? this.rowAccessibilityText : this.title)
     .onClick((): void => this.onRowClick())
   }
