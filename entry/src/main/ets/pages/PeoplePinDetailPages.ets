@@ -323,7 +323,7 @@ export struct PeopleDetailPage {
           this.profileStatistic('回答', profile.answerCount, 'answers')
           this.profileStatistic('文章', profile.articleCount, 'articles')
           this.profileStatistic('关注', profile.followingCount, 'following')
-          this.profileStatistic('粉丝', profile.followerCount, 'followers')
+          this.profileStatistic('粉丝', this.followerCount, 'followers')
         }
         .id('p2_people_detail_statistics')
         .width('100%')
