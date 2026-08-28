@@ -440,25 +440,35 @@ export struct PeopleDetailPage {
 
   @Builder
   private contentSectionTabs() {
-    Row({ space: $r('app.float.p1_spacing_small') }) {
-      this.contentTab('回答', PeopleContentSection.ANSWERS)
-      this.contentTab('文章', PeopleContentSection.ARTICLES)
-      this.contentTab('动态', PeopleContentSection.ACTIVITIES)
+    Scroll() {
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        this.contentTab('回答', PeopleContentSection.ANSWERS)
+        this.contentTab('文章', PeopleContentSection.ARTICLES)
+        this.contentTab('动态', PeopleContentSection.ACTIVITIES)
+      }
+      .padding({ left: $r('app.float.p1_spacing_small'), right: $r('app.float.p1_spacing_small') })
     }
     .id('p2_people_content_tabs')
+    .scrollable(ScrollDirection.Horizontal)
+    .scrollBar(BarState.Off)
     .width('100%')
+    .height(44)
   }
 
   @Builder
   private contentTab(label: string, section: PeopleContentSection) {
-    Button(label, { type: ButtonType.Capsule })
+    Button(label, { type: ButtonType.Normal, stateEffect: true })
       .id(`p2_people_content_tab_${section}`)
-      .layoutWeight(1)
+      .height(44)
+      .padding({ left: $r('app.float.p1_spacing_medium'), right: $r('app.float.p1_spacing_medium') })
       .fontSize($r('app.float.p1_body_font_size'))
-      .fontColor(this.selectedSection === section ? $r('app.color.on_brand') : $r('app.color.brand_primary'))
-      .backgroundColor(this.selectedSection === section
-        ? $r('app.color.brand_primary')
-        : $r('app.color.brand_primary_container'))
+      .fontWeight(this.selectedSection === section ? FontWeight.Medium : FontWeight.Regular)
+      .fontColor(this.selectedSection === section ? $r('app.color.brand_primary') : $r('app.color.primary_text'))
+      .backgroundColor(Color.Transparent)
+      .border({
+        width: { bottom: this.selectedSection === section ? 2 : 0 },
+        color: $r('app.color.brand_primary')
+      })
       .onClick((): void => this.selectSection(section))
   }
 
