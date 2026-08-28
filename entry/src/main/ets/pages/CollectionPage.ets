@@ -17,6 +17,7 @@ export struct CollectionPage {
   session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
+  onBack: () => void = (): void => {};
   @State private phase: CollectionPhase = CollectionPhase.IDLE;
   @State private items: Array<CollectionSummary> = [];
   @State private loadingMore: boolean = false;
@@ -64,11 +65,24 @@ export struct CollectionPage {
     Stack({ alignContent: Alignment.BottomEnd }) {
       Column({ space: $r('app.float.p1_spacing_medium') }) {
         Row({ space: $r('app.float.p1_spacing_small') }) {
-        Text('收藏夹')
-          .fontSize($r('app.float.p1_heading_font_size'))
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.primary_text'))
-          .layoutWeight(1)
+          Button({ type: ButtonType.Normal, stateEffect: true }) {
+            SymbolGlyph($r('sys.symbol.chevron_left'))
+              .fontSize(20)
+              .fontColor([$r('app.color.primary_text')])
+          }
+            .id('p3_collections_back')
+            .width(40)
+            .height(40)
+            .padding(0)
+            .backgroundColor(Color.Transparent)
+            .accessibilityText('返回')
+            .onClick((): void => this.onBack())
+          Text('收藏夹')
+            .id('p3_collections_title')
+            .fontSize($r('app.float.p1_heading_font_size'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.primary_text'))
+            .layoutWeight(1)
         }
         .width('100%')
 
