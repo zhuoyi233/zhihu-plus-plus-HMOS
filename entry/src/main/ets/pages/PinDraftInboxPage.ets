@@ -2,6 +2,7 @@ import { LoginSessionGateway, SessionStatus } from 'data';
 import { PinDraftResumeItem, PinDraftResumeListGateway } from './PinPublishPage';
 
 export type PinDraftOpenCallback = (draftId: string) => void;
+export type PinDraftBackCallback = () => void;
 
 enum PinDraftInboxPhase {
   LOADING,
@@ -19,6 +20,7 @@ export struct PinDraftInboxPage {
   gateway: PinDraftResumeListGateway | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
   onOpen: PinDraftOpenCallback = (_draftId: string): void => {};
+  onBack: PinDraftBackCallback = (): void => {};
   onGoLogin: () => void = (): void => {};
   @State private phase: PinDraftInboxPhase = PinDraftInboxPhase.LOADING;
   @State private items: Array<PinDraftResumeItem> = [];
@@ -36,17 +38,37 @@ export struct PinDraftInboxPage {
   build() {
     Column({ space: $r('app.float.p1_spacing_medium') }) {
       Row({ space: $r('app.float.p1_spacing_small') }) {
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.chevron_left'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+          .id('p4_pin_drafts_back')
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('返回')
+          .onClick((): void => this.onBack())
         Text('本地想法草稿')
           .id('p4_pin_drafts_title')
           .layoutWeight(1)
           .fontSize($r('app.float.p1_heading_font_size'))
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.primary_text'))
-        if (this.phase === PinDraftInboxPhase.READY) {
-          Button('刷新')
-            .id('p4_pin_drafts_refresh')
-            .onClick((): void => this.load())
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
         }
+          .id('p4_pin_drafts_refresh')
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('刷新草稿')
+          .enabled(this.phase === PinDraftInboxPhase.READY || this.phase === PinDraftInboxPhase.UNAVAILABLE)
+          .onClick((): void => this.load())
       }
       .width('100%')
 

@@ -44,7 +44,8 @@ export struct P1Shell {
     navigate: (destination: P1Destination) => void, onBack: () => void) => void = this.emptyWriteAnswer;
   @BuilderParam writePinContent: (draftId: string, navigate: (destination: P1Destination) => void,
     onBack: () => void) => void = this.emptyWritePin;
-  @BuilderParam pinDraftInboxContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
+  @BuilderParam pinDraftInboxContent: (navigate: (destination: P1Destination) => void, onBack: () => void) => void =
+    this.emptyPinDraftInbox;
   @BuilderParam peopleContent: (id: string, navigate: (destination: P1Destination) => void) => void =
     this.emptyContent;
   @BuilderParam pinContent: (id: string, navigate: (destination: P1Destination) => void) => void =
@@ -134,6 +135,11 @@ export struct P1Shell {
 
   @Builder
   emptyWritePin(_draftId: string, _navigate: (destination: P1Destination) => void, _onBack: () => void) {
+    Blank();
+  }
+
+  @Builder
+  emptyPinDraftInbox(_navigate: (destination: P1Destination) => void, _onBack: () => void) {
     Blank();
   }
 
@@ -314,9 +320,14 @@ export struct P1Shell {
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.PIN_DRAFTS) {
       NavDestination() {
-        this.pinDraftInboxContent((destination: P1Destination): void => this.navigate(destination));
+        this.pinDraftInboxContent(
+          (destination: P1Destination): void => this.navigate(destination),
+          (): void => {
+            this.pathStack.pop();
+          }
+        );
       }
-      .title('想法草稿')
+      .hideTitleBar(true)
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.PEOPLE) {
       NavDestination() {

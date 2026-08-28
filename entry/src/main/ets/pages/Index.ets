@@ -217,8 +217,8 @@ struct Index {
             this.writeAnswerContent(questionId, answerId, navigate, onBack),
           writePinContent: (draftId: string, navigate: (destination: P1Destination) => void,
             onBack: () => void): void => this.writePinContent(draftId, navigate, onBack),
-          pinDraftInboxContent: (navigate: (destination: P1Destination) => void): void =>
-            this.pinDraftInboxContent(navigate),
+          pinDraftInboxContent: (navigate: (destination: P1Destination) => void, onBack: () => void): void =>
+            this.pinDraftInboxContent(navigate, onBack),
           peopleContent: (id: string, navigate: (destination: P1Destination) => void): void =>
             this.peopleContent(id, navigate),
           pinContent: (id: string, navigate: (destination: P1Destination) => void): void => this.pinContent(id, navigate),
@@ -406,10 +406,11 @@ struct Index {
   }
 
   @Builder
-  pinDraftInboxContent(navigate: (destination: P1Destination) => void) {
+  pinDraftInboxContent(navigate: (destination: P1Destination) => void, onBack: () => void) {
     PinDraftInboxPage({
       gateway: this.pinDraftResumeGateway,
       session: this.session,
+      onBack: onBack,
       onOpen: (draftId: string): void => {
         navigate({ name: P1DestinationName.WRITE_PIN, draftId: draftId });
       },
