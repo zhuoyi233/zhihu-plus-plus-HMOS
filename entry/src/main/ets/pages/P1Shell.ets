@@ -32,12 +32,12 @@ export struct P1Shell {
   @BuilderParam searchContent: (query: string, navigate: (destination: P1Destination) => void,
     onBack: () => void) => void =
     this.emptySearch;
-  @BuilderParam questionContent: (id: string, navigate: (destination: P1Destination) => void) => void =
-    this.emptyContent;
-  @BuilderParam answerContent: (id: string, navigate: (destination: P1Destination) => void) => void =
-    this.emptyContent;
-  @BuilderParam articleContent: (id: string, navigate: (destination: P1Destination) => void) => void =
-    this.emptyContent;
+  @BuilderParam questionContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void) => void =
+    this.emptyDetailContent;
+  @BuilderParam answerContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void) => void =
+    this.emptyDetailContent;
+  @BuilderParam articleContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void) => void =
+    this.emptyDetailContent;
   @BuilderParam videoContent: (id: string, navigate: (destination: P1Destination) => void) => void =
     this.emptyContent;
   @BuilderParam writeAnswerContent: (questionId: string, answerId: string | undefined,
@@ -124,6 +124,11 @@ export struct P1Shell {
 
   @Builder
   emptyContent(_id: string, _navigate: (destination: P1Destination) => void) {
+    Blank();
+  }
+
+  @Builder
+  emptyDetailContent(_id: string, _navigate: (destination: P1Destination) => void, _onBack: () => void) {
     Blank();
   }
 
@@ -278,28 +283,37 @@ export struct P1Shell {
       NavDestination() {
         this.questionContent(
           destination.id,
-          (destination: P1Destination): void => this.navigate(destination)
+          (destination: P1Destination): void => this.navigate(destination),
+          (): void => {
+            this.pathStack.pop();
+          }
         );
       }
-      .title('问题')
+      .hideTitleBar(true)
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.ANSWER) {
       NavDestination() {
         this.answerContent(
           destination.id,
-          (destination: P1Destination): void => this.navigate(destination)
+          (destination: P1Destination): void => this.navigate(destination),
+          (): void => {
+            this.pathStack.pop();
+          }
         );
       }
-      .title('回答')
+      .hideTitleBar(true)
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.ARTICLE) {
       NavDestination() {
         this.articleContent(
           destination.id,
-          (destination: P1Destination): void => this.navigate(destination)
+          (destination: P1Destination): void => this.navigate(destination),
+          (): void => {
+            this.pathStack.pop();
+          }
         );
       }
-      .title('文章')
+      .hideTitleBar(true)
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.VIDEO) {
       NavDestination() {

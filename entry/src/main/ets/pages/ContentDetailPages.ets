@@ -58,6 +58,8 @@ struct ContentDetailPage {
   session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
+  onBack: () => void = (): void => {
+  };
   @State private phase: ContentDetailPhase = ContentDetailPhase.IDLE;
   @State private content: LoadedContentDetail | undefined = undefined;
   @State private errorMessage: string = '';
@@ -129,6 +131,7 @@ struct ContentDetailPage {
     this.showComments = false;
     this.commentRootDraft = '';
     this.commentReplyDraft = '';
+    this.topBarScrolled = false;
   }
 
   private createBlockingAction(): void {
@@ -146,6 +149,7 @@ struct ContentDetailPage {
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       Column() {
+        this.pageHeader()
         if (this.phase === ContentDetailPhase.LOADING || this.phase === ContentDetailPhase.IDLE) {
           this.statusPanel('正在加载内容…', false)
         } else if (this.phase === ContentDetailPhase.ERROR) {
@@ -279,8 +283,44 @@ struct ContentDetailPage {
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
     .width('100%')
-    .height('100%')
+    .layoutWeight(1)
     .padding($r('app.float.p1_page_padding'))
+  }
+
+  @Builder
+  private pageHeader() {
+    Row({ space: $r('app.float.p1_spacing_small') }) {
+      Button({ type: ButtonType.Normal, stateEffect: true }) {
+        SymbolGlyph($r('sys.symbol.chevron_left'))
+          .fontSize(20)
+          .fontColor([$r('app.color.primary_text')])
+      }
+        .id(`p3_${this.kind}_detail_back`)
+        .width(40)
+        .height(40)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .accessibilityText('返回')
+        .onClick((): void => this.onBack())
+      Text(contentDetailPageTitle(this.kind))
+        .id(`p3_${this.kind}_detail_page_title`)
+        .fontSize($r('app.float.p1_heading_font_size'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.primary_text'))
+        .layoutWeight(1)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      Blank()
+        .width(40)
+        .height(40)
+    }
+    .width('100%')
+    .padding({
+      left: $r('app.float.p1_page_padding'),
+      right: $r('app.float.p1_page_padding'),
+      top: $r('app.float.p1_spacing_medium')
+    })
+    .backgroundColor($r('app.color.surface_background'))
   }
 
   @Builder
@@ -624,7 +664,7 @@ struct ContentDetailPage {
   @Builder
   private detailTopBar(content: LoadedContentDetail) {
     // P3-9-B：顶部折叠作者栏——未滚动展开显示作者行（头像/名字/简介），滚动后收起为标题行。
-    // 返回键由 NavDestination 系统提供，此处不重复。
+    // 页面返回与类型标题由固定单行标题栏提供，此处只承载内容上下文。
     Row() {
       if (!this.topBarScrolled) {
         if (contentAuthorName(content).length > 0) {
@@ -1031,6 +1071,8 @@ export struct QuestionDetailPage {
   session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
+  onBack: () => void = (): void => {
+  };
 
   build() {
     ContentDetailPage({
@@ -1045,7 +1087,8 @@ export struct QuestionDetailPage {
       collectionRepository: this.collectionRepository,
       commentRepository: this.commentRepository,
       session: this.session,
-      navigate: this.navigate
+      navigate: this.navigate,
+      onBack: this.onBack
     })
   }
 }
@@ -1064,6 +1107,8 @@ export struct AnswerDetailPage {
   session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
+  onBack: () => void = (): void => {
+  };
 
   build() {
     ContentDetailPage({
@@ -1078,7 +1123,8 @@ export struct AnswerDetailPage {
       collectionRepository: this.collectionRepository,
       commentRepository: this.commentRepository,
       session: this.session,
-      navigate: this.navigate
+      navigate: this.navigate,
+      onBack: this.onBack
     })
   }
 }
@@ -1097,6 +1143,8 @@ export struct ArticleDetailPage {
   session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
+  onBack: () => void = (): void => {
+  };
 
   build() {
     ContentDetailPage({
@@ -1111,7 +1159,8 @@ export struct ArticleDetailPage {
       collectionRepository: this.collectionRepository,
       commentRepository: this.commentRepository,
       session: this.session,
-      navigate: this.navigate
+      navigate: this.navigate,
+      onBack: this.onBack
     })
   }
 }
@@ -1124,6 +1173,17 @@ export function contentTitle(content: LoadedContentDetail): string {
       return '回答';
     case ContentDetailKind.ARTICLE:
       return content.value.title;
+  }
+}
+
+export function contentDetailPageTitle(kind: ContentDetailKind): string {
+  switch (kind) {
+    case ContentDetailKind.QUESTION:
+      return '问题';
+    case ContentDetailKind.ANSWER:
+      return '回答';
+    case ContentDetailKind.ARTICLE:
+      return '文章';
   }
 }
 

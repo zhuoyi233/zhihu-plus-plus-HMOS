@@ -204,12 +204,12 @@ struct Index {
             this.dailyStoryContent(id, navigate),
           searchContent: (query: string, navigate: (destination: P1Destination) => void, onBack: () => void): void =>
             this.searchContent(query, navigate, onBack),
-          questionContent: (id: string, navigate: (destination: P1Destination) => void): void =>
-            this.questionContent(id, navigate),
-          answerContent: (id: string, navigate: (destination: P1Destination) => void): void =>
-            this.answerContent(id, navigate),
-          articleContent: (id: string, navigate: (destination: P1Destination) => void): void =>
-            this.articleContent(id, navigate),
+          questionContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void): void =>
+            this.questionContent(id, navigate, onBack),
+          answerContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void): void =>
+            this.answerContent(id, navigate, onBack),
+          articleContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void): void =>
+            this.articleContent(id, navigate, onBack),
           videoContent: (id: string, navigate: (destination: P1Destination) => void): void =>
             this.videoContent(id, navigate),
           writeAnswerContent: (questionId: string, answerId: string | undefined,
@@ -319,7 +319,7 @@ struct Index {
   }
 
   @Builder
-  questionContent(id: string, navigate: (destination: P1Destination) => void) {
+  questionContent(id: string, navigate: (destination: P1Destination) => void, onBack: () => void) {
     QuestionDetailPage({
       contentId: id,
       repository: this.questionRepository,
@@ -330,12 +330,13 @@ struct Index {
       voteRepository: this.voteRepository,
       followRepository: this.followRepository,
       collectionRepository: this.collectionRepository,
-      session: this.session
+      session: this.session,
+      onBack: onBack
     });
   }
 
   @Builder
-  answerContent(id: string, navigate: (destination: P1Destination) => void) {
+  answerContent(id: string, navigate: (destination: P1Destination) => void, onBack: () => void) {
     AnswerDetailPage({
       contentId: id,
       repository: this.answerRepository,
@@ -347,12 +348,13 @@ struct Index {
       followRepository: this.followRepository,
       collectionRepository: this.collectionRepository,
       commentRepository: this.commentRepository,
-      session: this.session
+      session: this.session,
+      onBack: onBack
     });
   }
 
   @Builder
-  articleContent(id: string, navigate: (destination: P1Destination) => void) {
+  articleContent(id: string, navigate: (destination: P1Destination) => void, onBack: () => void) {
     ArticleDetailPage({
       contentId: id,
       repository: this.articleRepository,
@@ -364,7 +366,8 @@ struct Index {
       followRepository: this.followRepository,
       collectionRepository: this.collectionRepository,
       commentRepository: this.commentRepository,
-      session: this.session
+      session: this.session,
+      onBack: onBack
     });
   }
 
