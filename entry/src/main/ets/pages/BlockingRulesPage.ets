@@ -21,6 +21,7 @@ import {
 export struct BlockingRulesPage {
   rules: BlockingRuleGateway | undefined = undefined;
   preferences: BlockingPreferencesGateway | undefined = undefined;
+  onBack: () => void = (): void => {};
   @State private viewState: BlockingRulesViewState = {
     phase: BlockingRulesPhase.LOADING,
     selectedKind: BlockingRuleKind.KEYWORD,
@@ -37,6 +38,10 @@ export struct BlockingRulesPage {
   @State private identifierInput: string = '';
   @State private nameInput: string = '';
   @State private confirmClear: boolean = false;
+  @State private actionsSheetShown: boolean = false;
+  @State private addRuleSheetShown: boolean = false;
+  @State private backupSheetShown: boolean = false;
+  @State private exportSheetShown: boolean = false;
   @State private backupInput: string = '';
   @State private exportedText: string = '';
   @State private backupStatus: string = '';
@@ -72,44 +77,284 @@ export struct BlockingRulesPage {
     this.identifierInput = '';
     this.nameInput = '';
     this.confirmClear = false;
+    this.actionsSheetShown = false;
+    this.addRuleSheetShown = false;
+    this.backupSheetShown = false;
+    this.exportSheetShown = false;
     this.backupInput = '';
     this.exportedText = '';
     this.backupStatus = '';
   }
 
   build() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
-      this.preferencesPanel()
-      this.tabBar()
-      this.addPanel()
-      if (this.viewState.phase === BlockingRulesPhase.LOADING && this.currentRuleCount() === 0) {
-        LoadingProgress()
-          .id('p2_blocking_rules_loading')
-          .width(40)
-          .height(40)
-          .color($r('app.color.brand_primary'))
-      } else {
-        Text(this.viewState.message)
-          .id('p2_blocking_rules_status')
-          .fontSize($r('app.float.p1_caption_font_size'))
-          .fontColor(this.viewState.phase === BlockingRulesPhase.ERROR ?
-            $r('app.color.error_text') : $r('app.color.secondary_text'))
-          .width('100%')
-        this.ruleList()
+    Stack({ alignContent: Alignment.BottomEnd }) {
+      Column({ space: $r('app.float.p1_spacing_medium') }) {
+        this.pageHeader()
+        this.preferencesPanel()
+        this.tabBar()
+        if (this.viewState.phase === BlockingRulesPhase.LOADING && this.currentRuleCount() === 0) {
+          LoadingProgress()
+            .id('p2_blocking_rules_loading')
+            .width(40)
+            .height(40)
+            .color($r('app.color.brand_primary'))
+        } else {
+          Text(this.viewState.message)
+            .id('p2_blocking_rules_status')
+            .fontSize($r('app.float.p1_caption_font_size'))
+            .fontColor(this.viewState.phase === BlockingRulesPhase.ERROR ?
+              $r('app.color.error_text') : $r('app.color.secondary_text'))
+            .width('100%')
+          this.ruleList()
+        }
       }
-      this.backupPanel()
-      if (this.confirmClear) {
-        this.clearConfirmation()
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+      .height('100%')
+      .padding($r('app.float.p1_page_padding'))
+      .backgroundColor($r('app.color.page_background'))
+
+      Button({ type: ButtonType.Normal, stateEffect: true }) {
+        SymbolGlyph($r('sys.symbol.plus'))
+          .fontSize(24)
+          .fontColor([Color.White])
       }
-      if (this.exportedText.length > 0) {
-        this.exportDialog()
-      }
+        .id('p3_blocking_add_rule')
+        .width(56)
+        .height(56)
+        .padding(0)
+        .borderRadius(28)
+        .backgroundColor($r('app.color.brand_primary'))
+        .margin({
+          right: $r('app.float.p1_page_padding'),
+          bottom: $r('app.float.p1_page_padding')
+        })
+        .accessibilityText('新增屏蔽规则')
+        .enabled(!this.viewState.busy)
+        .onClick((): void => {
+          this.addRuleSheetShown = true;
+        })
+
+      Column()
+        .bindSheet(this.actionsSheetShown, this.actionsSheet(), {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.actionsSheetShown) {
+              this.actionsSheetShown = false;
+            }
+          }
+        })
+      Column()
+        .bindSheet(this.addRuleSheetShown, this.addRuleSheet(), {
+          height: SheetSize.LARGE,
+          dragBar: true,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.addRuleSheetShown) {
+              this.addRuleSheetShown = false;
+            }
+          }
+        })
+      Column()
+        .bindSheet(this.backupSheetShown, this.backupSheet(), {
+          height: SheetSize.LARGE,
+          dragBar: true,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.backupSheetShown) {
+              this.backupSheetShown = false;
+            }
+          }
+        })
+      Column()
+        .bindSheet(this.confirmClear, this.clearConfirmation(), {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.confirmClear) {
+              this.confirmClear = false;
+            }
+          }
+        })
+      Column()
+        .bindSheet(this.exportSheetShown, this.exportDialog(), {
+          height: SheetSize.LARGE,
+          dragBar: true,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.exportSheetShown) {
+              this.exportSheetShown = false;
+            }
+          }
+        })
     }
     .id('p2_blocking_rules_page')
     .width('100%')
     .height('100%')
-    .padding($r('app.float.p1_page_padding'))
     .backgroundColor($r('app.color.page_background'))
+  }
+
+  @Builder
+  private pageHeader() {
+    Row({ space: $r('app.float.p1_spacing_small') }) {
+      Button({ type: ButtonType.Normal, stateEffect: true }) {
+        SymbolGlyph($r('sys.symbol.chevron_left'))
+          .fontSize(20)
+          .fontColor([$r('app.color.primary_text')])
+      }
+        .id('p3_blocking_rules_back')
+        .width(40)
+        .height(40)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .accessibilityText('返回')
+        .onClick((): void => this.onBack())
+      Text('内容屏蔽')
+        .fontSize($r('app.float.p1_heading_font_size'))
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.primary_text'))
+        .layoutWeight(1)
+      Button({ type: ButtonType.Normal, stateEffect: true }) {
+        SymbolGlyph($r('sys.symbol.more'))
+          .fontSize(20)
+          .fontColor([$r('app.color.primary_text')])
+      }
+        .id('p3_blocking_rules_actions')
+        .width(40)
+        .height(40)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .accessibilityText('内容屏蔽操作')
+        .onClick((): void => {
+          this.actionsSheetShown = true;
+        })
+    }
+    .width('100%')
+  }
+
+  @Builder
+  private actionsSheet() {
+    Column({ space: $r('app.float.p1_spacing_medium') }) {
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Text('内容屏蔽操作')
+          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.primary_text'))
+          .layoutWeight(1)
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+          .id('p3_blocking_rules_actions_close')
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('关闭内容屏蔽操作')
+          .onClick((): void => {
+            this.actionsSheetShown = false;
+          })
+      }
+      .width('100%')
+      Button('导入或导出屏蔽规则')
+        .id('p3_blocking_backup_actions')
+        .width('100%')
+        .fontSize($r('app.float.p1_body_font_size'))
+        .enabled(!this.viewState.busy)
+        .onClick((): void => {
+          this.actionsSheetShown = false;
+          this.backupSheetShown = true;
+        })
+      Button('清空当前分类')
+        .id('p2_blocking_clear')
+        .width('100%')
+        .fontSize($r('app.float.p1_body_font_size'))
+        .fontColor($r('app.color.error_text'))
+        .backgroundColor($r('app.color.control_background'))
+        .enabled(!this.viewState.busy && this.currentRuleCount() > 0)
+        .onClick((): void => {
+          this.actionsSheetShown = false;
+          this.confirmClear = true;
+        })
+    }
+    .width('100%')
+    .padding($r('app.float.p1_page_padding'))
+  }
+
+  @Builder
+  private addRuleSheet() {
+    Column({ space: $r('app.float.p1_spacing_medium') }) {
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Text(`新增${this.selectedKindLabel()}屏蔽规则`)
+          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.primary_text'))
+          .layoutWeight(1)
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+          .id('p3_blocking_add_rule_close')
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('关闭新增屏蔽规则')
+          .onClick((): void => {
+            this.addRuleSheetShown = false;
+          })
+      }
+      .width('100%')
+      this.addPanel()
+    }
+    .width('100%')
+    .padding($r('app.float.p1_page_padding'))
+  }
+
+  @Builder
+  private backupSheet() {
+    Column({ space: $r('app.float.p1_spacing_medium') }) {
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Text('导入或导出屏蔽规则')
+          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.primary_text'))
+          .layoutWeight(1)
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+          .id('p3_blocking_backup_close')
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('关闭导入或导出屏蔽规则')
+          .onClick((): void => {
+            this.backupSheetShown = false;
+          })
+      }
+      .width('100%')
+      this.backupPanel()
+    }
+    .width('100%')
+    .padding($r('app.float.p1_page_padding'))
   }
 
   @Builder
@@ -278,19 +523,10 @@ export struct BlockingRulesPage {
   @Builder
   private ruleList() {
     Column({ space: $r('app.float.p1_spacing_small') }) {
-      Row() {
-        Text(`当前 ${this.currentRuleCount()} 条`)
-          .fontSize($r('app.float.p1_caption_font_size'))
-          .fontColor($r('app.color.secondary_text'))
-          .layoutWeight(1)
-        Button('清空当前分类')
-          .id('p2_blocking_clear')
-          .enabled(!this.viewState.busy && this.currentRuleCount() > 0)
-          .onClick((): void => {
-            this.confirmClear = true;
-          })
-      }
-      .width('100%')
+      Text(`当前 ${this.currentRuleCount()} 条`)
+        .fontSize($r('app.float.p1_caption_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
       if (this.currentRuleCount() === 0) {
         Text('当前分类暂无规则')
           .id('p2_blocking_empty')
@@ -417,10 +653,6 @@ export struct BlockingRulesPage {
   @Builder
   private backupPanel() {
     Column({ space: $r('app.float.p1_spacing_small') }) {
-      Text('屏蔽词导入导出')
-        .fontSize($r('app.float.p1_body_font_size'))
-        .fontWeight(FontWeight.Medium)
-        .width('100%')
       Text('导出为 JSON 文本；导入支持本应用导出的格式，无效条目会被跳过。')
         .fontSize($r('app.float.p1_caption_font_size'))
         .fontColor($r('app.color.secondary_text'))
@@ -474,6 +706,7 @@ export struct BlockingRulesPage {
           .layoutWeight(1)
           .onClick((): void => {
             this.exportedText = '';
+            this.exportSheetShown = false;
           })
         Button('复制到剪贴板')
           .id('p3_blocking_export_copy')
@@ -493,6 +726,8 @@ export struct BlockingRulesPage {
     this.controller?.exportBackup().then((text: string | undefined): void => {
       if (text !== undefined) {
         this.exportedText = text;
+        this.backupSheetShown = false;
+        this.exportSheetShown = true;
       }
     });
   }
@@ -526,6 +761,16 @@ export struct BlockingRulesPage {
       return this.viewState.users.length;
     }
     return this.viewState.topics.length;
+  }
+
+  private selectedKindLabel(): string {
+    if (this.viewState.selectedKind === BlockingRuleKind.KEYWORD) {
+      return '关键词';
+    }
+    if (this.viewState.selectedKind === BlockingRuleKind.USER) {
+      return '用户';
+    }
+    return '话题';
   }
 
   private addNamedRule(): void {

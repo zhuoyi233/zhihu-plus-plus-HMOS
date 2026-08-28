@@ -230,7 +230,7 @@ struct Index {
             this.notificationContent(navigate),
           notificationSettingsContent: (navigate: (destination: P1Destination) => void): void =>
             this.notificationSettingsContent(navigate),
-          blockingRulesContent: (): void => this.blockingRulesContent(),
+          blockingRulesContent: (onBack: () => void): void => this.blockingRulesContent(onBack),
           blockedFeedHistoryContent: (onBack: () => void): void => this.blockedFeedHistoryContent(onBack),
           readHistoryContent: (navigate: (destination: P1Destination) => void, onBack: () => void): void =>
             this.readHistoryContent(navigate, onBack),
@@ -485,8 +485,8 @@ struct Index {
   }
 
   @Builder
-  blockingRulesContent() {
-    BlockingRulesPage({ rules: this.blockingRuleStore, preferences: this.preferencesStore });
+  blockingRulesContent(onBack: () => void) {
+    BlockingRulesPage({ rules: this.blockingRuleStore, preferences: this.preferencesStore, onBack: onBack });
   }
 
   @Builder
