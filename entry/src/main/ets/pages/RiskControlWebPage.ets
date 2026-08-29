@@ -80,12 +80,18 @@ export struct RiskControlWebPage {
         })
         .onPageEnd((): void => {
           this.ready = true;
-          this.status = '验证页面已加载，请完成页面内的验证';
+          if (!this.loadFailed) {
+            this.status = '验证页面已加载，请完成页面内的验证';
+          }
           this.readCookies();
         })
-        .onErrorReceive((_event): void => {
-          this.loadFailed = true;
-          this.status = '验证页面加载失败，请检查网络';
+        .onErrorReceive((event): void => {
+          // 仅主框架加载失败才算失败：子资源失败不应触发不透明遮罩盖住已加载的风控页
+          // （历史 bug：知乎验证页的子资源失败会让页面看起来“无法打开”）。
+          if (event !== undefined && event.request.isMainFrame()) {
+            this.loadFailed = true;
+            this.status = '验证页面加载失败，请检查网络';
+          }
         })
 
       if (!this.ready || this.loadFailed) {
