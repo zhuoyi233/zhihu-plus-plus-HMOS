@@ -438,6 +438,7 @@ export struct NativeContentDocument {
         .id('p2_content_document_list')
         .width('100%')
         .height('100%')
+        .scrollBar(BarState.Off)
         .padding({
           left: $r('app.float.p1_page_padding'),
           right: $r('app.float.p1_page_padding'),

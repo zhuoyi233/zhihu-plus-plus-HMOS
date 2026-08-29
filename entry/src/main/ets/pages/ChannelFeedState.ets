@@ -29,6 +29,51 @@ export interface ChannelFeedViewState {
 
 export type ChannelFeedStateObserver = (state: ChannelFeedViewState) => void;
 
+/**
+ * Stable callbacks used by the title bar. HdsNavigation may retain a
+ * Builder-created content tree, so changing a Builder argument is not a
+ * reliable way to reach the live feed controller. The page registers its
+ * action while it is mounted and the title bar invokes it directly.
+ */
+export class ChannelFeedInteractionBridge {
+  private hotRefreshAction: (() => void) | undefined = undefined;
+  private dailyRefreshAction: (() => void) | undefined = undefined;
+  private dailyDateAction: ((date: string) => void) | undefined = undefined;
+  private followingTabAction: ((index: number) => void) | undefined = undefined;
+
+  registerHotRefresh(action: () => void): void {
+    this.hotRefreshAction = action;
+  }
+
+  registerDailyRefresh(action: () => void): void {
+    this.dailyRefreshAction = action;
+  }
+
+  registerDailyDate(action: (date: string) => void): void {
+    this.dailyDateAction = action;
+  }
+
+  registerFollowingTab(action: (index: number) => void): void {
+    this.followingTabAction = action;
+  }
+
+  refreshHot(): void {
+    this.hotRefreshAction?.();
+  }
+
+  refreshDaily(): void {
+    this.dailyRefreshAction?.();
+  }
+
+  selectDailyDate(date: string): void {
+    this.dailyDateAction?.(date);
+  }
+
+  selectFollowingTab(index: number): void {
+    this.followingTabAction?.(index);
+  }
+}
+
 export class ChannelFeedController {
   private readonly source: ChannelFeedSource;
   private readonly repository: ChannelFeedRepository;
@@ -104,6 +149,20 @@ export class ChannelFeedController {
     if (!this.active || this.refreshing || this.loadingMore ||
       this.phase === ChannelFeedPhase.INITIAL_LOADING) {
       return Promise.resolve();
+    }
+    return this.loadFirstPage(this.items.length > 0);
+  }
+
+  /** Explicit title-bar reload. It also restarts an in-flight first page. */
+  reloadNow(): Promise<void> {
+    if (!this.active) {
+      return Promise.resolve();
+    }
+    if (this.refreshing || this.loadingMore || this.phase === ChannelFeedPhase.INITIAL_LOADING) {
+      this.generation += 1;
+      this.refreshing = false;
+      this.loadingMore = false;
+      this.repository.cancel();
     }
     return this.loadFirstPage(this.items.length > 0);
   }

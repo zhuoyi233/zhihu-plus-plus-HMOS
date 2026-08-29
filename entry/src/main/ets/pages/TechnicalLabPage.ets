@@ -30,6 +30,7 @@ export struct TechnicalLabPage {
     Stack({ alignContent: Alignment.TopStart }) {
       Scroll() {
         Column({ space: $r('app.float.p1_spacing_medium') }) {
+          Blank().height(64)
           Text('Zhihu++ HarmonyOS')
             .id('title')
             .fontSize($r('app.float.p1_display_font_size'))
@@ -180,6 +181,7 @@ export struct TechnicalLabPage {
         .width('100%')
         .padding($r('app.float.p1_page_padding'))
       }
+      .scrollBar(BarState.Off)
       .id('p1_technical_lab_scroll')
       .width('100%')
       .height('100%')

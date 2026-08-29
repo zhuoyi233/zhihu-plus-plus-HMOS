@@ -1,5 +1,5 @@
 import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
-import { window } from '@kit.ArkUI';
+import { display, window } from '@kit.ArkUI';
 import { AppSessionOwner, closeAppDatabase, getAppDatabase, getAppSessionOwner } from 'data';
 import { clearAbilityContext, setAbilityContext } from './AbilityContextHolder';
 import {
@@ -76,6 +76,15 @@ export default class EntryAbility extends UIAbility {
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
+    const mainWindow = windowStage.getMainWindowSync();
+    this.configureImmersiveWindow(mainWindow);
+    mainWindow.on('windowSizeChange', (): void => this.configureImmersiveWindow(mainWindow));
+    mainWindow.on('avoidAreaChange', (data): void => {
+      if (data.type === window.AvoidAreaType.TYPE_SYSTEM ||
+        data.type === window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR) {
+        this.publishAvoidArea(data.type, data.area);
+      }
+    });
     this.loadContentAfterCriticalStartup(windowStage, this.lifecycleGeneration);
   }
 
@@ -125,5 +134,35 @@ export default class EntryAbility extends UIAbility {
     }
     startupDestinationChannel.publish(toP1Destination(destination));
     AppLogger.info(AppLogEvent.DEEP_LINK_RESOLVED);
+  }
+
+  private configureImmersiveWindow(mainWindow: window.Window): void {
+    mainWindow.setImmersiveModeEnabledState(true);
+    void mainWindow.setWindowSystemBarProperties({
+      navigationBarColor: '#00000000',
+      statusBarColor: '#00000000',
+      statusBarContentColor: '#000000',
+      isStatusBarLightIcon: true
+    });
+    this.publishAvoidAreas(mainWindow);
+  }
+
+  private publishAvoidAreas(mainWindow: window.Window): void {
+    const systemArea = mainWindow.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
+    const navigationArea = mainWindow.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR);
+    this.publishAvoidArea(window.AvoidAreaType.TYPE_SYSTEM, systemArea);
+    this.publishAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR, navigationArea);
+  }
+
+  private publishAvoidArea(type: window.AvoidAreaType, area: window.AvoidArea): void {
+    const density = display.getDefaultDisplaySync().densityPixels;
+    const safeDensity = density > 0 ? density : 1;
+    if (type === window.AvoidAreaType.TYPE_SYSTEM) {
+      const top = area.topRect.height / safeDensity;
+      AppStorage.setOrCreate('statusBarHeight', top);
+      AppStorage.setOrCreate('topRectHeight', top);
+      return;
+    }
+    AppStorage.setOrCreate('bottomRectHeight', area.bottomRect.height / safeDensity);
   }
 }

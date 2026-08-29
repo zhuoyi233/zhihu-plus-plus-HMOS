@@ -2,6 +2,12 @@ import { AppPreferencesStore, AppThemeMode, LoginSessionGateway, SessionStatus }
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import bundleManager from '@ohos.bundle.bundleManager';
 import { Want } from '@kit.AbilityKit';
+import {
+  SegmentButton,
+  SegmentButtonOptions,
+  SymbolGlyphModifier,
+  uiMaterial
+} from '@kit.ArkUI';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import {
   decodeP1Destination,
@@ -14,8 +20,16 @@ import {
   startupDestinationChannel,
   StartupDestinationListener
 } from 'core';
-import { AppNavigationRow, AppPageHeader } from './AppPageChrome';
-import { isP1TopLevelTabIndex, P1TopLevelTab, p1TopLevelTabForDestination } from './P1TopLevelTabs';
+import { AppNavigationRow } from './AppPageChrome';
+import {
+  isP1TopLevelTabIndex,
+  P1TopLevelTab,
+  p1TopLevelTabForDestination
+} from './P1TopLevelTabs';
+import { DividerShowType, HdsNavDestination, HdsNavigation, HdsNavigationAttribute, HdsNavigationTitleMode, HdsTabsController } from '@kit.UIDesignKit';
+import { getImmersiveTitleBarStyle } from '../common/style/NavStyles';
+import { ZhihuHdsTabs } from './components/ZhihuHdsTabs';
+import { ChannelFeedInteractionBridge } from './ChannelFeedState';
 
 const PROJECT_HOME_URI: string = 'https://github.com/zhuoyi233/zhihu-plus-plus-HMOS';
 
@@ -23,12 +37,14 @@ const PROJECT_HOME_URI: string = 'https://github.com/zhuoyi233/zhihu-plus-plus-H
 export struct P1Shell {
   @BuilderParam homeContent: (reloadToken: number, navigate: (destination: P1Destination) => void) => void =
     this.emptyReloadableHome;
-  @BuilderParam followingContent: (reloadToken: number, navigate: (destination: P1Destination) => void) => void =
+  @BuilderParam followingContent: (reloadToken: number, navigate: (destination: P1Destination) => void,
+    selectedTabIndex: number) => void =
     this.emptyReloadableHome;
   @BuilderParam hotContent: (reloadToken: number, navigate: (destination: P1Destination) => void) => void =
     this.emptyReloadableHome;
-  @BuilderParam dailyContent: (reloadToken: number, navigate: (destination: P1Destination) => void) => void =
-    this.emptyReloadableHome;
+  @BuilderParam dailyContent: (reloadToken: number, dateCursor: string,
+    navigate: (destination: P1Destination) => void) => void =
+    this.emptyReloadableDaily;
   @BuilderParam dailyStoryContent: (id: string, navigate: (destination: P1Destination) => void) => void =
     this.emptyContent;
   @BuilderParam technicalLabContent: (navigate: (destination: P1Destination) => void) => void =
@@ -89,7 +105,16 @@ export struct P1Shell {
   @State private followingReloadToken: number = 0;
   @State private hotReloadToken: number = 0;
   @State private dailyReloadToken: number = 0;
+  // SegmentButtonOptions is an @ObjectLink in the framework component. Keep
+  // the options in observed state instead of passing an inline object, which
+  // otherwise renders the control but drops its tap callback on device.
+  @State private followingSegmentOptions: SegmentButtonOptions = this.createFollowingSegmentOptions();
+  @Provide('dailyDatePickerRequest') private dailyDatePickerRequest: number = 0;
+  @Provide('dailyDateCursor') private dailyDateCursor: string = '';
+  @Provide('channelFeedInteractionBridge') private channelFeedInteractionBridge: ChannelFeedInteractionBridge =
+    new ChannelFeedInteractionBridge();
   @State private topLevelTabIndex: number = P1TopLevelTab.HOME;
+  private readonly tabsController: HdsTabsController = new HdsTabsController();
   @Provide('p1PathStack') pathStack: NavPathStack = new NavPathStack();
   private unsubscribeStartupDestination: (() => void) | undefined = undefined;
   private readonly themeOperationGuard: LatestOperationGuard = new LatestOperationGuard();
@@ -121,7 +146,14 @@ export struct P1Shell {
   }
 
   @Builder
-  emptyReloadableHome(_reloadToken: number, _navigate: (destination: P1Destination) => void) {
+  emptyReloadableHome(_reloadToken: number, _navigate: (destination: P1Destination) => void,
+    _selectedTabIndex: number = 0) {
+    Blank();
+  }
+
+  @Builder
+  emptyReloadableDaily(_reloadToken: number, _dateCursor: string,
+    _navigate: (destination: P1Destination) => void) {
     Blank();
   }
 
@@ -204,49 +236,55 @@ export struct P1Shell {
   @Builder
   private destinationContent(destination: P1Destination | undefined) {
     if (destination === undefined) {
-      NavDestination() {
+      HdsNavDestination() {
         this.invalidDestinationPage();
       }
-      .title('无法打开页面')
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '无法打开页面' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.SETTINGS) {
-      NavDestination() {
+      HdsNavDestination() {
         this.settingsPage();
       }
-      .title('显示与阅读')
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '显示与阅读' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.BLOCKING_RULES) {
-      NavDestination() {
+      HdsNavDestination() {
         this.blockingRulesContent((): void => {
           this.pathStack.pop();
         });
       }
-      .hideTitleBar(true)
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '内容屏蔽' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.BLOCKED_FEED_HISTORY) {
-      NavDestination() {
+      HdsNavDestination() {
         this.blockedFeedHistoryContent((): void => {
           this.pathStack.pop();
         });
       }
-      .hideTitleBar(true)
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '屏蔽记录' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.READ_HISTORY) {
-      NavDestination() {
+      HdsNavDestination() {
         this.readHistoryContent((nextDestination: P1Destination): void => this.navigate(nextDestination), (): void => {
           this.pathStack.pop();
         });
       }
-      .hideTitleBar(true)
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '已读记录' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.TECHNICAL_LAB) {
-      NavDestination() {
+      HdsNavDestination() {
         this.technicalLabContent((destination: P1Destination): void => this.navigate(destination));
       }
-      .title('技术实验室')
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '技术实验室' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.LOGIN) {
-      NavDestination() {
+      HdsNavDestination() {
         this.loginContent((): void => {
           this.pathStack.pop();
         }, (): void => {
@@ -255,10 +293,11 @@ export struct P1Shell {
           this.navigate({ name: P1DestinationName.QR_DESKTOP_LOGIN_SCAN });
         });
       }
-      .hideTitleBar(true)
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '登录' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.SEARCH) {
-      NavDestination() {
+      HdsNavDestination() {
         this.searchContent(
           destination.query,
           (destination: P1Destination): void => this.navigate(destination),
@@ -267,38 +306,47 @@ export struct P1Shell {
           }
         );
       }
-      .hideTitleBar(true)
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '搜索' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.FOLLOWING) {
-      NavDestination() {
+      HdsNavDestination() {
         this.followingContent(this.followingReloadToken,
-          (destination: P1Destination): void => this.navigate(destination));
+          (destination: P1Destination): void => this.navigate(destination),
+          this.followingTitleBarIndexes[0]);
       }
-      .title('关注')
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '关注' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.HOT) {
-      NavDestination() {
+      HdsNavDestination() {
         this.hotContent(this.hotReloadToken, (destination: P1Destination): void => this.navigate(destination));
       }
-      .title('热榜')
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '热榜' }, divider: { showType: DividerShowType.OFF } } })
+      .hideTitleBar(false)
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.DAILY) {
-      NavDestination() {
-        this.dailyContent(this.dailyReloadToken, (destination: P1Destination): void => this.navigate(destination));
+      HdsNavDestination() {
+        this.dailyContent(this.dailyReloadToken, this.dailyDateCursor,
+          (destination: P1Destination): void => this.navigate(destination));
       }
-      .title('知乎日报')
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '知乎日报' }, divider: { showType: DividerShowType.OFF } } })
+      .hideTitleBar(false)
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.DAILY_STORY) {
-      NavDestination() {
+      HdsNavDestination() {
         this.dailyStoryContent(
           destination.id,
           (destination: P1Destination): void => this.navigate(destination)
         );
       }
-      .title('日报正文')
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '日报正文' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.QUESTION) {
-      NavDestination() {
+      HdsNavDestination() {
         this.questionContent(
           destination.id,
           (destination: P1Destination): void => this.navigate(destination),
@@ -307,10 +355,11 @@ export struct P1Shell {
           }
         );
       }
-      .hideTitleBar(true)
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '问题' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.ANSWER) {
-      NavDestination() {
+      HdsNavDestination() {
         this.answerContent(
           destination.id,
           (destination: P1Destination): void => this.navigate(destination),
@@ -319,10 +368,11 @@ export struct P1Shell {
           }
         );
       }
-      .hideTitleBar(true)
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '回答' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.ARTICLE) {
-      NavDestination() {
+      HdsNavDestination() {
         this.articleContent(
           destination.id,
           (destination: P1Destination): void => this.navigate(destination),
@@ -331,10 +381,11 @@ export struct P1Shell {
           }
         );
       }
-      .hideTitleBar(true)
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '文章' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.VIDEO) {
-      NavDestination() {
+      HdsNavDestination() {
         this.videoContent(
           destination.id,
           (destination: P1Destination): void => this.navigate(destination),
@@ -343,10 +394,11 @@ export struct P1Shell {
           }
         );
       }
-      .hideTitleBar(true)
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '视频' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.WRITE_ANSWER) {
-      NavDestination() {
+      HdsNavDestination() {
         this.writeAnswerContent(
           destination.questionId,
           destination.answerId,
@@ -356,10 +408,11 @@ export struct P1Shell {
           }
         );
       }
-      .hideTitleBar(true)
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '写回答' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.WRITE_PIN) {
-      NavDestination() {
+      HdsNavDestination() {
         this.writePinContent(
           destination.draftId,
           (destination: P1Destination): void => this.navigate(destination),
@@ -368,10 +421,11 @@ export struct P1Shell {
           }
         );
       }
-      .hideTitleBar(true)
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '发布想法' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.PIN_DRAFTS) {
-      NavDestination() {
+      HdsNavDestination() {
         this.pinDraftInboxContent(
           (destination: P1Destination): void => this.navigate(destination),
           (): void => {
@@ -379,10 +433,11 @@ export struct P1Shell {
           }
         );
       }
-      .hideTitleBar(true)
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '想法草稿' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.PEOPLE) {
-      NavDestination() {
+      HdsNavDestination() {
         this.peopleContent(
           destination.id,
           (destination: P1Destination): void => this.navigate(destination),
@@ -391,10 +446,11 @@ export struct P1Shell {
           }
         );
       }
-      .hideTitleBar(true)
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '用户主页' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.PIN) {
-      NavDestination() {
+      HdsNavDestination() {
         this.pinContent(
           destination.id,
           (destination: P1Destination): void => this.navigate(destination),
@@ -403,10 +459,11 @@ export struct P1Shell {
           }
         );
       }
-      .hideTitleBar(true)
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '想法' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.COLLECTIONS) {
-      NavDestination() {
+      HdsNavDestination() {
         this.collectionsContent(
           destination.id,
           (destination: P1Destination): void => this.navigate(destination),
@@ -415,10 +472,11 @@ export struct P1Shell {
           }
         );
       }
-      .hideTitleBar(true)
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '收藏夹' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.COLLECTION) {
-      NavDestination() {
+      HdsNavDestination() {
         this.collectionContentContent(
           destination.id,
           (destination: P1Destination): void => this.navigate(destination),
@@ -427,10 +485,11 @@ export struct P1Shell {
           }
         );
       }
-      .hideTitleBar(true)
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '收藏夹内容' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.NOTIFICATION) {
-      NavDestination() {
+      HdsNavDestination() {
         this.notificationContent(
           (destination: P1Destination): void => this.navigate(destination),
           (): void => {
@@ -438,133 +497,376 @@ export struct P1Shell {
           }
         );
       }
-      .hideTitleBar(true)
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '通知' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.NOTIFICATION_SETTINGS) {
-      NavDestination() {
+      HdsNavDestination() {
         this.notificationSettingsContent((destination: P1Destination): void => this.navigate(destination));
       }
-      .title('通知设置')
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '通知设置' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.READER_PROBE) {
-      NavDestination() {
+      HdsNavDestination() {
         this.readerProbeContent((): void => {
           this.pathStack.pop();
         });
       }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+        content: { title: { mainTitle: '阅读器诊断' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.IMAGE_PROBE) {
-      NavDestination() {
+      HdsNavDestination() {
         this.imageProbeContent((): void => {
           this.pathStack.pop();
         });
       }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+        content: { title: { mainTitle: '图片诊断' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.DATABASE_PROBE) {
-      NavDestination() {
+      HdsNavDestination() {
         this.databaseProbeContent((): void => {
           this.pathStack.pop();
         });
       }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+        content: { title: { mainTitle: '数据库诊断' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.DEEP_LINK_PROBE) {
-      NavDestination() {
+      HdsNavDestination() {
         this.deepLinkProbeContent((): void => {
           this.pathStack.pop();
         });
       }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+        content: { title: { mainTitle: '深链诊断' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.QR_SCAN_PROBE) {
-      NavDestination() {
+      HdsNavDestination() {
         this.qrScanProbeContent((): void => {
           this.pathStack.pop();
         });
       }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+        content: { title: { mainTitle: '二维码诊断' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.QR_DESKTOP_LOGIN_SCAN) {
-      NavDestination() {
+      HdsNavDestination() {
         this.qrDesktopLoginScanContent((): void => {
           this.pathStack.pop();
         });
       }
-      .title('扫描电脑端登录码')
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '扫描电脑端登录码' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.BACKGROUND_TASK_PROBE) {
-      NavDestination() {
+      HdsNavDestination() {
         this.backgroundTaskProbeContent((): void => {
           this.pathStack.pop();
         });
       }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+        content: { title: { mainTitle: '后台任务诊断' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.DOMAIN_FIXTURE_PROBE) {
-      NavDestination() {
+      HdsNavDestination() {
         this.domainFixtureProbeContent((): void => {
           this.pathStack.pop();
         });
       }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+        content: { title: { mainTitle: '领域数据诊断' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else {
-      NavDestination() {
+      HdsNavDestination() {
         this.businessPlaceholder(destination);
       }
-      .title(destination.name)
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+        content: { title: { mainTitle: destination.name }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     }
   }
 
   build() {
-    Navigation(this.pathStack) {
-      Tabs({ barPosition: BarPosition.End, index: $$this.topLevelTabIndex }) {
+    HdsNavigation(this.pathStack) {
+      ZhihuHdsTabs({ currentIndex: $topLevelTabIndex, controller: this.tabsController }) {
         TabContent() {
           this.homeContent(this.homeReloadToken, (destination: P1Destination): void => this.navigate(destination));
         }
         .id('p1_top_level_home_content')
-        .tabBar('首页')
+        .tabBar(this.topLevelTabBarStyle(P1TopLevelTab.HOME))
 
         TabContent() {
           this.followingContent(this.followingReloadToken,
-            (destination: P1Destination): void => this.navigate(destination));
+            (destination: P1Destination): void => this.navigate(destination),
+            this.followingTitleBarIndexes[0]);
         }
         .id('p1_top_level_following_content')
-        .tabBar('关注')
+        .tabBar(this.topLevelTabBarStyle(P1TopLevelTab.FOLLOWING))
 
         TabContent() {
           this.hotContent(this.hotReloadToken, (destination: P1Destination): void => this.navigate(destination));
         }
         .id('p1_top_level_hot_content')
-        .tabBar('热榜')
+        .tabBar(this.topLevelTabBarStyle(P1TopLevelTab.HOT))
 
         TabContent() {
-          this.dailyContent(this.dailyReloadToken, (destination: P1Destination): void => this.navigate(destination));
+          this.dailyContent(this.dailyReloadToken, this.dailyDateCursor,
+            (destination: P1Destination): void => this.navigate(destination));
         }
         .id('p1_top_level_daily_content')
-        .tabBar('日报')
+        .tabBar(this.topLevelTabBarStyle(P1TopLevelTab.DAILY))
 
         TabContent() {
           this.settingsPage();
         }
         .id('p1_top_level_account_content')
-        .tabBar('我的')
+        .tabBar(this.topLevelTabBarStyle(P1TopLevelTab.ACCOUNT))
       }
-      .id('p1_top_level_tabs')
-      .width('100%')
-      .height('100%')
-      .barMode(BarMode.Fixed)
-      .scrollable(false)
-      .animationDuration(0)
-      .onChange((index: number): void => {
-        if (isP1TopLevelTabIndex(index)) {
-          this.topLevelTabIndex = index;
-        }
-      })
-      .backgroundColor($r('app.color.page_background'))
     }
-    .hideTitleBar(true)
+    .titleBar({
+      style: getImmersiveTitleBarStyle(),
+      avoidLayoutSafeArea: true,
+      content: {
+        stackBuilder: (): void => this.rootTitleBarContent(),
+        divider: { showType: DividerShowType.OFF }
+      }
+    })
+    .titleMode(HdsNavigationTitleMode.MINI)
     .hideBackButton(true)
     .mode(NavigationMode.Stack)
+    .monopolizeEvents(false)
     .navDestination(this.destinationBuilder)
     .backgroundColor($r('app.color.page_background'))
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+  }
+
+  private topLevelTabBarStyle(tab: P1TopLevelTab): BottomTabBarStyle {
+    let icon: Resource = $r('sys.symbol.archivebox_fill');
+    if (tab === P1TopLevelTab.FOLLOWING) {
+      icon = $r('sys.symbol.scenes');
+    } else if (tab === P1TopLevelTab.HOT) {
+      icon = $r('sys.symbol.discover_fill');
+    } else if (tab === P1TopLevelTab.DAILY) {
+      icon = $r('sys.symbol.calendar_fill');
+    } else if (tab === P1TopLevelTab.ACCOUNT) {
+      icon = $r('sys.symbol.person_crop_circle_fill_1');
+    }
+
+    const normal: SymbolGlyphModifier = new SymbolGlyphModifier(icon)
+      .renderingStrategy(SymbolRenderingStrategy.SINGLE);
+    const selected: SymbolGlyphModifier = new SymbolGlyphModifier(icon)
+      .renderingStrategy(SymbolRenderingStrategy.SINGLE);
+    return BottomTabBarStyle.of({ normal, selected }, this.tabLabel(tab));
+  }
+
+  private tabLabel(tab: P1TopLevelTab): string {
+    switch (tab) {
+      case P1TopLevelTab.HOME:
+        return '首页';
+      case P1TopLevelTab.FOLLOWING:
+        return '关注';
+      case P1TopLevelTab.HOT:
+        return '热榜';
+      case P1TopLevelTab.DAILY:
+        return '日报';
+      case P1TopLevelTab.ACCOUNT:
+        return '我的';
+    }
+  }
+
+  @Builder
+  private rootTitleBarContent() {
+    Stack({ alignContent: Alignment.Center }) {
+    if (this.topLevelTabIndex === P1TopLevelTab.HOME) {
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          Row({ space: $r('app.float.p1_spacing_small') }) {
+            SymbolGlyph($r('sys.symbol.magnifyingglass'))
+              .fontSize(18)
+              .fontColor([$r('app.color.secondary_text')])
+            Text('搜索内容')
+              .fontSize($r('app.float.p1_body_font_size'))
+              .fontColor($r('app.color.secondary_text'))
+          }
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
+        }
+        .id('p2_home_titlebar_search')
+        .layoutWeight(1)
+        .height(40)
+        .padding($r('app.float.p1_spacing_small'))
+        .backgroundColor(Color.Transparent)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.THIN,
+          colorInvert: true,
+          applyShadow: true,
+          interactive: true,
+          lightEffect: {}
+        }))
+        .borderRadius($r('app.float.p1_card_radius'))
+        .accessibilityText('打开搜索')
+        .onClick((): void => this.navigate({ name: P1DestinationName.SEARCH, query: '' }))
+
+        Button({ type: ButtonType.Circle, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.bell'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+        .id('p2_home_titlebar_notifications')
+        .width(40)
+        .height(40)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.THIN,
+          colorInvert: true,
+          applyShadow: true,
+          interactive: true,
+          lightEffect: {}
+        }))
+        .accessibilityText('打开通知')
+        .onClick((): void => this.navigate({ name: P1DestinationName.NOTIFICATION }))
+      }
+      .width('100%')
+      .padding({ left: 12, right: 12 })
+      .hitTestBehavior(HitTestMode.Transparent)
+    } else if (this.topLevelTabIndex === P1TopLevelTab.FOLLOWING) {
+      Column() {
+        SegmentButton({
+          options: this.followingSegmentOptions,
+          selectedIndexes: $followingTitleBarIndexes,
+          onItemClicked: (index: number): void => this.selectFollowingTitleBarTab(index)
+        })
+          .width('52%')
+          .height(44)
+      }
+      .width('100%')
+      .height('100%')
+      .justifyContent(FlexAlign.Center)
+      .hitTestBehavior(HitTestMode.Transparent)
+    } else if (this.topLevelTabIndex === P1TopLevelTab.HOT) {
+      Row() {
+        Button({ type: ButtonType.Circle, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+        .id('p2_hot_titlebar_refresh')
+        .width(40)
+        .height(40)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.THIN,
+          colorInvert: true,
+          applyShadow: true,
+          interactive: true,
+          lightEffect: {}
+        }))
+        .accessibilityText('刷新热榜')
+        .onClick((): void => {
+          this.hotReloadToken += 1;
+          this.channelFeedInteractionBridge.refreshHot();
+        })
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.End)
+      .padding({ right: 12 })
+      .hitTestBehavior(HitTestMode.Transparent)
+    } else if (this.topLevelTabIndex === P1TopLevelTab.DAILY) {
+      Row() {
+        Button({ type: ButtonType.Circle, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.calendar'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+        .id('p2_daily_titlebar_date')
+        .width(40)
+        .height(40)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .systemMaterial(new uiMaterial.ImmersiveMaterial({
+          style: uiMaterial.ImmersiveStyle.THIN,
+          colorInvert: true,
+          applyShadow: true,
+          interactive: true,
+          lightEffect: {}
+        }))
+        .accessibilityText('选择日报日期')
+        .onClick((): void => {
+          this.openDailyDatePicker();
+        })
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.End)
+      .padding({ right: 12 })
+      .hitTestBehavior(HitTestMode.Transparent)
+    }
+    }
+    .id('p2_root_titlebar_content')
+    .width('100%')
+    .height('100%')
+    .monopolizeEvents(false)
+  }
+
+  // SegmentButton uses two-way binding; keep the selected index as observable
+  // component state so taps immediately rebuild the following feed content.
+  @State private followingTitleBarIndexes: number[] = [0];
+
+  private selectFollowingTitleBarTab(index: number): void {
+    if (index < 0 || index > 1) {
+      return;
+    }
+    this.followingTitleBarIndexes = [index];
+    this.channelFeedInteractionBridge.selectFollowingTab(index);
+  }
+
+  private createFollowingSegmentOptions(): SegmentButtonOptions {
+    return SegmentButtonOptions.tab({
+      buttons: [{ text: '推荐' }, { text: '动态' }],
+      backgroundColor: Color.Transparent,
+      selectedBackgroundColor: $r('app.color.brand_primary_container'),
+      backgroundSystemMaterial: new uiMaterial.ImmersiveMaterial({
+        style: uiMaterial.ImmersiveStyle.THIN,
+        colorInvert: true,
+        applyShadow: true,
+        interactive: false,
+        lightEffect: {}
+      }),
+      buttonPadding: 10
+    });
+  }
+
+  private openDailyDatePicker(): void {
+    const selectedDate: Date = new Date();
+    this.getUIContext().showDatePickerDialog({
+      selected: selectedDate,
+      start: new Date(2000, 0, 1),
+      end: new Date(),
+      onDateAccept: (date: Date): void => {
+        this.dailyDateCursor = this.formatDailyDateCursor(date);
+        this.dailyReloadToken += 1;
+        this.channelFeedInteractionBridge.selectDailyDate(this.dailyDateCursor);
+      }
+    });
+  }
+
+  private formatDailyDateCursor(date: Date): string {
+    const month: string = `${date.getMonth() + 1}`.padStart(2, '0');
+    const day: string = `${date.getDate()}`.padStart(2, '0');
+    return `${date.getFullYear()}${month}${day}`;
   }
 
   @Builder
@@ -572,8 +874,6 @@ export struct P1Shell {
     Stack({ alignContent: Alignment.TopStart }) {
       Scroll() {
         Column({ space: $r('app.float.p1_spacing_large') }) {
-          AppPageHeader({ title: '我的' });
-
           TextInput({ text: this.settingsSearchQuery, placeholder: '搜索设置' })
             .id('p3_settings_search')
             .width('100%')
@@ -690,15 +990,22 @@ export struct P1Shell {
           .width('100%')
           .borderRadius($r('app.float.p1_card_radius'))
           .backgroundColor($r('app.color.surface_background'))
-          }
         }
-        .width('100%')
-        .padding($r('app.float.p1_page_padding'))
+        }
       }
+      .scrollBar(BarState.Off)
+      .width('100%')
+      .padding({
+        left: $r('app.float.p1_page_padding'),
+        right: $r('app.float.p1_page_padding'),
+        top: 94,
+        bottom: $r('app.float.p1_page_padding')
+      })
       .id('p1_settings_scroll')
       .width('100%')
       .height('100%')
       .align(Alignment.TopStart)
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
       Column()
         .bindSheet(this.aboutVersionSheetShown, this.aboutVersionSheet(), {

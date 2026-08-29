@@ -39,6 +39,14 @@
     {
       "name": "on_brand",
       "value": "#07152A"
+    },
+    {
+      "name": "brand_primary_container",
+      "value": "#17345C"
+    },
+    {
+      "name": "divider_color",
+      "value": "#303238"
     }
   ]
 }
