@@ -45,9 +45,7 @@ import { stageAnswerEditSeed } from './AnswerEditSeedStore';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { createSystemShareService } from '../platform/SystemShareService';
 import { ShareOutcome, SharePayloadKind, ShareTextPayload } from '../platform/ShareContracts';
-
-/** 悬浮操作栏的正文预留高度：胶囊 44vp + 底部间距 12vp + 呼吸空间 8vp。 */
-const DETAIL_FLOATING_BAR_RESERVE_VP = 64;
+import uiMaterial from '@ohos.arkui.uiMaterial';
 
 @Component
 struct ContentDetailPage {
@@ -166,7 +164,7 @@ struct ContentDetailPage {
         } else if (this.phase === ContentDetailPhase.ERROR) {
           this.statusPanel(this.errorMessage, true)
         } else if (this.content !== undefined) {
-          // 沉浸光感风格：正文铺满、操作栏悬浮于底部之上（内容从两块胶囊下方穿透）。
+          // 沉浸光感风格：正文铺满并从操作栏下方穿透，操作栏为两块交互材质胶囊悬浮于文字上方。
           Stack({ alignContent: Alignment.Bottom }) {
             Column() {
               // P3-9-B：顶栏作为占位（非覆盖），正文在其下方，避免作者行与标题/统计重叠。
@@ -178,7 +176,6 @@ struct ContentDetailPage {
               }
               .layoutWeight(1)
               .width('100%')
-              .padding({ bottom: this.immersiveReading ? 0 : DETAIL_FLOATING_BAR_RESERVE_VP })
             }
             .width('100%')
             .height('100%')
@@ -567,7 +564,11 @@ struct ContentDetailPage {
             }
           }
           .borderRadius(24)
-          .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            interactive: true,
+            lightEffect: { color: $r('app.color.zhihu_blue') }
+          }))
           .clip(true)
 
           Blank()
@@ -595,7 +596,11 @@ struct ContentDetailPage {
           }
           .padding({ left: 8, right: 8 })
           .borderRadius(24)
-          .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            interactive: true,
+            lightEffect: { color: $r('app.color.zhihu_blue') }
+          }))
           .clip(true)
         } else {
           // 左块：投票胶囊（赞同图标+数字 / 反对），对齐上游主视觉——
@@ -682,7 +687,11 @@ struct ContentDetailPage {
           }
           .padding({ left: 8, right: 8 })
           .borderRadius(24)
-          .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
+          .systemMaterial(new uiMaterial.ImmersiveMaterial({
+            style: uiMaterial.ImmersiveStyle.REGULAR,
+            interactive: true,
+            lightEffect: { color: $r('app.color.zhihu_blue') }
+          }))
           .clip(true)
         }
       }
