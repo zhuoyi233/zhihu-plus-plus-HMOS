@@ -599,7 +599,7 @@ export struct P1Shell {
       .backgroundColor($r('app.color.page_background'))
       .barOverlap(true)
       .barFloatingStyle({
-        barBottomMargin: 28,
+        barBottomMargin: 12,
         systemMaterialEffect: {
           materialType: hdsMaterial.MaterialType.ADAPTIVE,
           materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
