@@ -446,7 +446,8 @@ struct ContentDetailPage {
         html: contentHtml(content),
         emptyMessage: contentEmptyMessage(content),
         onScrollOffset: (offset: number): void => {
-          this.topBarScrolled = offset > 0;
+          // 像素阈值滞回：视口因顶栏收起而变高时偏移量不变，状态不会振荡。
+          this.topBarScrolled = offset > 20;
         }
       })
         .layoutWeight(1)
