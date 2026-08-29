@@ -795,16 +795,27 @@ export struct P1Shell {
   private accountOverview() {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
       Row({ space: $r('app.float.p1_spacing_medium') }) {
-        Text(this.accountAvatarLetter())
-          .id('p3_account_overview_avatar')
-          .width(56)
-          .height(56)
-          .borderRadius(28)
-          .backgroundColor($r('app.color.brand_primary_container'))
-          .fontSize($r('app.float.p1_heading_font_size'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.brand_primary'))
-          .textAlign(TextAlign.Center)
+        Stack({ alignContent: Alignment.Center }) {
+          Text(this.accountAvatarLetter())
+            .width(56)
+            .height(56)
+            .borderRadius(28)
+            .backgroundColor($r('app.color.brand_primary_container'))
+            .fontSize($r('app.float.p1_heading_font_size'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.brand_primary'))
+            .textAlign(TextAlign.Center)
+          // 有头像地址时叠加真实头像；加载失败露出首字占位。
+          if (this.accountAvatarUrl().length > 0) {
+            Image(this.accountAvatarUrl())
+              .id('p3_account_overview_avatar')
+              .width(56)
+              .height(56)
+              .borderRadius(28)
+              .objectFit(ImageFit.Cover)
+          }
+        }
+        .id('p3_account_overview_avatar_box')
         Column({ space: $r('app.float.p1_spacing_xsmall') }) {
           Text(this.accountTitle())
             .id('p3_account_overview_title')
@@ -1377,6 +1388,14 @@ export struct P1Shell {
 
   private accountAvatarLetter(): string {
     return this.accountTitle().charAt(0);
+  }
+
+  private accountAvatarUrl(): string {
+    const state = this.session?.getState();
+    if (state?.status !== SessionStatus.AUTHENTICATED) {
+      return '';
+    }
+    return state.profile?.avatarUrl?.trim() ?? '';
   }
 
   @Builder
