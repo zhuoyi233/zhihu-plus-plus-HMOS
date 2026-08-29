@@ -1,6 +1,7 @@
 import { AppPreferencesStore, AppThemeMode, LoginSessionGateway, SessionStatus } from 'data';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import bundleManager from '@ohos.bundle.bundleManager';
+import { Want } from '@kit.AbilityKit';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import {
   decodeP1Destination,
@@ -15,6 +16,8 @@ import {
 } from 'core';
 import { AppNavigationRow, AppPageHeader } from './AppPageChrome';
 import { isP1TopLevelTabIndex, P1TopLevelTab, p1TopLevelTabForDestination } from './P1TopLevelTabs';
+
+const PROJECT_HOME_URI: string = 'https://github.com/zly2006/zhihu-plus-plus';
 
 @Component
 export struct P1Shell {
@@ -79,6 +82,8 @@ export struct P1Shell {
   @State private aboutVersionSheetShown: boolean = false;
   @State private projectLicenseSheetShown: boolean = false;
   @State private openSourceLicensesSheetShown: boolean = false;
+  @State private projectHomeHelpShown: boolean = false;
+  @State private projectHomeLaunchStatus: string = '';
   @State private settingsSearchQuery: string = '';
   @State private homeReloadToken: number = 0;
   @State private followingReloadToken: number = 0;
@@ -684,6 +689,9 @@ export struct P1Shell {
                 this.aboutVersionSheetShown = true;
               } });
             Divider().color($r('app.color.divider_color'))
+            AppNavigationRow({ title: 'GitHub', description: '查看上游项目主页', testId: 'p3_open_project_home', grouped: true,
+              onRowClick: (): void => this.openProjectHome() });
+            Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '项目协议', description: 'GNU AGPL v3.0',
               testId: 'p3_open_project_license', grouped: true,
               onRowClick: (): void => {
@@ -758,6 +766,19 @@ export struct P1Shell {
           onDisappear: (): void => {
             if (this.openSourceLicensesSheetShown) {
               this.openSourceLicensesSheetShown = false;
+            }
+          }
+        })
+      Column()
+        .bindSheet(this.projectHomeHelpShown, this.projectHomeHelpSheet(), {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.projectHomeHelpShown) {
+              this.projectHomeHelpShown = false;
             }
           }
         })
@@ -854,6 +875,10 @@ export struct P1Shell {
             this.refreshInstalledVersionLabel();
             this.aboutVersionSheetShown = true;
           } });
+      }
+      if (this.settingsSearchMatches('GitHub', '查看上游项目主页')) {
+        AppNavigationRow({ title: 'GitHub', description: '查看上游项目主页', testId: 'p3_open_project_home',
+          onRowClick: (): void => this.openProjectHome() });
       }
       if (this.settingsSearchMatches('项目协议', 'GNU AGPL v3.0')) {
         AppNavigationRow({ title: '项目协议', description: 'GNU AGPL v3.0',
@@ -1025,6 +1050,46 @@ export struct P1Shell {
   }
 
   @Builder
+  private projectHomeHelpSheet() {
+    Column({ space: $r('app.float.p1_spacing_medium') }) {
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Text('项目主页')
+          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.primary_text'))
+          .layoutWeight(1)
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+          .id('p3_project_home_close')
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('关闭项目主页说明')
+          .onClick((): void => {
+            this.projectHomeHelpShown = false;
+          })
+      }
+      .width('100%')
+      Text(PROJECT_HOME_URI)
+        .id('p3_project_home_url')
+        .fontSize($r('app.float.p1_body_font_size'))
+        .fontColor($r('app.color.primary_text'))
+        .width('100%')
+      Text(this.projectHomeLaunchStatus)
+        .id('p3_project_home_status')
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
+    }
+    .width('100%')
+    .padding($r('app.float.p1_page_padding'))
+  }
+
+  @Builder
   private openSourceLicenseRow(name: string, description: string) {
     Column({ space: $r('app.float.p1_spacing_xsmall') }) {
       Text(name)
@@ -1071,9 +1136,35 @@ export struct P1Shell {
       this.settingsSearchMatches('通知设置', '设置提醒和推送偏好') ||
       this.settingsSearchMatches('主题模式', '跟随系统 浅色 深色') ||
       this.settingsSearchMatches('应用与版本', this.installedVersionLabel) ||
+      this.settingsSearchMatches('GitHub', '查看上游项目主页') ||
       this.settingsSearchMatches('项目协议', 'GNU AGPL v3.0') ||
       this.settingsSearchMatches('开源许可', '3 个本地 HAR 模块 GNU AGPL v3.0') ||
       this.settingsSearchMatches('技术实验室', '仅用于本机诊断与验证');
+  }
+
+  private openProjectHome(): void {
+    const context = getAbilityContext();
+    if (context === undefined) {
+      this.showProjectHomeHelp('当前页面无法调用系统浏览器，请在浏览器中打开此地址。');
+      return;
+    }
+    const want: Want = {
+      action: 'ohos.want.action.viewData',
+      uri: PROJECT_HOME_URI
+    };
+    try {
+      void context.startAbility(want).then((): void => {
+      }, (): void => {
+        this.showProjectHomeHelp('系统中没有可处理此 HTTPS 地址的应用，请在浏览器中打开此地址。');
+      });
+    } catch (_error) {
+      this.showProjectHomeHelp('系统中没有可处理此 HTTPS 地址的应用，请在浏览器中打开此地址。');
+    }
+  }
+
+  private showProjectHomeHelp(status: string): void {
+    this.projectHomeLaunchStatus = status;
+    this.projectHomeHelpShown = true;
   }
 
   private accountSummary(): string {
