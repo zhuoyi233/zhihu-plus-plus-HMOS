@@ -86,7 +86,6 @@ export struct P1Shell {
   @BuilderParam domainFixtureProbeContent: (onBack: () => void) => void = this.emptyProbe;
   session: LoginSessionGateway | undefined = undefined;
   @State private themeMode: AppThemeMode = AppThemeMode.SYSTEM;
-  @State private themePersistenceStatus: string = '正在读取主题设置…';
   @State private installedVersionLabel: string = '正在读取已安装版本…';
   @State private aboutVersionSheetShown: boolean = false;
   /** GitHub 最新 Release 检出有新版本时非空：驱动“我的”页横幅与版本弹层下载入口。 */
@@ -113,7 +112,6 @@ export struct P1Shell {
 
   aboutToAppear(): void {
     this.themeMounted = true;
-    this.themePersistenceStatus = '正在读取主题设置…';
     this.restoreThemeMode();
     this.refreshInstalledVersionLabel();
     this.unsubscribeStartupDestination?.();
@@ -661,10 +659,6 @@ export struct P1Shell {
                 this.themeButton('深色', AppThemeMode.DARK, 'p1_theme_dark');
               }
               .width('100%')
-              Text(this.themePersistenceStatus)
-                .id('p1_theme_persistence_status')
-                .fontSize($r('app.float.p1_secondary_font_size'))
-                .fontColor($r('app.color.secondary_text'))
             }
             .alignItems(HorizontalAlign.Start)
             .width('100%')
@@ -720,6 +714,14 @@ export struct P1Shell {
           .borderRadius($r('app.float.p1_card_radius'))
           .backgroundColor($r('app.color.surface_background'))
           }
+          // 对齐上游 AccountSettingScreen 页脚免责声明。
+          Text('本软件仅供学习交流使用，应用内内容由知乎网站提供，著作权归其对应作者所有。')
+            .id('p3_settings_disclaimer_footer')
+            .fontSize($r('app.float.p1_caption_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .textAlign(TextAlign.Center)
+            .width('100%')
+            .padding($r('app.float.p1_card_padding'))
         }
         .width('100%')
         .padding($r('app.float.p1_page_padding'))
@@ -1547,38 +1549,30 @@ export struct P1Shell {
       }
       const context = this.getUIContext().getHostContext();
       if (context === undefined) {
-        this.themePersistenceStatus = '无法访问应用上下文';
         return;
       }
       const mode = await new AppPreferencesStore(context).loadThemeMode();
       if (!this.themeMounted || !this.themeOperationGuard.isCurrent(generation)) {
         return;
       }
-      this.themePersistenceStatus = this.applyThemeMode(mode)
-        ? '主题设置已恢复'
-        : '主题模式应用失败，请重试';
+      this.applyThemeMode(mode);
     } catch (_error) {
       if (!this.themeMounted || !this.themeOperationGuard.isCurrent(generation)) {
         return;
       }
-      this.themePersistenceStatus = this.applyThemeMode(AppThemeMode.SYSTEM)
-        ? '无法读取已保存主题，当前跟随系统'
-        : '无法读取或应用主题设置，请重试';
+      this.applyThemeMode(AppThemeMode.SYSTEM);
     }
   }
 
   private async selectThemeMode(mode: AppThemeMode): Promise<void> {
     const context = getAbilityContext();
     if (context === undefined) {
-      this.themePersistenceStatus = '无法访问应用上下文';
       return;
     }
     const generation = this.themeOperationGuard.next();
     if (!this.applyThemeMode(mode)) {
-      this.themePersistenceStatus = '主题模式应用失败，请重试';
       return;
     }
-    this.themePersistenceStatus = '正在保存主题设置…';
     const pendingSave = this.themeSaveQueue.catch((_error: Error): void => {
     }).then((): Promise<void> => {
       if (!this.themeMounted || !this.themeOperationGuard.isCurrent(generation)) {
@@ -1589,13 +1583,8 @@ export struct P1Shell {
     this.themeSaveQueue = pendingSave;
     try {
       await pendingSave;
-      if (this.themeMounted && this.themeOperationGuard.isCurrent(generation)) {
-        this.themePersistenceStatus = '主题设置已保存';
-      }
     } catch (_error) {
-      if (this.themeMounted && this.themeOperationGuard.isCurrent(generation)) {
-        this.themePersistenceStatus = '主题已应用，但本次未保存；重启后可能恢复此前设置';
-      }
+      // 保存失败时主题仍已应用，重启后可能恢复此前设置；不再展示状态文案。
     }
   }
 
