@@ -78,6 +78,7 @@ export struct P1Shell {
   @State private installedVersionLabel: string = '正在读取已安装版本…';
   @State private aboutVersionSheetShown: boolean = false;
   @State private projectLicenseSheetShown: boolean = false;
+  @State private openSourceLicensesSheetShown: boolean = false;
   @State private homeReloadToken: number = 0;
   @State private followingReloadToken: number = 0;
   @State private hotReloadToken: number = 0;
@@ -678,6 +679,12 @@ export struct P1Shell {
                 this.projectLicenseSheetShown = true;
               } });
             Divider().color($r('app.color.divider_color'))
+            AppNavigationRow({ title: '开源许可', description: '3 个本地 HAR 模块 · GNU AGPL v3.0',
+              testId: 'p3_open_open_source_licenses', grouped: true,
+              onRowClick: (): void => {
+                this.openSourceLicensesSheetShown = true;
+              } });
+            Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '技术实验室', description: '仅用于本机诊断与验证', testId: 'p1_open_technical_lab', grouped: true,
               onRowClick: (): void => this.navigate({ name: P1DestinationName.TECHNICAL_LAB }) });
             Text('页面内容由 Navigation 约束在系统安全区内，背景延伸覆盖状态栏和底部系统区域。')
@@ -726,6 +733,19 @@ export struct P1Shell {
           onDisappear: (): void => {
             if (this.projectLicenseSheetShown) {
               this.projectLicenseSheetShown = false;
+            }
+          }
+        })
+      Column()
+        .bindSheet(this.openSourceLicensesSheetShown, this.openSourceLicensesSheet(), {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.openSourceLicensesSheetShown) {
+              this.openSourceLicensesSheetShown = false;
             }
           }
         })
@@ -836,6 +856,73 @@ export struct P1Shell {
     }
     .width('100%')
     .padding($r('app.float.p1_page_padding'))
+  }
+
+  @Builder
+  private openSourceLicensesSheet() {
+    Column({ space: $r('app.float.p1_spacing_medium') }) {
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Text('开源许可')
+          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.primary_text'))
+          .layoutWeight(1)
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+          .id('p3_open_source_licenses_close')
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('关闭开源许可')
+          .onClick((): void => {
+            this.openSourceLicensesSheetShown = false;
+          })
+      }
+      .width('100%')
+      Text('当前 API 26 HAP 未打包第三方运行时 ohpm 依赖；以下是随应用打包的本地 HarmonyOS HAR 模块。')
+        .id('p3_open_source_licenses_summary')
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
+      Column() {
+        this.openSourceLicenseRow('core', '共享策略、导航与启动 · GNU AGPL v3.0');
+        Divider().color($r('app.color.divider_color'))
+        this.openSourceLicenseRow('data', '领域模型、网络、会话与本地数据 · GNU AGPL v3.0');
+        Divider().color($r('app.color.divider_color'))
+        this.openSourceLicenseRow('reader', '原生阅读、数据源与媒体加载 · GNU AGPL v3.0');
+      }
+      .id('p3_open_source_licenses_list')
+      .width('100%')
+      .borderRadius($r('app.float.p1_card_radius'))
+      .backgroundColor($r('app.color.control_background'))
+      Text('HarmonyOS 系统 Kit 为平台 API，不作为第三方打包依赖列入此处。许可名称以各模块 oh-package.json5 的声明为准。')
+        .fontSize($r('app.float.p1_caption_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
+    }
+    .width('100%')
+    .padding($r('app.float.p1_page_padding'))
+  }
+
+  @Builder
+  private openSourceLicenseRow(name: string, description: string) {
+    Column({ space: $r('app.float.p1_spacing_xsmall') }) {
+      Text(name)
+        .fontSize($r('app.float.p1_body_font_size'))
+        .fontColor($r('app.color.primary_text'))
+        .width('100%')
+      Text(description)
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
+    }
+    .alignItems(HorizontalAlign.Start)
+    .width('100%')
+    .padding($r('app.float.p1_card_padding'))
   }
 
   private refreshInstalledVersionLabel(): void {
