@@ -365,7 +365,7 @@ export struct P1Shell {
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.QUESTION) {
-      HdsNavDestination() {
+      NavDestination() {
         this.questionContent(
           destination.id,
           (destination: P1Destination): void => this.navigate(destination),
@@ -374,11 +374,11 @@ export struct P1Shell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '问题' }, divider: { showType: DividerShowType.OFF } } })
+      .hideTitleBar(true)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.ANSWER) {
-      HdsNavDestination() {
+      NavDestination() {
         this.answerContent(
           destination.id,
           (destination: P1Destination): void => this.navigate(destination),
@@ -387,11 +387,11 @@ export struct P1Shell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '回答' }, divider: { showType: DividerShowType.OFF } } })
+      .hideTitleBar(true)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.ARTICLE) {
-      HdsNavDestination() {
+      NavDestination() {
         this.articleContent(
           destination.id,
           (destination: P1Destination): void => this.navigate(destination),
@@ -400,7 +400,7 @@ export struct P1Shell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '文章' }, divider: { showType: DividerShowType.OFF } } })
+      .hideTitleBar(true)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.VIDEO) {

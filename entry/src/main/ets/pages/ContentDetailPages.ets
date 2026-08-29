@@ -165,6 +165,7 @@ struct ContentDetailPage {
     Stack({ alignContent: Alignment.TopStart }) {
       Column() {
         if (!this.immersiveReading) {
+          this.pageHeader()
         }
         if (this.phase === ContentDetailPhase.LOADING || this.phase === ContentDetailPhase.IDLE) {
           this.statusPanel('正在加载内容…', false)
