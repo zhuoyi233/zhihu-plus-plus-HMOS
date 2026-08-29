@@ -249,7 +249,8 @@ export class PinDetailController {
       await this.openedContentStore.upsert({
         contentKey: `pin:${pin.id}`,
         openedAt: Date.now(),
-        contentType: 'pin'
+        contentType: 'pin',
+        title: pinHistoryExcerpt(pin.contentHtml)
       });
     } catch (_error) {
       if (this.isCurrent(generation)) {
@@ -273,6 +274,17 @@ export class PinDetailController {
 export function readOnlyDetailRequiresLogin(error: Object): boolean {
   return error instanceof HttpFailure && error.kind === HttpFailureKind.AUTHENTICATION &&
     (error.status === undefined || error.status === 401);
+}
+
+const PIN_HISTORY_EXCERPT_MAX_LENGTH = 50;
+
+/** 历史页展示用想法摘要：去掉标签与多余空白，超长截断。想法没有标题字段，以正文开头代替。 */
+export function pinHistoryExcerpt(html: string): string {
+  const plain = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  if (plain.length <= PIN_HISTORY_EXCERPT_MAX_LENGTH) {
+    return plain;
+  }
+  return plain.substring(0, PIN_HISTORY_EXCERPT_MAX_LENGTH) + '…';
 }
 
 export function peoplePinErrorMessage(error: Object, label: string): string {

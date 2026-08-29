@@ -125,6 +125,14 @@ export default function readHistoryStateTest(): void {
         .assertUndefined();
     });
 
+    it('passesStoredTitleThroughForDisplay', 0, () => {
+      const titled = decodeReadHistoryItem(
+        { contentKey: 'answer:9', contentType: 'answer', openedAt: 3, title: '如何修复历史标题' });
+      expect(titled?.title).assertEqual('如何修复历史标题');
+      const untitled = decodeReadHistoryItem({ contentKey: 'answer:9', contentType: 'answer', openedAt: 3 });
+      expect(untitled?.title ?? '').assertEqual('');
+    });
+
     it('filtersCorruptRowsAndPublishesReadyHistory', 0, async () => {
       const history = new FakeReadHistory();
       history.items = [

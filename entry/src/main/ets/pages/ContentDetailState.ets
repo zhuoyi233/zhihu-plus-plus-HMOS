@@ -160,6 +160,18 @@ export class ContentDetailController {
     }
   }
 
+  /** 历史记录展示标题：回答用问题标题，问题/文章用自身标题；缺失时为空串，由列表页回退显示。 */
+  private recordTitle(content: LoadedContentDetail): string {
+    switch (content.kind) {
+      case ContentDetailKind.QUESTION:
+        return content.value.title;
+      case ContentDetailKind.ANSWER:
+        return content.value.questionTitle ?? '';
+      case ContentDetailKind.ARTICLE:
+        return content.value.title;
+    }
+  }
+
   private async recordOpenIfConfigured(content: LoadedContentDetail, generation: number): Promise<void> {
     const store = this.openedContentStore;
     if (store === undefined) {
@@ -169,7 +181,8 @@ export class ContentDetailController {
       await store.upsert({
         contentKey: contentDetailIdentity(content.kind, content.value.id),
         openedAt: Date.now(),
-        contentType: content.kind
+        contentType: content.kind,
+        title: this.recordTitle(content)
       });
       if (this.isCurrent(generation)) {
         this.openedRecordPhase = OpenedRecordPhase.RECORDED;

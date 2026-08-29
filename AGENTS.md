@@ -58,11 +58,19 @@ $hdc = "hdc"
 - **永不 push**，所有提交仅本地；远端 `origin/dev` 落后属正常。
 - 提交风格：`<type>(harmony): <中文>`，如 `fix(harmony): 修复搜索响应解析`。
 - 提交前检查：`git status` 干净（build-profile.json5 因 skip-worktree 不参与提交）、无临时文件（`.tmp_*` 等）。
+- 版本号映射：`versionCode` 由 `versionName` 按固定公式推导，二者在 `AppScope/app.json5` 一并更新：
+  `versionCode = (主版本号 + 1) × 1000000 + 次版本号 × 100 + 修订号`（如 `0.2.1 → 1000201`，
+  `0.3.0 → 1000300`，`1.0.0 → 2000000`）。鸿蒙官方仅要求 versionCode 整数且逐版递增（AGC 规则），
+  本公式为本仓库约定；历史 tag（HMOSv0.1.0/0.2.0）的 versionCode 是早期占位值，不回改。
+  之后只需提供 versionName 时，agent 按此公式自行补全 versionCode，无需再询问。
 - 版本 tag：仅用 `HMOSv<versionName>`（如 `HMOSv0.2.1`，与 `AppScope/app.json5` 的 `versionName` 一致）。
   发版顺序：改 `versionName`/`versionCode` → 完整验证 → 提交（`chore(harmony): 应用版本号升至 x.y.z`）→
   附注 tag（`git tag -a HMOSv0.2.1 -m "<一句里程碑中文摘要>"`）→ 推送仅在用户明确要求时执行
   （`git push origin dev` + 显式列出 HMOS tag）。仓库继承的上游 `0.x`/`nightly` tag 是 zly2006 的
   发布记录，**不要推送**，远端只保留 `HMOS*` tag。
+- 发布产物命名：`ZhihuPlusPlus-HMOS-v<version>-unsigned.hap`（如 `ZhihuPlusPlus-HMOS-v0.2.0-unsigned.hap`）。
+  `verify-harmony.ps1` 构建校验通过后会自动从 `entry-default-unsigned/signed.hap` 复制出该命名的
+  产物（同目录，含 `-signed` 后缀版），无需手动重命名；签名包仅限本机调试，不要分发。
 
 ## ArkTS / ArkUI 代码约束
 

@@ -327,7 +327,7 @@ export struct ChannelFeedPage {
 
           // 对齐上游 FeedCardMenuBox：右上角紧凑“更多”符号图标，屏蔽等操作收进菜单。
           Button({ type: ButtonType.Normal, stateEffect: true }) {
-            SymbolGlyph($r('sys.symbol.more'))
+            SymbolGlyph($r('sys.symbol.ellipsis_circle'))
               .fontSize(18)
               .fontColor([$r('app.color.secondary_text')])
           }

@@ -79,7 +79,7 @@ export default class EntryAbility extends UIAbility {
     const mainWindow = windowStage.getMainWindowSync();
     this.configureImmersiveWindow(mainWindow);
     mainWindow.on('windowSizeChange', (): void => this.configureImmersiveWindow(mainWindow));
-    mainWindow.on('avoidAreaChange', (data): void => {
+    mainWindow.on('avoidAreaChange', (data: window.AvoidAreaOptions): void => {
       if (data.type === window.AvoidAreaType.TYPE_SYSTEM ||
         data.type === window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR) {
         this.publishAvoidArea(data.type, data.area);
@@ -118,6 +118,23 @@ export default class EntryAbility extends UIAbility {
       if (error.code) {
         AppLogger.failure(AppLogEvent.CONTENT_LOAD_FAILED, error.code);
         return;
+      }
+      // 完全沉浸：窗口全屏布局，彻底移除状态栏/导航条避让区（布局直达物理底边）；
+      // 状态栏高度存入 AppStorage，由 P1Shell 根 Navigation 统一做顶部补偿。
+      try {
+        const mainWindow = windowStage.getMainWindowSync();
+        mainWindow.setWindowLayoutFullScreen(true).catch((_error: Error): void => {
+        });
+        mainWindow.setWindowSystemBarProperties({
+          navigationBarColor: '#00000000'
+        }).catch((_error: Error): void => {
+        });
+        const statusArea = mainWindow.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
+        const density = display.getDefaultDisplaySync().densityPixels;
+        if (density > 0) {
+          AppStorage.setOrCreate('statusBarHeightVp', statusArea.topRect.height / density);
+        }
+      } catch (_error) {
       }
       this.startup?.runDeferred();
     });

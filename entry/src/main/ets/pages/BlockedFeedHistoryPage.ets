@@ -166,7 +166,7 @@ export struct BlockedFeedHistoryPage {
         .fontColor($r('app.color.primary_text'))
         .layoutWeight(1)
       Button({ type: ButtonType.Normal, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.more'))
+        SymbolGlyph($r('sys.symbol.ellipsis_circle'))
           .fontSize(20)
           .fontColor([$r('app.color.primary_text')])
       }

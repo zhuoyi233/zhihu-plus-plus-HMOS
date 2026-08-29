@@ -217,7 +217,7 @@ export struct CollectionPage {
           .fontSize($r('app.float.p1_caption_font_size'))
           .fontColor($r('app.color.secondary_text'))
         Button({ type: ButtonType.Normal, stateEffect: true }) {
-          SymbolGlyph($r('sys.symbol.more'))
+          SymbolGlyph($r('sys.symbol.ellipsis_circle'))
             .fontSize(20)
             .fontColor([$r('app.color.primary_text')])
         }

@@ -20,7 +20,8 @@ import {
 import {
   PeopleDetailController,
   PinDetailController,
-  ReadOnlyDetailPhase
+  ReadOnlyDetailPhase,
+  pinHistoryExcerpt
 } from '../main/ets/pages/PeoplePinDetailState';
 import { PeopleContentController, PeopleContentPhase } from '../main/ets/pages/PeopleContentState';
 import { parseZhihuHtml, ReaderInlineKind } from 'reader';
@@ -140,6 +141,13 @@ class FixedPeopleContentRepository implements PeopleContentRepository {
 
 export default function peoplePinDetailStateTest(): void {
   describe('peoplePinDetailStateTest', () => {
+    it('buildsPinHistoryExcerptFromPlainText', 0, () => {
+      expect(pinHistoryExcerpt('<p>今天天气  不错。</p>')).assertEqual('今天天气 不错。');
+      expect(pinHistoryExcerpt('<p>短想法</p><p>第二段</p>')).assertEqual('短想法 第二段');
+      const longSentence = '这是一条特别长的想法内容，用来验证超出截断长度时会追加省略号。'.repeat(3);
+      expect(pinHistoryExcerpt(`<p>${longSentence}</p>`)).assertEqual(longSentence.substring(0, 50) + '…');
+      expect(pinHistoryExcerpt('<p></p>')).assertEqual('');
+    });
     it('gatesBothDetailsBeforeNetworkWhenSessionIsGuest', 0, async () => {
       const peopleRepository = new ControlledPeopleRepository();
       const pinRepository = new FixedPinRepository();

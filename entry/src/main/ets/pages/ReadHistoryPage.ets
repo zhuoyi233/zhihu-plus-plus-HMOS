@@ -239,7 +239,7 @@ export struct ReadHistoryPage {
       .backgroundColor(Color.Transparent)
       .accessibilityText('返回')
       .onClick((): void => this.onBack())
-      Text('已读记录')
+      Text('历史')
         .fontSize($r('app.float.p1_heading_font_size'))
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.primary_text'))
@@ -259,7 +259,7 @@ export struct ReadHistoryPage {
         this.sourceFilterSheetShown = true;
       })
       Button({ type: ButtonType.Normal, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.more'))
+        SymbolGlyph($r('sys.symbol.ellipsis_circle'))
           .fontSize(20)
           .fontColor([$r('app.color.primary_text')])
       }
@@ -417,7 +417,7 @@ export struct ReadHistoryPage {
       .onClick((): void => this.onOpen(readHistoryOpenTarget(item)))
       if (item.deletable) {
         Button({ type: ButtonType.Normal, stateEffect: true }) {
-          SymbolGlyph($r('sys.symbol.more'))
+          SymbolGlyph($r('sys.symbol.ellipsis_circle'))
             .fontSize(20)
             .fontColor([$r('app.color.primary_text')])
         }
