@@ -584,17 +584,8 @@ export struct P1Shell {
           if (this.hasSettingsSearchQuery()) {
             this.settingsSearchResults()
           } else {
-          Text('账号')
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .width('100%')
-          Column() {
-            AppNavigationRow({ title: '账号与登录', description: this.accountSummary(), testId: 'p2_open_login', grouped: true,
-              onRowClick: (): void => this.navigate({ name: P1DestinationName.LOGIN }) });
-          }
-          .width('100%')
-          .borderRadius($r('app.float.p1_card_radius'))
-          .backgroundColor($r('app.color.surface_background'))
+            this.accountOverview()
+            this.accountQuickActions()
 
           Text('创作')
             .fontSize($r('app.float.p1_secondary_font_size'))
@@ -788,6 +779,122 @@ export struct P1Shell {
     .height('100%')
     .alignContent(Alignment.TopStart)
     .backgroundColor($r('app.color.page_background'))
+  }
+
+  @Builder
+  private accountOverview() {
+    Button({ type: ButtonType.Normal, stateEffect: true }) {
+      Row({ space: $r('app.float.p1_spacing_medium') }) {
+        Text(this.accountAvatarLetter())
+          .id('p3_account_overview_avatar')
+          .width(56)
+          .height(56)
+          .borderRadius(28)
+          .backgroundColor($r('app.color.brand_primary_container'))
+          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.brand_primary'))
+          .textAlign(TextAlign.Center)
+        Column({ space: $r('app.float.p1_spacing_xsmall') }) {
+          Text(this.accountTitle())
+            .id('p3_account_overview_title')
+            .fontSize($r('app.float.p1_heading_font_size'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.primary_text'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width('100%')
+          Text(this.accountSummary())
+            .id('p3_account_overview_summary')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width('100%')
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        SymbolGlyph($r('sys.symbol.chevron_right'))
+          .fontSize(16)
+          .fontColor([$r('app.color.secondary_text')])
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+    }
+    .id('p2_open_login')
+    .width('100%')
+    .padding($r('app.float.p1_card_padding'))
+    .borderRadius($r('app.float.p1_card_radius'))
+    .backgroundColor($r('app.color.surface_background'))
+    .accessibilityText('账号与登录')
+    .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
+  }
+
+  @Builder
+  private accountQuickActions() {
+    Row({ space: $r('app.float.p1_spacing_small') }) {
+      Button({ type: ButtonType.Normal, stateEffect: true }) {
+        Column({ space: $r('app.float.p1_spacing_xsmall') }) {
+          SymbolGlyph($r('sys.symbol.bookmark'))
+            .fontSize(20)
+            .fontColor([$r('app.color.brand_primary')])
+          Text('收藏夹')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.primary_text'))
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Center)
+      }
+      .id('p3_account_quick_collections')
+      .layoutWeight(1)
+      .height(72)
+      .backgroundColor($r('app.color.surface_background'))
+      .borderRadius($r('app.float.p1_card_radius'))
+      .accessibilityText('打开我的收藏夹')
+      .onClick((): void => this.openMyCollections())
+
+      Button({ type: ButtonType.Normal, stateEffect: true }) {
+        Column({ space: $r('app.float.p1_spacing_xsmall') }) {
+          SymbolGlyph($r('sys.symbol.line_3_horizontal'))
+            .fontSize(20)
+            .fontColor([$r('app.color.brand_primary')])
+          Text('已读记录')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.primary_text'))
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Center)
+      }
+      .id('p3_account_quick_history')
+      .layoutWeight(1)
+      .height(72)
+      .backgroundColor($r('app.color.surface_background'))
+      .borderRadius($r('app.float.p1_card_radius'))
+      .accessibilityText('打开已读记录')
+      .onClick((): void => this.navigate({ name: P1DestinationName.READ_HISTORY }))
+
+      Button({ type: ButtonType.Normal, stateEffect: true }) {
+        Column({ space: $r('app.float.p1_spacing_xsmall') }) {
+          SymbolGlyph($r('sys.symbol.bell'))
+            .fontSize(20)
+            .fontColor([$r('app.color.brand_primary')])
+          Text('通知')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.primary_text'))
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Center)
+      }
+      .id('p3_account_quick_notifications')
+      .layoutWeight(1)
+      .height(72)
+      .backgroundColor($r('app.color.surface_background'))
+      .borderRadius($r('app.float.p1_card_radius'))
+      .accessibilityText('打开通知')
+      .onClick((): void => this.navigate({ name: P1DestinationName.NOTIFICATION }))
+    }
+    .id('p3_account_quick_actions')
+    .width('100%')
   }
 
   @Builder
@@ -1174,6 +1281,19 @@ export struct P1Shell {
     }
     const profileName = state.profile?.name.trim() ?? '';
     return profileName.length > 0 ? `已登录：${profileName}` : '已登录';
+  }
+
+  private accountTitle(): string {
+    const state = this.session?.getState();
+    if (state?.status !== SessionStatus.AUTHENTICATED) {
+      return '登录知乎';
+    }
+    const profileName = state.profile?.name.trim() ?? '';
+    return profileName.length > 0 ? profileName : '已登录账号';
+  }
+
+  private accountAvatarLetter(): string {
+    return this.accountTitle().charAt(0);
   }
 
   @Builder
