@@ -12,6 +12,8 @@ import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import bundleManager from '@ohos.bundle.bundleManager';
 import { Want } from '@kit.AbilityKit';
 import { hdsMaterial, HdsTabs, HdsTabsController } from '@kit.UIDesignKit';
+import { SymbolGlyphModifier } from '@kit.ArkUI';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import {
   decodeP1Destination,
@@ -28,6 +30,11 @@ import { AppNavigationRow, AppPageHeader } from './AppPageChrome';
 import { isP1TopLevelTabIndex, P1TopLevelTab, p1TopLevelTabForDestination } from './P1TopLevelTabs';
 
 const PROJECT_HOME_URI: string = 'https://github.com/zhuoyi233/zhihu-plus-plus-HMOS';
+
+interface TopLevelTabBarItem {
+  symbol: Resource;
+  label: string;
+}
 
 @Component
 export struct P1Shell {
@@ -108,6 +115,14 @@ export struct P1Shell {
   // 程序化切换（navigate 到顶级目的地）通过 @Watch 驱动 controller.changeIndex。
   @State @Watch('onTopLevelTabIndexChanged') private topLevelTabIndex: number = P1TopLevelTab.HOME;
   private readonly hdsTabsController: HdsTabsController = new HdsTabsController();
+  /** 首屏底栏页签：图标 + 文字，选中色为知乎蓝。 */
+  private readonly topLevelTabBarItems: Array<TopLevelTabBarItem> = [
+    { symbol: $r('sys.symbol.house'), label: '首页' },
+    { symbol: $r('sys.symbol.person_2'), label: '关注' },
+    { symbol: $r('sys.symbol.flame'), label: '热榜' },
+    { symbol: $r('sys.symbol.doc_text'), label: '日报' },
+    { symbol: $r('sys.symbol.person'), label: '我的' }
+  ];
   @Provide('p1PathStack') pathStack: NavPathStack = new NavPathStack();
   private unsubscribeStartupDestination: (() => void) | undefined = undefined;
   private readonly themeOperationGuard: LatestOperationGuard = new LatestOperationGuard();
@@ -123,6 +138,9 @@ export struct P1Shell {
       this.navigate(destination);
     };
     this.unsubscribeStartupDestination = startupDestinationChannel.subscribe(listener);
+    // 诊断：输出当前设备支持的沉浸材质类型（含 IMMERSIVE 即支持沉浸光感流动光效）。
+    hilog.info(0x0000, 'ImmersiveLight', 'systemMaterialTypes=%{public}s',
+      JSON.stringify(hdsMaterial.getSystemMaterialTypes()));
     // 每次启动静默检查 GitHub 最新 Release；失败不打扰，检出新版本时在“我的”页提示。
     void this.runUpdateCheck(false);
   }
@@ -540,32 +558,32 @@ export struct P1Shell {
           this.homeContent(this.homeReloadToken, (destination: P1Destination): void => this.navigate(destination));
         }
         .id('p1_top_level_home_content')
-        .tabBar('首页')
+        .tabBar(this.bottomTabBar(0))
 
         TabContent() {
           this.followingContent(this.followingReloadToken,
             (destination: P1Destination): void => this.navigate(destination));
         }
         .id('p1_top_level_following_content')
-        .tabBar('关注')
+        .tabBar(this.bottomTabBar(1))
 
         TabContent() {
           this.hotContent(this.hotReloadToken, (destination: P1Destination): void => this.navigate(destination));
         }
         .id('p1_top_level_hot_content')
-        .tabBar('热榜')
+        .tabBar(this.bottomTabBar(2))
 
         TabContent() {
           this.dailyContent(this.dailyReloadToken, (destination: P1Destination): void => this.navigate(destination));
         }
         .id('p1_top_level_daily_content')
-        .tabBar('日报')
+        .tabBar(this.bottomTabBar(3))
 
         TabContent() {
           this.settingsPage();
         }
         .id('p1_top_level_account_content')
-        .tabBar('我的')
+        .tabBar(this.bottomTabBar(4))
       }
       .id('p1_top_level_tabs')
       .width('100%')
@@ -1461,6 +1479,18 @@ export struct P1Shell {
 
   private onTopLevelTabIndexChanged(): void {
     this.hdsTabsController.changeIndex(this.topLevelTabIndex);
+  }
+
+  /** 底栏页签样式：图标随选中态着色（知乎蓝/灰），文字同色。 */
+  private bottomTabBar(index: number): BottomTabBarStyle {
+    const item = this.topLevelTabBarItems[index];
+    return new BottomTabBarStyle({
+      normal: new SymbolGlyphModifier(item.symbol).fontColor([$r('app.color.secondary_text')]),
+      selected: new SymbolGlyphModifier(item.symbol).fontColor([$r('app.color.zhihu_blue')])
+    }, item.label).labelStyle({
+      selectedColor: $r('app.color.zhihu_blue'),
+      unselectedColor: $r('app.color.secondary_text')
+    });
   }
 
   private navigate(destination: P1Destination): void {
