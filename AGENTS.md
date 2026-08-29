@@ -64,7 +64,8 @@ $hdc = "hdc"
   （`git push origin dev` + 显式列出 HMOS tag）。仓库继承的上游 `0.x`/`nightly` tag 是 zly2006 的
   发布记录，**不要推送**，远端只保留 `HMOS*` tag。
 - 发布产物命名：`ZhihuPlusPlus-HMOS-v<version>-unsigned.hap`（如 `ZhihuPlusPlus-HMOS-v0.2.0-unsigned.hap`）。
-  构建产出的 `entry-default-unsigned.hap` 上传 GitHub Release 前按此重命名；签名包同理用 `-signed` 后缀。
+  `verify-harmony.ps1` 构建校验通过后会自动从 `entry-default-unsigned/signed.hap` 复制出该命名的
+  产物（同目录，含 `-signed` 后缀版），无需手动重命名；签名包仅限本机调试，不要分发。
 
 ## ArkTS / ArkUI 代码约束
 

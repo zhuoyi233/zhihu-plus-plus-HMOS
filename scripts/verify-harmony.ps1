@@ -183,6 +183,36 @@ function Get-RegisteredTestCount {
   return $testCount
 }
 
+function Copy-ReleaseArtifacts {
+  param(
+    [string]$HapDirectory,
+    [string]$AppManifestPath
+  )
+
+  # 按发布命名规范产出 ZhihuPlusPlus-HMOS-v<versionName>-{unsigned,signed}.hap（见 AGENTS.md）。
+  $manifest = Get-Content -LiteralPath $AppManifestPath -Raw
+  $versionMatch = [regex]::Match($manifest, '"versionName"\s*:\s*"([^"]+)"')
+  if (-not $versionMatch.Success) {
+    throw "无法从 $AppManifestPath 解析 versionName。"
+  }
+  $versionName = $versionMatch.Groups[1].Value
+  $copied = @()
+  foreach ($suffix in @('unsigned', 'signed')) {
+    $source = Join-Path $HapDirectory "entry-default-$suffix.hap"
+    if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+      continue
+    }
+    $target = Join-Path $HapDirectory "ZhihuPlusPlus-HMOS-v$versionName-$suffix.hap"
+    Copy-Item -LiteralPath $source -Destination $target -Force
+    $copied += (Split-Path -Leaf $target)
+  }
+  if ($copied.Count -eq 0) {
+    Write-Host '发布产物：输出目录没有 HAP，跳过重命名复制。'
+    return
+  }
+  Write-Host "发布产物：$($copied -join '、')"
+}
+
 function Assert-HapApiVersions {
   param(
     [string]$HapPath,
@@ -378,6 +408,10 @@ try {
     $passed -ne $requiredTestCount -or $successEntries -ne $requiredTestCount) {
     throw "Hypium 未全量通过：Pass=$passed Failure=$failures Error=$errors Ignore=$ignored。"
   }
+
+  Copy-ReleaseArtifacts `
+    -HapDirectory (Join-Path $script:RepositoryRoot "entry\build\$($script:Product)\outputs\$($script:Product)") `
+    -AppManifestPath (Join-Path $script:RepositoryRoot 'AppScope\app.json5')
 
   Write-Host "HarmonyOS 迁移验证通过：API $ExpectedCompileApiVersion 编译，target=$ExpectedTargetSdkVersion，compatible=$ExpectedCompatibleSdkVersion，Hypium $passed/$requiredTestCount。"
   Write-Host "测试报告：$testResultPath"
