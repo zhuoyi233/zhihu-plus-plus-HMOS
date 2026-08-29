@@ -67,6 +67,8 @@ $hdc = "hdc"
 - 无 `TextEncoder`：用 `data` 模块 `Utf8.ets` 的 `utf8Encode`。
 - 图标用鸿蒙官方 Symbol：`SymbolGlyph($r('sys.symbol.xxx'))`（如 `more`/`arrow_up`/
   `bookmark`/`message`），名称以官方符号库为准，勿猜（`ellipsis` 等不存在）。
+  符号库：https://developer.huawei.com/consumer/cn/design/harmonyos-symbol ；
+  使用说明：https://developer.huawei.com/consumer/cn/doc/design-guides/system-icons-0000001929854962 。
 - ArkWeb（Web 组件）：`setUserAgentForHosts` 是**静态方法**；清 cookie 用
   `WebCookieManager.clearAllCookiesSync()`；登录/风控页用默认移动 UA（桌面 UA 会让页面
   按桌面视口渲染、字体过小）。
