@@ -71,28 +71,6 @@ export struct CollectionPage {
   build() {
     Stack({ alignContent: Alignment.BottomEnd }) {
       Column({ space: $r('app.float.p1_spacing_medium') }) {
-        Row({ space: $r('app.float.p1_spacing_small') }) {
-          Button({ type: ButtonType.Normal, stateEffect: true }) {
-            SymbolGlyph($r('sys.symbol.chevron_left'))
-              .fontSize(20)
-              .fontColor([$r('app.color.primary_text')])
-          }
-            .id('p3_collections_back')
-            .width(40)
-            .height(40)
-            .padding(0)
-            .backgroundColor(Color.Transparent)
-            .accessibilityText('返回')
-            .onClick((): void => this.onBack())
-          Text('收藏夹')
-            .id('p3_collections_title')
-            .fontSize($r('app.float.p1_heading_font_size'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.primary_text'))
-            .layoutWeight(1)
-        }
-        .width('100%')
-
         if (this.phase === CollectionPhase.IDLE || this.phase === CollectionPhase.LOADING) {
           this.statusPanel('正在加载收藏夹…', false, 'p3_collections_loading')
         } else if (this.phase === CollectionPhase.ERROR) {
@@ -142,6 +120,7 @@ export struct CollectionPage {
           }
           .id('p3_collections_list')
           .width('100%')
+          .scrollBar(BarState.Off)
           .layoutWeight(1)
           .edgeEffect(EdgeEffect.Spring)
           .onReachEnd(() => this.controller?.loadMore())
@@ -154,7 +133,7 @@ export struct CollectionPage {
       .padding({
         left: $r('app.float.p1_page_padding'),
         right: $r('app.float.p1_page_padding'),
-        top: $r('app.float.p1_spacing_medium'),
+        top: 94,
         bottom: $r('app.float.p1_page_padding')
       })
       .backgroundColor($r('app.color.page_background'))

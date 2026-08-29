@@ -194,12 +194,13 @@ struct Index {
           session: this.session,
           homeContent: (reloadToken: number, navigate: (destination: P1Destination) => void): void =>
             this.homeContent(reloadToken, navigate),
-          followingContent: (reloadToken: number, navigate: (destination: P1Destination) => void): void =>
-            this.followingContent(reloadToken, navigate),
+          followingContent: (reloadToken: number, navigate: (destination: P1Destination) => void,
+            selectedTabIndex: number): void => this.followingContent(reloadToken, navigate, selectedTabIndex),
           hotContent: (reloadToken: number, navigate: (destination: P1Destination) => void): void =>
             this.hotContent(reloadToken, navigate),
-          dailyContent: (reloadToken: number, navigate: (destination: P1Destination) => void): void =>
-            this.dailyContent(reloadToken, navigate),
+          dailyContent: (reloadToken: number, dateCursor: string,
+            navigate: (destination: P1Destination) => void): void =>
+            this.dailyContent(reloadToken, dateCursor, navigate),
           dailyStoryContent: (id: string, navigate: (destination: P1Destination) => void): void =>
             this.dailyStoryContent(id, navigate),
           searchContent: (query: string, navigate: (destination: P1Destination) => void, onBack: () => void): void =>
@@ -268,11 +269,13 @@ struct Index {
   }
 
   @Builder
-  followingContent(reloadToken: number, navigate: (destination: P1Destination) => void) {
+  followingContent(reloadToken: number, navigate: (destination: P1Destination) => void,
+    selectedTabIndex: number) {
     FollowingFeedPage({
       recommendRepository: this.followingRecommendRepository,
       dynamicRepository: this.followingRepository,
       reloadToken: reloadToken,
+      selectedTabIndex: selectedTabIndex,
       navigate: navigate,
       rules: this.blockingRuleStore,
       history: this.blockedFeedHistoryStore
@@ -292,12 +295,14 @@ struct Index {
   }
 
   @Builder
-  dailyContent(reloadToken: number, navigate: (destination: P1Destination) => void) {
+  dailyContent(reloadToken: number, dateCursor: string,
+    navigate: (destination: P1Destination) => void) {
     ChannelFeedPage({
       source: ChannelFeedSource.DAILY,
       repository: this.dailyRepository,
       dailyStoryRepository: this.dailyStoryRepository,
       reloadToken: reloadToken,
+      dateCursor: dateCursor,
       navigate: navigate,
       rules: this.blockingRuleStore,
       history: this.blockedFeedHistoryStore

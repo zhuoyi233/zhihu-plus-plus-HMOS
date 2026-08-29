@@ -17,6 +17,7 @@ export struct ImageProbe {
     Stack({ alignContent: Alignment.Center }) {
       Scroll() {
         Column({ space: 20 }) {
+          Blank().height(64)
           Row({ space: 12 }) {
             Button('返回')
               .id('image_back')
@@ -115,6 +116,7 @@ export struct ImageProbe {
         .padding(20)
         .alignItems(HorizontalAlign.Start)
       }
+      .scrollBar(BarState.Off)
       .width('100%')
       .height('100%')
 

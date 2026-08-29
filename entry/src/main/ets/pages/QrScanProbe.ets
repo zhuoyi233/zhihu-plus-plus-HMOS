@@ -48,6 +48,7 @@ export struct QrScanProbePage {
   build() {
     Scroll() {
       Column({ space: 16 }) {
+        Blank().height(64)
         Button('返回')
           .id('qr_scan_back')
           .onClick(() => this.onBack())
@@ -108,6 +109,7 @@ export struct QrScanProbePage {
       .width('100%')
       .padding(24)
     }
+    .scrollBar(BarState.Off)
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.page_background'))

@@ -188,7 +188,7 @@ export default function channelFeedRepositoryTest(): void {
         'https://daily.zhihu.com/api/4/stories/latest'
       );
       expect(buildChannelFeedRequestUrl(ChannelFeedSource.DAILY, '20260810')).assertEqual(
-        'https://daily.zhihu.com/api/4/stories/before/20260810'
+        'https://daily.zhihu.com/api/4/stories/before/20260811'
       );
       expect(canonicalChannelFeedCursorKey(
         ChannelFeedSource.FOLLOWING,
@@ -345,7 +345,7 @@ export default function channelFeedRepositoryTest(): void {
 
       const selectedDate = await repository.loadPage(ChannelFeedSource.DAILY, '20260810', true);
       expect(selectedDate.items.length).assertEqual(1);
-      expect(factory.requests[2].url).assertEqual('https://daily.zhihu.com/api/4/stories/before/20260810');
+        expect(factory.requests[2].url).assertEqual('https://daily.zhihu.com/api/4/stories/before/20260811');
     });
 
     it('fallsBackOnlyWhenPrimaryHostResolutionFails', 0, async () => {

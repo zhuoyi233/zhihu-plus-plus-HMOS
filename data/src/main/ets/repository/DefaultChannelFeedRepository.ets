@@ -83,7 +83,11 @@ export function buildChannelFeedRequestUrl(source: ChannelFeedSource, cursor?: s
     if (!isDailyFeedDateCursor(cursor)) {
       throw new ChannelFeedRepositoryFailure(ChannelFeedRepositoryFailureKind.INVALID_CURSOR);
     }
-    return `${DAILY_PRIMARY_BASE_URL}/before/${cursor}`;
+    // The Zhihu Daily endpoint is exclusive: /before/YYYYMMDD returns the
+    // edition before that date. Add one day so a user-selected date is the
+    // edition rendered by the first page; subsequent cursors are returned by
+    // the API and continue to work unchanged.
+    return `${DAILY_PRIMARY_BASE_URL}/before/${dailyBeforeCursor(cursor)}`;
   }
   const sourceUrl = cursor ?? contentBaseUrl(source);
   if (cursor !== undefined && !isChannelFeedCursorUrl(source, cursor)) {
@@ -118,6 +122,16 @@ export function buildChannelFeedRequestUrl(source: ChannelFeedSource, cursor?: s
   });
   preservedParts.push(CHANNEL_INCLUDE_QUERY);
   return `${baseUrl}?${preservedParts.join('&')}`;
+}
+
+function dailyBeforeCursor(cursor: string): string {
+  const year: number = Number(cursor.substring(0, 4));
+  const month: number = Number(cursor.substring(4, 6));
+  const day: number = Number(cursor.substring(6, 8));
+  const next: Date = new Date(year, month - 1, day + 1);
+  const nextMonth: string = `${next.getMonth() + 1}`.padStart(2, '0');
+  const nextDay: string = `${next.getDate()}`.padStart(2, '0');
+  return `${next.getFullYear()}${nextMonth}${nextDay}`;
 }
 
 export function canonicalChannelFeedCursorKey(source: ChannelFeedSource, cursor?: string): string {

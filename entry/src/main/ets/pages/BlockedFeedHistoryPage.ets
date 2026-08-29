@@ -56,7 +56,6 @@ export struct BlockedFeedHistoryPage {
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       Column({ space: $r('app.float.p1_spacing_medium') }) {
-        this.pageHeader()
         Text('只保存在本机；记录你屏蔽过的作者、关键词和话题，不保存正文或账号信息。')
           .id('p3_blocked_feed_history_privacy')
           .fontSize($r('app.float.p1_caption_font_size'))
@@ -104,11 +103,13 @@ export struct BlockedFeedHistoryPage {
           .id('p3_blocked_feed_history_list')
           .layoutWeight(1)
           .width('100%')
+          .scrollBar(BarState.Off)
         }
       }
       .width('100%')
       .height('100%')
-      .padding($r('app.float.p1_page_padding'))
+      .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
+        top: 94, bottom: $r('app.float.p1_page_padding') })
       .backgroundColor($r('app.color.page_background'))
 
       Column()

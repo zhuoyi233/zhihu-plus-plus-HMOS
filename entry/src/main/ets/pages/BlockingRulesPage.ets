@@ -89,7 +89,6 @@ export struct BlockingRulesPage {
   build() {
     Stack({ alignContent: Alignment.BottomEnd }) {
       Column({ space: $r('app.float.p1_spacing_medium') }) {
-        this.pageHeader()
         this.preferencesPanel()
         this.tabBar()
         if (this.viewState.phase === BlockingRulesPhase.LOADING && this.currentRuleCount() === 0) {
@@ -111,7 +110,8 @@ export struct BlockingRulesPage {
       .alignItems(HorizontalAlign.Start)
       .width('100%')
       .height('100%')
-      .padding($r('app.float.p1_page_padding'))
+      .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
+        top: 94, bottom: $r('app.float.p1_page_padding') })
       .backgroundColor($r('app.color.page_background'))
 
       Button({ type: ButtonType.Normal, stateEffect: true }) {
@@ -545,6 +545,7 @@ export struct BlockingRulesPage {
         }
         .id('p2_blocking_keyword_list')
         .layoutWeight(1)
+        .scrollBar(BarState.Off)
       } else if (this.viewState.selectedKind === BlockingRuleKind.USER) {
         List({ space: 10 }) {
           ForEach(this.viewState.users, (rule: BlockedUserRule) => {
@@ -557,6 +558,7 @@ export struct BlockingRulesPage {
         }
         .id('p2_blocking_user_list')
         .layoutWeight(1)
+        .scrollBar(BarState.Off)
       } else {
         List({ space: 10 }) {
           ForEach(this.viewState.topics, (rule: BlockedTopicRule) => {
@@ -569,6 +571,7 @@ export struct BlockingRulesPage {
         }
         .id('p2_blocking_topic_list')
         .layoutWeight(1)
+        .scrollBar(BarState.Off)
       }
     }
     .width('100%')

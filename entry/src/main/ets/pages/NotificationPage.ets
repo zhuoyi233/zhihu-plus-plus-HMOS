@@ -158,23 +158,6 @@ export struct NotificationPage {
   build() {
     Column({ space: $r('app.float.p1_spacing_medium') }) {
       Row({ space: $r('app.float.p1_spacing_small') }) {
-        Button({ type: ButtonType.Normal, stateEffect: true }) {
-          SymbolGlyph($r('sys.symbol.chevron_left'))
-            .fontSize(20)
-            .fontColor([$r('app.color.primary_text')])
-        }
-          .id('p3_notifications_back')
-          .width(40)
-          .height(40)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .accessibilityText('返回')
-          .onClick((): void => this.onBack())
-        Text('通知')
-          .fontSize($r('app.float.p1_heading_font_size'))
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.primary_text'))
-          .layoutWeight(1)
         if (this.unreadTotal > 0) {
           Button({ type: ButtonType.Normal, stateEffect: true }) {
             SymbolGlyph($r('sys.symbol.checkmark'))
@@ -259,6 +242,7 @@ export struct NotificationPage {
         .id('p3_notifications_list')
         .width('100%')
         .layoutWeight(1)
+        .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
         .onReachEnd(() => this.controller?.loadMore())
       }
@@ -270,7 +254,7 @@ export struct NotificationPage {
     .padding({
       left: $r('app.float.p1_page_padding'),
       right: $r('app.float.p1_page_padding'),
-      top: $r('app.float.p1_spacing_medium'),
+      top: 94,
       bottom: $r('app.float.p1_page_padding')
     })
     .backgroundColor($r('app.color.page_background'))
