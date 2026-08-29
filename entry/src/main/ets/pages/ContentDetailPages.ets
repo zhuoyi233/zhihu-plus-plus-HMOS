@@ -46,6 +46,9 @@ import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { createSystemShareService } from '../platform/SystemShareService';
 import { ShareOutcome, SharePayloadKind, ShareTextPayload } from '../platform/ShareContracts';
 
+/** 悬浮操作栏的正文预留高度：胶囊 44vp + 底部间距 12vp + 呼吸空间。 */
+const DETAIL_FLOATING_BAR_RESERVE_VP = 88;
+
 @Component
 struct ContentDetailPage {
   kind: ContentDetailKind = ContentDetailKind.QUESTION;
@@ -163,16 +166,23 @@ struct ContentDetailPage {
         } else if (this.phase === ContentDetailPhase.ERROR) {
           this.statusPanel(this.errorMessage, true)
         } else if (this.content !== undefined) {
-          Column() {
-            // P3-9-B：顶栏作为占位（非覆盖），正文在其下方，避免作者行与标题/统计重叠。
-            if (!this.immersiveReading) {
-              this.detailTopBar(this.content)
-            }
+          // 沉浸光感风格：正文铺满、操作栏悬浮于底部之上（内容从两块胶囊下方穿透）。
+          Stack({ alignContent: Alignment.Bottom }) {
             Column() {
-              this.loadedContent(this.content)
+              // P3-9-B：顶栏作为占位（非覆盖），正文在其下方，避免作者行与标题/统计重叠。
+              if (!this.immersiveReading) {
+                this.detailTopBar(this.content)
+              }
+              Column() {
+                this.loadedContent(this.content)
+              }
+              .layoutWeight(1)
+              .width('100%')
+              .padding({ bottom: this.immersiveReading ? 0 : DETAIL_FLOATING_BAR_RESERVE_VP })
             }
-            .layoutWeight(1)
             .width('100%')
+            .height('100%')
+
             if (!this.immersiveReading) {
               this.bottomActionBar()
             }
@@ -543,36 +553,52 @@ struct ContentDetailPage {
 
   @Builder
   private bottomActionBar() {
-    Column() {
+    // 沉浸光感风格：左右两块悬浮胶囊（左=赞同/反对或关注，右=收藏/评论/更多或写回答），
+    // 使用系统组件模糊材质，正文从下方穿透；不再使用整条实底栏。
+    Column({ space: $r('app.float.p1_spacing_xsmall') }) {
       if (this.interactionErrorMessage.length > 0) {
         this.interactionStatusRow()
       }
-      Row({ space: 0 }) {
+      Row({ space: $r('app.float.p1_spacing_medium') }) {
         if (this.kind === ContentDetailKind.QUESTION) {
-          if (this.followController !== undefined) {
-            this.followQuestionAction()
+          Row({ space: 0 }) {
+            if (this.followController !== undefined) {
+              this.followQuestionAction()
+            }
           }
+          .borderRadius(24)
+          .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
+          .clip(true)
+
           Blank()
             .layoutWeight(1)
-          Button({ type: ButtonType.Normal }) {
-            SymbolGlyph($r('sys.symbol.more'))
-              .fontSize(22)
-              .fontColor([$r('app.color.secondary_text')])
+
+          Row({ space: 0 }) {
+            Button({ type: ButtonType.Normal }) {
+              SymbolGlyph($r('sys.symbol.ellipsis_circle'))
+                .fontSize(22)
+                .fontColor([$r('app.color.secondary_text')])
+            }
+            .id('p3_question_detail_more')
+            .width(44)
+            .height(44)
+            .backgroundColor(Color.Transparent)
+            .accessibilityText('更多问题操作')
+            .onClick((): void => {
+              this.actionMenuShown = true;
+            })
+            Button('写回答')
+              .id('p4_question_write_answer')
+              .height(44)
+              .fontSize($r('app.float.p1_secondary_font_size'))
+              .onClick((): void => this.openAnswerComposer())
           }
-          .id('p3_question_detail_more')
-          .width(50)
-          .height(50)
-          .backgroundColor(Color.Transparent)
-          .accessibilityText('更多问题操作')
-          .onClick((): void => {
-            this.actionMenuShown = true;
-          })
-          Button('写回答')
-            .id('p4_question_write_answer')
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .onClick((): void => this.openAnswerComposer())
+          .padding({ left: 8, right: 8 })
+          .borderRadius(24)
+          .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
+          .clip(true)
         } else {
-          // 左组：投票胶囊（赞同图标+数字 / 反对），对齐上游主视觉——
+          // 左块：投票胶囊（赞同图标+数字 / 反对），对齐上游主视觉——
           // Neutral 显示赞+踩（浅蓝底蓝字）；点赞同后反对隐藏、踩后赞同隐藏（实蓝底白字）。
           Row({ space: 0 }) {
             if (this.voteState !== ContentVoteState.DOWN) {
@@ -591,78 +617,83 @@ struct ContentDetailPage {
           Blank()
             .layoutWeight(1)
 
-          if (this.canEditExistingAnswer()) {
-            Button('编辑')
-              .id('p4_answer_edit_existing')
-              .fontSize($r('app.float.p1_secondary_font_size'))
-              .onClick((): void => this.openExistingAnswerEditor())
-          }
-
-          // 右组：收藏 + 评论 + 更多（对齐上游 bottomBar 右侧图标按钮）。
-          Button({ type: ButtonType.Normal }) {
-            SymbolGlyph($r('sys.symbol.bookmark'))
-              .fontSize(22)
-              .fontColor([$r('app.color.secondary_text')])
-          }
-          .id(`p3_${this.kind}_detail_favorite_bar`)
-          .width(50)
-          .height(50)
-          .backgroundColor(Color.Transparent)
-          .onClick((): void => {
-            if (this.collectionRepository !== undefined && this.session !== undefined) {
-              this.favoriteDialogShown = true;
-            } else {
-              this.navigate({ name: P1DestinationName.LOGIN });
+          // 右块：编辑(本人回答) + 收藏 + 评论 + 更多，悬浮模糊胶囊。
+          Row({ space: 0 }) {
+            if (this.canEditExistingAnswer()) {
+              Button('编辑')
+                .id('p4_answer_edit_existing')
+                .height(44)
+                .fontSize($r('app.float.p1_secondary_font_size'))
+                .onClick((): void => this.openExistingAnswerEditor())
             }
-          })
 
-          Button({ type: ButtonType.Normal }) {
-            Row({ space: 5 }) {
-              SymbolGlyph($r('sys.symbol.message'))
+            Button({ type: ButtonType.Normal }) {
+              SymbolGlyph($r('sys.symbol.bookmark'))
                 .fontSize(22)
                 .fontColor([$r('app.color.secondary_text')])
-              Text(`${this.content?.value.commentCount ?? 0}`)
-                .fontSize($r('app.float.p1_body_font_size'))
-                .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.secondary_text'))
             }
-            .padding({ left: 8, right: 8, top: 6, bottom: 6 })
-          }
-          .id(`p3_${this.kind}_detail_comment_bar`)
-          .backgroundColor(Color.Transparent)
-          .onClick((): void => {
-            if (this.commentRepository !== undefined && this.session !== undefined) {
-              this.showComments = true;
-            } else {
-              this.navigate({ name: P1DestinationName.LOGIN });
-            }
-          })
+            .id(`p3_${this.kind}_detail_favorite_bar`)
+            .width(44)
+            .height(44)
+            .backgroundColor(Color.Transparent)
+            .onClick((): void => {
+              if (this.collectionRepository !== undefined && this.session !== undefined) {
+                this.favoriteDialogShown = true;
+              } else {
+                this.navigate({ name: P1DestinationName.LOGIN });
+              }
+            })
 
-          Button({ type: ButtonType.Normal }) {
-            SymbolGlyph($r('sys.symbol.more'))
-              .fontSize(22)
-              .fontColor([$r('app.color.secondary_text')])
+            Button({ type: ButtonType.Normal }) {
+              Row({ space: 5 }) {
+                SymbolGlyph($r('sys.symbol.message'))
+                  .fontSize(22)
+                  .fontColor([$r('app.color.secondary_text')])
+                Text(`${this.content?.value.commentCount ?? 0}`)
+                  .fontSize($r('app.float.p1_body_font_size'))
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor($r('app.color.secondary_text'))
+              }
+              .padding({ left: 8, right: 8, top: 6, bottom: 6 })
+            }
+            .id(`p3_${this.kind}_detail_comment_bar`)
+            .height(44)
+            .backgroundColor(Color.Transparent)
+            .onClick((): void => {
+              if (this.commentRepository !== undefined && this.session !== undefined) {
+                this.showComments = true;
+              } else {
+                this.navigate({ name: P1DestinationName.LOGIN });
+              }
+            })
+
+            Button({ type: ButtonType.Normal }) {
+              SymbolGlyph($r('sys.symbol.ellipsis_circle'))
+                .fontSize(22)
+                .fontColor([$r('app.color.secondary_text')])
+            }
+            .id(`p3_${this.kind}_detail_more`)
+            .width(44)
+            .height(44)
+            .backgroundColor(Color.Transparent)
+            .onClick((): void => {
+              this.actionMenuShown = true;
+            })
           }
-          .id(`p3_${this.kind}_detail_more`)
-          .width(50)
-          .height(50)
-          .backgroundColor(Color.Transparent)
-          .onClick((): void => {
-            this.actionMenuShown = true;
-          })
+          .padding({ left: 8, right: 8 })
+          .borderRadius(24)
+          .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
+          .clip(true)
         }
       }
       .width('100%')
       .padding({
         left: $r('app.float.p1_page_padding'),
         right: $r('app.float.p1_page_padding'),
-        top: $r('app.float.p1_spacing_small'),
-        bottom: $r('app.float.p1_spacing_small')
+        bottom: 12
       })
     }
     .width('100%')
-    .backgroundColor($r('app.color.surface_background'))
-    .border({ width: { top: 0.5 }, color: $r('app.color.divider_color') })
     .zIndex(2)
     .hitTestBehavior(HitTestMode.Default)
   }
