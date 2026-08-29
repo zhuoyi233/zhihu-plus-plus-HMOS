@@ -89,43 +89,6 @@ export struct HomeFeedPage {
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       Column({ space: $r('app.float.p1_spacing_medium') }) {
-        Row({ space: $r('app.float.p1_spacing_small') }) {
-          Button({ type: ButtonType.Normal, stateEffect: true }) {
-            Row({ space: $r('app.float.p1_spacing_small') }) {
-              SymbolGlyph($r('sys.symbol.magnifyingglass'))
-                .fontSize(18)
-                .fontColor([$r('app.color.secondary_text')])
-              Text('搜索内容')
-                .fontSize($r('app.float.p1_body_font_size'))
-                .fontColor($r('app.color.secondary_text'))
-            }
-            .width('100%')
-            .alignItems(VerticalAlign.Center)
-          }
-            .id('p2_home_search')
-            .layoutWeight(1)
-            .padding($r('app.float.p1_spacing_small'))
-            .backgroundColor($r('app.color.control_background'))
-            .borderRadius($r('app.float.p1_card_radius'))
-            .accessibilityText('打开搜索')
-            .onClick(() => this.navigate({ name: P1DestinationName.SEARCH, query: '' }))
-
-          Button({ type: ButtonType.Normal, stateEffect: true }) {
-            SymbolGlyph($r('sys.symbol.bell'))
-              .fontSize(20)
-              .fontColor([$r('app.color.primary_text')])
-          }
-            .id('p2_home_notifications')
-            .width(40)
-            .height(40)
-            .padding(0)
-            .backgroundColor(Color.Transparent)
-            .accessibilityText('打开通知')
-            .onClick(() => this.navigate({ name: P1DestinationName.NOTIFICATION }))
-        }
-        .id('p2_home_top_actions')
-        .width('100%')
-
         if (this.phase === HomeFeedPhase.INITIAL_LOADING || this.phase === HomeFeedPhase.IDLE) {
           this.centeredStatus('正在加载首页…', false, 'p2_home_initial_loading');
         } else if (this.phase === HomeFeedPhase.ERROR) {
@@ -178,6 +141,8 @@ export struct HomeFeedPage {
             }
             .id('p2_home_feed_list')
             .width('100%')
+            .scrollBar(BarState.Off)
+            .padding({ top: 94 })
             .height('100%')
             .edgeEffect(EdgeEffect.Spring)
             .onReachEnd(() => this.controller?.loadMore())
@@ -208,7 +173,6 @@ export struct HomeFeedPage {
       .padding({
         left: $r('app.float.p1_page_padding'),
         right: $r('app.float.p1_page_padding'),
-        top: $r('app.float.p1_spacing_medium'),
         bottom: $r('app.float.p1_page_padding')
       })
     }

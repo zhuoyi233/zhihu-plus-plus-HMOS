@@ -85,19 +85,6 @@ export struct SearchPage {
   build() {
     Column({ space: $r('app.float.p1_spacing_medium') }) {
       Row({ space: $r('app.float.p1_spacing_small') }) {
-        Button({ type: ButtonType.Normal, stateEffect: true }) {
-          SymbolGlyph($r('sys.symbol.chevron_left'))
-            .fontSize(20)
-            .fontColor([$r('app.color.primary_text')])
-        }
-        .id('p2_search_back')
-        .width(40)
-        .height(40)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .accessibilityText('返回')
-        .onClick((): void => this.onBack())
-
         Row({ space: $r('app.float.p1_spacing_xsmall') }) {
           SymbolGlyph($r('sys.symbol.magnifyingglass'))
             .fontSize(18)
@@ -158,6 +145,7 @@ export struct SearchPage {
       }
       .id('p2_search_input_row')
       .width('100%')
+      .padding({ top: 94 })
 
       if (this.query.length > 0) {
         this.resultTabs();
@@ -233,6 +221,7 @@ export struct SearchPage {
         }
         .id('p2_search_result_list')
         .width('100%')
+        .scrollBar(BarState.Off)
         .layoutWeight(1)
         .edgeEffect(EdgeEffect.Spring)
         .onReachEnd(() => this.controller?.loadMore())
@@ -244,7 +233,6 @@ export struct SearchPage {
     .padding({
       left: $r('app.float.p1_page_padding'),
       right: $r('app.float.p1_page_padding'),
-      top: $r('app.float.p1_spacing_medium'),
       bottom: $r('app.float.p1_page_padding')
     })
     .backgroundColor($r('app.color.page_background'))

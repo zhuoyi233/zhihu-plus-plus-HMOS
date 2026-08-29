@@ -1,5 +1,5 @@
 import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
-import { window } from '@kit.ArkUI';
+import { display, window } from '@kit.ArkUI';
 import { AppSessionOwner, closeAppDatabase, getAppDatabase, getAppSessionOwner } from 'data';
 import { clearAbilityContext, setAbilityContext } from './AbilityContextHolder';
 import {
@@ -76,6 +76,15 @@ export default class EntryAbility extends UIAbility {
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
+    const mainWindow = windowStage.getMainWindowSync();
+    this.configureImmersiveWindow(mainWindow);
+    mainWindow.on('windowSizeChange', (): void => this.configureImmersiveWindow(mainWindow));
+    mainWindow.on('avoidAreaChange', (data: window.AvoidAreaOptions): void => {
+      if (data.type === window.AvoidAreaType.TYPE_SYSTEM ||
+        data.type === window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR) {
+        this.publishAvoidArea(data.type, data.area);
+      }
+    });
     this.loadContentAfterCriticalStartup(windowStage, this.lifecycleGeneration);
   }
 
@@ -110,6 +119,23 @@ export default class EntryAbility extends UIAbility {
         AppLogger.failure(AppLogEvent.CONTENT_LOAD_FAILED, error.code);
         return;
       }
+      // 完全沉浸：窗口全屏布局，彻底移除状态栏/导航条避让区（布局直达物理底边）；
+      // 状态栏高度存入 AppStorage，由 P1Shell 根 Navigation 统一做顶部补偿。
+      try {
+        const mainWindow = windowStage.getMainWindowSync();
+        mainWindow.setWindowLayoutFullScreen(true).catch((_error: Error): void => {
+        });
+        mainWindow.setWindowSystemBarProperties({
+          navigationBarColor: '#00000000'
+        }).catch((_error: Error): void => {
+        });
+        const statusArea = mainWindow.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
+        const density = display.getDefaultDisplaySync().densityPixels;
+        if (density > 0) {
+          AppStorage.setOrCreate('statusBarHeightVp', statusArea.topRect.height / density);
+        }
+      } catch (_error) {
+      }
       this.startup?.runDeferred();
     });
   }
@@ -125,5 +151,35 @@ export default class EntryAbility extends UIAbility {
     }
     startupDestinationChannel.publish(toP1Destination(destination));
     AppLogger.info(AppLogEvent.DEEP_LINK_RESOLVED);
+  }
+
+  private configureImmersiveWindow(mainWindow: window.Window): void {
+    mainWindow.setImmersiveModeEnabledState(true);
+    void mainWindow.setWindowSystemBarProperties({
+      navigationBarColor: '#00000000',
+      statusBarColor: '#00000000',
+      statusBarContentColor: '#000000',
+      isStatusBarLightIcon: true
+    });
+    this.publishAvoidAreas(mainWindow);
+  }
+
+  private publishAvoidAreas(mainWindow: window.Window): void {
+    const systemArea = mainWindow.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
+    const navigationArea = mainWindow.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR);
+    this.publishAvoidArea(window.AvoidAreaType.TYPE_SYSTEM, systemArea);
+    this.publishAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR, navigationArea);
+  }
+
+  private publishAvoidArea(type: window.AvoidAreaType, area: window.AvoidArea): void {
+    const density = display.getDefaultDisplaySync().densityPixels;
+    const safeDensity = density > 0 ? density : 1;
+    if (type === window.AvoidAreaType.TYPE_SYSTEM) {
+      const top = area.topRect.height / safeDensity;
+      AppStorage.setOrCreate('statusBarHeight', top);
+      AppStorage.setOrCreate('topRectHeight', top);
+      return;
+    }
+    AppStorage.setOrCreate('bottomRectHeight', area.bottomRect.height / safeDensity);
   }
 }

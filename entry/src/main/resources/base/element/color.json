@@ -47,6 +47,10 @@
     {
       "name": "divider_color",
       "value": "#E5E6EB"
+    },
+    {
+      "name": "zhihu_blue",
+      "value": "#0084FF"
     }
   ]
 }

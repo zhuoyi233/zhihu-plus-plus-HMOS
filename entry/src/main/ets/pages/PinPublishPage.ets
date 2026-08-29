@@ -276,7 +276,6 @@ export struct PinPublishPage {
 
   build() {
     Column({ space: $r('app.float.p1_spacing_medium') }) {
-      this.header()
       if (this.viewState.requiresLogin) {
         this.loginRequired()
       } else {
@@ -296,7 +295,8 @@ export struct PinPublishPage {
     .alignItems(HorizontalAlign.Start)
     .width('100%')
     .height('100%')
-    .padding($r('app.float.p1_page_padding'))
+    .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
+      top: 94, bottom: $r('app.float.p1_page_padding') })
     .backgroundColor($r('app.color.page_background'))
   }
 

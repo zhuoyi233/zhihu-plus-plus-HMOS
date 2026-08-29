@@ -272,6 +272,7 @@ export struct CommentLayer {
             }
             .id('p3_comments_root_list')
             .width('100%')
+            .scrollBar(BarState.Off)
             .layoutWeight(1)
             .edgeEffect(EdgeEffect.Spring)
             .onReachEnd(() => this.controller?.loadMore())

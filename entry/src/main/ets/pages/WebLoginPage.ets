@@ -18,6 +18,16 @@ function isTrustedWebLoginUrl(url: string): boolean {
   return WEB_LOGIN_HOSTS.includes(authority);
 }
 
+function isQqLoginSchemeUrl(url: string): boolean {
+  const match = /^([A-Za-z][A-Za-z0-9+.-]*):/.exec(url);
+  if (match === null) {
+    return false;
+  }
+  const scheme = match[1].toLowerCase();
+  return scheme === 'mqq' || scheme === 'mqqapi' || scheme === 'mqqopensdkapi' ||
+    scheme === 'wtloginmqq';
+}
+
 /**
  * P3-10：网页登录页（ArkWeb，对齐上游 configureWebLogin）。
  * 加载 https://www.zhihu.com/signin，登录成功后知乎跳回首页，
@@ -30,6 +40,8 @@ function isTrustedWebLoginUrl(url: string): boolean {
 @Component
 export struct WebLoginPage {
   onCookiesCaptured: (cookies: Array<SessionCookie>) => void = (): void => {
+  };
+  onExternalUrl: (url: string) => void = (_url: string): void => {
   };
   onBack: () => void = (): void => {
   };
@@ -61,16 +73,34 @@ export struct WebLoginPage {
         .onPageEnd((event): void => {
           this.ready = true;
           const currentUrl = event.url;
-          this.status = '登录页已加载';
+          if (!this.loadFailed) {
+            this.status = '登录页已加载';
+          }
           if (!this.captured && isTrustedWebLoginUrl(currentUrl) && currentUrl === 'https://www.zhihu.com/') {
             // 登录成功后知乎跳回首页 → 读 cookie（对齐上游 onPageFinished + url == HOME）。
             this.captured = true;
             this.readCookies();
           }
         })
-        .onErrorReceive((_event): void => {
-          this.loadFailed = true;
-          this.status = '登录页加载失败，请检查网络';
+        .onLoadIntercept((event): boolean => {
+          if (event === undefined) {
+            return false;
+          }
+          const requestData = event.data;
+          const url = typeof requestData === 'string' ? requestData : requestData.getRequestUrl();
+          if (!isQqLoginSchemeUrl(url)) {
+            return false;
+          }
+          this.onExternalUrl(url);
+          return true;
+        })
+        .onErrorReceive((event): void => {
+          // 仅主框架加载失败才算失败：子资源（图片/脚本）失败不应触发不透明遮罩
+          // 盖住已正常加载的页面（历史 bug：登录/风控页看起来“无法打开”）。
+          if (event !== undefined && event.request.isMainFrame()) {
+            this.loadFailed = true;
+            this.status = '登录页加载失败，请检查网络';
+          }
         })
 
       if (!this.ready || this.loadFailed) {

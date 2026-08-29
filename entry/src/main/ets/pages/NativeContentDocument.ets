@@ -401,11 +401,12 @@ struct ContentBlockFormula {
 export struct NativeContentDocument {
   html: string = '';
   emptyMessage: string = '正文为空';
-  /** P3-9-B：正文滚动偏移回调（用于详情页顶栏折叠联动）。 */
+  /** P3-9-B：正文滚动像素偏移回调（用于详情页顶栏折叠联动）。 */
   onScrollOffset?: (offset: number) => void;
   @State private previewUrl: string = '';
   @State private empty: boolean = true;
   private readonly dataSource: ReaderBlockDataSource = new ReaderBlockDataSource();
+  private readonly scroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
     const blocks = parseZhihuHtml(this.html);
@@ -428,7 +429,7 @@ export struct NativeContentDocument {
           .width('100%')
           .padding($r('app.float.p1_page_padding'))
       } else {
-        List({ space: 12 }) {
+        List({ space: 12, scroller: this.scroller }) {
           LazyForEach(this.dataSource, (item: ReaderBlock) => {
             ListItem() {
               this.readerBlock(item)
@@ -438,6 +439,7 @@ export struct NativeContentDocument {
         .id('p2_content_document_list')
         .width('100%')
         .height('100%')
+        .scrollBar(BarState.Off)
         .padding({
           left: $r('app.float.p1_page_padding'),
           right: $r('app.float.p1_page_padding'),
@@ -446,10 +448,12 @@ export struct NativeContentDocument {
         })
         .cachedCount(6)
         .edgeEffect(EdgeEffect.Spring)
-        .onScrollIndex((firstIndex: number): void => {
+        // 用像素偏移而非 onScrollIndex 驱动顶栏折叠：索引会随视口高度变化回弹造成振荡闪烁，
+        // 像素偏移在顶栏收起（视口变高）时保持不变，状态稳定。
+        .onDidScroll((): void => {
           const callback = this.onScrollOffset;
           if (callback !== undefined) {
-            callback(firstIndex > 0 ? firstIndex : 0);
+            callback(this.scroller.currentOffset().yOffset);
           }
         })
       }

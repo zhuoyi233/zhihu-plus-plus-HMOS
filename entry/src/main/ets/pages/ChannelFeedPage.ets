@@ -21,12 +21,13 @@ import {
   BlockingActionViewState,
   BlockingUserCandidate
 } from './BlockingActionState';
-import { AppPageHeader, AppPageStatusKind, AppPageStatusPanel } from './AppPageChrome';
+import { AppPageStatusKind, AppPageStatusPanel } from './AppPageChrome';
 import {
   ChannelFeedController,
   ChannelFeedPhase,
   channelFeedTitle,
-  ChannelFeedViewState
+  ChannelFeedViewState,
+  ChannelFeedInteractionBridge
 } from './ChannelFeedState';
 import { dailyStoryDetailErrorMessage } from './DailyStoryDetailState';
 
@@ -40,6 +41,9 @@ export struct ChannelFeedPage {
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
   @Prop @Watch('reloadAfterAuthentication') reloadToken: number = 0;
+  @Prop @Watch('loadDateFromTitleBar') dateCursor: string = '';
+  @Consume('channelFeedInteractionBridge') private interactionBridge: ChannelFeedInteractionBridge =
+    new ChannelFeedInteractionBridge();
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
   @State private phase: ChannelFeedPhase = ChannelFeedPhase.IDLE;
@@ -65,6 +69,7 @@ export struct ChannelFeedPage {
     // 控制器仍存活时直接复用，避免重建控制器并重载列表导致滚动位置丢失。
     if (this.controller !== undefined) {
       this.controller.activate();
+      this.registerTitleBarActions();
       return;
     }
     const repository = this.repository;
@@ -76,8 +81,13 @@ export struct ChannelFeedPage {
     this.controller = new ChannelFeedController(this.source, repository, (state: ChannelFeedViewState): void => {
       this.applyState(state);
     });
+    this.registerTitleBarActions();
     this.controller.activate();
-    this.controller.loadInitial();
+    if (this.source === ChannelFeedSource.DAILY && /^\d{8}$/.test(this.dateCursor)) {
+      this.controller.loadDate(this.dateCursor);
+    } else {
+      this.controller.loadInitial();
+    }
     this.createBlockingAction();
   }
 
@@ -100,35 +110,38 @@ export struct ChannelFeedPage {
     });
   }
 
+  private registerTitleBarActions(): void {
+    const controller = this.controller;
+    if (controller === undefined) {
+      return;
+    }
+    if (this.source === ChannelFeedSource.HOT) {
+      this.interactionBridge.registerHotRefresh((): void => {
+        controller.reloadNow();
+      });
+    } else if (this.source === ChannelFeedSource.DAILY) {
+      this.interactionBridge.registerDailyRefresh((): void => {
+        controller.reloadNow();
+      });
+      this.interactionBridge.registerDailyDate((date: string): void => {
+        controller.loadDate(date);
+      });
+    }
+  }
+
   private reloadAfterAuthentication(): void {
     this.controller?.refresh();
+  }
+
+  private loadDateFromTitleBar(): void {
+    if (this.source === ChannelFeedSource.DAILY && /^\d{8}$/.test(this.dateCursor)) {
+      this.controller?.loadDate(this.dateCursor);
+    }
   }
 
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       Column({ space: $r('app.float.p1_spacing_medium') }) {
-        if (this.showHeader) {
-          AppPageHeader({
-            title: this.headerTitle(),
-            actionLabel: this.source === ChannelFeedSource.DAILY ? '选日期' :
-              (this.refreshing ? '刷新中…' : '刷新'),
-            actionId: this.source === ChannelFeedSource.DAILY ? 'p2_channel_daily_select_date' :
-              `p2_channel_${this.source}_refresh`,
-            actionEnabled: this.source === ChannelFeedSource.DAILY
-              ? true
-              : !this.refreshing && !this.loadingMore && this.phase !== ChannelFeedPhase.INITIAL_LOADING,
-            actionAccessibilityText: this.source === ChannelFeedSource.DAILY ? '选择日报日期' :
-              (this.refreshing ? `${channelFeedTitle(this.source)}正在刷新` : `刷新${channelFeedTitle(this.source)}`),
-            onAction: (): void => {
-              if (this.source === ChannelFeedSource.DAILY) {
-                this.showDailyDatePicker();
-                return;
-              }
-              this.controller?.refresh();
-            }
-          });
-        }
-
       if (this.phase === ChannelFeedPhase.IDLE || this.phase === ChannelFeedPhase.INITIAL_LOADING) {
         this.centeredStatus(`正在加载${channelFeedTitle(this.source)}…`, false);
       } else if (this.phase === ChannelFeedPhase.ERROR) {
@@ -184,6 +197,8 @@ export struct ChannelFeedPage {
           }
           .id(`p2_channel_${this.source}_list`)
           .width('100%')
+          .scrollBar(BarState.Off)
+          .padding({ top: 94 })
           .height('100%')
           .edgeEffect(EdgeEffect.Spring)
           .onReachEnd(() => this.controller?.loadMore())
@@ -215,7 +230,6 @@ export struct ChannelFeedPage {
       .padding({
         left: $r('app.float.p1_page_padding'),
         right: $r('app.float.p1_page_padding'),
-        top: $r('app.float.p1_spacing_medium'),
         bottom: $r('app.float.p1_page_padding')
       })
 
@@ -618,8 +632,9 @@ export struct ChannelFeedPage {
   }
 
   private showDailyDatePicker(): void {
+    const selectedDate: Date = this.currentDailyDate();
     this.getUIContext().showDatePickerDialog({
-      selected: new Date(),
+      selected: selectedDate,
       start: new Date(2000, 0, 1),
       end: new Date(),
       onDateAccept: (date: Date): void => {
@@ -627,6 +642,17 @@ export struct ChannelFeedPage {
         this.controller?.loadDate(cursor);
       }
     });
+  }
+
+  private currentDailyDate(): Date {
+    const first = this.items.find((item: ChannelFeedItem): boolean => item.kind === ChannelFeedItemKind.DAILY_STORY);
+    if (first === undefined || first.kind !== ChannelFeedItemKind.DAILY_STORY || !/^\d{8}$/.test(first.story.date)) {
+      return new Date();
+    }
+    const year: number = Number(first.story.date.substring(0, 4));
+    const month: number = Number(first.story.date.substring(4, 6)) - 1;
+    const day: number = Number(first.story.date.substring(6, 8));
+    return new Date(year, month, day);
   }
 }
 
