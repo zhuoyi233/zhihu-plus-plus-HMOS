@@ -79,6 +79,7 @@ export struct P1Shell {
   @State private aboutVersionSheetShown: boolean = false;
   @State private projectLicenseSheetShown: boolean = false;
   @State private openSourceLicensesSheetShown: boolean = false;
+  @State private settingsSearchQuery: string = '';
   @State private homeReloadToken: number = 0;
   @State private followingReloadToken: number = 0;
   @State private hotReloadToken: number = 0;
@@ -568,6 +569,16 @@ export struct P1Shell {
         Column({ space: $r('app.float.p1_spacing_large') }) {
           AppPageHeader({ title: '我的' });
 
+          TextInput({ text: this.settingsSearchQuery, placeholder: '搜索设置' })
+            .id('p3_settings_search')
+            .width('100%')
+            .onChange((value: string): void => {
+              this.settingsSearchQuery = value;
+            })
+
+          if (this.hasSettingsSearchQuery()) {
+            this.settingsSearchResults()
+          } else {
           Text('账号')
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
@@ -673,7 +684,7 @@ export struct P1Shell {
                 this.aboutVersionSheetShown = true;
               } });
             Divider().color($r('app.color.divider_color'))
-            AppNavigationRow({ title: '项目协议', description: 'GNU Affero General Public License v3.0',
+            AppNavigationRow({ title: '项目协议', description: 'GNU AGPL v3.0',
               testId: 'p3_open_project_license', grouped: true,
               onRowClick: (): void => {
                 this.projectLicenseSheetShown = true;
@@ -701,6 +712,7 @@ export struct P1Shell {
           .width('100%')
           .borderRadius($r('app.float.p1_card_radius'))
           .backgroundColor($r('app.color.surface_background'))
+          }
         }
         .width('100%')
         .padding($r('app.float.p1_page_padding'))
@@ -768,6 +780,110 @@ export struct P1Shell {
       .onClick(() => {
         this.selectThemeMode(mode);
       })
+  }
+
+  @Builder
+  private settingsSearchResults() {
+    Column({ space: $r('app.float.p1_spacing_small') }) {
+      Text('搜索结果')
+        .id('p3_settings_search_result_title')
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
+      if (this.settingsSearchMatches('账号与登录', this.accountSummary())) {
+        AppNavigationRow({ title: '账号与登录', description: this.accountSummary(), testId: 'p2_open_login',
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.LOGIN }) });
+      }
+      if (this.settingsSearchMatches('发布想法', '创建一条新的想法')) {
+        AppNavigationRow({ title: '发布想法', description: '创建一条新的想法', testId: 'p4_open_pin_publish',
+          onRowClick: (): void => this.openPinComposer() });
+      }
+      if (this.settingsSearchMatches('想法草稿', '继续编辑本地保存的草稿')) {
+        AppNavigationRow({ title: '想法草稿', description: '继续编辑本地保存的草稿', testId: 'p4_open_pin_drafts',
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.PIN_DRAFTS }) });
+      }
+      if (this.settingsSearchMatches('我的收藏夹', '查看自己的知乎收藏夹')) {
+        AppNavigationRow({ title: '我的收藏夹', description: '查看自己的知乎收藏夹', testId: 'p3_open_my_collections',
+          onRowClick: (): void => this.openMyCollections() });
+      }
+      if (this.settingsSearchMatches('已读记录', '查看已打开的内容')) {
+        AppNavigationRow({ title: '已读记录', description: '查看已打开的内容', testId: 'p2_open_read_history',
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.READ_HISTORY }) });
+      }
+      if (this.settingsSearchMatches('内容屏蔽', '管理作者与关键词屏蔽规则')) {
+        AppNavigationRow({ title: '内容屏蔽', description: '管理作者与关键词屏蔽规则', testId: 'p2_open_blocking_rules',
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.BLOCKING_RULES }) });
+      }
+      if (this.settingsSearchMatches('屏蔽记录', '查看最近隐藏的内容')) {
+        AppNavigationRow({ title: '屏蔽记录', description: '查看最近隐藏的内容', testId: 'p3_open_blocked_feed_history',
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.BLOCKED_FEED_HISTORY }) });
+      }
+      if (this.settingsSearchMatches('通知', '查看互动和系统消息')) {
+        AppNavigationRow({ title: '通知', description: '查看互动和系统消息', testId: 'p3_open_notifications',
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION }) });
+      }
+      if (this.settingsSearchMatches('通知设置', '设置提醒和推送偏好')) {
+        AppNavigationRow({ title: '通知设置', description: '设置提醒和推送偏好', testId: 'p3_open_notification_settings',
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION_SETTINGS }) });
+      }
+      if (this.settingsSearchMatches('主题模式', '跟随系统 浅色 深色')) {
+        Column({ space: $r('app.float.p1_spacing_small') }) {
+          Text('主题模式')
+            .fontSize($r('app.float.p1_body_font_size'))
+            .fontColor($r('app.color.primary_text'))
+          Text('跟随系统、浅色或深色')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+          Row({ space: $r('app.float.p1_spacing_small') }) {
+            this.themeButton('跟随系统', AppThemeMode.SYSTEM, 'p1_theme_system');
+            this.themeButton('浅色', AppThemeMode.LIGHT, 'p1_theme_light');
+            this.themeButton('深色', AppThemeMode.DARK, 'p1_theme_dark');
+          }
+          .width('100%')
+        }
+        .id('p3_settings_search_theme_mode')
+        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+        .padding($r('app.float.p1_card_padding'))
+        .borderRadius($r('app.float.p1_card_radius'))
+        .backgroundColor($r('app.color.surface_background'))
+      }
+      if (this.settingsSearchMatches('应用与版本', this.installedVersionLabel)) {
+        AppNavigationRow({ title: '应用与版本', description: this.installedVersionLabel,
+          testId: 'p3_open_about_version', onRowClick: (): void => {
+            this.refreshInstalledVersionLabel();
+            this.aboutVersionSheetShown = true;
+          } });
+      }
+      if (this.settingsSearchMatches('项目协议', 'GNU AGPL v3.0')) {
+        AppNavigationRow({ title: '项目协议', description: 'GNU AGPL v3.0',
+          testId: 'p3_open_project_license', onRowClick: (): void => {
+            this.projectLicenseSheetShown = true;
+          } });
+      }
+      if (this.settingsSearchMatches('开源许可', '3 个本地 HAR 模块 GNU AGPL v3.0')) {
+        AppNavigationRow({ title: '开源许可', description: '3 个本地 HAR 模块 · GNU AGPL v3.0',
+          testId: 'p3_open_open_source_licenses', onRowClick: (): void => {
+            this.openSourceLicensesSheetShown = true;
+          } });
+      }
+      if (this.settingsSearchMatches('技术实验室', '仅用于本机诊断与验证')) {
+        AppNavigationRow({ title: '技术实验室', description: '仅用于本机诊断与验证', testId: 'p1_open_technical_lab',
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.TECHNICAL_LAB }) });
+      }
+      if (!this.hasSettingsSearchResults()) {
+        Text('没有匹配的设置项')
+          .id('p3_settings_search_empty')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .width('100%')
+          .padding($r('app.float.p1_card_padding'))
+          .borderRadius($r('app.float.p1_card_radius'))
+          .backgroundColor($r('app.color.surface_background'))
+      }
+    }
+    .id('p3_settings_search_results')
+    .width('100%')
   }
 
   @Builder
@@ -932,6 +1048,32 @@ export struct P1Shell {
     } catch (_error) {
       this.installedVersionLabel = '暂时无法读取已安装版本';
     }
+  }
+
+  private hasSettingsSearchQuery(): boolean {
+    return this.settingsSearchQuery.trim().length > 0;
+  }
+
+  private settingsSearchMatches(title: string, description: string): boolean {
+    const query = this.settingsSearchQuery.trim().toLowerCase();
+    return query.length > 0 && `${title} ${description}`.toLowerCase().includes(query);
+  }
+
+  private hasSettingsSearchResults(): boolean {
+    return this.settingsSearchMatches('账号与登录', this.accountSummary()) ||
+      this.settingsSearchMatches('发布想法', '创建一条新的想法') ||
+      this.settingsSearchMatches('想法草稿', '继续编辑本地保存的草稿') ||
+      this.settingsSearchMatches('我的收藏夹', '查看自己的知乎收藏夹') ||
+      this.settingsSearchMatches('已读记录', '查看已打开的内容') ||
+      this.settingsSearchMatches('内容屏蔽', '管理作者与关键词屏蔽规则') ||
+      this.settingsSearchMatches('屏蔽记录', '查看最近隐藏的内容') ||
+      this.settingsSearchMatches('通知', '查看互动和系统消息') ||
+      this.settingsSearchMatches('通知设置', '设置提醒和推送偏好') ||
+      this.settingsSearchMatches('主题模式', '跟随系统 浅色 深色') ||
+      this.settingsSearchMatches('应用与版本', this.installedVersionLabel) ||
+      this.settingsSearchMatches('项目协议', 'GNU AGPL v3.0') ||
+      this.settingsSearchMatches('开源许可', '3 个本地 HAR 模块 GNU AGPL v3.0') ||
+      this.settingsSearchMatches('技术实验室', '仅用于本机诊断与验证');
   }
 
   private accountSummary(): string {
