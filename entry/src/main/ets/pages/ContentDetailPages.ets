@@ -1039,8 +1039,8 @@ struct ContentDetailPage {
   private voteUpAction() {
     Button({ type: ButtonType.Normal }) {
       Row({ space: 6 }) {
-        SymbolGlyph($r('sys.symbol.arrow_up'))
-          .fontSize(22)
+        SymbolGlyph($r('sys.symbol.triangleshape'))
+          .fontSize(20)
           .fontColor([this.voteState === ContentVoteState.UP
             ? $r('app.color.on_brand')
             : $r('app.color.brand_primary')])
@@ -1065,11 +1065,13 @@ struct ContentDetailPage {
   private voteDownAction() {
     Button({ type: ButtonType.Normal }) {
       Row({ space: 6 }) {
-        SymbolGlyph($r('sys.symbol.arrow_down'))
-          .fontSize(22)
+        // 官方符号库无现成下三角，反对图标由上三角旋转 180° 得到。
+        SymbolGlyph($r('sys.symbol.triangleshape'))
+          .fontSize(20)
           .fontColor([this.voteState === ContentVoteState.DOWN
             ? $r('app.color.on_brand')
             : $r('app.color.brand_primary')])
+          .rotate({ x: 0, y: 0, z: 1, angle: 180 })
       }
       .padding({ left: 14, right: 14, top: 10, bottom: 10 })
     }

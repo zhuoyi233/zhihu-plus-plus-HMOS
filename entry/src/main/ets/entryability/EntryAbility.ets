@@ -110,6 +110,14 @@ export default class EntryAbility extends UIAbility {
         AppLogger.failure(AppLogEvent.CONTENT_LOAD_FAILED, error.code);
         return;
       }
+      // 底部完全沉浸：导航条区域透明，配合页面 expandSafeArea 让正文延伸到物理底边。
+      try {
+        windowStage.getMainWindowSync().setWindowSystemBarProperties({
+          navigationBarColor: '#00000000'
+        }).catch((_error: Error): void => {
+        });
+      } catch (_error) {
+      }
       this.startup?.runDeferred();
     });
   }
