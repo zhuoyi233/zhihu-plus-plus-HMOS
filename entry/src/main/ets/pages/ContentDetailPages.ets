@@ -46,8 +46,8 @@ import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { createSystemShareService } from '../platform/SystemShareService';
 import { ShareOutcome, SharePayloadKind, ShareTextPayload } from '../platform/ShareContracts';
 
-/** 悬浮操作栏的正文预留高度：胶囊 44vp + 底部间距 12vp + 呼吸空间。 */
-const DETAIL_FLOATING_BAR_RESERVE_VP = 88;
+/** 悬浮操作栏的正文预留高度：胶囊 44vp + 底部间距 12vp + 呼吸空间 8vp。 */
+const DETAIL_FLOATING_BAR_RESERVE_VP = 64;
 
 @Component
 struct ContentDetailPage {
