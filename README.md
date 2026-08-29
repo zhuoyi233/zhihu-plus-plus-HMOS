@@ -4,7 +4,14 @@
 
 本仓库是 Zhihu++ 的 **鸿蒙（HarmonyOS）原生移植版**：用 ArkTS/ArkUI 重写，而非把安卓 Kotlin/Compose 代码直接搬运行，目标是在鸿蒙设备上提供与安卓 Lite 版一致的隐私增强、去广告、内容过滤体验。
 
-- **迁移基线**：安卓 Lite 版；开发工具固定 DevEco Studio 6.1.1 Release；运行/编译基线固定 API 26（HarmonyOS 26.0.0），`targetSdkVersion`/`compatibleSdkVersion` 均为 6.1.1(24)。
+> [!IMPORTANT]
+> 本项目不是知乎官方产品，与知乎及其关联公司不存在隶属、授权或背书关系。项目依赖非公开接口，知乎服务端的变化可能随时导致部分功能失效。
+
+### 特别感谢原项目
+
+感谢原项目开发者 zly2006 以及所有上游贡献者，用优美的代码完成了高质量的Android构建，使得本项目有出现的可能。
+
+- **迁移基线**：安卓 Lite 版；开发工具固定 DevEco Studio 6.1.1 Release；运行/编译基线固定 API 26（HarmonyOS 26.0.0），`targetSdkVersion`/`compatibleSdkVersion` 均为 26.0.0。
 - **工程模型**：Stage 模型，ArkUI 声明式范式，状态管理优先 V2；耗时计算用 TaskPool，必要时才用 Worker。
 - **应用标识**：`bundleName` 为 `com.github.zhuoyi233.zhplus`（与上游安卓包名不同）。
 
@@ -27,13 +34,21 @@ pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall -SkipBui
 pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall
 ```
 
-测试基线为 **416 个 Hypium 用例**，`verify-harmony.ps1` 会校验注册数与通过数。
+Hypium 用例数由 `verify-harmony.ps1` 从测试注册入口动态统计并校验全量通过（当前 **523 个**）。
 
 ### 当前进度
 
-按 `docs/harmonyos-migration-plan.md` 分阶段迁移（P0–P3）。已落地能力包括：根级导航与通用页面壳；手机号 / 扫码 / 网页三种登录与风控 ArkWeb 验证；首页 / 频道 / 关注信息流；创作（回答 / 想法）编辑与图片发布链路；收藏夹、评论、通知；阅读与历史；屏蔽规则与屏蔽记录等。详细验收记录见 `docs/p0`–`docs/p3`。
+按 `docs/harmonyos-migration-plan.md` 分阶段迁移（P0–P4）。已落地能力包括：根级导航与通用页面壳；手机号 / 扫码 / 网页三种登录与风控 ArkWeb 验证；首页 / 频道 / 关注信息流；创作发布全链路（回答 / 想法：本地草稿、图片上传、远端草稿、最终确认发布）；前台视频播放、扫码与系统分享；收藏夹、评论、通知；阅读与历史；屏蔽规则与屏蔽记录等。详细验收记录见 `docs/p0`–`docs/p4`。
 
 > 鸿蒙版仍在开发中，功能覆盖以各阶段验收文档为准，不保证与安卓版 100% 一致。
+
+### 下载未签名HAP
+
+可在本项目[release页面](https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases)获取未签名HAP包。
+
+可使用[小白调试助手](https://github.com/likuai2010/auto-installer/releases)或[HoKit](https://github.com/yabi-zzh/HoKit/releases)自行签名并安装。
+
+---
 
 > 以下为原仓库文档（锚定提交 e0856d27a715e1902635f3b6e9b722c0eea2d542）：
 
