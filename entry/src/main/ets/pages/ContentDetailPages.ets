@@ -99,8 +99,16 @@ struct ContentDetailPage {
   private blockingAction?: BlockingActionController;
   private voteController?: ContentVoteController;
   private followController?: FollowController;
+  /** 设备支持交互式沉浸材质；不支持时胶囊回落组件模糊（降级材质为不透明白底会遮挡正文）。 */
+  private immersiveMaterialSupported: boolean = false;
 
   aboutToAppear(): void {
+    try {
+      this.immersiveMaterialSupported =
+        uiMaterial.getMaterialInfo().type === uiMaterial.MaterialType.IMMERSIVE;
+    } catch (_error) {
+      this.immersiveMaterialSupported = false;
+    }
     // P3-7：返回栈重显（页面实例与状态保留）时 aboutToAppear 可能再次触发；
     // 控制器仍存活时直接复用，避免重建控制器并重载正文导致滚动位置丢失。
     if (this.controller !== undefined) {
@@ -555,57 +563,17 @@ struct ContentDetailPage {
   @Builder
   private bottomActionBar() {
     // 沉浸光感风格：左右两块悬浮胶囊（左=赞同/反对或关注，右=收藏/评论/更多或写回答），
-    // 使用系统组件模糊材质，正文从下方穿透；不再使用整条实底栏。
+    // 正文从下方穿透；不再使用整条实底栏。
     Column({ space: $r('app.float.p1_spacing_xsmall') }) {
       if (this.interactionErrorMessage.length > 0) {
         this.interactionStatusRow()
       }
       Row({ space: $r('app.float.p1_spacing_medium') }) {
         if (this.kind === ContentDetailKind.QUESTION) {
-          Row({ space: 0 }) {
-            if (this.followController !== undefined) {
-              this.followQuestionAction()
-            }
-          }
-          .borderRadius(24)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR,
-            interactive: true,
-            lightEffect: { color: $r('app.color.zhihu_blue') }
-          }))
-          .clip(true)
-
+          this.questionFollowCapsule()
           Blank()
             .layoutWeight(1)
-
-          Row({ space: 0 }) {
-            Button({ type: ButtonType.Normal }) {
-              SymbolGlyph($r('sys.symbol.ellipsis_circle'))
-                .fontSize(22)
-                .fontColor([$r('app.color.secondary_text')])
-            }
-            .id('p3_question_detail_more')
-            .width(44)
-            .height(44)
-            .backgroundColor(Color.Transparent)
-            .accessibilityText('更多问题操作')
-            .onClick((): void => {
-              this.actionMenuShown = true;
-            })
-            Button('写回答')
-              .id('p4_question_write_answer')
-              .height(44)
-              .fontSize($r('app.float.p1_secondary_font_size'))
-              .onClick((): void => this.openAnswerComposer())
-          }
-          .padding({ left: 8, right: 8 })
-          .borderRadius(24)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR,
-            interactive: true,
-            lightEffect: { color: $r('app.color.zhihu_blue') }
-          }))
-          .clip(true)
+          this.questionActionsCapsule()
         } else {
           // 左块：投票胶囊（赞同图标+数字 / 反对），对齐上游主视觉——
           // Neutral 显示赞+踩（浅蓝底蓝字）；点赞同后反对隐藏、踩后赞同隐藏（实蓝底白字）。
@@ -626,77 +594,7 @@ struct ContentDetailPage {
           Blank()
             .layoutWeight(1)
 
-          // 右块：编辑(本人回答) + 收藏 + 评论 + 更多，悬浮模糊胶囊。
-          Row({ space: 0 }) {
-            if (this.canEditExistingAnswer()) {
-              Button('编辑')
-                .id('p4_answer_edit_existing')
-                .height(44)
-                .fontSize($r('app.float.p1_secondary_font_size'))
-                .onClick((): void => this.openExistingAnswerEditor())
-            }
-
-            Button({ type: ButtonType.Normal }) {
-              SymbolGlyph($r('sys.symbol.bookmark'))
-                .fontSize(22)
-                .fontColor([$r('app.color.secondary_text')])
-            }
-            .id(`p3_${this.kind}_detail_favorite_bar`)
-            .width(44)
-            .height(44)
-            .backgroundColor(Color.Transparent)
-            .onClick((): void => {
-              if (this.collectionRepository !== undefined && this.session !== undefined) {
-                this.favoriteDialogShown = true;
-              } else {
-                this.navigate({ name: P1DestinationName.LOGIN });
-              }
-            })
-
-            Button({ type: ButtonType.Normal }) {
-              Row({ space: 5 }) {
-                SymbolGlyph($r('sys.symbol.message'))
-                  .fontSize(22)
-                  .fontColor([$r('app.color.secondary_text')])
-                Text(`${this.content?.value.commentCount ?? 0}`)
-                  .fontSize($r('app.float.p1_body_font_size'))
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor($r('app.color.secondary_text'))
-              }
-              .padding({ left: 8, right: 8, top: 6, bottom: 6 })
-            }
-            .id(`p3_${this.kind}_detail_comment_bar`)
-            .height(44)
-            .backgroundColor(Color.Transparent)
-            .onClick((): void => {
-              if (this.commentRepository !== undefined && this.session !== undefined) {
-                this.showComments = true;
-              } else {
-                this.navigate({ name: P1DestinationName.LOGIN });
-              }
-            })
-
-            Button({ type: ButtonType.Normal }) {
-              SymbolGlyph($r('sys.symbol.ellipsis_circle'))
-                .fontSize(22)
-                .fontColor([$r('app.color.secondary_text')])
-            }
-            .id(`p3_${this.kind}_detail_more`)
-            .width(44)
-            .height(44)
-            .backgroundColor(Color.Transparent)
-            .onClick((): void => {
-              this.actionMenuShown = true;
-            })
-          }
-          .padding({ left: 8, right: 8 })
-          .borderRadius(24)
-          .systemMaterial(new uiMaterial.ImmersiveMaterial({
-            style: uiMaterial.ImmersiveStyle.REGULAR,
-            interactive: true,
-            lightEffect: { color: $r('app.color.zhihu_blue') }
-          }))
-          .clip(true)
+          this.answerActionsCapsule()
         }
       }
       .width('100%')
@@ -709,6 +607,167 @@ struct ContentDetailPage {
     .width('100%')
     .zIndex(2)
     .hitTestBehavior(HitTestMode.Default)
+  }
+
+  /** 交互式沉浸材质：支持的真机上胶囊呈现跟手光效（知乎蓝）。 */
+  private interactiveMaterial(): uiMaterial.ImmersiveMaterial {
+    return new uiMaterial.ImmersiveMaterial({
+      style: uiMaterial.ImmersiveStyle.REGULAR,
+      interactive: true,
+      lightEffect: { color: $r('app.color.zhihu_blue') }
+    });
+  }
+
+  @Builder
+  private answerActionsCapsule() {
+    if (this.immersiveMaterialSupported) {
+      Row({ space: 0 }) {
+        this.answerRightActions()
+      }
+      .padding({ left: 8, right: 8 })
+      .borderRadius(24)
+      .clip(true)
+      .systemMaterial(this.interactiveMaterial())
+    } else {
+      // 降级：不支持的设备上沉浸材质是不透明白底，会遮挡正文，改用组件模糊。
+      Row({ space: 0 }) {
+        this.answerRightActions()
+      }
+      .padding({ left: 8, right: 8 })
+      .borderRadius(24)
+      .clip(true)
+      .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
+    }
+  }
+
+  @Builder
+  private answerRightActions() {
+    if (this.canEditExistingAnswer()) {
+      Button('编辑')
+        .id('p4_answer_edit_existing')
+        .height(44)
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .onClick((): void => this.openExistingAnswerEditor())
+    }
+
+    Button({ type: ButtonType.Normal }) {
+      SymbolGlyph($r('sys.symbol.bookmark'))
+        .fontSize(22)
+        .fontColor([$r('app.color.secondary_text')])
+    }
+    .id(`p3_${this.kind}_detail_favorite_bar`)
+    .width(44)
+    .height(44)
+    .backgroundColor(Color.Transparent)
+    .onClick((): void => {
+      if (this.collectionRepository !== undefined && this.session !== undefined) {
+        this.favoriteDialogShown = true;
+      } else {
+        this.navigate({ name: P1DestinationName.LOGIN });
+      }
+    })
+
+    Button({ type: ButtonType.Normal }) {
+      Row({ space: 5 }) {
+        SymbolGlyph($r('sys.symbol.message'))
+          .fontSize(22)
+          .fontColor([$r('app.color.secondary_text')])
+        Text(`${this.content?.value.commentCount ?? 0}`)
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.secondary_text'))
+      }
+      .padding({ left: 8, right: 8, top: 6, bottom: 6 })
+    }
+    .id(`p3_${this.kind}_detail_comment_bar`)
+    .height(44)
+    .backgroundColor(Color.Transparent)
+    .onClick((): void => {
+      if (this.commentRepository !== undefined && this.session !== undefined) {
+        this.showComments = true;
+      } else {
+        this.navigate({ name: P1DestinationName.LOGIN });
+      }
+    })
+
+    Button({ type: ButtonType.Normal }) {
+      SymbolGlyph($r('sys.symbol.ellipsis_circle'))
+        .fontSize(22)
+        .fontColor([$r('app.color.secondary_text')])
+    }
+    .id(`p3_${this.kind}_detail_more`)
+    .width(44)
+    .height(44)
+    .backgroundColor(Color.Transparent)
+    .onClick((): void => {
+      this.actionMenuShown = true;
+    })
+  }
+
+  @Builder
+  private questionFollowCapsule() {
+    if (this.immersiveMaterialSupported) {
+      Row({ space: 0 }) {
+        if (this.followController !== undefined) {
+          this.followQuestionAction()
+        }
+      }
+      .borderRadius(24)
+      .clip(true)
+      .systemMaterial(this.interactiveMaterial())
+    } else {
+      Row({ space: 0 }) {
+        if (this.followController !== undefined) {
+          this.followQuestionAction()
+        }
+      }
+      .borderRadius(24)
+      .clip(true)
+      .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
+    }
+  }
+
+  @Builder
+  private questionActionsCapsule() {
+    if (this.immersiveMaterialSupported) {
+      Row({ space: 0 }) {
+        this.questionRightActions()
+      }
+      .padding({ left: 8, right: 8 })
+      .borderRadius(24)
+      .clip(true)
+      .systemMaterial(this.interactiveMaterial())
+    } else {
+      Row({ space: 0 }) {
+        this.questionRightActions()
+      }
+      .padding({ left: 8, right: 8 })
+      .borderRadius(24)
+      .clip(true)
+      .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
+    }
+  }
+
+  @Builder
+  private questionRightActions() {
+    Button({ type: ButtonType.Normal }) {
+      SymbolGlyph($r('sys.symbol.ellipsis_circle'))
+        .fontSize(22)
+        .fontColor([$r('app.color.secondary_text')])
+    }
+    .id('p3_question_detail_more')
+    .width(44)
+    .height(44)
+    .backgroundColor(Color.Transparent)
+    .accessibilityText('更多问题操作')
+    .onClick((): void => {
+      this.actionMenuShown = true;
+    })
+    Button('写回答')
+      .id('p4_question_write_answer')
+      .height(44)
+      .fontSize($r('app.float.p1_secondary_font_size'))
+      .onClick((): void => this.openAnswerComposer())
   }
 
   private openAnswerComposer(): void {
