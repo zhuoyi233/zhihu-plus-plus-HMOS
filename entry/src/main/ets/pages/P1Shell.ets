@@ -686,16 +686,6 @@ export struct P1Shell {
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '技术实验室', description: '仅用于本机诊断与验证', testId: 'p1_open_technical_lab', grouped: true,
               onRowClick: (): void => this.navigate({ name: P1DestinationName.TECHNICAL_LAB }) });
-            Text('页面内容由 Navigation 约束在系统安全区内，背景延伸覆盖状态栏和底部系统区域。')
-              .id('p1_safe_area_description')
-              .fontSize($r('app.float.p1_caption_font_size'))
-              .fontColor($r('app.color.secondary_text'))
-              .width('100%')
-              .padding({
-                left: $r('app.float.p1_card_padding'),
-                right: $r('app.float.p1_card_padding'),
-                bottom: $r('app.float.p1_card_padding')
-              })
           }
           .width('100%')
           .borderRadius($r('app.float.p1_card_radius'))
