@@ -304,6 +304,8 @@ export struct ChannelFeedPage {
           Text(channelActionLabel(item.feedItem, this.source))
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
             .layoutWeight(1)
           Text(channelKindLabel(item.feedItem.target.kind))
             .fontSize($r('app.float.p1_secondary_font_size'))
@@ -325,15 +327,20 @@ export struct ChannelFeedPage {
           .accessibilityText('屏蔽作者或关键词')
         }
         .width('100%')
+        // 对齐上游 FeedCard：标题 2 行、摘要 3 行、作者与元信息各 1 行，控制一屏卡片数量。
         Text(item.feedItem.target.title)
           .fontSize($r('app.float.p1_heading_font_size'))
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.primary_text'))
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
         if (item.feedItem.target.excerpt.trim().length > 0) {
           Text(item.feedItem.target.excerpt)
             .fontSize($r('app.float.p1_body_font_size'))
             .fontColor($r('app.color.secondary_text'))
+            .maxLines(3)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%')
         }
         Row({ space: $r('app.float.p1_spacing_medium') }) {
@@ -341,6 +348,8 @@ export struct ChannelFeedPage {
             Text(item.feedItem.target.author.name)
               .fontSize($r('app.float.p1_secondary_font_size'))
               .fontColor($r('app.color.secondary_text'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
               .layoutWeight(1)
           } else {
             Blank().layoutWeight(1)
@@ -390,11 +399,15 @@ export struct ChannelFeedPage {
             .fontSize($r('app.float.p1_heading_font_size'))
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.primary_text'))
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%')
           if (item.story.hint.trim().length > 0) {
             Text(item.story.hint)
               .fontSize($r('app.float.p1_body_font_size'))
               .fontColor($r('app.color.secondary_text'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
               .width('100%')
           }
         }

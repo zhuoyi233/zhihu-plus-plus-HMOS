@@ -241,6 +241,8 @@ export struct HomeFeedPage {
           Text(homeFeedActionLabel(item))
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
             .layoutWeight(1)
           Text(feedKindLabel(item.target.kind))
             .fontSize($r('app.float.p1_secondary_font_size'))
@@ -263,16 +265,21 @@ export struct HomeFeedPage {
         }
         .width('100%')
 
+        // 对齐上游 FeedCard：标题 2 行、摘要 3 行、作者与元信息各 1 行，控制一屏卡片数量。
         Text(item.target.title)
           .fontSize($r('app.float.p1_heading_font_size'))
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.primary_text'))
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
 
         if (item.target.excerpt.trim().length > 0) {
           Text(item.target.excerpt)
             .fontSize($r('app.float.p1_body_font_size'))
             .fontColor($r('app.color.secondary_text'))
+            .maxLines(3)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%')
         }
 
@@ -281,6 +288,8 @@ export struct HomeFeedPage {
             Text(item.target.author.name)
               .fontSize($r('app.float.p1_secondary_font_size'))
               .fontColor($r('app.color.secondary_text'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
               .layoutWeight(1)
           } else {
             Blank().layoutWeight(1)
