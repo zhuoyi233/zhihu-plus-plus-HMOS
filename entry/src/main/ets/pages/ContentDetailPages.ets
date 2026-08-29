@@ -186,6 +186,9 @@ struct ContentDetailPage {
           }
           .width('100%')
           .layoutWeight(1)
+          // 底部向下扩展安全区：操作栏胶囊与正文延伸到物理底边，
+          // 消除导航条避让区在胶囊下方留下的白色空带。
+          .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
         }
       }
       .id(`p2_${this.kind}_detail_page`)
