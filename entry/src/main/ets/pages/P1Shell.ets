@@ -607,9 +607,6 @@ export struct P1Shell {
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
           Column() {
-            AppNavigationRow({ title: '我的收藏夹', description: '查看自己的知乎收藏夹', testId: 'p3_open_my_collections', grouped: true,
-              onRowClick: (): void => this.openMyCollections() });
-            Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '已读记录', description: '查看已打开的内容', testId: 'p2_open_read_history', grouped: true,
               onRowClick: (): void => this.navigate({ name: P1DestinationName.READ_HISTORY }) });
             Divider().color($r('app.color.divider_color'))
@@ -845,7 +842,7 @@ export struct P1Shell {
         .width('100%')
         .alignItems(HorizontalAlign.Center)
       }
-      .id('p3_account_quick_collections')
+      .id('p3_open_my_collections')
       .layoutWeight(1)
       .height(72)
       .backgroundColor($r('app.color.surface_background'))
