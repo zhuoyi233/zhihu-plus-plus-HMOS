@@ -3,7 +3,7 @@
     "bundleName": "com.github.zhuoyi233.zhplus",
     "vendor": "zhuoyi233",
     "versionCode": 1000000,
-    "versionName": "0.1.0",
+    "versionName": "0.2.0",
     "buildVersion": "1",
     "icon": "$media:app_icon",
     "label": "$string:app_name"
