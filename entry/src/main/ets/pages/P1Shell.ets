@@ -17,7 +17,7 @@ import {
 import { AppNavigationRow, AppPageHeader } from './AppPageChrome';
 import { isP1TopLevelTabIndex, P1TopLevelTab, p1TopLevelTabForDestination } from './P1TopLevelTabs';
 
-const PROJECT_HOME_URI: string = 'https://github.com/zly2006/zhihu-plus-plus';
+const PROJECT_HOME_URI: string = 'https://github.com/zhuoyi233/zhihu-plus-plus-HMOS';
 
 @Component
 export struct P1Shell {
@@ -648,14 +648,6 @@ export struct P1Shell {
                 .id('p1_theme_persistence_status')
                 .fontSize($r('app.float.p1_secondary_font_size'))
                 .fontColor($r('app.color.secondary_text'))
-              Text('标题文字会跟随系统字体大小')
-                .id('p1_font_scale_heading')
-                .fontSize($r('app.float.p1_heading_font_size'))
-                .fontColor($r('app.color.primary_text'))
-              Text('正文使用 fp 字体单位，支持换行且不限制最大行数。')
-                .id('p1_font_scale_body')
-                .fontSize($r('app.float.p1_body_font_size'))
-                .fontColor($r('app.color.secondary_text'))
             }
             .alignItems(HorizontalAlign.Start)
             .width('100%')
@@ -677,7 +669,7 @@ export struct P1Shell {
                 this.aboutVersionSheetShown = true;
               } });
             Divider().color($r('app.color.divider_color'))
-            AppNavigationRow({ title: 'GitHub', description: '查看上游项目主页', testId: 'p3_open_project_home', grouped: true,
+            AppNavigationRow({ title: 'GitHub', description: '查看项目主页', testId: 'p3_open_project_home', grouped: true,
               onRowClick: (): void => this.openProjectHome() });
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '项目协议', description: 'GNU AGPL v3.0',
@@ -980,8 +972,8 @@ export struct P1Shell {
             this.aboutVersionSheetShown = true;
           } });
       }
-      if (this.settingsSearchMatches('GitHub', '查看上游项目主页')) {
-        AppNavigationRow({ title: 'GitHub', description: '查看上游项目主页', testId: 'p3_open_project_home',
+      if (this.settingsSearchMatches('GitHub', '查看项目主页')) {
+        AppNavigationRow({ title: 'GitHub', description: '查看项目主页', testId: 'p3_open_project_home',
           onRowClick: (): void => this.openProjectHome() });
       }
       if (this.settingsSearchMatches('项目协议', 'GNU AGPL v3.0')) {
@@ -1240,7 +1232,7 @@ export struct P1Shell {
       this.settingsSearchMatches('通知设置', '设置提醒和推送偏好') ||
       this.settingsSearchMatches('主题模式', '跟随系统 浅色 深色') ||
       this.settingsSearchMatches('应用与版本', this.installedVersionLabel) ||
-      this.settingsSearchMatches('GitHub', '查看上游项目主页') ||
+      this.settingsSearchMatches('GitHub', '查看项目主页') ||
       this.settingsSearchMatches('项目协议', 'GNU AGPL v3.0') ||
       this.settingsSearchMatches('开源许可', '3 个本地 HAR 模块 GNU AGPL v3.0') ||
       this.settingsSearchMatches('技术实验室', '仅用于本机诊断与验证');
