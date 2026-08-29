@@ -555,7 +555,7 @@ struct ContentDetailPage {
           Blank()
             .layoutWeight(1)
           Button({ type: ButtonType.Normal }) {
-            SymbolGlyph($r('sys.symbol.more'))
+            SymbolGlyph($r('sys.symbol.ellipsis_circle'))
               .fontSize(22)
               .fontColor([$r('app.color.secondary_text')])
           }
@@ -639,7 +639,7 @@ struct ContentDetailPage {
           })
 
           Button({ type: ButtonType.Normal }) {
-            SymbolGlyph($r('sys.symbol.more'))
+            SymbolGlyph($r('sys.symbol.ellipsis_circle'))
               .fontSize(22)
               .fontColor([$r('app.color.secondary_text')])
           }

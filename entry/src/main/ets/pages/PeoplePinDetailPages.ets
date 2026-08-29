@@ -248,7 +248,7 @@ export struct PeopleDetailPage {
         .layoutWeight(1)
         .maxLines(1)
       Button({ type: ButtonType.Normal, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.more'))
+        SymbolGlyph($r('sys.symbol.ellipsis_circle'))
           .fontSize(20)
           .fontColor([$r('app.color.primary_text')])
       }
@@ -906,7 +906,7 @@ export struct PinDetailPage {
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
       Button({ type: ButtonType.Normal, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.more'))
+        SymbolGlyph($r('sys.symbol.ellipsis_circle'))
           .fontSize(20)
           .fontColor([$r('app.color.primary_text')])
       }

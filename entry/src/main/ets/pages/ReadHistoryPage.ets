@@ -258,7 +258,7 @@ export struct ReadHistoryPage {
         this.sourceFilterSheetShown = true;
       })
       Button({ type: ButtonType.Normal, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.more'))
+        SymbolGlyph($r('sys.symbol.ellipsis_circle'))
           .fontSize(20)
           .fontColor([$r('app.color.primary_text')])
       }
@@ -416,7 +416,7 @@ export struct ReadHistoryPage {
       .onClick((): void => this.onOpen(readHistoryOpenTarget(item)))
       if (item.deletable) {
         Button({ type: ButtonType.Normal, stateEffect: true }) {
-          SymbolGlyph($r('sys.symbol.more'))
+          SymbolGlyph($r('sys.symbol.ellipsis_circle'))
             .fontSize(20)
             .fontColor([$r('app.color.primary_text')])
         }
