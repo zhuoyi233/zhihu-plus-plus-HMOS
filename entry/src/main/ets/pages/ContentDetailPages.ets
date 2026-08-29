@@ -46,8 +46,6 @@ import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { createSystemShareService } from '../platform/SystemShareService';
 import { ShareOutcome, SharePayloadKind, ShareTextPayload } from '../platform/ShareContracts';
 import uiMaterial from '@ohos.arkui.uiMaterial';
-import { window } from '@kit.ArkUI';
-import display from '@ohos.display';
 
 @Component
 struct ContentDetailPage {
@@ -103,8 +101,6 @@ struct ContentDetailPage {
   private followController?: FollowController;
   /** 设备支持交互式沉浸材质；不支持时胶囊回落组件模糊（降级材质为不透明白底会遮挡正文）。 */
   private immersiveMaterialSupported: boolean = false;
-  /** 系统底部导航条/手势指示条避让高度（vp）：悬浮操作栏据此下移到物理底边上方。 */
-  @State private bottomNavInsetVp: number = 0;
 
   aboutToAppear(): void {
     try {
@@ -112,18 +108,6 @@ struct ContentDetailPage {
         uiMaterial.getMaterialInfo().type === uiMaterial.MaterialType.IMMERSIVE;
     } catch (_error) {
       this.immersiveMaterialSupported = false;
-    }
-    const context = getAbilityContext();
-    if (context !== undefined) {
-      window.getLastWindow(context).then((win: window.Window): void => {
-        const indicator = win.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR);
-        const insetPx = indicator.bottomRect.height;
-        const density = display.getDefaultDisplaySync().densityPixels;
-        if (density > 0 && insetPx > 0) {
-          this.bottomNavInsetVp = insetPx / density;
-        }
-      }).catch((_error: Error): void => {
-      });
     }
     // P3-7：返回栈重显（页面实例与状态保留）时 aboutToAppear 可能再次触发；
     // 控制器仍存活时直接复用，避免重建控制器并重载正文导致滚动位置丢失。
@@ -210,18 +194,12 @@ struct ContentDetailPage {
           }
           .width('100%')
           .layoutWeight(1)
-          // 底部向下扩展安全区：操作栏胶囊与正文延伸到物理底边，
-          // 消除导航条避让区在胶囊下方留下的白色空带。
-          .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
         }
       }
       .id(`p2_${this.kind}_detail_page`)
       .width('100%')
       .height('100%')
       .backgroundColor($r('app.color.page_background'))
-      // 页面根容器向下扩展安全区：子组件（含悬浮操作栏与正文）才能随之延伸到物理底边，
-      // 否则导航条避让区会留下一条页底白色空带（子组件的 expandSafeArea 无法越出父边界）。
-      .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
 
       if (this.immersiveReading) {
         this.immersiveExitControl()
@@ -625,8 +603,6 @@ struct ContentDetailPage {
     }
     .width('100%')
     .zIndex(2)
-    // 布局底边停在系统避让边界时，用避让高度把整条操作栏下移到物理底边上方 12vp。
-    .offset({ y: this.bottomNavInsetVp })
     .hitTestBehavior(HitTestMode.Default)
   }
 

@@ -447,8 +447,6 @@ export struct NativeContentDocument {
         })
         .cachedCount(6)
         .edgeEffect(EdgeEffect.Spring)
-        // 正文视口向下扩展安全区：文字延伸到物理底边，滚动时穿过悬浮胶囊直至屏幕边缘。
-        .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.BOTTOM])
         // 用像素偏移而非 onScrollIndex 驱动顶栏折叠：索引会随视口高度变化回弹造成振荡闪烁，
         // 像素偏移在顶栏收起（视口变高）时保持不变，状态稳定。
         .onDidScroll((): void => {

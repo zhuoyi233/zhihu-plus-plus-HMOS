@@ -114,6 +114,8 @@ export struct P1Shell {
   // HdsTabs 是外部组件，不支持内置 Tabs 的 $$ 双向绑定；用单向 index + onChange 回写，
   // 程序化切换（navigate 到顶级目的地）通过 @Watch 驱动 controller.changeIndex。
   @State @Watch('onTopLevelTabIndexChanged') private topLevelTabIndex: number = P1TopLevelTab.HOME;
+  /** 窗口全屏布局后的状态栏高度（vp），由 EntryAbility 写入 AppStorage。 */
+  @StorageProp('statusBarHeightVp') statusBarHeightVp: number = 0;
   private readonly hdsTabsController: HdsTabsController = new HdsTabsController();
   /** 首屏底栏页签：图标 + 文字，选中色为知乎蓝。 */
   private readonly topLevelTabBarItems: Array<TopLevelTabBarItem> = [
@@ -611,7 +613,9 @@ export struct P1Shell {
     .mode(NavigationMode.Stack)
     .navDestination(this.destinationBuilder)
     .backgroundColor($r('app.color.page_background'))
-    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+    // 窗口全屏布局后避让区已移除：状态栏高度由根 Navigation 统一做顶部补偿，
+    // 所有页面（含推入的 NavDestination）随之避开状态栏。
+    .padding({ top: this.statusBarHeightVp })
   }
 
   @Builder
