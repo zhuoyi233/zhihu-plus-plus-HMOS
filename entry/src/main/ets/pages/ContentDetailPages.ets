@@ -164,9 +164,7 @@ struct ContentDetailPage {
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       Column() {
-        if (!this.immersiveReading) {
-          this.pageHeader()
-        }
+        // 页面页头（返回 + 标题）由 P1Shell 的 HDS 标题栏 stackBuilder 承载。
         if (this.phase === ContentDetailPhase.LOADING || this.phase === ContentDetailPhase.IDLE) {
           this.statusPanel('正在加载内容…', false)
         } else if (this.phase === ContentDetailPhase.ERROR) {
@@ -327,42 +325,6 @@ struct ContentDetailPage {
     .width('100%')
     .layoutWeight(1)
     .padding($r('app.float.p1_page_padding'))
-  }
-
-  @Builder
-  private pageHeader() {
-    Row({ space: $r('app.float.p1_spacing_small') }) {
-      Button({ type: ButtonType.Normal, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(20)
-          .fontColor([$r('app.color.primary_text')])
-      }
-        .id(`p3_${this.kind}_detail_back`)
-        .width(40)
-        .height(40)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .accessibilityText('返回')
-        .onClick((): void => this.onBack())
-      Text(contentDetailPageTitle(this.kind))
-        .id(`p3_${this.kind}_detail_page_title`)
-        .fontSize($r('app.float.p1_heading_font_size'))
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.primary_text'))
-        .layoutWeight(1)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-      Blank()
-        .width(40)
-        .height(40)
-    }
-    .width('100%')
-    .padding({
-      left: $r('app.float.p1_page_padding'),
-      right: $r('app.float.p1_page_padding'),
-      top: $r('app.float.p1_spacing_medium')
-    })
-    .backgroundColor($r('app.color.surface_background'))
   }
 
   @Builder

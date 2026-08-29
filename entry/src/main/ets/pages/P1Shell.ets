@@ -365,7 +365,7 @@ export struct P1Shell {
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.QUESTION) {
-      NavDestination() {
+      HdsNavDestination() {
         this.questionContent(
           destination.id,
           (destination: P1Destination): void => this.navigate(destination),
@@ -374,11 +374,12 @@ export struct P1Shell {
           }
         );
       }
-      .hideTitleBar(true)
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.detailTitleBar('问题'), divider: { showType: DividerShowType.OFF } } })
+      .hideBackButton(true)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.ANSWER) {
-      NavDestination() {
+      HdsNavDestination() {
         this.answerContent(
           destination.id,
           (destination: P1Destination): void => this.navigate(destination),
@@ -387,11 +388,12 @@ export struct P1Shell {
           }
         );
       }
-      .hideTitleBar(true)
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.detailTitleBar('回答'), divider: { showType: DividerShowType.OFF } } })
+      .hideBackButton(true)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.ARTICLE) {
-      NavDestination() {
+      HdsNavDestination() {
         this.articleContent(
           destination.id,
           (destination: P1Destination): void => this.navigate(destination),
@@ -400,7 +402,8 @@ export struct P1Shell {
           }
         );
       }
-      .hideTitleBar(true)
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.detailTitleBar('文章'), divider: { showType: DividerShowType.OFF } } })
+      .hideBackButton(true)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.VIDEO) {
@@ -710,6 +713,39 @@ export struct P1Shell {
       case P1TopLevelTab.ACCOUNT:
         return '我的';
     }
+  }
+
+  /** 详情页 HDS 标题栏内容：返回键 + 页面标题（替代各详情页自绘页头，消除标题栏空置占位）。 */
+  @Builder
+  private detailTitleBar(title: string) {
+    Row({ space: $r('app.float.p1_spacing_small') }) {
+      Button({ type: ButtonType.Normal, stateEffect: true }) {
+        SymbolGlyph($r('sys.symbol.chevron_left'))
+          .fontSize(20)
+          .fontColor([$r('app.color.primary_text')])
+      }
+        .width(40)
+        .height(40)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .accessibilityText('返回')
+        .onClick((): void => {
+          this.pathStack.pop();
+        })
+      Text(title)
+        .fontSize($r('app.float.p1_heading_font_size'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.primary_text'))
+        .layoutWeight(1)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      Blank()
+        .width(40)
+        .height(40)
+    }
+    .width('100%')
+    .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding') })
+    .hitTestBehavior(HitTestMode.Transparent)
   }
 
   @Builder
