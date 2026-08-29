@@ -7,7 +7,8 @@
 
 - 四模块架构：`entry`（HAP 主模块）+ `core`/`data`/`reader`（HAR 共享库）；
   `AppScope` 为应用壳（bundleName `com.github.zhuoyi233.zhplus`）。
-- 编译：API 26，`targetSdkVersion`/`compatibleSdkVersion` 均 6.1.1(24)。
+- 编译：API 26，`targetSdkVersion`/`compatibleSdkVersion` 均 `26.0.0`（已从 API 24 迁移，
+  见 `docs/api26-api24-migration-plan.md`）。
 - 依赖：ohpm（`oh-package.json5`），构建工具 hvigor。
 
 ## 构建与验证（必须按顺序执行）
@@ -21,7 +22,8 @@ pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall
 ```
 
 - **必须用 pwsh 7**：Windows PowerShell 5.1 对 UTF-8 无 BOM 中文会乱码，导致脚本失败。
-- 测试基线 **416 个 Hypium 用例**，`verify-harmony.ps1` 会校验注册数与通过数。
+- 用例数由脚本解析 `entry/src/test/List.test.ets` 注册项动态统计，并校验全量通过；
+  无需手动维护基线数字，必要时可用 `-ExpectedTestCount` 显式固定。
 - 签名：已对 `build-profile.json5` 设置 `git update-index --skip-worktree`，本地签名配置
   （`devecocli signature generate` 写入）不会进入 `git status`/提交，**无需再还原**
   （提交前若出现需还原，说明 skip-worktree 失效，重新设置即可）。证书文件在项目外
@@ -79,5 +81,5 @@ $hdc = "hdc"
 
 ## 文档与行为基线
 
-- 阶段文档在 `docs/p0`–`docs/p3`；清理/迁移分析在 `docs/cleanup/`。
+- 阶段文档在 `docs/p0`–`docs/p5`；清理/迁移分析在 `docs/cleanup/`。
 - 行为对齐安卓 Lite：登录三模式（手机号/扫码/网页）、信息流屏蔽、风控 ArkWeb 验证等。
