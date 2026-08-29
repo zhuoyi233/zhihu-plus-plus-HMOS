@@ -11,6 +11,7 @@ import {
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import bundleManager from '@ohos.bundle.bundleManager';
 import { Want } from '@kit.AbilityKit';
+import { hdsMaterial, HdsTabs, HdsTabsController } from '@kit.UIDesignKit';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import {
   decodeP1Destination,
@@ -103,7 +104,10 @@ export struct P1Shell {
   @State private followingReloadToken: number = 0;
   @State private hotReloadToken: number = 0;
   @State private dailyReloadToken: number = 0;
-  @State private topLevelTabIndex: number = P1TopLevelTab.HOME;
+  // HdsTabs 是外部组件，不支持内置 Tabs 的 $$ 双向绑定；用单向 index + onChange 回写，
+  // 程序化切换（navigate 到顶级目的地）通过 @Watch 驱动 controller.changeIndex。
+  @State @Watch('onTopLevelTabIndexChanged') private topLevelTabIndex: number = P1TopLevelTab.HOME;
+  private readonly hdsTabsController: HdsTabsController = new HdsTabsController();
   @Provide('p1PathStack') pathStack: NavPathStack = new NavPathStack();
   private unsubscribeStartupDestination: (() => void) | undefined = undefined;
   private readonly themeOperationGuard: LatestOperationGuard = new LatestOperationGuard();
@@ -529,7 +533,9 @@ export struct P1Shell {
 
   build() {
     Navigation(this.pathStack) {
-      Tabs({ barPosition: BarPosition.End, index: $$this.topLevelTabIndex }) {
+      // 首屏底栏用 HdsTabs 悬浮页签接入鸿蒙沉浸光感材质（API 6.1.0(23)+，ADAPTIVE 按设备与系统档位自适应）。
+      HdsTabs({ barPosition: BarPosition.End, index: this.topLevelTabIndex,
+        controller: this.hdsTabsController }) {
         TabContent() {
           this.homeContent(this.homeReloadToken, (destination: P1Destination): void => this.navigate(destination));
         }
@@ -573,6 +579,14 @@ export struct P1Shell {
         }
       })
       .backgroundColor($r('app.color.page_background'))
+      .barOverlap(true)
+      .barFloatingStyle({
+        barBottomMargin: 28,
+        systemMaterialEffect: {
+          materialType: hdsMaterial.MaterialType.ADAPTIVE,
+          materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        }
+      })
     }
     .hideTitleBar(true)
     .hideBackButton(true)
@@ -1443,6 +1457,10 @@ export struct P1Shell {
     .height('100%')
     .alignContent(Alignment.TopStart)
     .backgroundColor($r('app.color.page_background'))
+  }
+
+  private onTopLevelTabIndexChanged(): void {
+    this.hdsTabsController.changeIndex(this.topLevelTabIndex);
   }
 
   private navigate(destination: P1Destination): void {
