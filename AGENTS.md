@@ -63,6 +63,8 @@ $hdc = "hdc"
   附注 tag（`git tag -a HMOSv0.2.1 -m "<一句里程碑中文摘要>"`）→ 推送仅在用户明确要求时执行
   （`git push origin dev` + 显式列出 HMOS tag）。仓库继承的上游 `0.x`/`nightly` tag 是 zly2006 的
   发布记录，**不要推送**，远端只保留 `HMOS*` tag。
+- 发布产物命名：`ZhihuPlusPlus-HMOS-v<version>-unsigned.hap`（如 `ZhihuPlusPlus-HMOS-v0.2.0-unsigned.hap`）。
+  构建产出的 `entry-default-unsigned.hap` 上传 GitHub Release 前按此重命名；签名包同理用 `-signed` 后缀。
 
 ## ArkTS / ArkUI 代码约束
 
