@@ -95,6 +95,7 @@ export function decodeReadHistoryItem(content: OpenedContent): ReadHistoryItem |
     kind: contentKind,
     id: id,
     openedAt: content.openedAt,
+    title: content.title,
     deletable: true,
     inOnline: false
   };

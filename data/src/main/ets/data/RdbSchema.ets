@@ -4,7 +4,7 @@ export interface SchemaMigration {
   statements: Array<string>;
 }
 
-export const CURRENT_SCHEMA_VERSION: number = 5;
+export const CURRENT_SCHEMA_VERSION: number = 6;
 
 export function schemaMigrationTo(targetVersion: number): SchemaMigration {
   if (targetVersion === 1) {
@@ -72,6 +72,15 @@ export function schemaMigrationTo(targetVersion: number): SchemaMigration {
           'version INTEGER NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)',
         'CREATE INDEX IF NOT EXISTS index_content_drafts_account_updated ' +
           'ON content_drafts(account_key, updated_at DESC, draft_key DESC)'
+      ]
+    };
+  }
+  if (targetVersion === 6) {
+    return {
+      fromVersion: 5,
+      toVersion: 6,
+      statements: [
+        "ALTER TABLE opened_content ADD COLUMN title TEXT NOT NULL DEFAULT ''"
       ]
     };
   }

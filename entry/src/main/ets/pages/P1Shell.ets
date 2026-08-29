@@ -622,7 +622,7 @@ export struct P1Shell {
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
           Column() {
-            AppNavigationRow({ title: '已读记录', description: '查看已打开的内容', testId: 'p2_open_read_history', grouped: true,
+            AppNavigationRow({ title: '历史', description: '查看已打开的内容', testId: 'p2_open_read_history', grouped: true,
               onRowClick: (): void => this.navigate({ name: P1DestinationName.READ_HISTORY }) });
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '内容屏蔽', description: '管理作者与关键词屏蔽规则', testId: 'p2_open_blocking_rules', grouped: true,
@@ -868,7 +868,7 @@ export struct P1Shell {
           SymbolGlyph($r('sys.symbol.line_3_horizontal'))
             .fontSize(20)
             .fontColor([$r('app.color.brand_primary')])
-          Text('已读记录')
+          Text('历史')
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.primary_text'))
         }
@@ -880,7 +880,7 @@ export struct P1Shell {
       .height(72)
       .backgroundColor($r('app.color.surface_background'))
       .borderRadius($r('app.float.p1_card_radius'))
-      .accessibilityText('打开已读记录')
+      .accessibilityText('打开历史')
       .onClick((): void => this.navigate({ name: P1DestinationName.READ_HISTORY }))
 
       Button({ type: ButtonType.Normal, stateEffect: true }) {
@@ -944,8 +944,8 @@ export struct P1Shell {
         AppNavigationRow({ title: '我的收藏夹', description: '查看自己的知乎收藏夹', testId: 'p3_open_my_collections',
           onRowClick: (): void => this.openMyCollections() });
       }
-      if (this.settingsSearchMatches('已读记录', '查看已打开的内容')) {
-        AppNavigationRow({ title: '已读记录', description: '查看已打开的内容', testId: 'p2_open_read_history',
+      if (this.settingsSearchMatches('历史', '查看已打开的内容')) {
+        AppNavigationRow({ title: '历史', description: '查看已打开的内容', testId: 'p2_open_read_history',
           onRowClick: (): void => this.navigate({ name: P1DestinationName.READ_HISTORY }) });
       }
       if (this.settingsSearchMatches('内容屏蔽', '管理作者与关键词屏蔽规则')) {
@@ -1315,7 +1315,7 @@ export struct P1Shell {
       this.settingsSearchMatches('发布想法', '创建一条新的想法') ||
       this.settingsSearchMatches('想法草稿', '继续编辑本地保存的草稿') ||
       this.settingsSearchMatches('我的收藏夹', '查看自己的知乎收藏夹') ||
-      this.settingsSearchMatches('已读记录', '查看已打开的内容') ||
+      this.settingsSearchMatches('历史', '查看已打开的内容') ||
       this.settingsSearchMatches('内容屏蔽', '管理作者与关键词屏蔽规则') ||
       this.settingsSearchMatches('屏蔽记录', '查看最近隐藏的内容') ||
       this.settingsSearchMatches('通知', '查看互动和系统消息') ||

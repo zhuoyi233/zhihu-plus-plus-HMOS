@@ -238,7 +238,7 @@ export struct ReadHistoryPage {
       .backgroundColor(Color.Transparent)
       .accessibilityText('返回')
       .onClick((): void => this.onBack())
-      Text('已读记录')
+      Text('历史')
         .fontSize($r('app.float.p1_heading_font_size'))
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.primary_text'))

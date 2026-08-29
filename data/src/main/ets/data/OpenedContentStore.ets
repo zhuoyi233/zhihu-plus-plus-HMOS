@@ -8,6 +8,8 @@ export interface OpenedContent {
   contentKey: string;
   openedAt: number;
   contentType: string;
+  /** 打开时的展示标题；本地库始终存储，旧记录或未知场景为 undefined/空串。 */
+  title?: string;
 }
 
 export interface ReadHistoryGateway {
@@ -31,7 +33,8 @@ export class OpenedContentStore implements ReadHistoryGateway {
       const values: relationalStore.ValuesBucket = {
         content_key: content.contentKey,
         opened_at: content.openedAt,
-        content_type: content.contentType
+        content_type: content.contentType,
+        title: content.title ?? ''
       };
       const rowId = await store.insert(TABLE_NAME, values, relationalStore.ConflictResolution.ON_CONFLICT_REPLACE);
       if (rowId === -1) {
@@ -49,7 +52,7 @@ export class OpenedContentStore implements ReadHistoryGateway {
     await this.mutationQueue;
     const store = await this.database.open();
     const predicates = new relationalStore.RdbPredicates(TABLE_NAME).equalTo('content_key', contentKey);
-    const resultSet = await store.query(predicates, ['content_key', 'opened_at', 'content_type']);
+    const resultSet = await store.query(predicates, ['content_key', 'opened_at', 'content_type', 'title']);
     try {
       if (!resultSet.goToFirstRow()) {
         return undefined;
@@ -57,7 +60,8 @@ export class OpenedContentStore implements ReadHistoryGateway {
       return {
         contentKey: resultSet.getString(resultSet.getColumnIndex('content_key')),
         openedAt: resultSet.getLong(resultSet.getColumnIndex('opened_at')),
-        contentType: resultSet.getString(resultSet.getColumnIndex('content_type'))
+        contentType: resultSet.getString(resultSet.getColumnIndex('content_type')),
+        title: resultSet.getString(resultSet.getColumnIndex('title'))
       };
     } finally {
       resultSet.close();
@@ -72,7 +76,7 @@ export class OpenedContentStore implements ReadHistoryGateway {
     const store = await this.database.open();
     const predicates = new relationalStore.RdbPredicates(TABLE_NAME)
       .orderByDesc('opened_at').orderByDesc('content_key').limitAs(limit);
-    const resultSet = await store.query(predicates, ['content_key', 'opened_at', 'content_type']);
+    const resultSet = await store.query(predicates, ['content_key', 'opened_at', 'content_type', 'title']);
     const result: Array<OpenedContent> = [];
     try {
       if (resultSet.goToFirstRow()) {
@@ -80,7 +84,8 @@ export class OpenedContentStore implements ReadHistoryGateway {
           result.push({
             contentKey: resultSet.getString(resultSet.getColumnIndex('content_key')),
             openedAt: resultSet.getLong(resultSet.getColumnIndex('opened_at')),
-            contentType: resultSet.getString(resultSet.getColumnIndex('content_type'))
+            contentType: resultSet.getString(resultSet.getColumnIndex('content_type')),
+            title: resultSet.getString(resultSet.getColumnIndex('title'))
           });
         } while (resultSet.goToNextRow());
       }

@@ -22,17 +22,18 @@ export default function p1PersistenceTest(): void {
     });
 
     it('plansOnlyContiguousPendingMigrations', 0, () => {
-      expect(pendingSchemaVersions(0).join(',')).assertEqual('1,2,3,4,5');
-      expect(pendingSchemaVersions(1).join(',')).assertEqual('2,3,4,5');
-      expect(pendingSchemaVersions(2).join(',')).assertEqual('3,4,5');
-      expect(pendingSchemaVersions(3).join(',')).assertEqual('4,5');
-      expect(pendingSchemaVersions(4).join(',')).assertEqual('5');
-      expect(pendingSchemaVersions(5).length).assertEqual(0);
+      expect(pendingSchemaVersions(0).join(',')).assertEqual('1,2,3,4,5,6');
+      expect(pendingSchemaVersions(1).join(',')).assertEqual('2,3,4,5,6');
+      expect(pendingSchemaVersions(2).join(',')).assertEqual('3,4,5,6');
+      expect(pendingSchemaVersions(3).join(',')).assertEqual('4,5,6');
+      expect(pendingSchemaVersions(4).join(',')).assertEqual('5,6');
+      expect(pendingSchemaVersions(5).join(',')).assertEqual('6');
+      expect(pendingSchemaVersions(6).length).assertEqual(0);
     });
 
     it('rejectsInvalidDatabaseVersions', 0, () => {
       expect(() => pendingSchemaVersions(-1)).assertThrowError('Unsupported schema version: -1');
-      expect(() => pendingSchemaVersions(6)).assertThrowError('Unsupported schema version: 6');
+      expect(() => pendingSchemaVersions(7)).assertThrowError('Unsupported schema version: 7');
       expect(() => pendingSchemaVersions(1.5)).assertThrowError('Unsupported schema version: 1.5');
     });
 
