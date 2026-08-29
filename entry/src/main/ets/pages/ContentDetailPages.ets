@@ -165,7 +165,6 @@ struct ContentDetailPage {
     Stack({ alignContent: Alignment.TopStart }) {
       Column() {
         if (!this.immersiveReading) {
-          this.pageHeader()
         }
         if (this.phase === ContentDetailPhase.LOADING || this.phase === ContentDetailPhase.IDLE) {
           this.statusPanel('正在加载内容…', false)
@@ -199,7 +198,18 @@ struct ContentDetailPage {
       .id(`p2_${this.kind}_detail_page`)
       .width('100%')
       .height('100%')
+      .padding({ top: 94 })
       .backgroundColor($r('app.color.page_background'))
+
+      if (!this.immersiveReading && this.content !== undefined &&
+        this.phase === ContentDetailPhase.READY) {
+        Stack({ alignContent: Alignment.Bottom }) {
+          this.bottomActionBar()
+        }
+        .width('100%')
+        .height('100%')
+        .hitTestBehavior(HitTestMode.Transparent)
+      }
 
       if (this.immersiveReading) {
         this.immersiveExitControl()
@@ -574,7 +584,7 @@ struct ContentDetailPage {
         } else {
           // 左块：投票胶囊（赞同图标+数字 / 反对），对齐上游主视觉——
           // Neutral 显示赞+踩（浅蓝底蓝字）；点赞同后反对隐藏、踩后赞同隐藏（实蓝底白字）。
-          Row({ space: 0 }) {
+          Row({ space: 8 }) {
             if (this.voteState !== ContentVoteState.DOWN) {
               this.voteUpAction()
             }
@@ -603,7 +613,7 @@ struct ContentDetailPage {
     }
     .width('100%')
     .zIndex(2)
-    .hitTestBehavior(HitTestMode.Default)
+    .hitTestBehavior(HitTestMode.Transparent)
   }
 
   /** 交互式沉浸材质：支持的真机上胶囊呈现跟手光效（知乎蓝）。ULTRA_THIN 避免白雾遮字。 */
@@ -1093,7 +1103,7 @@ struct ContentDetailPage {
 
   @Builder
   private voteUpAction() {
-    Button({ type: ButtonType.Normal }) {
+    Button({ type: ButtonType.Normal, stateEffect: true }) {
       Row({ space: 6 }) {
         SymbolGlyph($r('sys.symbol.triangleshape'))
           .fontSize(20)
@@ -1107,10 +1117,11 @@ struct ContentDetailPage {
             ? $r('app.color.on_brand')
             : $r('app.color.brand_primary'))
       }
-      .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+      .padding({ left: 10, right: 10, top: 10, bottom: 10 })
     }
     .id(`p3_${this.kind}_vote_up`)
     .backgroundColor(Color.Transparent)
+    .lightUpEffect(1)
     .enabled(!this.interactionPending)
     .onClick((): void => {
       this.voteController?.toggleVote(true);
@@ -1119,7 +1130,7 @@ struct ContentDetailPage {
 
   @Builder
   private voteDownAction() {
-    Button({ type: ButtonType.Normal }) {
+    Button({ type: ButtonType.Normal, stateEffect: true }) {
       Row({ space: 6 }) {
         // 官方符号库无现成下三角，反对图标由上三角旋转 180° 得到。
         SymbolGlyph($r('sys.symbol.triangleshape'))
@@ -1129,10 +1140,11 @@ struct ContentDetailPage {
             : $r('app.color.brand_primary')])
           .rotate({ x: 0, y: 0, z: 1, angle: 180 })
       }
-      .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+      .padding({ left: 10, right: 10, top: 10, bottom: 10 })
     }
     .id(`p3_${this.kind}_vote_down`)
     .backgroundColor(Color.Transparent)
+    .lightUpEffect(1)
     .enabled(!this.interactionPending)
     .onClick((): void => {
       this.voteController?.toggleVote(false);

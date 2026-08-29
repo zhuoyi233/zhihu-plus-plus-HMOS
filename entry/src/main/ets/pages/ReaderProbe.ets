@@ -295,6 +295,7 @@ export struct ReaderProbe {
         .id('reader_list')
         .width('100%')
         .layoutWeight(1)
+        .scrollBar(BarState.Off)
         .padding({ left: 20, right: 20, top: 16, bottom: 24 })
         .cachedCount(6)
       }

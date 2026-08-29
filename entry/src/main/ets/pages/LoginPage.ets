@@ -1,4 +1,4 @@
-import { ApplicationStateChangeCallback, common } from '@kit.AbilityKit';
+import { ApplicationStateChangeCallback, common, Want } from '@kit.AbilityKit';
 import {
   COOKIE_HEADER_MAX_LENGTH,
   getAppSessionOwner,
@@ -9,6 +9,7 @@ import { completesUserAuthentication, LoginController, LoginPhase, LoginViewStat
 import { PhoneLoginPage } from './PhoneLoginPage';
 import { RiskControlWebPage } from './RiskControlWebPage';
 import { WebLoginPage } from './WebLoginPage';
+import { getAbilityContext } from '../entryability/AbilityContextHolder';
 
 /** 登录模式（对齐上游 LOGIN_MODE_PHONE=2 / LOGIN_MODE_QR=1 / LOGIN_MODE_WEB=0）。 */
 const LOGIN_MODE_PHONE = 0;
@@ -54,6 +55,7 @@ export struct LoginPage {
   @State private showWebLogin: boolean = false;
   @State private riskCookies: Array<SessionCookie> = [];
   private controller?: LoginController;
+  private abilityContext?: common.UIAbilityContext;
   private applicationContext?: common.ApplicationContext;
   private applicationStateCallback?: LoginApplicationStateCallback;
 
@@ -71,6 +73,7 @@ export struct LoginPage {
       };
       return;
     }
+    this.abilityContext = getAbilityContext();
     this.controller = new LoginController(
       getAppSessionOwner(context).getRepository(),
       new ZhihuQrLoginClient(),
@@ -109,6 +112,7 @@ export struct LoginPage {
     }
     this.controller?.deactivate();
     this.controller = undefined;
+    this.abilityContext = undefined;
     this.cookieInput = '';
     this.showWebLogin = false;
     this.riskCookies = [];
@@ -118,27 +122,6 @@ export struct LoginPage {
     Stack({ alignContent: Alignment.TopStart }) {
       Scroll() {
         Column({ space: $r('app.float.p1_spacing_large') }) {
-          Row({ space: $r('app.float.p1_spacing_small') }) {
-            Button({ type: ButtonType.Normal, stateEffect: true }) {
-              SymbolGlyph($r('sys.symbol.chevron_left'))
-                .fontSize(20)
-                .fontColor([$r('app.color.primary_text')])
-            }
-              .id('p2_login_back')
-              .width(40)
-              .height(40)
-              .padding(0)
-              .backgroundColor(Color.Transparent)
-              .accessibilityText('返回上一页')
-              .onClick(() => this.onBack())
-            Text('账号与登录')
-              .fontSize($r('app.float.p1_heading_font_size'))
-              .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.primary_text'))
-              .layoutWeight(1)
-          }
-          .width('100%')
-
           Column({ space: $r('app.float.p1_spacing_small') }) {
             Text(this.viewState.profileName === undefined ? '游客模式' : this.viewState.profileName)
               .id('p2_login_identity')
@@ -301,8 +284,10 @@ export struct LoginPage {
         }
         .alignItems(HorizontalAlign.Start)
         .width('100%')
-        .padding($r('app.float.p1_page_padding'))
+        .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
+          top: 94, bottom: $r('app.float.p1_page_padding') })
       }
+      .scrollBar(BarState.Off)
       .width('100%')
       .height('100%')
       .align(Alignment.TopStart)
@@ -313,6 +298,9 @@ export struct LoginPage {
           onCookiesCaptured: (cookies: Array<SessionCookie>): void => {
             this.showWebLogin = false;
             this.controller?.loginWithCookies(cookies);
+          },
+          onExternalUrl: (url: string): void => {
+            this.openExternalLogin(url);
           },
           onBack: (): void => {
             this.showWebLogin = false;
@@ -383,5 +371,18 @@ export struct LoginPage {
       .onClick((): void => {
         this.selectedMode = index;
       })
+  }
+
+  private openExternalLogin(url: string): void {
+    const context = this.abilityContext;
+    if (context === undefined) {
+      return;
+    }
+    const want: Want = {
+      action: 'ohos.want.action.viewData',
+      uri: url
+    };
+    context.startAbility(want).catch((_error: Error): void => {
+    });
   }
 }

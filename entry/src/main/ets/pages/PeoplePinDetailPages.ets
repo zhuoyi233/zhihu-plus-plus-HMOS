@@ -36,6 +36,7 @@ import {
   BlockingActionViewState,
   BlockingUserCandidate
 } from './BlockingActionState';
+import { ZhihuHdsActionBar } from './components/ZhihuHdsTabs';
 
 @Component
 struct ReadOnlyDetailStatusPanel {
@@ -170,7 +171,6 @@ export struct PeopleDetailPage {
 
   build() {
     Column() {
-      this.pageHeader()
       if (this.phase === ReadOnlyDetailPhase.IDLE || this.phase === ReadOnlyDetailPhase.LOADING) {
         ReadOnlyDetailStatusPanel({
           kind: 'people',
@@ -383,9 +383,10 @@ export struct PeopleDetailPage {
       }
       .alignItems(HorizontalAlign.Center)
       .width('100%')
-      .padding($r('app.float.p1_page_padding'))
+      .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
+        top: 94, bottom: $r('app.float.p1_page_padding') })
     }
-    .scrollBar(BarState.Auto)
+    .scrollBar(BarState.Off)
     .width('100%')
     .layoutWeight(1)
   }
@@ -453,6 +454,7 @@ export struct PeopleDetailPage {
       }
       .padding({ left: $r('app.float.p1_spacing_small'), right: $r('app.float.p1_spacing_small') })
     }
+    .scrollBar(BarState.Off)
     .id('p2_people_content_tabs')
     .scrollable(ScrollDirection.Horizontal)
     .scrollBar(BarState.Off)
@@ -814,7 +816,6 @@ export struct PinDetailPage {
 
   build() {
     Column() {
-      this.pageHeader()
       if (this.phase === ReadOnlyDetailPhase.IDLE || this.phase === ReadOnlyDetailPhase.LOADING) {
         ReadOnlyDetailStatusPanel({
           kind: 'pin',
@@ -932,8 +933,9 @@ export struct PinDetailPage {
 
   @Builder
   private loadedPin(pin: PinDetail) {
-    Column() {
-      Column({ space: $r('app.float.p1_spacing_small') }) {
+    Stack({ alignContent: Alignment.TopStart }) {
+      Column() {
+        Column({ space: $r('app.float.p1_spacing_small') }) {
         Text(pin.author.headline.length > 0 ? `${pin.author.name} · ${pin.author.headline}` : pin.author.name)
           .id('p2_pin_detail_author')
           .fontSize($r('app.float.p1_body_font_size'))
@@ -994,12 +996,20 @@ export struct PinDetailPage {
       .padding($r('app.float.p1_page_padding'))
       .backgroundColor($r('app.color.surface_background'))
 
-      NativeContentDocument({
-        html: pin.contentHtml,
-        emptyMessage: '这条想法暂时没有正文'
-      })
-        .layoutWeight(1)
-      this.bottomActionBar(pin)
+        NativeContentDocument({
+          html: pin.contentHtml,
+          emptyMessage: '这条想法暂时没有正文'
+        })
+          .layoutWeight(1)
+      }
+      .width('100%')
+      .height('100%')
+      Stack({ alignContent: Alignment.Bottom }) {
+        this.bottomActionBar(pin)
+      }
+      .width('100%')
+      .height('100%')
+      .hitTestBehavior(HitTestMode.Transparent)
     }
     .width('100%')
     .height('100%')
@@ -1036,6 +1046,13 @@ export struct PinDetailPage {
 
   @Builder
   private bottomActionBar(pin: PinDetail) {
+    ZhihuHdsActionBar() {
+      this.pinBottomActionBarContent(pin)
+    }
+  }
+
+  @Builder
+  private pinBottomActionBarContent(pin: PinDetail) {
     Row() {
       Text('参与讨论')
         .fontSize($r('app.float.p1_secondary_font_size'))
@@ -1065,13 +1082,13 @@ export struct PinDetailPage {
     }
     .id('p3_pin_detail_bottom_actions')
     .width('100%')
+    .borderRadius(28)
     .padding({
       left: $r('app.float.p1_page_padding'),
       right: $r('app.float.p1_page_padding'),
       top: $r('app.float.p1_spacing_small'),
       bottom: $r('app.float.p1_spacing_small')
     })
-    .backgroundColor($r('app.color.surface_background'))
     .border({ width: { top: 0.5 }, color: $r('app.color.divider_color') })
   }
 

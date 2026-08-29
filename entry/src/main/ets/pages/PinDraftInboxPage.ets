@@ -37,41 +37,6 @@ export struct PinDraftInboxPage {
 
   build() {
     Column({ space: $r('app.float.p1_spacing_medium') }) {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
-        Button({ type: ButtonType.Normal, stateEffect: true }) {
-          SymbolGlyph($r('sys.symbol.chevron_left'))
-            .fontSize(20)
-            .fontColor([$r('app.color.primary_text')])
-        }
-          .id('p4_pin_drafts_back')
-          .width(40)
-          .height(40)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .accessibilityText('返回')
-          .onClick((): void => this.onBack())
-        Text('本地想法草稿')
-          .id('p4_pin_drafts_title')
-          .layoutWeight(1)
-          .fontSize($r('app.float.p1_heading_font_size'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.primary_text'))
-        Button({ type: ButtonType.Normal, stateEffect: true }) {
-          SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-            .fontSize(20)
-            .fontColor([$r('app.color.primary_text')])
-        }
-          .id('p4_pin_drafts_refresh')
-          .width(40)
-          .height(40)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .accessibilityText('刷新草稿')
-          .enabled(this.phase === PinDraftInboxPhase.READY || this.phase === PinDraftInboxPhase.UNAVAILABLE)
-          .onClick((): void => this.load())
-      }
-      .width('100%')
-
       Text(this.statusMessage())
         .id('p4_pin_drafts_status')
         .width('100%')
@@ -116,13 +81,15 @@ export struct PinDraftInboxPage {
         .id('p4_pin_drafts_list')
         .width('100%')
         .layoutWeight(1)
+        .scrollBar(BarState.Off)
       }
     }
     .id('p4_pin_drafts_page')
     .alignItems(HorizontalAlign.Start)
     .width('100%')
     .height('100%')
-    .padding($r('app.float.p1_page_padding'))
+    .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
+      top: 94, bottom: $r('app.float.p1_page_padding') })
     .backgroundColor($r('app.color.page_background'))
   }
 

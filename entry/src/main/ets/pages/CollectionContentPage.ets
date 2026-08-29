@@ -60,7 +60,6 @@ export struct CollectionContentPage {
 
   build() {
     Column({ space: $r('app.float.p1_spacing_medium') }) {
-      this.pageHeader()
       if (this.phase === CollectionContentPhase.IDLE || this.phase === CollectionContentPhase.LOADING) {
         this.statusPanel('正在加载收藏夹内容…', false, 'p3_collection_content_loading')
       } else if (this.phase === CollectionContentPhase.ERROR) {
@@ -68,7 +67,6 @@ export struct CollectionContentPage {
       } else if (this.phase === CollectionContentPhase.EMPTY) {
         this.statusPanel('这个收藏夹还没有内容', true, 'p3_collection_content_empty')
       } else {
-        this.header()
         if (this.errorMessage.length > 0) {
           Row({ space: $r('app.float.p1_spacing_small') }) {
             Text(this.errorMessage)
@@ -111,6 +109,7 @@ export struct CollectionContentPage {
         }
         .id('p3_collection_content_list')
         .width('100%')
+        .scrollBar(BarState.Off)
         .layoutWeight(1)
         .edgeEffect(EdgeEffect.Spring)
         .onReachEnd(() => this.controller?.loadMore())
@@ -123,7 +122,7 @@ export struct CollectionContentPage {
     .padding({
       left: $r('app.float.p1_page_padding'),
       right: $r('app.float.p1_page_padding'),
-      top: $r('app.float.p1_spacing_medium'),
+      top: 94,
       bottom: $r('app.float.p1_page_padding')
     })
     .backgroundColor($r('app.color.page_background'))
