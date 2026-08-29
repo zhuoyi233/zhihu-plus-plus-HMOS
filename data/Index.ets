@@ -82,3 +82,6 @@ export * from './src/main/ets/data/DraftKeyStore';
 export * from './src/main/ets/data/EncryptedDraftBodyStore';
 export * from './src/main/ets/data/DraftRepository';
 export * from './src/main/ets/data/LocalDraftImageReferences';
+export * from './src/main/ets/update/AppUpdateModels';
+export * from './src/main/ets/update/AppUpdateParser';
+export * from './src/main/ets/update/AppUpdateClient';

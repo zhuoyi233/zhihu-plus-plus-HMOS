@@ -1,4 +1,13 @@
-import { AppPreferencesStore, AppThemeMode, LoginSessionGateway, SessionStatus } from 'data';
+import {
+  AppPreferencesStore,
+  AppThemeMode,
+  AppUpdateCheckResult,
+  AppUpdateCheckStatus,
+  AppUpdateClient,
+  AppUpdateRelease,
+  LoginSessionGateway,
+  SessionStatus
+} from 'data';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import bundleManager from '@ohos.bundle.bundleManager';
 import { Want } from '@kit.AbilityKit';
@@ -80,6 +89,12 @@ export struct P1Shell {
   @State private themePersistenceStatus: string = '正在读取主题设置…';
   @State private installedVersionLabel: string = '正在读取已安装版本…';
   @State private aboutVersionSheetShown: boolean = false;
+  /** GitHub 最新 Release 检出有新版本时非空：驱动“我的”页横幅与版本弹层下载入口。 */
+  @State private pendingUpdateRelease: AppUpdateRelease | undefined = undefined;
+  @State private updateCheckBusy: boolean = false;
+  @State private updateCheckMessage: string = '';
+  private installedVersionName: string = '';
+  private readonly updateClient: AppUpdateClient = new AppUpdateClient();
   @State private projectLicenseSheetShown: boolean = false;
   @State private openSourceLicensesSheetShown: boolean = false;
   @State private projectHomeHelpShown: boolean = false;
@@ -106,6 +121,8 @@ export struct P1Shell {
       this.navigate(destination);
     };
     this.unsubscribeStartupDestination = startupDestinationChannel.subscribe(listener);
+    // 每次启动静默检查 GitHub 最新 Release；失败不打扰，检出新版本时在“我的”页提示。
+    void this.runUpdateCheck(false);
   }
 
   aboutToDisappear(): void {
@@ -662,6 +679,18 @@ export struct P1Shell {
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
           Column() {
+            if (this.pendingUpdateRelease !== undefined) {
+              AppNavigationRow({ title: this.pendingUpdateTitle(),
+                description: '点击前往 GitHub 下载新版 HAP', testId: 'p3_open_update_download', grouped: true,
+                onRowClick: (): void => {
+                  const release = this.pendingUpdateRelease;
+                  const url = release !== undefined && release.htmlUrl.length > 0
+                    ? release.htmlUrl
+                    : PROJECT_HOME_URI + '/releases/latest';
+                  this.openExternalUrl(url, '无法打开发布页');
+                } });
+              Divider().color($r('app.color.divider_color'))
+            }
             AppNavigationRow({ title: '应用与版本', description: this.installedVersionLabel,
               testId: 'p3_open_about_version', grouped: true,
               onRowClick: (): void => {
@@ -1036,6 +1065,32 @@ export struct P1Shell {
         .fontSize($r('app.float.p1_secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
+      Button('检查更新')
+        .id('p3_check_update')
+        .fontSize($r('app.float.p1_body_font_size'))
+        .enabled(!this.updateCheckBusy)
+        .onClick((): void => {
+          void this.runUpdateCheck(true);
+        })
+      if (this.updateCheckMessage.length > 0) {
+        Text(this.updateCheckMessage)
+          .id('p3_update_check_status')
+          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .width('100%')
+      }
+      if (this.pendingUpdateRelease !== undefined) {
+        Button('前往下载新版 HAP')
+          .id('p3_update_download')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .onClick((): void => {
+            const release = this.pendingUpdateRelease;
+            const url = release !== undefined && release.htmlUrl.length > 0
+              ? release.htmlUrl
+              : PROJECT_HOME_URI + '/releases/latest';
+            this.openExternalUrl(url, '无法打开发布页');
+          })
+      }
     }
     .width('100%')
     .padding($r('app.float.p1_page_padding'))
@@ -1195,10 +1250,53 @@ export struct P1Shell {
   private refreshInstalledVersionLabel(): void {
     try {
       const bundle = bundleManager.getBundleInfoForSelfSync(bundleManager.BundleFlag.GET_BUNDLE_INFO_DEFAULT);
+      this.installedVersionName = bundle.versionName;
       this.installedVersionLabel = `版本 ${bundle.versionName}（版本号 ${bundle.versionCode}）`;
     } catch (_error) {
+      this.installedVersionName = '';
       this.installedVersionLabel = '暂时无法读取已安装版本';
     }
+  }
+
+  /** verbose=true 供“应用与版本”弹层手动检查（展示状态）；false 供启动静默检查（仅检出新版本时提示）。 */
+  private async runUpdateCheck(verbose: boolean): Promise<void> {
+    if (this.updateCheckBusy) {
+      return;
+    }
+    if (this.installedVersionName.length === 0) {
+      if (verbose) {
+        this.updateCheckMessage = '无法读取本机版本，暂时无法检查更新';
+      }
+      return;
+    }
+    this.updateCheckBusy = true;
+    if (verbose) {
+      this.updateCheckMessage = '正在检查更新…';
+    }
+    try {
+      const result: AppUpdateCheckResult =
+        await this.updateClient.checkLatestRelease(this.installedVersionName);
+      if (result.status === AppUpdateCheckStatus.UPDATE_AVAILABLE && result.release !== undefined) {
+        this.pendingUpdateRelease = result.release;
+        if (verbose) {
+          this.updateCheckMessage = `发现新版本 ${result.release.versionName}，可前往下载`;
+        }
+      } else if (result.status === AppUpdateCheckStatus.UP_TO_DATE) {
+        this.pendingUpdateRelease = undefined;
+        if (verbose) {
+          this.updateCheckMessage = '当前已是最新版本';
+        }
+      } else if (verbose) {
+        this.updateCheckMessage = result.message.length > 0 ? result.message : '检查更新失败，请稍后重试';
+      }
+    } finally {
+      this.updateCheckBusy = false;
+    }
+  }
+
+  private pendingUpdateTitle(): string {
+    const release = this.pendingUpdateRelease;
+    return release !== undefined ? `发现新版本 ${release.versionName}` : '';
   }
 
   private hasSettingsSearchQuery(): boolean {
@@ -1228,24 +1326,28 @@ export struct P1Shell {
       this.settingsSearchMatches('技术实验室', '仅用于本机诊断与验证');
   }
 
-  private openProjectHome(): void {
+  private openExternalUrl(url: string, fallbackPrefix: string): void {
     const context = getAbilityContext();
     if (context === undefined) {
-      this.showProjectHomeHelp('当前页面无法调用系统浏览器，请在浏览器中打开此地址。');
+      this.showProjectHomeHelp(`${fallbackPrefix}，请在浏览器中打开此地址：${url}`);
       return;
     }
     const want: Want = {
       action: 'ohos.want.action.viewData',
-      uri: PROJECT_HOME_URI
+      uri: url
     };
     try {
       void context.startAbility(want).then((): void => {
       }, (): void => {
-        this.showProjectHomeHelp('系统中没有可处理此 HTTPS 地址的应用，请在浏览器中打开此地址。');
+        this.showProjectHomeHelp(`${fallbackPrefix}，请在浏览器中打开此地址：${url}`);
       });
     } catch (_error) {
-      this.showProjectHomeHelp('系统中没有可处理此 HTTPS 地址的应用，请在浏览器中打开此地址。');
+      this.showProjectHomeHelp(`${fallbackPrefix}，请在浏览器中打开此地址：${url}`);
     }
+  }
+
+  private openProjectHome(): void {
+    this.openExternalUrl(PROJECT_HOME_URI, '当前无法调用系统浏览器');
   }
 
   private showProjectHomeHelp(status: string): void {
