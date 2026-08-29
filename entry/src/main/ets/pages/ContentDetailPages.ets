@@ -178,7 +178,7 @@ struct ContentDetailPage {
             }
           }
           .width('100%')
-          .height('100%')
+          .layoutWeight(1)
         }
       }
       .id(`p2_${this.kind}_detail_page`)
