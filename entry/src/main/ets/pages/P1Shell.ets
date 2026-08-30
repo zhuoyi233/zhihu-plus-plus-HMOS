@@ -740,6 +740,7 @@ export struct P1Shell {
           .width(40)
           .height(40)
           .padding(0)
+          .borderRadius(20)
           .backgroundColor(this.supportsImmersiveMaterial()
             ? Color.Transparent
             : $r('app.color.surface_background'))
