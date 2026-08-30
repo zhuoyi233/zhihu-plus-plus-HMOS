@@ -1,4 +1,4 @@
-name: HarmonyOS API 26 Compile / API 24 Compatible Check
+name: HarmonyOS API 26 Compile / API 23 Compatible Check
 
 on:
   pull_request:
@@ -24,7 +24,7 @@ on:
         default: 0
 
 concurrency:
-  group: harmonyos-compile-api26-compatible-api24-${{ github.ref }}
+  group: harmonyos-compile-api26-compatible-api23-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -32,7 +32,7 @@ permissions:
 
 jobs:
   verify:
-    name: API 26 compile / API 24 compatible build and Hypium
+    name: API 26 compile / API 23 compatible build and Hypium
     if: ${{ vars.ENABLE_HARMONYOS_API26_API24_CI == 'true' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: [self-hosted, windows, x64, harmonyos-compile-api26]
     timeout-minutes: 30
@@ -46,7 +46,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Verify API 26 compile / API 24 compatibility and tests
+      - name: Verify API 26 compile / API 23 compatibility and tests
         shell: pwsh
         run: |
           $expected = 0
@@ -58,15 +58,15 @@ jobs:
             -SdkRoot $env:HARMONY_SDK_ROOT `
             -ExpectedCompileApiVersion '26' `
             -ExpectedCompilePlatformVersion '26.0.0' `
-            -ExpectedTargetSdkVersion '6.1.1(24)' `
-            -ExpectedCompatibleSdkVersion '6.1.1(24)' `
+            -ExpectedTargetSdkVersion '26.0.0' `
+            -ExpectedCompatibleSdkVersion '6.1.0(23)' `
             -ExpectedTestCount $expected
 
       - name: Upload Hypium reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: harmonyos-api26-api24-test-reports-${{ github.run_id }}
+          name: harmonyos-api26-api23-test-reports-${{ github.run_id }}
           if-no-files-found: warn
           retention-days: 14
           path: |
