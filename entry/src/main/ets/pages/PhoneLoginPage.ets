@@ -25,6 +25,18 @@ function normalizePhoneInput(input: string): string {
   return compact;
 }
 
+/** 服务端英文参数级报错（如 miss arg grant_type，实测为风控/网关层拒绝）直译无指导意义，
+ * 转译为可行动提示并括注原文。协议层已与上游逐字节对齐，此类报错不是客户端参数缺失。 */
+function friendlyPhoneLoginMessage(raw: string, fallback: string): string {
+  if (raw.length === 0) {
+    return fallback;
+  }
+  if (/miss arg/i.test(raw)) {
+    return `登录失败：服务端拒绝了本次请求（疑似风控），请稍后重试或改用 Cookie 登录（${raw}）`;
+  }
+  return raw;
+}
+
 /**
  * P3-10：手机号登录卡片（对齐上游 PhoneLoginPane）。
  * 流程：手机号 → 发送短信验证码（可能要求图形验证码）→ 输入验证码登录。
@@ -200,11 +212,13 @@ export struct PhoneLoginPage {
         this.message = '请先完成图形验证码';
       } else {
         this.step = PhoneLoginStep.IDLE;
-        this.message = result.errorMessage ?? '验证码发送失败，请重试';
+        this.message = friendlyPhoneLoginMessage(result.errorMessage ?? '', '验证码发送失败，请重试');
       }
     } catch (error) {
       this.step = PhoneLoginStep.IDLE;
-      this.message = error instanceof PhoneLoginError ? error.message : '网络错误，请稍后重试';
+      this.message = error instanceof PhoneLoginError
+        ? friendlyPhoneLoginMessage(error.message, '网络错误，请稍后重试')
+        : '网络错误，请稍后重试';
     }
   }
 
@@ -246,11 +260,13 @@ export struct PhoneLoginPage {
         this.message = '仍需完成图形验证码';
       } else {
         this.step = PhoneLoginStep.IDLE;
-        this.message = result.errorMessage ?? '验证码发送失败，请重试';
+        this.message = friendlyPhoneLoginMessage(result.errorMessage ?? '', '验证码发送失败，请重试');
       }
     } catch (error) {
       this.step = PhoneLoginStep.CAPTCHA_REQUIRED;
-      this.message = error instanceof PhoneLoginError ? error.message : '网络错误，请稍后重试';
+      this.message = error instanceof PhoneLoginError
+        ? friendlyPhoneLoginMessage(error.message, '网络错误，请稍后重试')
+        : '网络错误，请稍后重试';
     }
   }
 
@@ -266,7 +282,9 @@ export struct PhoneLoginPage {
       this.onCookiesCaptured(token.cookies);
     } catch (error) {
       this.step = PhoneLoginStep.DIGITS_SENT;
-      this.message = error instanceof PhoneLoginError ? error.message : '登录失败，请稍后重试';
+      this.message = error instanceof PhoneLoginError
+        ? friendlyPhoneLoginMessage(error.message, '登录失败，请稍后重试')
+        : '登录失败，请稍后重试';
     }
   }
 }
