@@ -999,16 +999,15 @@ private openAnswerComposer(): void {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
       Row({ space: 6 }) {
         SymbolGlyph(this.voteState === ContentVoteState.UP
-            ? $r('sys.symbol.triangleshape_fill')
-            : $r('sys.symbol.triangleshape'))
-          .fontSize(20)
+            ? $r('sys.symbol.arrowtriangle_left_fill')
+            : $r('sys.symbol.arrowtriangle_left'))
+          .fontSize(22)
           .fontColor([$r('app.color.brand_primary')])
+          .rotate({ x: 0, y: 0, z: 1, angle: 90 })
         Text(`${this.voteupCount}`)
           .fontSize($r('app.float.p1_body_font_size'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.voteState === ContentVoteState.UP
-            ? $r('app.color.on_brand')
-            : $r('app.color.brand_primary'))
+          .fontWeight(this.voteState === ContentVoteState.UP ? FontWeight.Bold : FontWeight.Medium)
+          .fontColor($r('app.color.brand_primary'))
       }
       .padding({ left: 10, right: 10, top: 10, bottom: 10 })
     }
@@ -1025,13 +1024,13 @@ private openAnswerComposer(): void {
   private voteDownAction() {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
       Row({ space: 6 }) {
-        // 官方符号库无现成下三角，反对图标由上三角旋转 180° 得到。
+        // 左三角旋转 -90°（逆时针）得到向下方向；选中实心、未选中描边。
         SymbolGlyph(this.voteState === ContentVoteState.DOWN
-            ? $r('sys.symbol.triangleshape_fill')
-            : $r('sys.symbol.triangleshape'))
-          .fontSize(20)
+            ? $r('sys.symbol.arrowtriangle_left_fill')
+            : $r('sys.symbol.arrowtriangle_left'))
+          .fontSize(22)
           .fontColor([$r('app.color.brand_primary')])
-          .rotate({ x: 0, y: 0, z: 1, angle: 180 })
+          .rotate({ x: 0, y: 0, z: 1, angle: -90 })
       }
       .padding({ left: 10, right: 10, top: 10, bottom: 10 })
     }
