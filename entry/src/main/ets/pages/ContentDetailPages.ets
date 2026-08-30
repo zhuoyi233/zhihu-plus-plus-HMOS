@@ -748,42 +748,9 @@ private openAnswerComposer(): void {
               this.navigate({ name: P1DestinationName.PEOPLE, id: urlToken });
             }
           })
-        } else {
-          // 无作者时：回答/文章不显示「回答」文字（系统栏已有），问题页显示标题。
-          if (content.kind === ContentDetailKind.QUESTION) {
-            Text(contentTitle(content))
-              .id(`p3_${content.kind}_detail_top_title`)
-              .fontSize($r('app.float.p1_body_font_size'))
-              .fontColor($r('app.color.primary_text'))
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .layoutWeight(1)
-              .padding({
-                left: $r('app.float.p1_page_padding'),
-                right: $r('app.float.p1_page_padding'),
-                top: $r('app.float.p1_spacing_small'),
-                bottom: $r('app.float.p1_spacing_small')
-              })
-            }
-          }
-      } else {
-        // 收起态：回答/文章完全不渲染（节省空间，标题由 NavDestination 系统栏提供）；
-        // 问题页保留标题（系统栏无对应完整标题）。
-        if (content.kind === ContentDetailKind.QUESTION) {
-          Text(contentTitle(content))
-            .id(`p3_${content.kind}_detail_top_title`)
-            .fontSize($r('app.float.p1_body_font_size'))
-            .fontColor($r('app.color.primary_text'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .layoutWeight(1)
-            .padding({
-              left: $r('app.float.p1_page_padding'),
-              right: $r('app.float.p1_page_padding'),
-              top: $r('app.float.p1_spacing_small'),
-              bottom: $r('app.float.p1_spacing_small')
-            })
         }
+        // 无作者与收起态均不再渲染标题行（对齐回答/文章页）：问题标题由下方固定信息头
+        // 常驻展示，条带再渲染同款标题会与之同屏重复。
       }
     }
     .width('100%')
