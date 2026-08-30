@@ -235,9 +235,11 @@ struct ContentDetailPage {
             }
           }
         })
-      if (this.kind === ContentDetailKind.ANSWER || this.kind === ContentDetailKind.ARTICLE) {
+      if (this.kind === ContentDetailKind.ANSWER || this.kind === ContentDetailKind.ARTICLE ||
+        this.kind === ContentDetailKind.QUESTION) {
         CommentLayer({
-          contentType: this.kind === ContentDetailKind.ARTICLE ? 'article' : 'answer',
+          contentType: this.kind === ContentDetailKind.ARTICLE ? 'article'
+            : this.kind === ContentDetailKind.QUESTION ? 'question' : 'answer',
           contentId: this.contentId,
           repository: this.commentRepository,
           session: this.session,
@@ -630,6 +632,31 @@ struct ContentDetailPage {
 
   @Builder
   private questionRightActions() {
+    // 对齐回答详情页右下角动作组：评论 + 更多（问题暂无投票/收藏端点，见 ContentDetailPages 注释）。
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      Row({ space: 5 }) {
+        SymbolGlyph($r('sys.symbol.message'))
+          .fontSize(22)
+          .fontColor([$r('app.color.secondary_text')])
+        Text(`${this.content?.value.commentCount ?? 0}`)
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.secondary_text'))
+      }
+      .padding({ left: 6, right: 6, top: 6, bottom: 6 })
+    }
+    .id('p3_question_detail_comment_bar')
+    .height(44)
+    .backgroundColor(Color.Transparent)
+    .accessibilityText('问题评论')
+    .onClick((): void => {
+      if (this.commentRepository !== undefined && this.session !== undefined) {
+        this.showComments = true;
+      } else {
+        this.navigate({ name: P1DestinationName.LOGIN });
+      }
+    })
+
     Button({ type: ButtonType.Normal, stateEffect: false }) {
       SymbolGlyph($r('sys.symbol.ellipsis_circle'))
         .fontSize(22)
@@ -643,20 +670,6 @@ struct ContentDetailPage {
     .onClick((): void => {
       this.actionMenuShown = true;
     })
-    Button('写回答')
-      .id('p4_question_write_answer')
-      .height(44)
-      .fontSize($r('app.float.p1_secondary_font_size'))
-      .onClick((): void => this.openAnswerComposer())
-  }
-
-private openAnswerComposer(): void {
-    const session = this.session;
-    if (session === undefined || session.getState().status !== SessionStatus.AUTHENTICATED) {
-      this.navigate({ name: P1DestinationName.LOGIN });
-      return;
-    }
-    this.navigate({ name: P1DestinationName.WRITE_ANSWER, questionId: this.contentId });
   }
 
   private canEditExistingAnswer(): boolean {
@@ -994,11 +1007,22 @@ private openAnswerComposer(): void {
 
   @Builder
   private followQuestionAction() {
-    Button(this.following ? `已关注 ${this.followerCount}` : `关注问题 ${this.followerCount}`,
-      { type: ButtonType.Normal })
+    // 对齐回答详情页底部动作语言：透明背景 + 符号 + 次要色文字，玻璃胶囊由外层承载。
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      Row({ space: 5 }) {
+        SymbolGlyph(this.following ? $r('sys.symbol.checkmark') : $r('sys.symbol.plus'))
+          .fontSize(22)
+          .fontColor([this.following ? $r('app.color.brand_primary') : $r('app.color.secondary_text')])
+        Text(this.following ? `已关注 ${this.followerCount}` : `关注问题 ${this.followerCount}`)
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.following ? $r('app.color.brand_primary') : $r('app.color.secondary_text'))
+      }
+      .padding({ left: 6, right: 6, top: 6, bottom: 6 })
+    }
       .id('p3_question_follow')
-      .fontSize($r('app.float.p1_body_font_size'))
-      .fontColor(this.following ? $r('app.color.brand_primary') : $r('app.color.secondary_text'))
+      .height(44)
+      .backgroundColor(Color.Transparent)
       .enabled(!this.interactionPending)
       .onClick((): void => {
         this.followController?.toggleFollow();
