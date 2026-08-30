@@ -6,6 +6,7 @@ import {
   AppUpdateClient,
   AppUpdateRelease,
   LoginSessionGateway,
+  SessionState,
   SessionStatus
 } from 'data';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
@@ -102,6 +103,10 @@ export struct P1Shell {
   @BuilderParam backgroundTaskProbeContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam domainFixtureProbeContent: (onBack: () => void) => void = this.emptyProbe;
   session: LoginSessionGateway | undefined = undefined;
+  // 登录/登出经 AppStorage 广播 sessionStateTick（LoginSessionGateway 非可观察对象，
+  // 直接 getState() 不驱动 UI）；快照仅在 tick 变化时刷新，供账号概览等方法读取。
+  @StorageProp('sessionStateTick') @Watch('onSessionStateTick') sessionStateTick: number = 0;
+  @State private sessionSnapshot?: SessionState = undefined;
   @State private themeMode: AppThemeMode = AppThemeMode.SYSTEM;
   @State private installedVersionLabel: string = '正在读取已安装版本…';
   @State private aboutVersionSheetShown: boolean = false;
@@ -138,6 +143,7 @@ export struct P1Shell {
 
   aboutToAppear(): void {
     this.themeMounted = true;
+    this.sessionSnapshot = this.session?.getState();
     this.restoreThemeMode();
     this.refreshInstalledVersionLabel();
     this.unsubscribeStartupDestination?.();
@@ -1704,8 +1710,16 @@ export struct P1Shell {
     this.projectHomeHelpShown = true;
   }
 
+  private onSessionStateTick(): void {
+    this.sessionSnapshot = this.session?.getState();
+  }
+
+  private accountSessionState(): SessionState | undefined {
+    return this.sessionSnapshot ?? this.session?.getState();
+  }
+
   private accountSummary(): string {
-    const state = this.session?.getState();
+    const state = this.accountSessionState();
     if (state?.status !== SessionStatus.AUTHENTICATED) {
       return '管理当前知乎账号的登录状态';
     }
@@ -1714,7 +1728,7 @@ export struct P1Shell {
   }
 
   private accountTitle(): string {
-    const state = this.session?.getState();
+    const state = this.accountSessionState();
     if (state?.status !== SessionStatus.AUTHENTICATED) {
       return '登录知乎';
     }
@@ -1727,7 +1741,7 @@ export struct P1Shell {
   }
 
   private accountAvatarUrl(): string {
-    const state = this.session?.getState();
+    const state = this.accountSessionState();
     if (state?.status !== SessionStatus.AUTHENTICATED) {
       return '';
     }
@@ -1868,8 +1882,11 @@ export struct P1Shell {
     this.followingReloadToken += 1;
     this.hotReloadToken += 1;
     this.dailyReloadToken += 1;
+    this.sessionSnapshot = this.session?.getState();
     const nextTick = (AppStorage.get<number>('loginFeedReloadTick') ?? 0) + 1;
     AppStorage.setOrCreate('loginFeedReloadTick', nextTick);
+    const nextSessionTick = (AppStorage.get<number>('sessionStateTick') ?? 0) + 1;
+    AppStorage.setOrCreate('sessionStateTick', nextSessionTick);
   }
 
   private destinationDescription(destination: P1Destination): string {
