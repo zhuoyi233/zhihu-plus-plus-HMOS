@@ -7,8 +7,9 @@
 
 - 四模块架构：`entry`（HAP 主模块）+ `core`/`data`/`reader`（HAR 共享库）；
   `AppScope` 为应用壳（bundleName `com.github.zhuoyi233.zhplus`）。
-- 编译：API 26，`targetSdkVersion`/`compatibleSdkVersion` 均 `26.0.0`（已从 API 24 迁移，
-  见 `docs/api26-api24-migration-plan.md`）。
+- 编译：API 26，`targetSdkVersion` `26.0.0`、`compatibleSdkVersion` `6.1.0(23)`——最低支持
+  HarmonyOS 6.1.0（API 23）设备（编译/兼容版本拆分背景见 `docs/api26-api24-migration-plan.md`；
+  注意 API 10–25 的版本值必须用 `'X.Y.Z(N)'` 旧格式，`'26.0.0'` 新格式仅 API 26+ 合法）。
 - 依赖：ohpm（`oh-package.json5`），构建工具 hvigor。
 
 ## 构建与验证（必须按顺序执行）
@@ -80,6 +81,11 @@ $hdc = "hdc"
   （用 interface）；`catch (e)` 后不能 `throw e`（包装成具体 Error 再抛）。
 - 禁解构参数；`Object.entries(...).forEach` 的元组回调改用 `Object.keys`。
 - 无 `TextEncoder`：用 `data` 模块 `Utf8.ets` 的 `utf8Encode`。
+- 最低兼容 API 23：`uiMaterial` 全家族（`@ohos.arkui.uiMaterial`，含 `ImmersiveMaterial`/
+  `systemMaterial`/`getMaterialInfo`）是 API 26 专属，**禁止 import**，否则 API 23 设备载入
+  即崩；普通组件玻璃效果用 `backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)` 兜底，
+  系统材质只能走 HDS 组件（`hdsMaterial`/`HdsTabs` 等，自 6.1.0(23) 起可用）。
+  新 API 起始版本可在 SDK `hms/ets/api/device-define/api-version/*.json` 查表核实。
 - 图标用鸿蒙官方 Symbol：`SymbolGlyph($r('sys.symbol.xxx'))`（如 `more`/`arrow_up`/
   `bookmark`/`message`），名称以官方符号库为准，勿猜（`ellipsis` 等不存在）。
   符号库：https://developer.huawei.com/consumer/cn/design/harmonyos-symbol ；
