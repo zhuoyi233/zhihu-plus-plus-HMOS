@@ -42,6 +42,8 @@ export struct ChannelFeedPage {
   history: BlockedFeedHistoryGateway | undefined = undefined;
   @Prop @Watch('reloadAfterAuthentication') reloadToken: number = 0;
   @Prop @Watch('loadDateFromTitleBar') dateCursor: string = '';
+  // 登录成功重载信号：经 AppStorage 广播（@Consume 在 HdsTabs 树下实测不链接）
+  @StorageProp('loginFeedReloadTick') @Watch('onLoginFeedReloadTick') loginFeedReloadTick: number = 0;
   @Consume('channelFeedInteractionBridge') private interactionBridge: ChannelFeedInteractionBridge =
     new ChannelFeedInteractionBridge();
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
@@ -131,6 +133,10 @@ export struct ChannelFeedPage {
 
   private reloadAfterAuthentication(): void {
     this.controller?.refresh();
+  }
+
+  private onLoginFeedReloadTick(): void {
+    this.controller?.reloadNow();
   }
 
   private loadDateFromTitleBar(): void {

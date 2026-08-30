@@ -24,6 +24,9 @@ export struct HomeFeedPage {
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
   @Prop @Watch('reloadAfterAuthentication') reloadToken: number = 0;
+  // 登录成功重载信号：reloadToken 走 Builder 参数、@Provide/@Consume 在 HdsTabs 的
+  // TabContent 构建树下均实测不可靠，AppStorage 广播是可靠通道（同 bottomRectHeight）
+  @StorageProp('loginFeedReloadTick') @Watch('onLoginFeedReloadTick') loginFeedReloadTick: number = 0;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
   @State private phase: HomeFeedPhase = HomeFeedPhase.IDLE;
@@ -83,6 +86,10 @@ export struct HomeFeedPage {
   }
 
   private reloadAfterAuthentication(): void {
+    this.controller?.refresh();
+  }
+
+  private onLoginFeedReloadTick(): void {
     this.controller?.refresh();
   }
 

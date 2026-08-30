@@ -1842,7 +1842,7 @@ export struct P1Shell {
     this.pathStack.pop();
     const paths: Array<NavPathInfo> | undefined = this.pathStack.getPathStack();
     if (paths === undefined || paths.length === 0) {
-      this.reloadCurrentTopLevelTab();
+      this.reloadFeedsAfterLogin();
       return;
     }
     const current = paths[paths.length - 1];
@@ -1857,23 +1857,19 @@ export struct P1Shell {
     this.pathStack.pushPath({ name: destination.name, param: destination });
   }
 
-  private reloadCurrentTopLevelTab(): void {
-    switch (this.topLevelTabIndex) {
-      case P1TopLevelTab.HOME:
-        this.homeReloadToken += 1;
-        return;
-      case P1TopLevelTab.FOLLOWING:
-        this.followingReloadToken += 1;
-        return;
-      case P1TopLevelTab.HOT:
-        this.hotReloadToken += 1;
-        return;
-      case P1TopLevelTab.DAILY:
-        this.dailyReloadToken += 1;
-        return;
-      default:
-        return;
-    }
+  /**
+   * 登录成功后重载各 feed。reloadToken 走 Builder 参数传入，且 @Provide/@Consume 在
+   * HdsTabs 的 TabContent 构建树下实测不链接（各页面会拿到自己的兜底实例），因此用
+   * AppStorage 广播 loginFeedReloadTick，让已挂载的 feed 页各自触发重载；未挂载过的
+   * feed 首次进入时自然加载。token 自增保留作为可生效场景的兜底。
+   */
+  private reloadFeedsAfterLogin(): void {
+    this.homeReloadToken += 1;
+    this.followingReloadToken += 1;
+    this.hotReloadToken += 1;
+    this.dailyReloadToken += 1;
+    const nextTick = (AppStorage.get<number>('loginFeedReloadTick') ?? 0) + 1;
+    AppStorage.setOrCreate('loginFeedReloadTick', nextTick);
   }
 
   private destinationDescription(destination: P1Destination): string {
