@@ -140,3 +140,22 @@ export struct AppNavigationRow {
     .onClick((): void => this.onRowClick())
   }
 }
+
+/** 下拉刷新自定义区域的构造参数（无字段，仅用于 ComponentContent 类型标注）。 */
+export class FeedPullDownIndicatorOptions {
+}
+
+/** 下拉刷新区域的蓝色加载圆圈：与上拉加载更多同款同尺寸，容器高度保证圆圈落在悬浮标题栏下方。 */
+@Builder
+export function feedPullDownIndicator(_options: FeedPullDownIndicatorOptions) {
+  Column() {
+    LoadingProgress()
+      .width(40)
+      .height(40)
+      .color($r('app.color.brand_primary'))
+  }
+  .width('100%')
+  .height(148)
+  .justifyContent(FlexAlign.End)
+  .padding({ bottom: 12 })
+}
