@@ -336,6 +336,7 @@ struct Index {
       voteRepository: this.voteRepository,
       followRepository: this.followRepository,
       collectionRepository: this.collectionRepository,
+      commentRepository: this.commentRepository,
       session: this.session,
       onBack: onBack
     });

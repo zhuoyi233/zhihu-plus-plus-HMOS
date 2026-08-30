@@ -171,22 +171,18 @@ struct ContentDetailPage {
         } else if (this.phase === ContentDetailPhase.ERROR) {
           this.statusPanel(this.errorMessage, true)
         } else if (this.content !== undefined) {
-          // 沉浸光感风格：正文铺满并从操作栏下方穿透，操作栏为两块交互材质胶囊悬浮于文字上方。
-          Stack({ alignContent: Alignment.Bottom }) {
-            Column() {
-              // P3-9-B：顶栏作为占位（非覆盖），正文在其下方，避免作者行与标题/统计重叠。
-              if (!this.immersiveReading) {
-                this.detailTopBar(this.content)
-              }
-              Column() {
-                this.loadedContent(this.content)
-              }
-              .layoutWeight(1)
-              .width('100%')
+          Column() {
+            // P3-9-B：顶栏作为占位（非覆盖），正文在其下方，避免作者行与标题/统计重叠。
+            if (!this.immersiveReading) {
+              this.detailTopBar(this.content)
             }
+            Column() {
+              this.loadedContent(this.content)
+            }
+            .layoutWeight(1)
             .width('100%')
-            .height('100%')
-
+            // 底部操作栏为占位布局（栏在内容流末尾，占真实布局空间，不叠压正文）；
+            // 悬浮穿透方案在无材质降级与图片场景下会遮挡正文，勿改回。
             if (!this.immersiveReading) {
               this.bottomActionBar()
             }
@@ -200,16 +196,6 @@ struct ContentDetailPage {
       .height('100%')
       .padding({ top: 94 })
       .backgroundColor($r('app.color.page_background'))
-
-      if (!this.immersiveReading && this.content !== undefined &&
-        this.phase === ContentDetailPhase.READY) {
-        Stack({ alignContent: Alignment.Bottom }) {
-          this.bottomActionBar()
-        }
-        .width('100%')
-        .height('100%')
-        .hitTestBehavior(HitTestMode.Transparent)
-      }
 
       if (this.immersiveReading) {
         this.immersiveExitControl()
@@ -249,9 +235,11 @@ struct ContentDetailPage {
             }
           }
         })
-      if (this.kind === ContentDetailKind.ANSWER || this.kind === ContentDetailKind.ARTICLE) {
+      if (this.kind === ContentDetailKind.ANSWER || this.kind === ContentDetailKind.ARTICLE ||
+        this.kind === ContentDetailKind.QUESTION) {
         CommentLayer({
-          contentType: this.kind === ContentDetailKind.ARTICLE ? 'article' : 'answer',
+          contentType: this.kind === ContentDetailKind.ARTICLE ? 'article'
+            : this.kind === ContentDetailKind.QUESTION ? 'question' : 'answer',
           contentId: this.contentId,
           repository: this.commentRepository,
           session: this.session,
@@ -356,14 +344,7 @@ struct ContentDetailPage {
   private loadedContent(content: LoadedContentDetail) {
     Column() {
       Column({ space: $r('app.float.p1_spacing_small') }) {
-        // 作者行仅问题页保留（回答/文章的顶栏折叠作者行已含头像+名字+签名，避免重复）。
-        if (content.kind === ContentDetailKind.QUESTION && contentAuthorName(content).length > 0) {
-          Text(contentAuthorLine(content))
-            .id(`p2_${content.kind}_detail_author`)
-            .fontSize($r('app.float.p1_body_font_size'))
-            .fontColor($r('app.color.primary_text'))
-            .width('100%')
-        }
+        // 作者信息由顶栏折叠作者条承载（头像+名字），内容区不再重复渲染作者行。
 
         // 主标题保留在正文信息头：回答显示所属问题，文章显示文章标题，避免仅依赖通用路由标题。
         if (contentContextTitle(content).length > 0) {
@@ -533,7 +514,8 @@ struct ContentDetailPage {
 
         @Builder
   private bottomActionBar() {
-    // 沉浸光感玻璃胶囊：左右两块独立悬浮（PR 的空 HdsTabs 材质画布方案），正文从下方穿透。
+    // 沉浸光感玻璃胶囊：左右两块独立悬浮胶囊（PR 的空 HdsTabs 材质画布方案），
+    // 操作栏整体为占位布局（位于内容流末尾），不叠压正文。
     Column({ space: $r('app.float.p1_spacing_xsmall') }) {
       if (this.interactionErrorMessage.length > 0) {
         this.interactionStatusRow()
@@ -650,6 +632,31 @@ struct ContentDetailPage {
 
   @Builder
   private questionRightActions() {
+    // 对齐回答详情页右下角动作组：评论 + 更多（问题暂无投票/收藏端点，见 ContentDetailPages 注释）。
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      Row({ space: 5 }) {
+        SymbolGlyph($r('sys.symbol.message'))
+          .fontSize(22)
+          .fontColor([$r('app.color.secondary_text')])
+        Text(`${this.content?.value.commentCount ?? 0}`)
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.secondary_text'))
+      }
+      .padding({ left: 6, right: 6, top: 6, bottom: 6 })
+    }
+    .id('p3_question_detail_comment_bar')
+    .height(44)
+    .backgroundColor(Color.Transparent)
+    .accessibilityText('问题评论')
+    .onClick((): void => {
+      if (this.commentRepository !== undefined && this.session !== undefined) {
+        this.showComments = true;
+      } else {
+        this.navigate({ name: P1DestinationName.LOGIN });
+      }
+    })
+
     Button({ type: ButtonType.Normal, stateEffect: false }) {
       SymbolGlyph($r('sys.symbol.ellipsis_circle'))
         .fontSize(22)
@@ -663,20 +670,6 @@ struct ContentDetailPage {
     .onClick((): void => {
       this.actionMenuShown = true;
     })
-    Button('写回答')
-      .id('p4_question_write_answer')
-      .height(44)
-      .fontSize($r('app.float.p1_secondary_font_size'))
-      .onClick((): void => this.openAnswerComposer())
-  }
-
-private openAnswerComposer(): void {
-    const session = this.session;
-    if (session === undefined || session.getState().status !== SessionStatus.AUTHENTICATED) {
-      this.navigate({ name: P1DestinationName.LOGIN });
-      return;
-    }
-    this.navigate({ name: P1DestinationName.WRITE_ANSWER, questionId: this.contentId });
   }
 
   private canEditExistingAnswer(): boolean {
@@ -768,42 +761,9 @@ private openAnswerComposer(): void {
               this.navigate({ name: P1DestinationName.PEOPLE, id: urlToken });
             }
           })
-        } else {
-          // 无作者时：回答/文章不显示「回答」文字（系统栏已有），问题页显示标题。
-          if (content.kind === ContentDetailKind.QUESTION) {
-            Text(contentTitle(content))
-              .id(`p3_${content.kind}_detail_top_title`)
-              .fontSize($r('app.float.p1_body_font_size'))
-              .fontColor($r('app.color.primary_text'))
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .layoutWeight(1)
-              .padding({
-                left: $r('app.float.p1_page_padding'),
-                right: $r('app.float.p1_page_padding'),
-                top: $r('app.float.p1_spacing_small'),
-                bottom: $r('app.float.p1_spacing_small')
-              })
-            }
-          }
-      } else {
-        // 收起态：回答/文章完全不渲染（节省空间，标题由 NavDestination 系统栏提供）；
-        // 问题页保留标题（系统栏无对应完整标题）。
-        if (content.kind === ContentDetailKind.QUESTION) {
-          Text(contentTitle(content))
-            .id(`p3_${content.kind}_detail_top_title`)
-            .fontSize($r('app.float.p1_body_font_size'))
-            .fontColor($r('app.color.primary_text'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .layoutWeight(1)
-            .padding({
-              left: $r('app.float.p1_page_padding'),
-              right: $r('app.float.p1_page_padding'),
-              top: $r('app.float.p1_spacing_small'),
-              bottom: $r('app.float.p1_spacing_small')
-            })
         }
+        // 无作者与收起态均不再渲染标题行（对齐回答/文章页）：问题标题由下方固定信息头
+        // 常驻展示，条带再渲染同款标题会与之同屏重复。
       }
     }
     .width('100%')
@@ -1047,11 +1007,22 @@ private openAnswerComposer(): void {
 
   @Builder
   private followQuestionAction() {
-    Button(this.following ? `已关注 ${this.followerCount}` : `关注问题 ${this.followerCount}`,
-      { type: ButtonType.Normal })
+    // 对齐回答详情页底部动作语言：透明背景 + 符号 + 次要色文字，玻璃胶囊由外层承载。
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      Row({ space: 5 }) {
+        SymbolGlyph(this.following ? $r('sys.symbol.checkmark') : $r('sys.symbol.plus'))
+          .fontSize(22)
+          .fontColor([this.following ? $r('app.color.brand_primary') : $r('app.color.secondary_text')])
+        Text(this.following ? `已关注 ${this.followerCount}` : `关注问题 ${this.followerCount}`)
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.following ? $r('app.color.brand_primary') : $r('app.color.secondary_text'))
+      }
+      .padding({ left: 6, right: 6, top: 6, bottom: 6 })
+    }
       .id('p3_question_follow')
-      .fontSize($r('app.float.p1_body_font_size'))
-      .fontColor(this.following ? $r('app.color.brand_primary') : $r('app.color.secondary_text'))
+      .height(44)
+      .backgroundColor(Color.Transparent)
       .enabled(!this.interactionPending)
       .onClick((): void => {
         this.followController?.toggleFollow();
@@ -1401,14 +1372,6 @@ export function contentBlockingTitle(content: LoadedContentDetail): string {
   }
   const excerpt = content.value.excerpt.trim();
   return excerpt.length > 0 ? excerpt : '回答';
-}
-
-export function contentAuthorLine(content: LoadedContentDetail): string {
-  const author = content.value.author;
-  if (author === undefined) {
-    return '';
-  }
-  return author.headline.trim().length > 0 ? `${author.name} · ${author.headline}` : author.name;
 }
 
 export function contentStatistics(content: LoadedContentDetail, voteupCount?: number, followerCount?: number): string {

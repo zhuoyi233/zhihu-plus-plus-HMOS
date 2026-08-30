@@ -8,7 +8,7 @@ param(
   [string]$ExpectedCompileApiVersion = '26',
   [string]$ExpectedCompilePlatformVersion = '26.0.0',
   [string]$ExpectedTargetSdkVersion = '26.0.0',
-  [string]$ExpectedCompatibleSdkVersion = '26.0.0',
+  [string]$ExpectedCompatibleSdkVersion = '6.1.0(23)',
   [string]$ExpectedBundleName = 'com.github.zhuoyi233.zhplus',
   [ValidateRange(0, 100000)]
   [int]$ExpectedTestCount = 0,

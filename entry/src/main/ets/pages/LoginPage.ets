@@ -83,6 +83,11 @@ export struct LoginPage {
         if (completesUserAuthentication(previousPhase, state.phase)) {
           this.onAuthenticated();
         }
+        // 退出登录完成：广播会话变更，账号概览等界面据此刷新（见 P1Shell sessionStateTick）
+        if (previousPhase === LoginPhase.LOGGING_OUT && state.phase === LoginPhase.GUEST) {
+          const nextSessionTick = (AppStorage.get<number>('sessionStateTick') ?? 0) + 1;
+          AppStorage.setOrCreate('sessionStateTick', nextSessionTick);
+        }
       }
     );
     this.controller.activate();

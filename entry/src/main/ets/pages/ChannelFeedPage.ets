@@ -14,6 +14,7 @@ import {
   FeedItem,
   FeedTargetKind
 } from 'data';
+import { ComponentContent } from '@kit.ArkUI';
 import {
   BlockingActionContext,
   BlockingActionController,
@@ -21,7 +22,12 @@ import {
   BlockingActionViewState,
   BlockingUserCandidate
 } from './BlockingActionState';
-import { AppPageStatusKind, AppPageStatusPanel } from './AppPageChrome';
+import {
+  AppPageStatusKind,
+  AppPageStatusPanel,
+  FeedPullDownIndicatorOptions,
+  feedPullDownIndicator
+} from './AppPageChrome';
 import {
   ChannelFeedController,
   ChannelFeedPhase,
@@ -42,6 +48,13 @@ export struct ChannelFeedPage {
   history: BlockedFeedHistoryGateway | undefined = undefined;
   @Prop @Watch('reloadAfterAuthentication') reloadToken: number = 0;
   @Prop @Watch('loadDateFromTitleBar') dateCursor: string = '';
+  // 登录成功重载信号：经 AppStorage 广播（@Consume 在 HdsTabs 树下实测不链接）
+  @StorageProp('loginFeedReloadTick') @Watch('onLoginFeedReloadTick') loginFeedReloadTick: number = 0;
+  // 双击底栏页签刷新：关注=1、热榜=2、日报=3（P1TopLevelTab），复用下拉刷新链路
+  @StorageProp('tabRefreshTick') @Watch('onTabRefreshRequested') tabRefreshTick: number = 0;
+  @StorageProp('tabRefreshTabIndex') tabRefreshTabIndex: number = -1;
+  // 下拉刷新自定义加载圆圈（refreshingContent 需 ComponentContent，随页面销毁释放）
+  private refreshContent?: ComponentContent<FeedPullDownIndicatorOptions> = undefined;
   @Consume('channelFeedInteractionBridge') private interactionBridge: ChannelFeedInteractionBridge =
     new ChannelFeedInteractionBridge();
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
@@ -65,6 +78,8 @@ export struct ChannelFeedPage {
   private pendingBlockItem?: ChannelContentItem = undefined;
 
   aboutToAppear(): void {
+    this.refreshContent = new ComponentContent(this.getUIContext(), wrapBuilder(feedPullDownIndicator),
+      new FeedPullDownIndicatorOptions());
     // P3-7：返回栈重显（页面实例与状态保留）时 aboutToAppear 可能再次触发；
     // 控制器仍存活时直接复用，避免重建控制器并重载列表导致滚动位置丢失。
     if (this.controller !== undefined) {
@@ -92,6 +107,8 @@ export struct ChannelFeedPage {
   }
 
   aboutToDisappear(): void {
+    this.refreshContent?.dispose();
+    this.refreshContent = undefined;
     this.controller?.deactivate();
     this.pendingUserBlock = undefined;
     this.keywordBlockVisible = false;
@@ -133,6 +150,27 @@ export struct ChannelFeedPage {
     this.controller?.refresh();
   }
 
+  /** 本页所属的顶级页签：关注页两个子源都挂在“关注”页签下。 */
+  private tabIndexOfSource(): number {
+    if (this.source === ChannelFeedSource.HOT) {
+      return 2;
+    }
+    if (this.source === ChannelFeedSource.DAILY) {
+      return 3;
+    }
+    return 1;
+  }
+
+  private onTabRefreshRequested(): void {
+    if (this.tabRefreshTabIndex === this.tabIndexOfSource()) {
+      this.controller?.refresh();
+    }
+  }
+
+  private onLoginFeedReloadTick(): void {
+    this.controller?.reloadNow();
+  }
+
   private loadDateFromTitleBar(): void {
     if (this.source === ChannelFeedSource.DAILY && /^\d{8}$/.test(this.dateCursor)) {
       this.controller?.loadDate(this.dateCursor);
@@ -171,7 +209,12 @@ export struct ChannelFeedPage {
           .backgroundColor($r('app.color.surface_background'))
         }
 
-        Refresh({ refreshing: this.refreshing, offset: 80, friction: 100 }) {
+        Refresh({
+          refreshing: this.refreshing,
+          refreshingContent: this.refreshContent,
+          offset: 80,
+          friction: 100
+        }) {
           List() {
             ForEach(this.items, (item: ChannelFeedItem, index: number) => {
               ListItem() {
@@ -184,15 +227,17 @@ export struct ChannelFeedPage {
               .margin({ bottom: $r('app.float.p1_spacing_medium') })
             }, (item: ChannelFeedItem): string => channelFeedItemIdentity(item))
 
-            if (this.loadingMore || this.canLoadMore) {
+            if (this.loadingMore) {
+              // 上拉加载更多：与下拉刷新一致的圆形加载动画（onReachEnd 自动触发）
               ListItem() {
-                Button(this.loadingMore ? '正在加载更多…' : '加载更多')
+                LoadingProgress()
                   .id(`p2_channel_${this.source}_load_more`)
-                  .width('100%')
-                  .fontSize($r('app.float.p1_secondary_font_size'))
-                  .enabled(!this.loadingMore)
-                  .onClick(() => this.controller?.loadMore())
+                  .width(40)
+                  .height(40)
+                  .color($r('app.color.brand_primary'))
               }
+              .width('100%')
+              .padding({ top: 12, bottom: 12 })
             }
           }
           .id(`p2_channel_${this.source}_list`)

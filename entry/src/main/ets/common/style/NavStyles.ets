@@ -40,7 +40,8 @@ export function getImmersiveTitleBarStyle(): TitleBarStyleOptions {
         }
       },
       systemMaterialEffect: {
-        materialType: hdsMaterial.MaterialType.IMMERSIVE,
+        // ADAPTIVE 跟随系统材质策略（自 6.1.0(23) 起可用），由系统按设备能力自选
+        materialType: hdsMaterial.MaterialType.ADAPTIVE,
         materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
       }
     };

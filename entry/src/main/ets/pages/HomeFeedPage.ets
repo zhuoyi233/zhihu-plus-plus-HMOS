@@ -15,7 +15,13 @@ import {
   BlockingActionViewState,
   BlockingUserCandidate
 } from './BlockingActionState';
-import { AppPageStatusKind, AppPageStatusPanel } from './AppPageChrome';
+import { ComponentContent } from '@kit.ArkUI';
+import {
+  AppPageStatusKind,
+  AppPageStatusPanel,
+  FeedPullDownIndicatorOptions,
+  feedPullDownIndicator
+} from './AppPageChrome';
 import { HomeFeedController, HomeFeedPhase, HomeFeedViewState } from './HomeFeedState';
 
 @Component
@@ -24,6 +30,14 @@ export struct HomeFeedPage {
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
   @Prop @Watch('reloadAfterAuthentication') reloadToken: number = 0;
+  // 登录成功重载信号：reloadToken 走 Builder 参数、@Provide/@Consume 在 HdsTabs 的
+  // TabContent 构建树下均实测不可靠，AppStorage 广播是可靠通道（同 bottomRectHeight）
+  @StorageProp('loginFeedReloadTick') @Watch('onLoginFeedReloadTick') loginFeedReloadTick: number = 0;
+  // 双击底栏“首页”页签刷新：复用下拉刷新链路
+  @StorageProp('tabRefreshTick') @Watch('onTabRefreshRequested') tabRefreshTick: number = 0;
+  @StorageProp('tabRefreshTabIndex') tabRefreshTabIndex: number = -1;
+  // 下拉刷新自定义加载圆圈（refreshingContent 需 ComponentContent，随页面销毁释放）
+  private refreshContent?: ComponentContent<FeedPullDownIndicatorOptions> = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
   @State private phase: HomeFeedPhase = HomeFeedPhase.IDLE;
@@ -43,6 +57,8 @@ export struct HomeFeedPage {
   private pendingBlockItem?: FeedItem = undefined;
 
   aboutToAppear(): void {
+    this.refreshContent = new ComponentContent(this.getUIContext(), wrapBuilder(feedPullDownIndicator),
+      new FeedPullDownIndicatorOptions());
     // P3-7：返回栈重显（页面实例与状态保留）时 aboutToAppear 可能再次触发；
     // 控制器仍存活时直接复用，避免重建控制器并重载列表导致滚动位置丢失。
     if (this.controller !== undefined) {
@@ -64,6 +80,8 @@ export struct HomeFeedPage {
   }
 
   aboutToDisappear(): void {
+    this.refreshContent?.dispose();
+    this.refreshContent = undefined;
     this.controller?.deactivate();
     this.pendingUserBlock = undefined;
     this.keywordBlockVisible = false;
@@ -86,6 +104,16 @@ export struct HomeFeedPage {
     this.controller?.refresh();
   }
 
+  private onLoginFeedReloadTick(): void {
+    this.controller?.refresh();
+  }
+
+  private onTabRefreshRequested(): void {
+    if (this.tabRefreshTabIndex === 0) {
+      this.controller?.refresh();
+    }
+  }
+
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       Column({ space: $r('app.float.p1_spacing_medium') }) {
@@ -93,12 +121,6 @@ export struct HomeFeedPage {
           this.centeredStatus('正在加载首页…', false, 'p2_home_initial_loading');
         } else if (this.phase === HomeFeedPhase.ERROR) {
           this.centeredStatus(this.errorMessage, true, 'p2_home_error');
-          if (this.requiresLogin) {
-            Button('去登录')
-              .id('p2_home_error_login')
-              .fontSize($r('app.float.p1_body_font_size'))
-              .onClick(() => this.navigate({ name: P1DestinationName.LOGIN }))
-          }
         } else if (this.phase === HomeFeedPhase.EMPTY) {
           this.centeredStatus('暂时没有可显示的内容', true, 'p2_home_empty');
         } else {
@@ -119,7 +141,12 @@ export struct HomeFeedPage {
             .backgroundColor($r('app.color.surface_background'))
           }
 
-          Refresh({ refreshing: this.refreshing, offset: 80, friction: 100 }) {
+          Refresh({
+            refreshing: this.refreshing,
+            refreshingContent: this.refreshContent,
+            offset: 80,
+            friction: 100
+          }) {
             List() {
               ForEach(this.items, (item: FeedItem) => {
                 ListItem() {
@@ -128,15 +155,17 @@ export struct HomeFeedPage {
                 .margin({ bottom: $r('app.float.p1_spacing_medium') })
               }, (item: FeedItem): string => feedItemIdentity(item))
 
-              if (this.loadingMore || this.canLoadMore) {
+              if (this.loadingMore) {
+                // 上拉加载更多：与下拉刷新一致的圆形加载动画（onReachEnd 自动触发）
                 ListItem() {
-                  Button(this.loadingMore ? '正在加载更多…' : '加载更多')
+                  LoadingProgress()
                     .id('p2_home_load_more')
-                    .width('100%')
-                    .fontSize($r('app.float.p1_secondary_font_size'))
-                    .enabled(!this.loadingMore)
-                    .onClick(() => this.controller?.loadMore())
+                    .width(40)
+                    .height(40)
+                    .color($r('app.color.brand_primary'))
                 }
+                .width('100%')
+                .padding({ top: 12, bottom: 12 })
               }
             }
             .id('p2_home_feed_list')
@@ -185,13 +214,19 @@ export struct HomeFeedPage {
 
   @Builder
   private centeredStatus(message: string, retry: boolean, testId: string) {
+    // 登录动作必须走面板内置按钮（面板 layoutWeight(1) 居中）：作为 Column 兄弟节点会被
+    // 挤到底部，与悬浮 HdsTabs 底栏重叠导致点不到
     AppPageStatusPanel({
       kind: retry ? AppPageStatusKind.ERROR : AppPageStatusKind.LOADING,
       message: message,
       testId: testId,
-      actionLabel: retry && !this.requiresLogin ? '重新加载' : '',
-      actionId: `${testId}_retry`,
+      actionLabel: retry ? (this.requiresLogin ? '去登录' : '重新加载') : '',
+      actionId: this.requiresLogin ? 'p2_home_error_login' : `${testId}_retry`,
       onAction: (): void => {
+        if (this.requiresLogin) {
+          this.navigate({ name: P1DestinationName.LOGIN });
+          return;
+        }
         this.controller?.retry();
       }
     });

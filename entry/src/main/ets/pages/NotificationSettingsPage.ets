@@ -6,6 +6,7 @@ import {
   notificationKindInfo
 } from 'data';
 import { common } from '@kit.AbilityKit';
+import { deviceInfo } from '@kit.BasicServicesKit';
 import notificationManager from '@ohos.notificationManager';
 
 @Component
@@ -210,7 +211,12 @@ export struct NotificationSettingsPage {
     }
     this.systemNotificationSettingsOpening = true;
     try {
-      await notificationManager.openNotificationSettingsWithResult(hostContext as common.UIAbilityContext);
+      // openNotificationSettingsWithResult 为 API 26 专属；API 26 以下回退自 13 起可用的旧接口
+      if (deviceInfo.sdkApiVersion >= 26) {
+        await notificationManager.openNotificationSettingsWithResult(hostContext as common.UIAbilityContext);
+      } else {
+        await notificationManager.openNotificationSettings(hostContext as common.UIAbilityContext);
+      }
       await this.refreshSystemNotificationStatus();
     } catch (_error) {
       this.systemNotificationStatus = '无法打开系统通知设置，请稍后重试';

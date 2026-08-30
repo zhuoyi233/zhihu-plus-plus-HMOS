@@ -6,6 +6,11 @@ export struct ZhihuHdsTabs {
   @StorageProp('bottomRectHeight') bottomRectHeight: number = 0;
   controller: HdsTabsController = new HdsTabsController();
   @BuilderParam content: () => void;
+  /** 双击页签回调（350ms 内同页签连点两次），供宿主实现双击刷新。 */
+  onTabDoubleTap: (index: number) => void = (_index: number): void => {
+  };
+  private lastTapIndex: number = -1;
+  private lastTapTime: number = 0;
 
   build() {
     HdsTabs({
@@ -29,11 +34,24 @@ export struct ZhihuHdsTabs {
         this.currentIndex = index;
       }
     })
+    .onTabBarClick((index: number): void => {
+      const now = Date.now();
+      if (this.lastTapIndex === index && now - this.lastTapTime <= 350) {
+        this.lastTapIndex = -1;
+        this.lastTapTime = 0;
+        this.onTabDoubleTap(index);
+        return;
+      }
+      this.lastTapIndex = index;
+      this.lastTapTime = now;
+    })
     .barFloatingStyle({
       barSideMargin: 16,
       barBottomMargin: this.bottomRectHeight,
       systemMaterialEffect: {
-        materialType: hdsMaterial.MaterialType.IMMERSIVE,
+        // ADAPTIVE 跟随系统材质策略（自 6.1.0(23) 起可用）：系统按设备能力自选材质类型与档位，
+        // 支持材质的设备自动选用沉浸材质，未来新增材质类型无需应用侧跟进
+        materialType: hdsMaterial.MaterialType.ADAPTIVE,
         materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
       },
       gradientMask: {
@@ -108,7 +126,7 @@ export struct ZhihuHdsActionBar {
           barSideMargin: 0,
           lightColor: Color.White,
           systemMaterialEffect: {
-            materialType: hdsMaterial.MaterialType.IMMERSIVE,
+            materialType: hdsMaterial.MaterialType.ADAPTIVE,
             materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
           },
           thermoCtrl: true

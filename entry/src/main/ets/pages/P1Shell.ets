@@ -6,6 +6,7 @@ import {
   AppUpdateClient,
   AppUpdateRelease,
   LoginSessionGateway,
+  SessionState,
   SessionStatus
 } from 'data';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
@@ -14,8 +15,7 @@ import { Want } from '@kit.AbilityKit';
 import {
   SegmentButton,
   SegmentButtonOptions,
-  SymbolGlyphModifier,
-  uiMaterial
+  SymbolGlyphModifier
 } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
@@ -103,6 +103,10 @@ export struct P1Shell {
   @BuilderParam backgroundTaskProbeContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam domainFixtureProbeContent: (onBack: () => void) => void = this.emptyProbe;
   session: LoginSessionGateway | undefined = undefined;
+  // 登录/登出经 AppStorage 广播 sessionStateTick（LoginSessionGateway 非可观察对象，
+  // 直接 getState() 不驱动 UI）；快照仅在 tick 变化时刷新，供账号概览等方法读取。
+  @StorageProp('sessionStateTick') @Watch('onSessionStateTick') sessionStateTick: number = 0;
+  @State private sessionSnapshot?: SessionState = undefined;
   @State private themeMode: AppThemeMode = AppThemeMode.SYSTEM;
   @State private installedVersionLabel: string = '正在读取已安装版本…';
   @State private aboutVersionSheetShown: boolean = false;
@@ -139,6 +143,7 @@ export struct P1Shell {
 
   aboutToAppear(): void {
     this.themeMounted = true;
+    this.sessionSnapshot = this.session?.getState();
     this.restoreThemeMode();
     this.refreshInstalledVersionLabel();
     this.unsubscribeStartupDestination?.();
@@ -622,7 +627,19 @@ export struct P1Shell {
 
   build() {
     HdsNavigation(this.pathStack) {
-      ZhihuHdsTabs({ currentIndex: $topLevelTabIndex, controller: this.tabsController }) {
+      ZhihuHdsTabs({
+        currentIndex: $topLevelTabIndex,
+        controller: this.tabsController,
+        onTabDoubleTap: (index: number): void => {
+          // 双击页签刷新对应 feed（“我的”除外）；跨页面信号经 AppStorage 广播。
+          if (index < P1TopLevelTab.HOME || index > P1TopLevelTab.DAILY) {
+            return;
+          }
+          const nextTick = (AppStorage.get<number>('tabRefreshTick') ?? 0) + 1;
+          AppStorage.setOrCreate('tabRefreshTick', nextTick);
+          AppStorage.setOrCreate('tabRefreshTabIndex', index);
+        }
+      }) {
         TabContent() {
           this.homeContent(this.homeReloadToken, (destination: P1Destination): void => this.navigate(destination));
         }
@@ -791,13 +808,8 @@ export struct P1Shell {
         .height(40)
         .padding($r('app.float.p1_spacing_small'))
         .backgroundColor(Color.Transparent)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.THIN,
-          colorInvert: true,
-          applyShadow: true,
-          interactive: true,
-          lightEffect: {}
-        }))
+        // uiMaterial 全家族为 API 26 专属；工程最低兼容 API 23，标题栏玻璃一律走模糊兜底
+        .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
         .borderRadius($r('app.float.p1_card_radius'))
         .accessibilityText('打开搜索')
         .onClick((): void => this.navigate({ name: P1DestinationName.SEARCH, query: '' }))
@@ -812,13 +824,7 @@ export struct P1Shell {
         .height(40)
         .padding(0)
         .backgroundColor(Color.Transparent)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.THIN,
-          colorInvert: true,
-          applyShadow: true,
-          interactive: true,
-          lightEffect: {}
-        }))
+        .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
         .accessibilityText('打开通知')
         .onClick((): void => this.navigate({ name: P1DestinationName.NOTIFICATION }))
       }
@@ -851,13 +857,7 @@ export struct P1Shell {
         .height(40)
         .padding(0)
         .backgroundColor(Color.Transparent)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.THIN,
-          colorInvert: true,
-          applyShadow: true,
-          interactive: true,
-          lightEffect: {}
-        }))
+        .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
         .accessibilityText('刷新热榜')
         .onClick((): void => {
           this.hotReloadToken += 1;
@@ -880,13 +880,7 @@ export struct P1Shell {
         .height(40)
         .padding(0)
         .backgroundColor(Color.Transparent)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.THIN,
-          colorInvert: true,
-          applyShadow: true,
-          interactive: true,
-          lightEffect: {}
-        }))
+        .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
         .accessibilityText('选择日报日期')
         .onClick((): void => {
           this.openDailyDatePicker();
@@ -921,13 +915,6 @@ export struct P1Shell {
       buttons: [{ text: '推荐' }, { text: '动态' }],
       backgroundColor: Color.Transparent,
       selectedBackgroundColor: $r('app.color.brand_primary_container'),
-      backgroundSystemMaterial: new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.THIN,
-        colorInvert: true,
-        applyShadow: true,
-        interactive: false,
-        lightEffect: {}
-      }),
       buttonPadding: 10
     });
   }
@@ -1735,8 +1722,16 @@ export struct P1Shell {
     this.projectHomeHelpShown = true;
   }
 
+  private onSessionStateTick(): void {
+    this.sessionSnapshot = this.session?.getState();
+  }
+
+  private accountSessionState(): SessionState | undefined {
+    return this.sessionSnapshot ?? this.session?.getState();
+  }
+
   private accountSummary(): string {
-    const state = this.session?.getState();
+    const state = this.accountSessionState();
     if (state?.status !== SessionStatus.AUTHENTICATED) {
       return '管理当前知乎账号的登录状态';
     }
@@ -1745,7 +1740,7 @@ export struct P1Shell {
   }
 
   private accountTitle(): string {
-    const state = this.session?.getState();
+    const state = this.accountSessionState();
     if (state?.status !== SessionStatus.AUTHENTICATED) {
       return '登录知乎';
     }
@@ -1758,7 +1753,7 @@ export struct P1Shell {
   }
 
   private accountAvatarUrl(): string {
-    const state = this.session?.getState();
+    const state = this.accountSessionState();
     if (state?.status !== SessionStatus.AUTHENTICATED) {
       return '';
     }
@@ -1873,7 +1868,7 @@ export struct P1Shell {
     this.pathStack.pop();
     const paths: Array<NavPathInfo> | undefined = this.pathStack.getPathStack();
     if (paths === undefined || paths.length === 0) {
-      this.reloadCurrentTopLevelTab();
+      this.reloadFeedsAfterLogin();
       return;
     }
     const current = paths[paths.length - 1];
@@ -1888,23 +1883,22 @@ export struct P1Shell {
     this.pathStack.pushPath({ name: destination.name, param: destination });
   }
 
-  private reloadCurrentTopLevelTab(): void {
-    switch (this.topLevelTabIndex) {
-      case P1TopLevelTab.HOME:
-        this.homeReloadToken += 1;
-        return;
-      case P1TopLevelTab.FOLLOWING:
-        this.followingReloadToken += 1;
-        return;
-      case P1TopLevelTab.HOT:
-        this.hotReloadToken += 1;
-        return;
-      case P1TopLevelTab.DAILY:
-        this.dailyReloadToken += 1;
-        return;
-      default:
-        return;
-    }
+  /**
+   * 登录成功后重载各 feed。reloadToken 走 Builder 参数传入，且 @Provide/@Consume 在
+   * HdsTabs 的 TabContent 构建树下实测不链接（各页面会拿到自己的兜底实例），因此用
+   * AppStorage 广播 loginFeedReloadTick，让已挂载的 feed 页各自触发重载；未挂载过的
+   * feed 首次进入时自然加载。token 自增保留作为可生效场景的兜底。
+   */
+  private reloadFeedsAfterLogin(): void {
+    this.homeReloadToken += 1;
+    this.followingReloadToken += 1;
+    this.hotReloadToken += 1;
+    this.dailyReloadToken += 1;
+    this.sessionSnapshot = this.session?.getState();
+    const nextTick = (AppStorage.get<number>('loginFeedReloadTick') ?? 0) + 1;
+    AppStorage.setOrCreate('loginFeedReloadTick', nextTick);
+    const nextSessionTick = (AppStorage.get<number>('sessionStateTick') ?? 0) + 1;
+    AppStorage.setOrCreate('sessionStateTick', nextSessionTick);
   }
 
   private destinationDescription(destination: P1Destination): string {

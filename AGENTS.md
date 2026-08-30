@@ -7,8 +7,9 @@
 
 - 四模块架构：`entry`（HAP 主模块）+ `core`/`data`/`reader`（HAR 共享库）；
   `AppScope` 为应用壳（bundleName `com.github.zhuoyi233.zhplus`）。
-- 编译：API 26，`targetSdkVersion`/`compatibleSdkVersion` 均 `26.0.0`（已从 API 24 迁移，
-  见 `docs/api26-api24-migration-plan.md`）。
+- 编译：API 26，`targetSdkVersion` `26.0.0`、`compatibleSdkVersion` `6.1.0(23)`——最低支持
+  HarmonyOS 6.1.0（API 23）设备（编译/兼容版本拆分背景见 `docs/api26-api24-migration-plan.md`；
+  注意 API 10–25 的版本值必须用 `'X.Y.Z(N)'` 旧格式，`'26.0.0'` 新格式仅 API 26+ 合法）。
 - 依赖：ohpm（`oh-package.json5`），构建工具 hvigor。
 
 ## 构建与验证（必须按顺序执行）
@@ -58,6 +59,10 @@ $hdc = "hdc"
 - **严格禁止 push**：所有提交仅本地，远端落后属正常。仅当用户**当次明确要求**时才允许 push，
   且一次要求只执行**单次** push（只推用户指定的分支/tag，不顺势推送其他分支、tag 或 `--tags`），
   该许可不延续到后续任务。
+- **禁止自动提交**：改动（含修复、重构、文档）完成后一律不主动 commit，仅当用户**当次明确要求**
+  提交时才执行。用户要求提交但未说明提交内容/拆分方式时，agent 按 git diff 的实际变更与本节
+  规范自行生成 commit message 并做合理的提交拆分，无需逐次询问；与任务无关的未跟踪文件不得
+  顺势带入。
 - 提交风格：`<type>(harmony): <中文>`，如 `fix(harmony): 修复搜索响应解析`。
 - 提交前检查：`git status` 干净（build-profile.json5 因 skip-worktree 不参与提交）、无临时文件（`.tmp_*` 等）。
 - 版本号映射：`versionCode` 由 `versionName` 按固定公式推导，二者在 `AppScope/app.json5` 一并更新：
@@ -79,7 +84,17 @@ $hdc = "hdc"
 - 显式类型：禁 `any`/`unknown`（用 `Object`）、对象字面量不能作为 `Promise<T>` 返回
   （用 interface）；`catch (e)` 后不能 `throw e`（包装成具体 Error 再抛）。
 - 禁解构参数；`Object.entries(...).forEach` 的元组回调改用 `Object.keys`。
+- 跨页面状态通道：P1Shell 各 feed 页经 `@Builder` 参数传值（如 reloadToken）在 HdsTabs 的
+  TabContent 构建树下**不会触发已挂载子组件更新**，`@Provide`/`@Consume` 在该树形下也实测
+  **不链接**（页面各持本地兜底实例）。跨页面信号一律走 AppStorage 广播 + `@StorageProp`+`@Watch`
+  （如 `loginFeedReloadTick`，同 `bottomRectHeight` 模式）；signal 处理需容忍控制器失活态
+  （refresh/reloadNow 对 inactive 自行 no-op）。
 - 无 `TextEncoder`：用 `data` 模块 `Utf8.ets` 的 `utf8Encode`。
+- 最低兼容 API 23：`uiMaterial` 全家族（`@ohos.arkui.uiMaterial`，含 `ImmersiveMaterial`/
+  `systemMaterial`/`getMaterialInfo`）是 API 26 专属，**禁止 import**，否则 API 23 设备载入
+  即崩；普通组件玻璃效果用 `backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)` 兜底，
+  系统材质只能走 HDS 组件（`hdsMaterial`/`HdsTabs` 等，自 6.1.0(23) 起可用）。
+  新 API 起始版本可在 SDK `hms/ets/api/device-define/api-version/*.json` 查表核实。
 - 图标用鸿蒙官方 Symbol：`SymbolGlyph($r('sys.symbol.xxx'))`（如 `more`/`arrow_up`/
   `bookmark`/`message`），名称以官方符号库为准，勿猜（`ellipsis` 等不存在）。
   符号库：https://developer.huawei.com/consumer/cn/design/harmonyos-symbol ；
