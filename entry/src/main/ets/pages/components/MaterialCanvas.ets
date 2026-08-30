@@ -58,18 +58,23 @@ export struct GlassCapsule {
 
   build() {
     if (this.useMaterial) {
+      // 画布比内容宽 48vp：HDS 悬浮 bar 相对画布存在内部右侧预留，按内容宽度画会让玻璃
+      // 右缘切进内容（真机表现为“包裹不完全”）；多画的部分被 Stack 裁掉。内容测量另加
+      // 8vp 呼吸边距，玻璃不紧贴图标。
       Stack({ alignContent: Alignment.Center }) {
-        materialCanvas(this.canvasWidth, this.canvasHeight)
+        materialCanvas(this.canvasWidth + 48, this.canvasHeight)
         Row() {
           this.content()
         }
         .onAreaChange((_: Area, newValue: Area): void => {
           const width = Number(newValue.width);
-          if (width > 1 && Math.abs(width - this.canvasWidth) > 1) {
-            this.canvasWidth = width;
+          const padded = width + 8;
+          if (padded > 1 && Math.abs(padded - this.canvasWidth) > 1) {
+            this.canvasWidth = padded;
           }
         })
       }
+      .width(this.canvasWidth)
       .borderRadius(24)
       .clip(true)
     } else {
