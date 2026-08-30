@@ -594,7 +594,7 @@ struct ContentDetailPage {
         .onClick((): void => this.openExistingAnswerEditor())
     }
 
-    Button({ type: ButtonType.Circle, stateEffect: true }) {
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
       SymbolGlyph($r('sys.symbol.bookmark'))
         .fontSize(22)
         .fontColor([$r('app.color.secondary_text')])
@@ -611,7 +611,7 @@ struct ContentDetailPage {
       }
     })
 
-    Button({ type: ButtonType.Circle, stateEffect: true }) {
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
       Row({ space: 5 }) {
         SymbolGlyph($r('sys.symbol.message'))
           .fontSize(22)
@@ -634,7 +634,7 @@ struct ContentDetailPage {
       }
     })
 
-    Button({ type: ButtonType.Circle, stateEffect: true }) {
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
       SymbolGlyph($r('sys.symbol.ellipsis_circle'))
         .fontSize(22)
         .fontColor([$r('app.color.secondary_text')])
@@ -650,7 +650,7 @@ struct ContentDetailPage {
 
   @Builder
   private questionRightActions() {
-    Button({ type: ButtonType.Circle, stateEffect: true }) {
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
       SymbolGlyph($r('sys.symbol.ellipsis_circle'))
         .fontSize(22)
         .fontColor([$r('app.color.secondary_text')])
@@ -996,7 +996,7 @@ private openAnswerComposer(): void {
 
   @Builder
   private voteUpAction() {
-    Button({ type: ButtonType.Circle, stateEffect: true }) {
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
 
       Row({ space: 6 }) {
         SymbolGlyph(this.voteState === ContentVoteState.UP
@@ -1023,7 +1023,7 @@ private openAnswerComposer(): void {
 
   @Builder
   private voteDownAction() {
-    Button({ type: ButtonType.Circle, stateEffect: true }) {
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
 
       Row({ space: 6 }) {
         // 左三角旋转 -90°（逆时针）得到向下方向；选中实心、未选中描边。

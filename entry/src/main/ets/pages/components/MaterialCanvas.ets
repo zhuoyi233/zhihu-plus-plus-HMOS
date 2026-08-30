@@ -49,7 +49,7 @@ export function materialCanvas(widthVp: Length, heightVp: Length) {
 export struct GlassCapsule {
   @BuilderParam content: () => void = this.emptyContent;
   @Prop useMaterial: boolean = true;
-  @State private canvasWidth: number = 120;
+  @State private canvasWidth: number = 320;
   private readonly canvasHeight: number = 64;
 
   @Builder
