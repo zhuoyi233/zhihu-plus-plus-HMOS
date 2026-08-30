@@ -80,6 +80,11 @@ $hdc = "hdc"
 - 显式类型：禁 `any`/`unknown`（用 `Object`）、对象字面量不能作为 `Promise<T>` 返回
   （用 interface）；`catch (e)` 后不能 `throw e`（包装成具体 Error 再抛）。
 - 禁解构参数；`Object.entries(...).forEach` 的元组回调改用 `Object.keys`。
+- 跨页面状态通道：P1Shell 各 feed 页经 `@Builder` 参数传值（如 reloadToken）在 HdsTabs 的
+  TabContent 构建树下**不会触发已挂载子组件更新**，`@Provide`/`@Consume` 在该树形下也实测
+  **不链接**（页面各持本地兜底实例）。跨页面信号一律走 AppStorage 广播 + `@StorageProp`+`@Watch`
+  （如 `loginFeedReloadTick`，同 `bottomRectHeight` 模式）；signal 处理需容忍控制器失活态
+  （refresh/reloadNow 对 inactive 自行 no-op）。
 - 无 `TextEncoder`：用 `data` 模块 `Utf8.ets` 的 `utf8Encode`。
 - 最低兼容 API 23：`uiMaterial` 全家族（`@ohos.arkui.uiMaterial`，含 `ImmersiveMaterial`/
   `systemMaterial`/`getMaterialInfo`）是 API 26 专属，**禁止 import**，否则 API 23 设备载入
