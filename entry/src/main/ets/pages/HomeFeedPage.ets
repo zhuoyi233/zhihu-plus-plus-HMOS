@@ -27,6 +27,9 @@ export struct HomeFeedPage {
   // 登录成功重载信号：reloadToken 走 Builder 参数、@Provide/@Consume 在 HdsTabs 的
   // TabContent 构建树下均实测不可靠，AppStorage 广播是可靠通道（同 bottomRectHeight）
   @StorageProp('loginFeedReloadTick') @Watch('onLoginFeedReloadTick') loginFeedReloadTick: number = 0;
+  // 双击底栏“首页”页签刷新：复用下拉刷新链路
+  @StorageProp('tabRefreshTick') @Watch('onTabRefreshRequested') tabRefreshTick: number = 0;
+  @StorageProp('tabRefreshTabIndex') tabRefreshTabIndex: number = -1;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
   @State private phase: HomeFeedPhase = HomeFeedPhase.IDLE;
@@ -91,6 +94,12 @@ export struct HomeFeedPage {
 
   private onLoginFeedReloadTick(): void {
     this.controller?.refresh();
+  }
+
+  private onTabRefreshRequested(): void {
+    if (this.tabRefreshTabIndex === 0) {
+      this.controller?.refresh();
+    }
   }
 
   build() {

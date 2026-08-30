@@ -6,6 +6,11 @@ export struct ZhihuHdsTabs {
   @StorageProp('bottomRectHeight') bottomRectHeight: number = 0;
   controller: HdsTabsController = new HdsTabsController();
   @BuilderParam content: () => void;
+  /** 双击页签回调（350ms 内同页签连点两次），供宿主实现双击刷新。 */
+  onTabDoubleTap: (index: number) => void = (_index: number): void => {
+  };
+  private lastTapIndex: number = -1;
+  private lastTapTime: number = 0;
 
   build() {
     HdsTabs({
@@ -28,6 +33,17 @@ export struct ZhihuHdsTabs {
       if (index >= 0 && index <= 4) {
         this.currentIndex = index;
       }
+    })
+    .onTabBarClick((index: number): void => {
+      const now = Date.now();
+      if (this.lastTapIndex === index && now - this.lastTapTime <= 350) {
+        this.lastTapIndex = -1;
+        this.lastTapTime = 0;
+        this.onTabDoubleTap(index);
+        return;
+      }
+      this.lastTapIndex = index;
+      this.lastTapTime = now;
     })
     .barFloatingStyle({
       barSideMargin: 16,

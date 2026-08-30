@@ -627,7 +627,19 @@ export struct P1Shell {
 
   build() {
     HdsNavigation(this.pathStack) {
-      ZhihuHdsTabs({ currentIndex: $topLevelTabIndex, controller: this.tabsController }) {
+      ZhihuHdsTabs({
+        currentIndex: $topLevelTabIndex,
+        controller: this.tabsController,
+        onTabDoubleTap: (index: number): void => {
+          // 双击页签刷新对应 feed（“我的”除外）；跨页面信号经 AppStorage 广播。
+          if (index < P1TopLevelTab.HOME || index > P1TopLevelTab.DAILY) {
+            return;
+          }
+          const nextTick = (AppStorage.get<number>('tabRefreshTick') ?? 0) + 1;
+          AppStorage.setOrCreate('tabRefreshTick', nextTick);
+          AppStorage.setOrCreate('tabRefreshTabIndex', index);
+        }
+      }) {
         TabContent() {
           this.homeContent(this.homeReloadToken, (destination: P1Destination): void => this.navigate(destination));
         }

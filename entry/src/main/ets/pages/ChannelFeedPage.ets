@@ -44,6 +44,9 @@ export struct ChannelFeedPage {
   @Prop @Watch('loadDateFromTitleBar') dateCursor: string = '';
   // 登录成功重载信号：经 AppStorage 广播（@Consume 在 HdsTabs 树下实测不链接）
   @StorageProp('loginFeedReloadTick') @Watch('onLoginFeedReloadTick') loginFeedReloadTick: number = 0;
+  // 双击底栏页签刷新：关注=1、热榜=2、日报=3（P1TopLevelTab），复用下拉刷新链路
+  @StorageProp('tabRefreshTick') @Watch('onTabRefreshRequested') tabRefreshTick: number = 0;
+  @StorageProp('tabRefreshTabIndex') tabRefreshTabIndex: number = -1;
   @Consume('channelFeedInteractionBridge') private interactionBridge: ChannelFeedInteractionBridge =
     new ChannelFeedInteractionBridge();
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
@@ -133,6 +136,23 @@ export struct ChannelFeedPage {
 
   private reloadAfterAuthentication(): void {
     this.controller?.refresh();
+  }
+
+  /** 本页所属的顶级页签：关注页两个子源都挂在“关注”页签下。 */
+  private tabIndexOfSource(): number {
+    if (this.source === ChannelFeedSource.HOT) {
+      return 2;
+    }
+    if (this.source === ChannelFeedSource.DAILY) {
+      return 3;
+    }
+    return 1;
+  }
+
+  private onTabRefreshRequested(): void {
+    if (this.tabRefreshTabIndex === this.tabIndexOfSource()) {
+      this.controller?.refresh();
+    }
   }
 
   private onLoginFeedReloadTick(): void {
