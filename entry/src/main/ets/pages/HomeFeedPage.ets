@@ -93,12 +93,6 @@ export struct HomeFeedPage {
           this.centeredStatus('正在加载首页…', false, 'p2_home_initial_loading');
         } else if (this.phase === HomeFeedPhase.ERROR) {
           this.centeredStatus(this.errorMessage, true, 'p2_home_error');
-          if (this.requiresLogin) {
-            Button('去登录')
-              .id('p2_home_error_login')
-              .fontSize($r('app.float.p1_body_font_size'))
-              .onClick(() => this.navigate({ name: P1DestinationName.LOGIN }))
-          }
         } else if (this.phase === HomeFeedPhase.EMPTY) {
           this.centeredStatus('暂时没有可显示的内容', true, 'p2_home_empty');
         } else {
@@ -185,13 +179,19 @@ export struct HomeFeedPage {
 
   @Builder
   private centeredStatus(message: string, retry: boolean, testId: string) {
+    // 登录动作必须走面板内置按钮（面板 layoutWeight(1) 居中）：作为 Column 兄弟节点会被
+    // 挤到底部，与悬浮 HdsTabs 底栏重叠导致点不到
     AppPageStatusPanel({
       kind: retry ? AppPageStatusKind.ERROR : AppPageStatusKind.LOADING,
       message: message,
       testId: testId,
-      actionLabel: retry && !this.requiresLogin ? '重新加载' : '',
-      actionId: `${testId}_retry`,
+      actionLabel: retry ? (this.requiresLogin ? '去登录' : '重新加载') : '',
+      actionId: this.requiresLogin ? 'p2_home_error_login' : `${testId}_retry`,
       onAction: (): void => {
+        if (this.requiresLogin) {
+          this.navigate({ name: P1DestinationName.LOGIN });
+          return;
+        }
         this.controller?.retry();
       }
     });
