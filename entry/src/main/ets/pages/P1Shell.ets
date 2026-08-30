@@ -14,8 +14,7 @@ import { Want } from '@kit.AbilityKit';
 import {
   SegmentButton,
   SegmentButtonOptions,
-  SymbolGlyphModifier,
-  uiMaterial
+  SymbolGlyphModifier
 } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
@@ -791,13 +790,8 @@ export struct P1Shell {
         .height(40)
         .padding($r('app.float.p1_spacing_small'))
         .backgroundColor(Color.Transparent)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.THIN,
-          colorInvert: true,
-          applyShadow: true,
-          interactive: true,
-          lightEffect: {}
-        }))
+        // uiMaterial 全家族为 API 26 专属；工程最低兼容 API 23，标题栏玻璃一律走模糊兜底
+        .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
         .borderRadius($r('app.float.p1_card_radius'))
         .accessibilityText('打开搜索')
         .onClick((): void => this.navigate({ name: P1DestinationName.SEARCH, query: '' }))
@@ -812,13 +806,7 @@ export struct P1Shell {
         .height(40)
         .padding(0)
         .backgroundColor(Color.Transparent)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.THIN,
-          colorInvert: true,
-          applyShadow: true,
-          interactive: true,
-          lightEffect: {}
-        }))
+        .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
         .accessibilityText('打开通知')
         .onClick((): void => this.navigate({ name: P1DestinationName.NOTIFICATION }))
       }
@@ -851,13 +839,7 @@ export struct P1Shell {
         .height(40)
         .padding(0)
         .backgroundColor(Color.Transparent)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.THIN,
-          colorInvert: true,
-          applyShadow: true,
-          interactive: true,
-          lightEffect: {}
-        }))
+        .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
         .accessibilityText('刷新热榜')
         .onClick((): void => {
           this.hotReloadToken += 1;
@@ -880,13 +862,7 @@ export struct P1Shell {
         .height(40)
         .padding(0)
         .backgroundColor(Color.Transparent)
-        .systemMaterial(new uiMaterial.ImmersiveMaterial({
-          style: uiMaterial.ImmersiveStyle.THIN,
-          colorInvert: true,
-          applyShadow: true,
-          interactive: true,
-          lightEffect: {}
-        }))
+        .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
         .accessibilityText('选择日报日期')
         .onClick((): void => {
           this.openDailyDatePicker();
@@ -921,13 +897,6 @@ export struct P1Shell {
       buttons: [{ text: '推荐' }, { text: '动态' }],
       backgroundColor: Color.Transparent,
       selectedBackgroundColor: $r('app.color.brand_primary_container'),
-      backgroundSystemMaterial: new uiMaterial.ImmersiveMaterial({
-        style: uiMaterial.ImmersiveStyle.THIN,
-        colorInvert: true,
-        applyShadow: true,
-        interactive: false,
-        lightEffect: {}
-      }),
       buttonPadding: 10
     });
   }
