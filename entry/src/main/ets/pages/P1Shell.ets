@@ -730,7 +730,7 @@ export struct P1Shell {
     Row({ space: $r('app.float.p1_spacing_small') }) {
       Stack({ alignContent: Alignment.Center }) {
         if (this.supportsImmersiveMaterial()) {
-          materialCanvas(72, 72)
+          materialCanvas(52, 52)
         }
         Button({ type: ButtonType.Normal, stateEffect: true }) {
           SymbolGlyph($r('sys.symbol.chevron_left'))
@@ -749,9 +749,9 @@ export struct P1Shell {
             this.pathStack.pop();
           })
       }
-        .width(56)
-        .height(56)
-        .borderRadius(28)
+        .width(44)
+        .height(44)
+        .borderRadius(22)
         .clip(true)
       Text(title)
         .fontSize($r('app.float.p1_heading_font_size'))
