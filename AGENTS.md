@@ -55,7 +55,9 @@ $hdc = "hdc"
 
 ## 提交规范
 
-- **永不 push**，所有提交仅本地；远端 `origin/dev` 落后属正常。
+- **严格禁止 push**：所有提交仅本地，远端落后属正常。仅当用户**当次明确要求**时才允许 push，
+  且一次要求只执行**单次** push（只推用户指定的分支/tag，不顺势推送其他分支、tag 或 `--tags`），
+  该许可不延续到后续任务。
 - 提交风格：`<type>(harmony): <中文>`，如 `fix(harmony): 修复搜索响应解析`。
 - 提交前检查：`git status` 干净（build-profile.json5 因 skip-worktree 不参与提交）、无临时文件（`.tmp_*` 等）。
 - 版本号映射：`versionCode` 由 `versionName` 按固定公式推导，二者在 `AppScope/app.json5` 一并更新：

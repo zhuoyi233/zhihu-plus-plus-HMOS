@@ -39,6 +39,7 @@ import {
 import { DividerShowType, hdsMaterial, HdsNavDestination, HdsNavigation, HdsNavigationAttribute, HdsNavigationTitleMode, HdsTabsController } from '@kit.UIDesignKit';
 import { getImmersiveTitleBarStyle } from '../common/style/NavStyles';
 import { ZhihuHdsTabs } from './components/ZhihuHdsTabs';
+import { materialCanvas } from './components/MaterialCanvas';
 import { ChannelFeedInteractionBridge } from './ChannelFeedState';
 
 const PROJECT_HOME_URI: string = 'https://github.com/zhuoyi233/zhihu-plus-plus-HMOS';
@@ -374,7 +375,8 @@ export struct P1Shell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '问题' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.detailTitleBar('问题'), divider: { showType: DividerShowType.OFF } } })
+      .hideBackButton(true)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.ANSWER) {
@@ -387,7 +389,8 @@ export struct P1Shell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '回答' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.detailTitleBar('回答'), divider: { showType: DividerShowType.OFF } } })
+      .hideBackButton(true)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.ARTICLE) {
@@ -400,7 +403,8 @@ export struct P1Shell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '文章' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.detailTitleBar('文章'), divider: { showType: DividerShowType.OFF } } })
+      .hideBackButton(true)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.VIDEO) {
@@ -710,6 +714,59 @@ export struct P1Shell {
       case P1TopLevelTab.ACCOUNT:
         return '我的';
     }
+  }
+
+  private supportsImmersiveMaterial(): boolean {
+    try {
+      return hdsMaterial.getSystemMaterialTypes().includes(hdsMaterial.MaterialType.IMMERSIVE);
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  /** 详情页 HDS 标题栏内容：返回键 + 页面标题（替代各详情页自绘页头，消除标题栏空置占位）。 */
+  @Builder
+  private detailTitleBar(title: string) {
+    Row({ space: $r('app.float.p1_spacing_small') }) {
+      Stack({ alignContent: Alignment.Center }) {
+        if (this.supportsImmersiveMaterial()) {
+          materialCanvas(52, 52)
+        }
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.chevron_left'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+          .width(40)
+          .height(40)
+          .padding(0)
+          .borderRadius(20)
+          .backgroundColor(this.supportsImmersiveMaterial()
+            ? Color.Transparent
+            : $r('app.color.surface_background'))
+          .accessibilityText('返回')
+          .onClick((): void => {
+            this.pathStack.pop();
+          })
+      }
+        .width(44)
+        .height(44)
+        .borderRadius(22)
+        .clip(true)
+      Text(title)
+        .fontSize($r('app.float.p1_heading_font_size'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.primary_text'))
+        .layoutWeight(1)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+      Blank()
+        .width(40)
+        .height(40)
+    }
+    .width('100%')
+    .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding') })
+    .hitTestBehavior(HitTestMode.Transparent)
   }
 
   @Builder
