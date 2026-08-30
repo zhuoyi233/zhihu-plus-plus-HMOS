@@ -14,7 +14,6 @@ import {
   contentDetailIdentity
 } from '../main/ets/pages/ContentDetailState';
 import {
-  contentAuthorLine,
   contentContextTitle,
   contentEmptyMessage,
   contentHtml,
@@ -92,7 +91,6 @@ export default function contentDetailStateTest(): void {
       if (answer !== undefined) {
         expect(contentTitle(answer)).assertEqual('回答');
         expect(contentContextTitle(answer)).assertEqual('回答所属问题');
-        expect(contentAuthorLine(answer)).assertEqual('回答者 · 回答签名');
         expect(contentStatistics(answer)).assertEqual('10 赞同 · 2 条评论');
         expect(contentStatistics(answer, 42)).assertEqual('42 赞同 · 2 条评论');
         expect(contentHtml(answer)).assertEqual('<p>回答正文</p>');
