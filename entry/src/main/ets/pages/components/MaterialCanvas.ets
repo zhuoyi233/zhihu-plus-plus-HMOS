@@ -5,6 +5,9 @@ import { DividerMode, hdsMaterial, HdsTabs } from '@kit.UIDesignKit';
  * 透过 HDS 组件自身的材质渲染路径呈现真机玻璃效果，规避 uiMaterial.systemMaterial 的
  * 白底遮挡问题。画布不响应点击。
  *
+ * 关键：必须给 barFloatingStyle.barWidth 显式传三档断点宽度并设置组件级 barWidth/barHeight，
+ * 否则无页签内容的 bar 会塌缩成最小宽度的竖条（真机上表现为“玻璃细棍”）。
+ *
  * 用法：GlassCapsule() { 内容组件 }，或单独以 materialCanvas(w, h) 铺底。
  */
 @Builder
@@ -14,6 +17,8 @@ export function materialCanvas(widthVp: Length, heightVp: Length) {
     .width(widthVp)
     .height(heightVp)
     .barPosition(BarPosition.End)
+    .barWidth(widthVp)
+    .barHeight(heightVp)
     .barOverlap(true)
     .clip(false)
     .backgroundColor(Color.Transparent)
@@ -21,6 +26,11 @@ export function materialCanvas(widthVp: Length, heightVp: Length) {
     .divider({ mode: DividerMode.NONE })
     .hitTestBehavior(HitTestMode.None)
     .barFloatingStyle({
+      barWidth: {
+        smallWidth: widthVp,
+        mediumWidth: widthVp,
+        largeWidth: widthVp
+      },
       barBottomMargin: 0,
       barSideMargin: 0,
       lightColor: Color.White,
