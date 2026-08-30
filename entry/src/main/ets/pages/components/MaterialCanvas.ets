@@ -39,7 +39,7 @@ export function materialCanvas(widthVp: Length, heightVp: Length) {
 export struct GlassCapsule {
   @BuilderParam content: () => void = this.emptyContent;
   @Prop useMaterial: boolean = true;
-  @State private canvasWidth: number = 240;
+  @State private canvasWidth: number = 120;
   private readonly canvasHeight: number = 64;
 
   @Builder
@@ -67,7 +67,7 @@ export struct GlassCapsule {
       Row() {
         this.content()
       }
-      .padding({ left: 16, right: 16, top: 10, bottom: 10 })
+      .padding({ left: 10, right: 10, top: 8, bottom: 8 })
       .borderRadius(24)
       .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
     }

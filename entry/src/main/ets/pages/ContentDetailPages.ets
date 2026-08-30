@@ -538,7 +538,7 @@ struct ContentDetailPage {
       if (this.interactionErrorMessage.length > 0) {
         this.interactionStatusRow()
       }
-      Row({ space: $r('app.float.p1_spacing_medium') }) {
+      Row({ space: $r('app.float.p1_spacing_small') }) {
         if (this.kind === ContentDetailKind.QUESTION) {
           GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
             if (this.followController !== undefined) {
@@ -600,7 +600,7 @@ struct ContentDetailPage {
         .fontColor([$r('app.color.secondary_text')])
     }
     .id(`p3_${this.kind}_detail_favorite_bar`)
-    .width(44)
+    .width(40)
     .height(44)
     .backgroundColor(Color.Transparent)
     .onClick((): void => {
@@ -621,7 +621,7 @@ struct ContentDetailPage {
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.secondary_text'))
       }
-      .padding({ left: 8, right: 8, top: 6, bottom: 6 })
+      .padding({ left: 6, right: 6, top: 6, bottom: 6 })
     }
     .id(`p3_${this.kind}_detail_comment_bar`)
     .height(44)
@@ -640,7 +640,7 @@ struct ContentDetailPage {
         .fontColor([$r('app.color.secondary_text')])
     }
     .id(`p3_${this.kind}_detail_more`)
-    .width(44)
+    .width(40)
     .height(44)
     .backgroundColor(Color.Transparent)
     .onClick((): void => {
@@ -656,7 +656,7 @@ struct ContentDetailPage {
         .fontColor([$r('app.color.secondary_text')])
     }
     .id('p3_question_detail_more')
-    .width(44)
+    .width(40)
     .height(44)
     .backgroundColor(Color.Transparent)
     .accessibilityText('更多问题操作')
