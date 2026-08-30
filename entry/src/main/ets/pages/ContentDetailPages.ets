@@ -45,7 +45,8 @@ import { stageAnswerEditSeed } from './AnswerEditSeedStore';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { createSystemShareService } from '../platform/SystemShareService';
 import { ShareOutcome, SharePayloadKind, ShareTextPayload } from '../platform/ShareContracts';
-import uiMaterial from '@ohos.arkui.uiMaterial';
+import { hdsMaterial } from '@kit.UIDesignKit';
+import { GlassCapsule } from './components/MaterialCanvas';
 
 @Component
 struct ContentDetailPage {
@@ -95,17 +96,17 @@ struct ContentDetailPage {
   @State private menuStatus: string = '';
   /** 沉浸式阅读仅收起页面 Chrome，不改变正文、互动或滚动状态。 */
   @State private immersiveReading: boolean = false;
+  /** 设备支持沉浸材质：玻璃胶囊走 HDS 画布，否则回落组件模糊。 */
+  private immersiveMaterialSupported: boolean = false;
   private controller?: ContentDetailController;
   private blockingAction?: BlockingActionController;
   private voteController?: ContentVoteController;
   private followController?: FollowController;
-  /** 设备支持交互式沉浸材质；不支持时胶囊回落组件模糊（降级材质为不透明白底会遮挡正文）。 */
-  private immersiveMaterialSupported: boolean = false;
 
   aboutToAppear(): void {
     try {
       this.immersiveMaterialSupported =
-        uiMaterial.getMaterialInfo().type === uiMaterial.MaterialType.IMMERSIVE;
+        hdsMaterial.getSystemMaterialTypes().includes(hdsMaterial.MaterialType.IMMERSIVE);
     } catch (_error) {
       this.immersiveMaterialSupported = false;
     }
@@ -530,41 +531,45 @@ struct ContentDetailPage {
     };
   }
 
-  @Builder
+        @Builder
   private bottomActionBar() {
-    // 沉浸光感风格：左右两块悬浮胶囊（左=赞同/反对或关注，右=收藏/评论/更多或写回答），
-    // 正文从下方穿透；不再使用整条实底栏。
+    // 沉浸光感玻璃胶囊：左右两块独立悬浮（PR 的空 HdsTabs 材质画布方案），正文从下方穿透。
     Column({ space: $r('app.float.p1_spacing_xsmall') }) {
       if (this.interactionErrorMessage.length > 0) {
         this.interactionStatusRow()
       }
       Row({ space: $r('app.float.p1_spacing_medium') }) {
         if (this.kind === ContentDetailKind.QUESTION) {
-          this.questionFollowCapsule()
-          Blank()
-            .layoutWeight(1)
-          this.questionActionsCapsule()
-        } else {
-          // 左块：投票胶囊（赞同图标+数字 / 反对），对齐上游主视觉——
-          // Neutral 显示赞+踩（浅蓝底蓝字）；点赞同后反对隐藏、踩后赞同隐藏（实蓝底白字）。
-          Row({ space: 8 }) {
-            if (this.voteState !== ContentVoteState.DOWN) {
-              this.voteUpAction()
-            }
-            if (this.voteState !== ContentVoteState.UP) {
-              this.voteDownAction()
+          GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
+            if (this.followController !== undefined) {
+              this.followQuestionAction()
             }
           }
-          .borderRadius(24)
-          .backgroundColor(this.voteState === ContentVoteState.NEUTRAL
-            ? $r('app.color.brand_primary_container')
-            : $r('app.color.brand_primary'))
-          .clip(true)
 
           Blank()
             .layoutWeight(1)
 
-          this.answerActionsCapsule()
+          GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
+            this.questionRightActions()
+          }
+        } else {
+          GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
+            Row({ space: 0 }) {
+              if (this.voteState !== ContentVoteState.DOWN) {
+                this.voteUpAction()
+              }
+              if (this.voteState !== ContentVoteState.UP) {
+                this.voteDownAction()
+              }
+            }
+          }
+
+          Blank()
+            .layoutWeight(1)
+
+          GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
+            this.answerRightActions()
+          }
         }
       }
       .width('100%')
@@ -576,38 +581,7 @@ struct ContentDetailPage {
     }
     .width('100%')
     .zIndex(2)
-    .hitTestBehavior(HitTestMode.Transparent)
-  }
-
-  /** 交互式沉浸材质：支持的真机上胶囊呈现跟手光效（知乎蓝）。ULTRA_THIN 避免白雾遮字。 */
-  private interactiveMaterial(): uiMaterial.ImmersiveMaterial {
-    return new uiMaterial.ImmersiveMaterial({
-      style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
-      interactive: true,
-      lightEffect: { color: $r('app.color.zhihu_blue') }
-    });
-  }
-
-  @Builder
-  private answerActionsCapsule() {
-    if (this.immersiveMaterialSupported) {
-      Row({ space: 0 }) {
-        this.answerRightActions()
-      }
-      .padding({ left: 8, right: 8 })
-      .borderRadius(24)
-      .clip(true)
-      .systemMaterial(this.interactiveMaterial())
-    } else {
-      // 降级：不支持的设备上沉浸材质是不透明白底，会遮挡正文，改用组件模糊。
-      Row({ space: 0 }) {
-        this.answerRightActions()
-      }
-      .padding({ left: 8, right: 8 })
-      .borderRadius(24)
-      .clip(true)
-      .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
-    }
+    .hitTestBehavior(HitTestMode.Default)
   }
 
   @Builder
@@ -675,50 +649,6 @@ struct ContentDetailPage {
   }
 
   @Builder
-  private questionFollowCapsule() {
-    if (this.immersiveMaterialSupported) {
-      Row({ space: 0 }) {
-        if (this.followController !== undefined) {
-          this.followQuestionAction()
-        }
-      }
-      .borderRadius(24)
-      .clip(true)
-      .systemMaterial(this.interactiveMaterial())
-    } else {
-      Row({ space: 0 }) {
-        if (this.followController !== undefined) {
-          this.followQuestionAction()
-        }
-      }
-      .borderRadius(24)
-      .clip(true)
-      .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
-    }
-  }
-
-  @Builder
-  private questionActionsCapsule() {
-    if (this.immersiveMaterialSupported) {
-      Row({ space: 0 }) {
-        this.questionRightActions()
-      }
-      .padding({ left: 8, right: 8 })
-      .borderRadius(24)
-      .clip(true)
-      .systemMaterial(this.interactiveMaterial())
-    } else {
-      Row({ space: 0 }) {
-        this.questionRightActions()
-      }
-      .padding({ left: 8, right: 8 })
-      .borderRadius(24)
-      .clip(true)
-      .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
-    }
-  }
-
-  @Builder
   private questionRightActions() {
     Button({ type: ButtonType.Normal }) {
       SymbolGlyph($r('sys.symbol.ellipsis_circle'))
@@ -740,7 +670,7 @@ struct ContentDetailPage {
       .onClick((): void => this.openAnswerComposer())
   }
 
-  private openAnswerComposer(): void {
+private openAnswerComposer(): void {
     const session = this.session;
     if (session === undefined || session.getState().status !== SessionStatus.AUTHENTICATED) {
       this.navigate({ name: P1DestinationName.LOGIN });
@@ -1068,11 +998,11 @@ struct ContentDetailPage {
   private voteUpAction() {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
       Row({ space: 6 }) {
-        SymbolGlyph($r('sys.symbol.triangleshape'))
+        SymbolGlyph(this.voteState === ContentVoteState.UP
+            ? $r('sys.symbol.triangleshape_fill')
+            : $r('sys.symbol.triangleshape'))
           .fontSize(20)
-          .fontColor([this.voteState === ContentVoteState.UP
-            ? $r('app.color.on_brand')
-            : $r('app.color.brand_primary')])
+          .fontColor([$r('app.color.brand_primary')])
         Text(`${this.voteupCount}`)
           .fontSize($r('app.float.p1_body_font_size'))
           .fontWeight(FontWeight.Medium)
@@ -1096,11 +1026,11 @@ struct ContentDetailPage {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
       Row({ space: 6 }) {
         // 官方符号库无现成下三角，反对图标由上三角旋转 180° 得到。
-        SymbolGlyph($r('sys.symbol.triangleshape'))
+        SymbolGlyph(this.voteState === ContentVoteState.DOWN
+            ? $r('sys.symbol.triangleshape_fill')
+            : $r('sys.symbol.triangleshape'))
           .fontSize(20)
-          .fontColor([this.voteState === ContentVoteState.DOWN
-            ? $r('app.color.on_brand')
-            : $r('app.color.brand_primary')])
+          .fontColor([$r('app.color.brand_primary')])
           .rotate({ x: 0, y: 0, z: 1, angle: 180 })
       }
       .padding({ left: 10, right: 10, top: 10, bottom: 10 })

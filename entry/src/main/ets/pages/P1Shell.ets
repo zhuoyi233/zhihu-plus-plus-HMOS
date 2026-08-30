@@ -39,6 +39,7 @@ import {
 import { DividerShowType, hdsMaterial, HdsNavDestination, HdsNavigation, HdsNavigationAttribute, HdsNavigationTitleMode, HdsTabsController } from '@kit.UIDesignKit';
 import { getImmersiveTitleBarStyle } from '../common/style/NavStyles';
 import { ZhihuHdsTabs } from './components/ZhihuHdsTabs';
+import { materialCanvas } from './components/MaterialCanvas';
 import { ChannelFeedInteractionBridge } from './ChannelFeedState';
 
 const PROJECT_HOME_URI: string = 'https://github.com/zhuoyi233/zhihu-plus-plus-HMOS';
@@ -715,23 +716,42 @@ export struct P1Shell {
     }
   }
 
+  private supportsImmersiveMaterial(): boolean {
+    try {
+      return hdsMaterial.getSystemMaterialTypes().includes(hdsMaterial.MaterialType.IMMERSIVE);
+    } catch (_error) {
+      return false;
+    }
+  }
+
   /** 详情页 HDS 标题栏内容：返回键 + 页面标题（替代各详情页自绘页头，消除标题栏空置占位）。 */
   @Builder
   private detailTitleBar(title: string) {
     Row({ space: $r('app.float.p1_spacing_small') }) {
-      Button({ type: ButtonType.Normal, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(20)
-          .fontColor([$r('app.color.primary_text')])
+      Stack({ alignContent: Alignment.Center }) {
+        if (this.supportsImmersiveMaterial()) {
+          materialCanvas(72, 72)
+        }
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.chevron_left'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(this.supportsImmersiveMaterial()
+            ? Color.Transparent
+            : $r('app.color.surface_background'))
+          .accessibilityText('返回')
+          .onClick((): void => {
+            this.pathStack.pop();
+          })
       }
-        .width(40)
-        .height(40)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .accessibilityText('返回')
-        .onClick((): void => {
-          this.pathStack.pop();
-        })
+        .width(56)
+        .height(56)
+        .borderRadius(28)
+        .clip(true)
       Text(title)
         .fontSize($r('app.float.p1_heading_font_size'))
         .fontWeight(FontWeight.Medium)
