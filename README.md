@@ -9,13 +9,32 @@
 
 ### 特别感谢原项目
 
-感谢原项目开发者 [zly2006](https://github.com/zly2006) 以及所有上游贡献者，用优美的代码完成了高质量的Android构建，使得本项目有出现的可能。
+感谢原项目开发者 zly2006 以及所有上游贡献者，用优美的代码完成了高质量的Android构建，使得本项目有出现的可能。
 
-## 应用截图
+- **迁移基线**：安卓 Lite 版；开发工具固定 DevEco Studio 6.1.1 Release；运行/编译基线固定 API 26（HarmonyOS 26.0.0），`targetSdkVersion`/`compatibleSdkVersion` 均为 26.0.0。
+- **工程模型**：Stage 模型，ArkUI 声明式范式，状态管理优先 V2；耗时计算用 TaskPool，必要时才用 Worker。
+- **应用标识**：`bundleName` 为 `com.github.zhuoyi233.zhplus`（与上游安卓包名不同）。
 
-| 首页 | 关注 | 日报 | 个人主页 | 文章 |
-| --- | --- | --- | --- | --- |
-| ![首页截图](assets/images/1_home.jpg) | ![关注截图](assets/images/2_follow.jpg) | ![日报截图](assets/images/3_daily.jpg) | ![个人主页截图](assets/images/4_people.jpg) | ![文章截图](assets/images/5_article.jpg) |
+### 工程结构
+
+- `entry`：HAP 主模块（页面、登录、创作发布、信息流等 UI 与编排）。
+- `core` / `data` / `reader`：HAR 共享库（协议解析、仓储、过滤、阅读器等核心能力）。
+- `AppScope`：应用壳与资源。
+- 构建：`oh-package.json5` + hvigor；`build-profile.json5` 的本地签名配置已 `git update-index --skip-worktree`，不进提交。
+
+### 构建与验证
+
+需要 **pwsh 7**（Windows PowerShell 5.1 对中文会乱码）：
+
+```powershell
+# 编译 + Hypium 测试（跳过依赖安装与 HAP 构建，最常用）
+pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall -SkipBuild
+
+# 完整构建（assembleHap + 签名 + 测试）
+pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall
+```
+
+Hypium 用例数由 `verify-harmony.ps1` 从测试注册入口动态统计并校验全量通过（当前 **523 个**）。
 
 ### 当前进度
 
@@ -23,7 +42,7 @@
 
 > 鸿蒙版仍在开发中，功能覆盖以各阶段验收文档为准，不保证与安卓版 100% 一致。
 
-### 下载
+### 下载未签名HAP
 
 可在本项目[release页面](https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases)获取未签名HAP包。
 
