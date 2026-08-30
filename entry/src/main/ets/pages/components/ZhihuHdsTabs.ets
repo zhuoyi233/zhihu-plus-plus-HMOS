@@ -33,7 +33,9 @@ export struct ZhihuHdsTabs {
       barSideMargin: 16,
       barBottomMargin: this.bottomRectHeight,
       systemMaterialEffect: {
-        materialType: hdsMaterial.MaterialType.IMMERSIVE,
+        // ADAPTIVE 跟随系统材质策略（自 6.1.0(23) 起可用）：系统按设备能力自选材质类型与档位，
+        // 支持材质的设备自动选用沉浸材质，未来新增材质类型无需应用侧跟进
+        materialType: hdsMaterial.MaterialType.ADAPTIVE,
         materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
       },
       gradientMask: {
@@ -108,7 +110,7 @@ export struct ZhihuHdsActionBar {
           barSideMargin: 0,
           lightColor: Color.White,
           systemMaterialEffect: {
-            materialType: hdsMaterial.MaterialType.IMMERSIVE,
+            materialType: hdsMaterial.MaterialType.ADAPTIVE,
             materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
           },
           thermoCtrl: true
