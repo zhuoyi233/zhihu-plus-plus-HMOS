@@ -59,6 +59,10 @@ $hdc = "hdc"
 - **严格禁止 push**：所有提交仅本地，远端落后属正常。仅当用户**当次明确要求**时才允许 push，
   且一次要求只执行**单次** push（只推用户指定的分支/tag，不顺势推送其他分支、tag 或 `--tags`），
   该许可不延续到后续任务。
+- **禁止自动提交**：改动（含修复、重构、文档）完成后一律不主动 commit，仅当用户**当次明确要求**
+  提交时才执行。用户要求提交但未说明提交内容/拆分方式时，agent 按 git diff 的实际变更与本节
+  规范自行生成 commit message 并做合理的提交拆分，无需逐次询问；与任务无关的未跟踪文件不得
+  顺势带入。
 - 提交风格：`<type>(harmony): <中文>`，如 `fix(harmony): 修复搜索响应解析`。
 - 提交前检查：`git status` 干净（build-profile.json5 因 skip-worktree 不参与提交）、无临时文件（`.tmp_*` 等）。
 - 版本号映射：`versionCode` 由 `versionName` 按固定公式推导，二者在 `AppScope/app.json5` 一并更新：
