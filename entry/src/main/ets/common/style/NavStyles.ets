@@ -3,7 +3,9 @@ import { hdsMaterial, ScrollEffectType, TitleBarStyleOptions } from '@kit.UIDesi
 import { HarmonyOSCapabilities } from '../platform/HarmonyOSCapabilities';
 
 export function getImmersiveTitleBarStyle(): TitleBarStyleOptions {
-  if (HarmonyOSCapabilities.supportsImmersiveMaterial()) {
+  // 标题栏沉浸样式（材质层+渐变模糊滚动效果）仅 API 26+ 渲染正常；
+  // 23 真机渲染白色遮挡条（见 HarmonyOSCapabilities.supportsImmersiveTitleBarStyle）。
+  if (HarmonyOSCapabilities.supportsImmersiveTitleBarStyle()) {
     return {
       scrollEffectOpts: {
         enableScrollEffect: true,
