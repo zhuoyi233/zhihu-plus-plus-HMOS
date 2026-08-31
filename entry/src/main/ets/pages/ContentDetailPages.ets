@@ -181,11 +181,6 @@ struct ContentDetailPage {
             }
             .layoutWeight(1)
             .width('100%')
-            // 底部操作栏为占位布局（栏在内容流末尾，占真实布局空间，不叠压正文）；
-            // 悬浮穿透方案在无材质降级与图片场景下会遮挡正文，勿改回。
-            if (!this.immersiveReading) {
-              this.bottomActionBar()
-            }
           }
           .width('100%')
           .layoutWeight(1)
@@ -196,6 +191,18 @@ struct ContentDetailPage {
       .height('100%')
       .padding({ top: 94 })
       .backgroundColor($r('app.color.page_background'))
+
+      // 底部操作栏：全屏悬浮层单实例承载（正文从下方穿透直至物理底边）。
+      // 切勿在布局流内再渲染第二份——两份会完全重叠绘制（06a2ab90 修复的错乱根源）。
+      if (!this.immersiveReading && this.content !== undefined &&
+        this.phase === ContentDetailPhase.READY) {
+        Stack({ alignContent: Alignment.Bottom }) {
+          this.bottomActionBar()
+        }
+        .width('100%')
+        .height('100%')
+        .hitTestBehavior(HitTestMode.Transparent)
+      }
 
       if (this.immersiveReading) {
         this.immersiveExitControl()
@@ -515,7 +522,7 @@ struct ContentDetailPage {
         @Builder
   private bottomActionBar() {
     // 沉浸光感玻璃胶囊：左右两块独立悬浮胶囊（PR 的空 HdsTabs 材质画布方案），
-    // 操作栏整体为占位布局（位于内容流末尾），不叠压正文。
+    // 由全屏悬浮层单实例承载，正文从下方穿透直至物理底边（窗口为全屏布局，无避让空带）。
     Column({ space: $r('app.float.p1_spacing_xsmall') }) {
       if (this.interactionErrorMessage.length > 0) {
         this.interactionStatusRow()
