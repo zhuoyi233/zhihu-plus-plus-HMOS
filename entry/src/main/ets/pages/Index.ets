@@ -22,6 +22,7 @@ import {
   DefaultPeopleRepository,
   DefaultPinRepository,
   DefaultPinPublishRepository,
+  DefaultQuestionAnswerFeedRepository,
   DefaultSearchRepository,
   DefaultOnlineHistoryRepository,
   DefaultNotificationRepository,
@@ -46,6 +47,7 @@ import {
   ImageUploadSource,
   AnswerPublishRepository,
   PinPublishRepository,
+  QuestionAnswerFeedRepository,
   VoteRepository,
   ZhihuHttpClient
 } from 'data';
@@ -110,6 +112,7 @@ struct Index {
   @State private dailyRepository?: ChannelFeedRepository = undefined;
   @State private dailyStoryRepository?: DailyStoryRepository = undefined;
   @State private questionRepository?: ContentRepository = undefined;
+  private questionAnswerFeedFactory: () => QuestionAnswerFeedRepository | undefined = () => undefined;
   @State private answerRepository?: ContentRepository = undefined;
   @State private articleRepository?: ContentRepository = undefined;
   @State private peopleRepository?: PeopleDetailRepository = undefined;
@@ -160,6 +163,8 @@ struct Index {
       this.dailyRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(), blockingMatcher);
       this.dailyStoryRepository = new DefaultDailyStoryRepository(new ZhihuHttpClient());
       this.questionRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
+      this.questionAnswerFeedFactory = (): QuestionAnswerFeedRepository =>
+        new DefaultQuestionAnswerFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.answerRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
       this.articleRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
       this.peopleRepository = new DefaultPeopleRepository(new ZhihuHttpClient(session));
@@ -337,6 +342,7 @@ struct Index {
       followRepository: this.followRepository,
       collectionRepository: this.collectionRepository,
       commentRepository: this.commentRepository,
+      questionAnswerFeedFactory: this.questionAnswerFeedFactory,
       session: this.session,
       onBack: onBack
     });

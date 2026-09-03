@@ -7,9 +7,10 @@ import {
   DailyStorySummary,
   isDailyFeedDateCursor
 } from './ChannelFeedModels';
-import { FeedItem, FeedPage, PageCursor } from './DomainModels';
+import { FeedItem, FeedPage, FeedTargetKind, FeedTargetSummary, PageCursor, UserProfile } from './DomainModels';
 import {
   JsonArrayValue,
+  JsonBooleanValue,
   jsonIntegerLiteral,
   jsonNumber,
   JsonNumberValue,
@@ -203,4 +204,85 @@ export function decodeDailyFeedPage(json: string): ChannelFeedPage {
 
 function invalid(message: string): DomainDecodeError {
   return new DomainDecodeError(DomainDecodeFailureKind.MISSING_FIELD, message);
+}
+
+/**
+ * 问题回答信息流（/api/v4/questions/{id}/feeds）解码。
+ * 与 moments/hot 条目不同：条目无顶层 id/verb，形如
+ * {type:'question_feed_card', target_type:'answer', target:{...}}；
+ * target 亦无嵌套 question 对象，标题从 target 自身尽力取值。
+ */
+export function decodeQuestionAnswerFeedPage(json: string): ChannelFeedPage {
+  const object = root(json, '问题回答信息流');
+  const data = requiredArray(object, 'data', 'feed.data');
+  const items: Array<ChannelContentItem> = [];
+  data.items.forEach((value: JsonValue): void => {
+    const item = jsonObject(value);
+    if (item === undefined) {
+      return;
+    }
+    const target = jsonObject(item.get('target'));
+    const targetType = jsonString(item.get('target_type')) ?? jsonString(target?.get('type')) ??
+      jsonString(item.get('type'));
+    if (targetType !== 'answer') {
+      // 跳过置顶/聚合等非内容条目，对齐上游按 target 类型过滤的语义。
+      return;
+    }
+    if (target === undefined) {
+      return;
+    }
+    const targetId = wireId(target.get('id'), 'feed.target.id');
+    const kind: FeedTargetKind = FeedTargetKind.ANSWER;
+    const question = jsonObject(target.get('question'));
+    const title = jsonString(target.get('title')) ?? jsonString(target.get('name')) ??
+      (question === undefined ? undefined : jsonString(question.get('title'))) ?? '';
+    const authorObject = jsonObject(target.get('author'));
+    const author: UserProfile = {
+      id: jsonString(authorObject?.get('id')) ?? '',
+      name: jsonString(authorObject?.get('name')) ?? '',
+      headline: jsonString(authorObject?.get('headline')) ?? '',
+      urlToken: jsonString(authorObject?.get('url_token')),
+      avatarUrl: jsonString(authorObject?.get('avatar_url')),
+      followerCount: 0,
+      isFollowing: false,
+      isOrganization: false
+    };
+    const targetTopicIds = topicIds(target);
+    const feedTarget: FeedTargetSummary = {
+      kind: kind,
+      id: targetId,
+      title: title,
+      excerpt: jsonString(target.get('excerpt')) ?? '',
+      url: jsonString(target.get('url')) ?? '',
+      voteupCount: jsonNumber(target.get('voteup_count')) ?? 0,
+      commentCount: jsonNumber(target.get('comment_count')) ?? 0,
+      author: author,
+      topicIds: targetTopicIds
+    };
+    const feedEntry: FeedItem = {
+      id: targetId,
+      verb: '',
+      createdAt: jsonNumber(target.get('created_time')) ?? 0,
+      updatedAt: jsonNumber(target.get('updated_time')) ?? 0,
+      target: feedTarget
+    };
+    const contentItem: ChannelContentItem = {
+      kind: ChannelFeedItemKind.CONTENT,
+      feedItem: feedEntry,
+      topicIds: targetTopicIds
+    };
+    items.push(contentItem);
+  });
+  const paging = jsonObject(object.get('paging'));
+  const next = paging === undefined ? undefined : jsonString(paging.get('next'));
+  const end = paging?.get('is_end');
+  const isEnd = (end instanceof JsonBooleanValue && end.value) || next === undefined || next.trim().length === 0;
+  const cursor: PageCursor = {
+    isEnd: isEnd,
+    isStart: false,
+    next: !isEnd ? next : undefined,
+    page: -1,
+    total: items.length
+  };
+  return { items: items, cursor: cursor };
 }

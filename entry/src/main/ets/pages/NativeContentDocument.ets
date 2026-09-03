@@ -403,15 +403,120 @@ export struct NativeContentDocument {
   emptyMessage: string = '正文为空';
   /** P3-9-B：正文滚动像素偏移回调（用于详情页顶栏折叠联动）。 */
   onScrollOffset?: (offset: number) => void;
+  /** 问题详情页在正文末尾追加的 section（回答信息流）；未传入时渲染空。 */
+  @BuilderParam documentHeader: () => void = this.emptyFooter;
+  @BuilderParam documentBodyFooter: () => void = this.emptyFooter;
+  @BuilderParam documentItems: () => void = this.emptyFooter;
+  @BuilderParam documentFooter: () => void = this.emptyFooter;
+  /** 列表触底回调：问题详情页用于回答信息流分页加载。 */
+  onListReachEnd?: () => void;
+  /** 问题页正文折叠预览：正文超阈值（纯文本≥100 字或含图）时收起为 180vp 视口。 */
+  collapsible: boolean = false;
+  @State private detailExpanded: boolean = false;
+  @State private collapsibleActive: boolean = false;
+  /** 正文自然高度（vp）：由内层 onAreaChange 单调更新；视口高度据此派生，勿存快照——
+   * 首帧测量偏小若被存死，内容长高后视口将永久被压小（正文整块消失）。 */
+  @State private naturalHeightVp: number = 0;
+  private blocks: ReaderBlock[] = [];
   @State private previewUrl: string = '';
   @State private empty: boolean = true;
   private readonly dataSource: ReaderBlockDataSource = new ReaderBlockDataSource();
   private readonly scroller: Scroller = new Scroller();
 
+  @Builder
+  private emptyFooter(): void {
+  }
+
+  /**
+   * 问题正文折叠视口（对齐上游 QuestionAnimatedBodyHeader）：收起 180vp + 底部渐变遮罩 +
+   * 右下角展开/收起开关，420ms FastOutSlowIn 动画。内层 Scroll 让子列不受视口高度约束、
+   * 始终按自然高度测量（onAreaChange 回填展开目标高度），规避"父锁高→子测量被压缩"死锁。
+   */
+  @Builder
+  private collapsibleBodyViewport() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      Scroll() {
+        Column({ space: 12 }) {
+          ForEach(this.blocks, (item: ReaderBlock) => {
+            this.readerBlock(item)
+          }, (item: ReaderBlock): string => item.id)
+        }
+        .width('100%')
+        .onAreaChange((_oldArea: Area, newArea: Area): void => {
+          const height = Number(newArea.height);
+          if (height > 0 && Math.abs(height - this.naturalHeightVp) > 1) {
+            this.naturalHeightVp = height;
+          }
+        })
+      }
+      .scrollBar(BarState.Off)
+      .align(Alignment.Top)
+      .width('100%')
+      // 该 Scroll 仅用于让子列按自然高度测量（无约束约束），自身永不滚动；
+      // 不禁用滚动交互会抢占全部滑动手势，外层列表（回答流）将无法滚动。
+      .enableScrollInteraction(false)
+
+      Column()
+          .linearGradient({
+            angle: 180,
+            colors: [['rgba(0,0,0,0)', 0], [$r('app.color.page_background'), 1]]
+          })
+          .width('100%')
+          .height(88)
+          .opacity(this.detailExpanded ? 0 : 1)
+          .hitTestBehavior(HitTestMode.None)
+
+      Row() {
+        Blank()
+        Row({ space: 4 }) {
+          SymbolGlyph(this.detailExpanded ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
+            .fontSize(16)
+            .fontColor([$r('app.color.brand_primary')])
+          Text(this.detailExpanded ? '收起详情' : '展开详情')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.brand_primary'))
+        }
+        .padding({ left: 12, right: 12 }).height(56)
+        .borderRadius(16)
+        .backgroundColor($r('app.color.surface_background'))
+        .onClick((): void => this.toggleDetailExpanded())
+        .accessibilityText(this.detailExpanded ? '收起问题详情' : '展开问题详情')
+      }
+      .id('p3_question_detail_toggle')
+      .width('100%')
+      .padding({ left: 12, right: 12, bottom: 8 })
+    }
+    .id('p3_question_detail_content')
+    .height(this.detailExpanded ? this.expandedViewportHeight() : this.collapsedViewportHeight())
+    .clip(true)
+    .width('100%')
+  }
+
+  /** 收起态视口高：未测得自然高前用 180，测得后取 min(自然高,180) 兜底短正文。 */
+  private collapsedViewportHeight(): number {
+    return this.naturalHeightVp > 0 ? Math.min(this.naturalHeightVp, 180) : 180;
+  }
+
+  private expandedViewportHeight(): number {
+    return Math.max(this.naturalHeightVp, 1) + 64;
+  }
+
+  private toggleDetailExpanded(): void {
+    this.getUIContext().animateTo({
+      duration: 420,
+      curve: Curve.FastOutSlowIn
+    }, (): void => {
+      this.detailExpanded = !this.detailExpanded;
+    });
+  }
+
   aboutToAppear(): void {
     const blocks = parseZhihuHtml(this.html);
     this.empty = blocks.length === 0;
+    this.blocks = blocks;
     this.dataSource.replace(blocks);
+    const plainLength = this.html.replace(/<[^>]*>/g, '').trim().length;
+    this.collapsibleActive = this.collapsible && (plainLength >= 100 || this.html.includes('<img'));
   }
 
   aboutToDisappear(): void {
@@ -420,21 +525,32 @@ export struct NativeContentDocument {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
-      if (this.empty) {
-        Text(this.emptyMessage)
-          .id('p2_content_document_empty')
-          .fontSize($r('app.float.p1_body_font_size'))
-          .fontColor($r('app.color.secondary_text'))
-          .textAlign(TextAlign.Center)
-          .width('100%')
-          .padding($r('app.float.p1_page_padding'))
-      } else {
-        List({ space: 12, scroller: this.scroller }) {
-          LazyForEach(this.dataSource, (item: ReaderBlock) => {
+      List({ space: 12, scroller: this.scroller }) {
+          ListItem() { this.documentHeader() }
+          if (this.empty) {
             ListItem() {
-              this.readerBlock(item)
+              Text(this.emptyMessage).id('p2_content_document_empty')
+                .fontColor($r('app.color.secondary_text')).padding(12)
             }
-          }, (item: ReaderBlock): string => item.id)
+          }
+          if (this.collapsibleActive) {
+            ListItem() {
+              this.collapsibleBodyViewport()
+            }
+            .width('100%')
+          } else {
+            LazyForEach(this.dataSource, (item: ReaderBlock) => {
+              ListItem() {
+                this.readerBlock(item)
+              }
+            }, (item: ReaderBlock): string => item.id)
+          }
+          ListItem() { this.documentBodyFooter() }
+          this.documentItems()
+          ListItem() {
+            this.documentFooter()
+          }
+          .width('100%')
         }
         .id('p2_content_document_list')
         .width('100%')
@@ -444,10 +560,17 @@ export struct NativeContentDocument {
           left: $r('app.float.p1_page_padding'),
           right: $r('app.float.p1_page_padding'),
           top: $r('app.float.p1_spacing_medium'),
-          bottom: $r('app.float.p1_page_padding')
+          bottom: 100
         })
         .cachedCount(6)
         .edgeEffect(EdgeEffect.Spring)
+        // 触底回调：问题详情页据此加载回答信息流下一页。
+        .onReachEnd((): void => {
+          const callback = this.onListReachEnd;
+          if (callback !== undefined) {
+            callback();
+          }
+        })
         // 用像素偏移而非 onScrollIndex 驱动顶栏折叠：索引会随视口高度变化回弹造成振荡闪烁，
         // 像素偏移在顶栏收起（视口变高）时保持不变，状态稳定。
         .onDidScroll((): void => {
@@ -456,7 +579,6 @@ export struct NativeContentDocument {
             callback(this.scroller.currentOffset().yOffset);
           }
         })
-      }
 
       if (this.previewUrl.length > 0) {
         ContentImagePreview({

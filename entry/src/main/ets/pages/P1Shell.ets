@@ -1,3 +1,4 @@
+import { QuestionTitleBar } from './QuestionTitleBar';
 import {
   AppPreferencesStore,
   AppThemeMode,
@@ -380,7 +381,7 @@ export struct P1Shell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.detailTitleBar('问题'), divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.questionTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
@@ -742,6 +743,11 @@ export struct P1Shell {
   }
 
   /** 详情页 HDS 标题栏内容：返回键 + 页面标题（替代各详情页自绘页头，消除标题栏空置占位）。 */
+  @Builder
+  private questionTitleBar(id: string) {
+    QuestionTitleBar({ questionId: id, onBack: (): void => { this.pathStack.pop(); } })
+  }
+
   @Builder
   private detailTitleBar(title: string) {
     Row({ space: $r('app.float.p1_spacing_small') }) {

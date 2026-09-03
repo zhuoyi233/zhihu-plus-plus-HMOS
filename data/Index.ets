@@ -40,6 +40,7 @@ export * from './src/main/ets/repository/CommentRepository';
 export * from './src/main/ets/repository/DailyStoryRepository';
 export * from './src/main/ets/repository/DefaultContentRepository';
 export * from './src/main/ets/repository/DefaultChannelFeedRepository';
+export * from './src/main/ets/repository/QuestionAnswerFeedRepository';
 export * from './src/main/ets/repository/DefaultCollectionRepository';
 export * from './src/main/ets/repository/DefaultCommentRepository';
 export * from './src/main/ets/repository/NotificationRepository';

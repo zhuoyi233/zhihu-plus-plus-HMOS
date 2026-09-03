@@ -39,6 +39,11 @@ export interface PinDetail {
   topics: Array<PinTopic>;
 }
 
+export interface QuestionTopicSummary {
+  id: string;
+  name: string;
+}
+
 export interface Question {
   id: string;
   title: string;
@@ -47,11 +52,15 @@ export interface Question {
   answerCount: number;
   commentCount: number;
   followerCount: number;
+  /** 浏览数（详情 include 的 visit_count）；未返回时缺省。 */
+  visitCount?: number;
   createdAt: number;
   updatedAt: number;
   author?: UserProfile;
   /** 当前登录用户是否已关注该问题；详情接口未返回时缺省。 */
   isFollowing?: boolean;
+  /** 问题关联话题（详情 include 的 topics）；未返回时缺省。 */
+  topics?: QuestionTopicSummary[];
 }
 
 export interface AnswerEndorsementDisplay {

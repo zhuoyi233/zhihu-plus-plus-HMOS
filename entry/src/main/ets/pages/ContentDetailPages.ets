@@ -1,4 +1,10 @@
+import { QuestionAnswerDataSource } from './QuestionAnswerDataSource';
+import { QuestionAnswerNavigator, stageQuestionAnswerNavigator, takeQuestionAnswerNavigator } from './QuestionAnswerNavigator';
+import { publishQuestionTitle } from './QuestionTitleBar';
+import { FeedContentSummary } from './components/FeedContentSummary';
+import { AppPageStatusKind, AppPageStatusPanel, FeedPullDownIndicatorOptions, feedPullDownIndicator } from './AppPageChrome';
 import { pasteboard } from '@kit.BasicServicesKit';
+import { ComponentContent, SegmentButton, SegmentButtonOptions } from '@kit.ArkUI';
 import {
   P1Destination,
   P1DestinationName
@@ -7,15 +13,20 @@ import {
   AnswerEndorsementDisplay,
   BlockedFeedHistoryGateway,
   BlockingRuleGateway,
+  ChannelContentItem,
   CollectionRepository,
   CommentRepository,
   ContentDetailKind,
   ContentRepository,
   ContentVoteState,
+  feedItemIdentity,
   FollowMutationResult,
   FollowRepository,
   LoginSessionGateway,
   OpenedContentStore,
+  QuestionAnswerFeedRepository,
+  QuestionAnswerSortOrder,
+  QuestionTopicSummary,
   SessionStatus,
   VoteRepository
 } from 'data';
@@ -25,6 +36,11 @@ import {
   BlockingActionViewState,
   BlockingUserCandidate
 } from './BlockingActionState';
+import {
+  QuestionAnswersController,
+  QuestionAnswersPhase,
+  QuestionAnswersViewState
+} from './QuestionAnswersState';
 import {
   ContentDetailController,
   ContentDetailPhase,
@@ -52,6 +68,18 @@ import { GlassCapsule } from './components/MaterialCanvas';
 struct ContentDetailPage {
   kind: ContentDetailKind = ContentDetailKind.QUESTION;
   contentId: string = '';
+  @State private activeContentId: string = '';
+  @State private refreshingAnswers: boolean = false;
+  @State private navigatorBusy: boolean = false;
+  @State private navigatorRevision: number = 0;
+  @State private navigatorError: string = '';
+  @StorageProp('loginFeedReloadTick') @Watch('onLoginChanged') private loginTick: number = 0;
+  @State private authenticated: boolean = false;
+  private answerNavigator?: QuestionAnswerNavigator;
+  private readonly answerDataSource: QuestionAnswerDataSource = new QuestionAnswerDataSource();
+  private refreshContent?: ComponentContent<FeedPullDownIndicatorOptions>;
+  private questionScrolled: boolean = false;
+  private pageActive: boolean = false;
   repository: ContentRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
   rules: BlockingRuleGateway | undefined = undefined;
@@ -63,6 +91,7 @@ struct ContentDetailPage {
   session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
+  questionAnswerFeedFactory: () => QuestionAnswerFeedRepository | undefined = () => undefined;
   onBack: () => void = (): void => {
   };
   @State private phase: ContentDetailPhase = ContentDetailPhase.IDLE;
@@ -88,8 +117,18 @@ struct ContentDetailPage {
   @State private showComments: boolean = false;
   @State private commentRootDraft: string = '';
   @State private commentReplyDraft: string = '';
-  /** P3-9-B：顶栏折叠状态——false 收起（标题行）、true 展开（作者行），滚动后收为标题行。 */
-  @State private topBarScrolled: boolean = false;
+  /** 问题页回答信息流（P1）：状态由 QuestionAnswersController 推送。 */
+  @State private answersState: QuestionAnswersViewState = {
+    phase: QuestionAnswersPhase.IDLE,
+    items: [],
+    loadingMore: false,
+    canLoadMore: false,
+    sortOrder: QuestionAnswerSortOrder.DEFAULT,
+    errorMessage: '',
+    requiresLogin: false
+  };
+  @State private answersSortIndexes: number[] = [0];
+  private answersController?: QuestionAnswersController;
   /** P3-9-C：底部菜单弹窗可见性。 */
   @State private actionMenuShown: boolean = false;
   /** P3-9-C：菜单操作反馈（复制链接结果等）。 */
@@ -104,6 +143,15 @@ struct ContentDetailPage {
   private followController?: FollowController;
 
   aboutToAppear(): void {
+    this.pageActive = true;
+    if (this.activeContentId.length === 0) { this.activeContentId = this.contentId; }
+    this.authenticated = this.session?.getState().status === SessionStatus.AUTHENTICATED;
+    this.refreshContent = new ComponentContent(this.getUIContext(), wrapBuilder(feedPullDownIndicator),
+      new FeedPullDownIndicatorOptions());
+    if (this.kind === ContentDetailKind.ANSWER && this.answerNavigator === undefined) {
+      this.answerNavigator = takeQuestionAnswerNavigator(this.activeContentId);
+    }
+    this.answerNavigator?.resume();
     try {
       this.immersiveMaterialSupported =
         hdsMaterial.getSystemMaterialTypes().includes(hdsMaterial.MaterialType.IMMERSIVE);
@@ -114,6 +162,11 @@ struct ContentDetailPage {
     // 控制器仍存活时直接复用，避免重建控制器并重载正文导致滚动位置丢失。
     if (this.controller !== undefined) {
       this.controller.activate();
+      this.answersController?.activate();
+      this.ensureAnswers();
+      if (this.phase === ContentDetailPhase.LOADING) {
+        void this.controller.load(this.kind, this.activeContentId);
+      }
       return;
     }
     const repository = this.repository;
@@ -128,26 +181,66 @@ struct ContentDetailPage {
       (state: ContentDetailViewState): void => this.applyState(state)
     );
     this.controller.activate();
-    this.controller.load(this.kind, this.contentId);
+    this.controller.load(this.kind, this.activeContentId);
     this.createBlockingAction();
+    this.ensureAnswers();
+  }
+
+  private ensureAnswers(): void {
+    if (!this.pageActive || this.kind !== ContentDetailKind.QUESTION || !this.authenticated) { return; }
+    if (this.answersController === undefined) {
+      const repository = this.questionAnswerFeedFactory();
+      if (repository === undefined) { return; }
+      this.answersSortIndexes = [0];
+      this.answersController = new QuestionAnswersController(repository, this.activeContentId,
+        (state: QuestionAnswersViewState): void => {
+          this.answersState = state;
+          this.answerDataSource.replace(state.items);
+        });
+    }
+    this.answersController.activate();
+  }
+
+  private onLoginChanged(): void {
+    this.authenticated = this.session?.getState().status === SessionStatus.AUTHENTICATED;
+    if (!this.pageActive) { return; }
+    this.answersController?.deactivate();
+    this.answersController = undefined;
+    this.answerDataSource.replace([]);
+    this.ensureAnswers();
+    this.followController?.deactivate();
+    this.followController = undefined;
+    void this.controller?.load(this.kind, this.activeContentId);
   }
 
   aboutToDisappear(): void {
+    this.pageActive = false;
+    this.refreshContent?.dispose();
+    this.refreshContent = undefined;
+    this.answersController?.deactivate();
     this.controller?.deactivate();
     this.voteController?.deactivate();
     this.followController?.deactivate();
-    this.controller = undefined;
-    this.blockingAction = undefined;
+    this.voteController = undefined;
+    this.followController = undefined;
+    this.answerNavigator?.pause();
     this.pendingUserBlock = undefined;
     this.keywordBlockVisible = false;
     this.keywordBlockInput = '';
-    this.voteController = undefined;
-    this.followController = undefined;
     this.showComments = false;
     this.commentRootDraft = '';
     this.commentReplyDraft = '';
-    this.topBarScrolled = false;
     this.immersiveReading = false;
+  }
+
+  private async refreshQuestion(): Promise<void> {
+    this.refreshingAnswers = true;
+    this.followController?.deactivate();
+    this.followController = undefined;
+    try {
+      await Promise.all([this.controller?.load(this.kind, this.activeContentId) ?? Promise.resolve(),
+        this.answersController?.refresh() ?? Promise.resolve()]);
+    } finally { this.refreshingAnswers = false; }
   }
 
   private createBlockingAction(): void {
@@ -173,11 +266,15 @@ struct ContentDetailPage {
         } else if (this.content !== undefined) {
           Column() {
             // P3-9-B：顶栏作为占位（非覆盖），正文在其下方，避免作者行与标题/统计重叠。
-            if (!this.immersiveReading) {
+            if (!this.immersiveReading && this.kind !== ContentDetailKind.QUESTION) {
               this.detailTopBar(this.content)
             }
             Column() {
-              this.loadedContent(this.content)
+              if (this.kind === ContentDetailKind.QUESTION) {
+                this.questionDocument(this.content)
+              } else {
+                this.loadedContent(this.content)
+              }
             }
             .layoutWeight(1)
             .width('100%')
@@ -208,7 +305,8 @@ struct ContentDetailPage {
         this.immersiveExitControl()
       }
 
-      if (this.collectionRepository !== undefined && this.session !== undefined) {
+      if (this.phase === ContentDetailPhase.READY &&
+        this.collectionRepository !== undefined && this.session !== undefined) {
         Column()
           .bindSheet(this.favoriteDialogShown, this.favoriteDialog(), {
             height: SheetSize.LARGE,
@@ -242,12 +340,13 @@ struct ContentDetailPage {
             }
           }
         })
-      if (this.kind === ContentDetailKind.ANSWER || this.kind === ContentDetailKind.ARTICLE ||
-        this.kind === ContentDetailKind.QUESTION) {
+      // 切换回答期间卸载旧内容的弹层，避免普通入参 contentId 留在前一答。
+      if (this.phase === ContentDetailPhase.READY && (this.kind === ContentDetailKind.ANSWER ||
+        this.kind === ContentDetailKind.ARTICLE || this.kind === ContentDetailKind.QUESTION)) {
         CommentLayer({
           contentType: this.kind === ContentDetailKind.ARTICLE ? 'article'
             : this.kind === ContentDetailKind.QUESTION ? 'question' : 'answer',
-          contentId: this.contentId,
+          contentId: this.activeContentId,
           repository: this.commentRepository,
           session: this.session,
           navigate: this.navigate,
@@ -274,7 +373,7 @@ struct ContentDetailPage {
   private favoriteDialog() {
     CollectionDialogComponent({
       contentType: this.kind === ContentDetailKind.ARTICLE ? 'article' : 'answer',
-      contentId: this.contentId,
+      contentId: this.activeContentId,
       repository: this.collectionRepository,
       session: this.session,
       navigate: this.navigate,
@@ -311,7 +410,7 @@ struct ContentDetailPage {
           Button('重新加载')
             .id(`p2_${this.kind}_detail_retry`)
             .onClick((): void => {
-              this.controller?.load(this.kind, this.contentId);
+              this.controller?.load(this.kind, this.activeContentId);
             })
         }
       }
@@ -350,6 +449,28 @@ struct ContentDetailPage {
   @Builder
   private loadedContent(content: LoadedContentDetail) {
     Column() {
+      this.contentHeader(content)
+      this.answerNavigationControls()
+
+      NativeContentDocument({
+        html: contentHtml(content),
+        emptyMessage: contentEmptyMessage(content),
+        collapsible: this.kind === ContentDetailKind.QUESTION,
+        documentFooter: (): void => {
+          this.answerNavigationControls()
+        },
+        onListReachEnd: (): void => {
+          this.answersController?.loadMore();
+        }
+      })
+        .layoutWeight(1)
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  @Builder
+  private contentHeader(content: LoadedContentDetail) {
       Column({ space: $r('app.float.p1_spacing_small') }) {
         // 作者信息由顶栏折叠作者条承载（头像+名字），内容区不再重复渲染作者行。
 
@@ -360,16 +481,25 @@ struct ContentDetailPage {
             .fontSize($r('app.float.p1_heading_font_size'))
             .fontWeight(FontWeight.Bold)
             .fontColor($r('app.color.primary_text'))
-            .maxLines(3)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .copyOption(CopyOptions.LocalDevice)
             .width('100%')
         }
 
-        Text(this.displayedContentStatistics(content))
+        if (content.kind === ContentDetailKind.QUESTION) {
+          Row({ space: $r('app.float.p1_spacing_medium') }) {
+            this.questionStatItem($r('sys.symbol.eye'), `${content.value.visitCount ?? 0} 浏览`)
+            this.questionStatItem($r('sys.symbol.heart'), `${this.followController === undefined ? content.value.followerCount : this.followerCount} 关注`)
+            this.questionStatItem($r('sys.symbol.message'), `${content.value.commentCount} 评论`)
+          }
           .id(`p2_${content.kind}_detail_statistics`)
-          .fontSize($r('app.float.p1_secondary_font_size'))
-          .fontColor($r('app.color.secondary_text'))
           .width('100%')
+        } else {
+          Text(this.displayedContentStatistics(content))
+            .id(`p2_${content.kind}_detail_statistics`)
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
+        }
 
         if (contentEndorsements(content).length > 0) {
           this.endorsementFlow(contentEndorsements(content))
@@ -408,19 +538,73 @@ struct ContentDetailPage {
         bottom: $r('app.float.p1_spacing_medium')
       })
       .backgroundColor($r('app.color.surface_background'))
+  }
 
+  @Builder
+  private questionDocument(content: LoadedContentDetail) {
+    Refresh({ refreshing: $$this.refreshingAnswers, refreshingContent: this.refreshContent }) {
       NativeContentDocument({
-        html: contentHtml(content),
-        emptyMessage: contentEmptyMessage(content),
+        html: contentHtml(content), emptyMessage: contentEmptyMessage(content), collapsible: true,
+        documentHeader: (): void => { this.contentHeader(content) },
+        documentBodyFooter: (): void => { this.questionBodyFooter(content) },
+        documentItems: (): void => { this.questionAnswerItems() },
+        documentFooter: (): void => { this.questionAnswersFooter() },
+        onListReachEnd: (): void => { this.answersController?.loadMore(); },
         onScrollOffset: (offset: number): void => {
-          // 像素阈值滞回：视口因顶栏收起而变高时偏移量不变，状态不会振荡。
-          this.topBarScrolled = offset > 20;
+          const scrolled = offset > 160;
+          if (scrolled !== this.questionScrolled) {
+            this.questionScrolled = scrolled;
+            this.getUIContext().animateTo({ duration: 220, curve: Curve.EaseInOut }, (): void => {
+              publishQuestionTitle({ id: this.activeContentId, title: contentTitle(content), scrolled: scrolled });
+            });
+          }
         }
       })
-        .layoutWeight(1)
-    }
-    .width('100%')
-    .height('100%')
+    }.height('100%').width('100%').onRefreshing((): void => { void this.refreshQuestion(); })
+  }
+
+  @Builder
+  private questionBodyFooter(content: LoadedContentDetail) {
+    Column({ space: 12 }) {
+        if (content.kind === ContentDetailKind.QUESTION &&
+          (content.value.topics?.length ?? 0) > 0) {
+          Flex({ wrap: FlexWrap.Wrap }) {
+            ForEach(content.value.topics, (topic: QuestionTopicSummary): void => {
+              Button(`# ${topic.name}`, { type: ButtonType.Normal, stateEffect: true })
+                .id(`p3_question_topic_${topic.id}`)
+                .height(30)
+                .fontSize($r('app.float.p1_caption_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+                .backgroundColor($r('app.color.surface_background'))
+                .borderRadius(15)
+                .margin({ right: 8, bottom: 8 })
+                .onClick((): void => this.navigate({ name: P1DestinationName.SEARCH, query: topic.name }))
+            }, (topic: QuestionTopicSummary): string => topic.id)
+          }
+          .width('100%')
+        }
+
+
+      Button('写回答')
+        .id('question_write_answer').width('100%')
+        .onClick((): void => this.navigate(this.authenticated
+          ? { name: P1DestinationName.WRITE_ANSWER, questionId: this.activeContentId }
+          : { name: P1DestinationName.LOGIN }))
+      Row() {
+        Text(this.questionAnswerCount().toString() + ' 回答').fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.primary_text')).layoutWeight(1)
+        SegmentButton({ options: this.answersSortOptions, selectedIndexes: $answersSortIndexes,
+          onItemClicked: (index: number): void => this.selectAnswerSort(index) })
+          .id('question_sort').width(168).height(36)
+      }.width('100%')
+    }.width('100%')
+  }
+
+  @Builder
+  private questionAnswerItems() {
+    LazyForEach(this.answerDataSource, (item: ChannelContentItem) => {
+      ListItem() { this.answerFeedCard(item) }
+    }, (item: ChannelContentItem): string => feedItemIdentity(item.feedItem))
   }
 
   @Builder
@@ -679,6 +863,145 @@ struct ContentDetailPage {
     })
   }
 
+  /** 问题页统计项：小图标 + 辅助文字（对齐上游 StatItem）。 */
+  @Builder
+  private questionStatItem(icon: Resource, text: string) {
+    Row({ space: 4 }) {
+      SymbolGlyph(icon)
+        .fontSize(14)
+        .fontColor([$r('app.color.secondary_text')])
+      Text(text)
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+    }
+    .alignItems(VerticalAlign.Center)
+  }
+
+  /**
+   * 问题页回答信息流 footer：挂载在正文文档列表末尾，随同一滚动贯通（对齐上游单列表）。
+   * 注意：@BuilderParam 传入的箭头闭包体内只允许直接调用本 builder（不得再包 if 等非 UI
+   * 语句，否则编译器不转换 builder 调用，运行时静默不渲染）；kind 守卫放在 builder 内部。
+   */
+  @Builder
+  private questionAnswersFooter() {
+    if (this.kind === ContentDetailKind.QUESTION) {
+      Column({ space: 12 }) {
+        if (!this.authenticated) {
+          AppPageStatusPanel({ kind: AppPageStatusKind.EMPTY, message: '登录后即可查看全部回答',
+            testId: 'question_answers_login', actionLabel: '去登录', actionId: 'question_answers_login_button',
+            onAction: (): void => this.navigate({ name: P1DestinationName.LOGIN }) })
+        } else if (this.answersState.phase === QuestionAnswersPhase.INITIAL_LOADING) {
+          AppPageStatusPanel({ message: '正在加载回答…', testId: 'question_answers_loading' })
+        } else if (this.answersState.errorMessage.length > 0) {
+          AppPageStatusPanel({ kind: AppPageStatusKind.ERROR, message: this.answersState.errorMessage,
+            testId: 'question_answers_error', actionLabel: this.answersState.requiresLogin ? '去登录' : '重试',
+            actionId: 'question_answers_retry', onAction: (): void => {
+              if (this.answersState.requiresLogin) { this.navigate({ name: P1DestinationName.LOGIN }); }
+              else if (this.answersState.phase === QuestionAnswersPhase.ERROR) { this.answersController?.refresh(); }
+              else { this.answersController?.loadMore(); }
+            } })
+        } else if (this.answersState.phase === QuestionAnswersPhase.EMPTY) {
+          AppPageStatusPanel({ kind: AppPageStatusKind.EMPTY, message: '暂无可显示的回答', testId: 'question_answers_empty' })
+        } else if (this.answersState.loadingMore) {
+          LoadingProgress().id('p3_question_answers_loading_more').width(40).height(40)
+            .color($r('app.color.brand_primary'))
+        } else if (this.answersState.canLoadMore) {
+          Button('加载更多回答').id('question_answers_more')
+            .onClick((): void => { this.answersController?.loadMore(); })
+        } else {
+          Text('已显示全部回答').fontColor($r('app.color.secondary_text'))
+        }
+      }.width('100%').padding({ top: 12, bottom: 12 })
+    }
+  }
+
+  @Builder
+  private answerFeedCard(item: ChannelContentItem) {
+    Button({ type: ButtonType.Normal, stateEffect: true }) {
+      FeedContentSummary({ target: item.feedItem.target, showTitle: false })
+    }.id('p3_question_answers_card_' + item.feedItem.target.id)
+      .width('100%').padding($r('app.float.p1_card_padding'))
+      .borderRadius($r('app.float.p1_card_radius')).backgroundColor($r('app.color.surface_background'))
+      .accessibilityText('打开回答').onClick((): void => {
+        const repository = this.questionAnswerFeedFactory();
+        const seed = this.answersController?.snapshot();
+        if (repository !== undefined && seed !== undefined) {
+          stageQuestionAnswerNavigator(new QuestionAnswerNavigator(this.activeContentId,
+            item.feedItem.target.id, seed, repository));
+        }
+        this.navigate({ name: P1DestinationName.ANSWER, id: item.feedItem.target.id });
+      })
+  }
+
+  // SegmentButton 的 options 是 @ObjectLink，须放观察状态（内联对象在真机上会丢点击回调）。
+  @State private answersSortOptions: SegmentButtonOptions = SegmentButtonOptions.tab({
+    buttons: [{ text: '默认' }, { text: '最新' }]
+  });
+
+  private questionAnswerCount(): number {
+    const content = this.content;
+    if (content === undefined || content.kind !== ContentDetailKind.QUESTION) {
+      return 0;
+    }
+    return content.value.answerCount;
+  }
+
+  private selectAnswerSort(index: number): void {
+    if (index !== 0 && index !== 1) {
+      return;
+    }
+    if (this.answersSortIndexes[0] !== index) {
+      this.answersSortIndexes = [index];
+    }
+    const order = index === 0 ? QuestionAnswerSortOrder.DEFAULT : QuestionAnswerSortOrder.UPDATED;
+    this.answersController?.setSortOrder(order);
+  }
+
+  @Builder
+  private answerNavigationControls() {
+    if (this.kind === ContentDetailKind.ANSWER && this.answerNavigator !== undefined) {
+      Column() {
+        Row({ space: 12 }) {
+          Button('上一答').id('question_answer_previous')
+            .enabled(!this.navigatorBusy && this.navigatorHasPrevious()).layoutWeight(1)
+            .onClick((): void => { void this.moveAnswer(-1); })
+          Button('下一答').id('question_answer_next')
+            .enabled(!this.navigatorBusy && this.navigatorHasNext()).layoutWeight(1)
+            .onClick((): void => { void this.moveAnswer(1); })
+        }.width('100%')
+        if (this.navigatorError.length > 0) {
+          Text(this.navigatorError).fontColor($r('app.color.error_text'))
+        }
+      }.width('100%').padding(8)
+    }
+  }
+
+  private navigatorHasPrevious(): boolean {
+    return this.navigatorRevision >= 0 && (this.answerNavigator?.hasPrevious() ?? false);
+  }
+  private navigatorHasNext(): boolean {
+    return this.navigatorRevision >= 0 && (this.answerNavigator?.hasNext() ?? false);
+  }
+  private async moveAnswer(direction: number): Promise<void> {
+    if (this.navigatorBusy) { return; }
+    this.navigatorBusy = true;
+    this.navigatorError = '';
+    try {
+      const id = await this.answerNavigator?.move(direction);
+      this.navigatorRevision += 1;
+      if (!this.pageActive) { return; }
+      if (id === undefined) { this.navigatorError = this.answerNavigator?.errorMessage() ?? ''; return; }
+      this.voteController?.deactivate();
+      this.voteController = undefined;
+      this.showComments = false;
+      this.favoriteDialogShown = false;
+      this.commentRootDraft = '';
+      this.commentReplyDraft = '';
+      this.activeContentId = id;
+      await this.controller?.load(ContentDetailKind.ANSWER, id);
+    } finally { this.navigatorBusy = false; }
+  }
+
   private canEditExistingAnswer(): boolean {
     const content = this.content;
     const session = this.session;
@@ -706,54 +1029,75 @@ struct ContentDetailPage {
 
   @Builder
   private detailTopBar(content: LoadedContentDetail) {
-    // P3-9-B：顶部折叠作者栏——未滚动展开显示作者行（头像/名字/简介），滚动后收起为标题行。
-    // 页面返回与类型标题由固定单行标题栏提供，此处只承载内容上下文。
+    // 作者栏常驻（不可随滚动收缩）：收缩会改变布局高度，中长正文在阈值附近反复触发
+    // 视口高度突变，导致作者栏闪烁与滚动顿挫（上游无此问题因其作者条在列表内随内容
+    // 滚走；本侧为固定头部，收缩必然跳动）。无作者时显示单行标题占位。
     Row() {
-      if (!this.topBarScrolled) {
-        if (contentAuthorName(content).length > 0) {
-          Row({ space: $r('app.float.p1_spacing_small') }) {
-            Stack({ alignContent: Alignment.Center }) {
-              // 底层占位：首字圆，头像缺失或加载失败时可见。
-              Circle()
+      if (contentAuthorName(content).length > 0) {
+        Row({ space: $r('app.float.p1_spacing_small') }) {
+          Stack({ alignContent: Alignment.Center }) {
+            // 底层占位：首字圆，头像缺失或加载失败时可见。
+            Circle()
+              .width(36)
+              .height(36)
+              .fill($r('app.color.control_background'))
+            Text(contentAuthorName(content).substring(0, 1))
+              .fontSize($r('app.float.p1_caption_font_size'))
+              .fontColor($r('app.color.secondary_text'))
+            // 顶层真实头像：加载成功覆盖占位（加载失败保持透明，露出首字圆）。
+            if (contentAuthorAvatarUrl(content).length > 0) {
+              Image(contentAuthorAvatarUrl(content))
+                .id(`p3_${content.kind}_detail_top_avatar`)
                 .width(36)
                 .height(36)
-                .fill($r('app.color.control_background'))
-              Text(contentAuthorName(content).substring(0, 1))
+                .borderRadius(18)
+                .objectFit(ImageFit.Cover)
+            }
+          }
+          .width(36)
+          .height(36)
+          .clip(true)
+
+          Column({ space: 2 }) {
+            Text(contentAuthorName(content))
+              .id(`p3_${content.kind}_detail_top_author`)
+              .fontSize($r('app.float.p1_body_font_size'))
+              .fontColor($r('app.color.primary_text'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+            if (contentAuthorHeadline(content).length > 0) {
+              Text(contentAuthorHeadline(content))
                 .fontSize($r('app.float.p1_caption_font_size'))
                 .fontColor($r('app.color.secondary_text'))
-              // 顶层真实头像：加载成功覆盖占位（加载失败保持透明，露出首字圆）。
-              if (contentAuthorAvatarUrl(content).length > 0) {
-                Image(contentAuthorAvatarUrl(content))
-                  .id(`p3_${content.kind}_detail_top_avatar`)
-                  .width(36)
-                  .height(36)
-                  .borderRadius(18)
-                  .objectFit(ImageFit.Cover)
-              }
-            }
-            .width(36)
-            .height(36)
-            .clip(true)
-
-            Column({ space: 2 }) {
-              Text(contentAuthorName(content))
-                .id(`p3_${content.kind}_detail_top_author`)
-                .fontSize($r('app.float.p1_body_font_size'))
-                .fontColor($r('app.color.primary_text'))
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
-              if (contentAuthorHeadline(content).length > 0) {
-                Text(contentAuthorHeadline(content))
-                  .fontSize($r('app.float.p1_caption_font_size'))
-                  .fontColor($r('app.color.secondary_text'))
-                  .maxLines(1)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
-              }
             }
-            .layoutWeight(1)
-            .alignItems(HorizontalAlign.Start)
           }
-          .id(`p3_${content.kind}_detail_top_author_row`)
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+        }
+        .id(`p3_${content.kind}_detail_top_author_row`)
+        .layoutWeight(1)
+        .padding({
+          left: $r('app.float.p1_page_padding'),
+          right: $r('app.float.p1_page_padding'),
+          top: $r('app.float.p1_spacing_small'),
+          bottom: $r('app.float.p1_spacing_small')
+        })
+        .onClick((): void => {
+          const author = content.value.author;
+          if (author !== undefined && author.id.trim().length > 0) {
+            const urlToken = author.urlToken ?? author.id;
+            this.navigate({ name: P1DestinationName.PEOPLE, id: urlToken });
+          }
+        })
+      } else {
+        Text(contentTitle(content))
+          .id(`p3_${content.kind}_detail_top_title`)
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor($r('app.color.primary_text'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
           .padding({
             left: $r('app.float.p1_page_padding'),
@@ -761,16 +1105,6 @@ struct ContentDetailPage {
             top: $r('app.float.p1_spacing_small'),
             bottom: $r('app.float.p1_spacing_small')
           })
-          .onClick((): void => {
-            const author = content.value.author;
-            if (author !== undefined && author.id.trim().length > 0) {
-              const urlToken = author.urlToken ?? author.id;
-              this.navigate({ name: P1DestinationName.PEOPLE, id: urlToken });
-            }
-          })
-        }
-        // 无作者与收起态均不再渲染标题行（对齐回答/文章页）：问题标题由下方固定信息头
-        // 常驻展示，条带再渲染同款标题会与之同屏重复。
       }
     }
     .width('100%')
@@ -1064,6 +1398,9 @@ struct ContentDetailPage {
     this.openedRecordPhase = state.openedRecordPhase;
     if (state.phase === ContentDetailPhase.READY && state.content !== undefined) {
       this.activateInteraction(state.content);
+      if (state.content.kind === ContentDetailKind.QUESTION) {
+        publishQuestionTitle({ id: this.activeContentId, title: state.content.value.title, scrolled: this.questionScrolled });
+      }
     }
   }
 
@@ -1074,7 +1411,7 @@ struct ContentDetailPage {
       }
       const repository = this.followRepository;
       const session = this.session;
-      const contentId = this.contentId;
+      const contentId = this.activeContentId;
       this.followController = new FollowController(
         repository,
         session,
@@ -1091,7 +1428,7 @@ struct ContentDetailPage {
         this.voteRepository,
         this.session,
         this.kind,
-        this.contentId,
+        this.activeContentId,
         (state: ContentVoteViewState): void => this.applyVoteState(state)
       );
       this.voteController.activate();
@@ -1127,6 +1464,7 @@ struct ContentDetailPage {
 
 @Component
 export struct QuestionDetailPage {
+  questionAnswerFeedFactory: () => QuestionAnswerFeedRepository | undefined = () => undefined;
   contentId: string = '';
   repository: ContentRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
@@ -1145,6 +1483,7 @@ export struct QuestionDetailPage {
   build() {
     ContentDetailPage({
       kind: ContentDetailKind.QUESTION,
+      questionAnswerFeedFactory: this.questionAnswerFeedFactory,
       contentId: this.contentId,
       repository: this.repository,
       openedContentStore: this.openedContentStore,
