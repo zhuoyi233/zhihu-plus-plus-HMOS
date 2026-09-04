@@ -267,6 +267,13 @@ function feedTargetFromObject(object: JsonObjectValue): FeedTargetSummary {
     url: textOrEmpty(object.get('url'), 'feed.target.url'),
     voteupCount: numberOrDefault(object.get('voteup_count'), 0, 'feed.target.voteup_count'),
     commentCount: numberOrDefault(object.get('comment_count'), 0, 'feed.target.comment_count'),
+    answerCount: kind === FeedTargetKind.QUESTION
+      ? numberOrDefault(object.get('answer_count'), 0, 'feed.target.answer_count') : undefined,
+    visitCount: kind === FeedTargetKind.QUESTION && object.get('visit_count') !== undefined &&
+      !(object.get('visit_count') instanceof JsonNullValue)
+      ? numberOrDefault(object.get('visit_count'), 0, 'feed.target.visit_count') : undefined,
+    followerCount: kind === FeedTargetKind.QUESTION
+      ? numberOrDefault(object.get('follower_count'), 0, 'feed.target.follower_count') : undefined,
     author: optionalUser(object.get('author')),
     topicIds: topicIdsFromObject(object)
   };

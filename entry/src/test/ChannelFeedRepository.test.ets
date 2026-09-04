@@ -168,6 +168,7 @@ const FOLLOW_PAGE_WITH_TARGETLESS = '{"data":[{"type":"feed","id":"agg-1","verb"
   '"paging":{"is_end":true}}';
 const HOT_PAGE = '{"data":[{"type":"hot_list_feed","id":"hot-wrapper","detail_text":"1234 万热度",' +
   '"target":{"type":"question","id":1993016651038364760,"title":"热榜问题",' +
+  '"answer_count":123,"comment_count":7,"follower_count":456,' +
   '"bound_topic_ids":[1,"2",1]}}],' +
   '"paging":{"is_end":true}}';
 const FILTER_PAGE = '{"data":[{"id":"blocked","target":{"type":"question","id":"202",' +
@@ -283,6 +284,10 @@ export default function channelFeedRepositoryTest(): void {
         expect(hot.items[0].feedItem.actionText).assertEqual('1234 万热度');
         expect(hot.items[0].feedItem.target.id).assertEqual('1993016651038364760');
         expect(hot.items[0].topicIds.join(',')).assertEqual('1,2');
+        expect(hot.items[0].feedItem.target.answerCount).assertEqual(123);
+        expect(hot.items[0].feedItem.target.commentCount).assertEqual(7);
+        expect(hot.items[0].feedItem.target.followerCount).assertEqual(456);
+        expect(hot.items[0].feedItem.target.visitCount).assertUndefined();
       } else {
         expect(false).assertTrue();
       }

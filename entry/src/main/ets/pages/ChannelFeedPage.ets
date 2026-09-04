@@ -1,4 +1,5 @@
 import { FeedContentSummary } from './components/FeedContentSummary';
+import { HotQuestionStatistics } from './components/HotQuestionStatistics';
 import { isSafeDecimalContentId, P1Destination, P1DestinationName } from 'core';
 import {
   BlockedFeedHistoryGateway,
@@ -10,6 +11,7 @@ import {
   channelFeedItemIdentity,
   ChannelFeedRepository,
   ChannelFeedSource,
+  ContentRepository,
   DailyStoryRepository,
   DefaultChannelFeedRepository,
   FeedItem,
@@ -44,6 +46,7 @@ export struct ChannelFeedPage {
   /** 关注页的两个子 Tab 共用列表实现，标题由外层 Tabs 提供。 */
   showHeader: boolean = true;
   repository: ChannelFeedRepository | undefined = new DefaultChannelFeedRepository();
+  questionRepositoryFactory: () => ContentRepository | undefined = () => undefined;
   dailyStoryRepository: DailyStoryRepository | undefined = undefined;
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
@@ -387,7 +390,10 @@ export struct ChannelFeedPage {
           .accessibilityText('屏蔽作者或关键词')
         }
         .width('100%')
-        FeedContentSummary({ target: item.feedItem.target })
+        FeedContentSummary({ target: item.feedItem.target, showStatistics: this.source !== ChannelFeedSource.HOT })
+        if (this.source === ChannelFeedSource.HOT) {
+          HotQuestionStatistics({ target: item.feedItem.target, repositoryFactory: this.questionRepositoryFactory })
+        }
       }
       .alignItems(HorizontalAlign.Start)
       .width('100%')

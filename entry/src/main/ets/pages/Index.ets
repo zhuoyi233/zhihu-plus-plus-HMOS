@@ -109,6 +109,7 @@ struct Index {
   @State private followingRepository?: ChannelFeedRepository = undefined;
   @State private followingRecommendRepository?: ChannelFeedRepository = undefined;
   @State private hotRepository?: ChannelFeedRepository = undefined;
+  private hotQuestionRepositoryFactory: () => ContentRepository | undefined = () => undefined;
   @State private dailyRepository?: ChannelFeedRepository = undefined;
   @State private dailyStoryRepository?: DailyStoryRepository = undefined;
   @State private questionRepository?: ContentRepository = undefined;
@@ -160,6 +161,7 @@ struct Index {
       this.followingRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.followingRecommendRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.hotRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
+      this.hotQuestionRepositoryFactory = (): ContentRepository => new DefaultContentRepository(new ZhihuHttpClient(session));
       this.dailyRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(), blockingMatcher);
       this.dailyStoryRepository = new DefaultDailyStoryRepository(new ZhihuHttpClient());
       this.questionRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
@@ -292,6 +294,7 @@ struct Index {
     ChannelFeedPage({
       source: ChannelFeedSource.HOT,
       repository: this.hotRepository,
+      questionRepositoryFactory: this.hotQuestionRepositoryFactory,
       reloadToken: reloadToken,
       navigate: navigate,
       rules: this.blockingRuleStore,

@@ -134,6 +134,9 @@ export interface FeedTargetSummary {
   url: string;
   voteupCount: number;
   commentCount: number;
+  answerCount?: number;
+  visitCount?: number;
+  followerCount?: number;
   author?: UserProfile;
   topicIds: Array<string>;
 }
