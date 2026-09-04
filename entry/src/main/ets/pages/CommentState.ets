@@ -470,22 +470,17 @@ export class CommentController {
       this.emit();
       return;
     }
-    const isChild = this.activeRoot !== undefined;
-    const targetList = isChild ? this.childItems : this.rootItems;
-    const index = targetList.findIndex((candidate: CommentItem): boolean => candidate.id === comment.id);
-    if (index < 0) {
+    const previous = this.findLikeTarget(comment.id);
+    if (previous === undefined) {
       return;
     }
     const generation = this.generation;
-    const previous = targetList[index];
     const nextLiked = !previous.liked;
     const nextCount = Math.max(0, previous.likeCount + (nextLiked ? 1 : -1));
     this.likeBusy = true;
     this.actionMessage = undefined;
     this.actionRequiresLogin = false;
-    const updated = targetList.slice();
-    updated[index] = copyCommentWithLike(previous, nextLiked, nextCount);
-    this.replaceModeItems(isChild, updated);
+    this.updateLikeEverywhere(previous.id, nextLiked, nextCount);
     this.emit();
     try {
       await this.repository.likeComment(comment.id, nextLiked);
@@ -494,12 +489,7 @@ export class CommentController {
       }
     } catch (error) {
       if (this.isCurrent(generation)) {
-        const reverted = (isChild ? this.childItems : this.rootItems).slice();
-        const revertIndex = reverted.findIndex((candidate: CommentItem): boolean => candidate.id === comment.id);
-        if (revertIndex >= 0) {
-          reverted[revertIndex] = previous;
-        }
-        this.replaceModeItems(isChild, reverted);
+        this.updateLikeEverywhere(previous.id, previous.liked, previous.likeCount);
         this.actionMessage = commentActionError(error, '点赞操作失败，请重试');
         this.actionRequiresLogin = commentActionRequiresLogin(error);
       }
@@ -508,6 +498,31 @@ export class CommentController {
         this.likeBusy = false;
         this.emit();
       }
+    }
+  }
+
+  private findLikeTarget(id: string): CommentItem | undefined {
+    if (this.activeRoot?.id === id) {
+      return this.activeRoot;
+    }
+    for (const item of this.childItems.concat(this.rootItems)) {
+      if (item.id === id) {
+        return item;
+      }
+      const child = item.childComments.find((candidate: CommentItem): boolean => candidate.id === id);
+      if (child !== undefined) {
+        return child;
+      }
+    }
+    return undefined;
+  }
+
+  /** 同步根列表、内嵌回复与回复页，避免返回上一层后赞数恢复旧值。 */
+  private updateLikeEverywhere(id: string, liked: boolean, count: number): void {
+    this.rootItems = updateCommentLikes(this.rootItems, id, liked, count);
+    this.childItems = updateCommentLikes(this.childItems, id, liked, count);
+    if (this.activeRoot !== undefined) {
+      this.activeRoot = updateCommentLikes([this.activeRoot], id, liked, count)[0];
     }
   }
 
@@ -597,6 +612,23 @@ export class CommentController {
       this.observer(this.snapshot());
     }
   }
+}
+
+/** 保持评论内容不变，只替换目标 ID 的点赞状态及其所在的父节点。 */
+function updateCommentLikes(items: Array<CommentItem>, id: string, liked: boolean,
+  count: number): Array<CommentItem> {
+  let changed = false;
+  const updated = items.map((item: CommentItem): CommentItem => {
+    const children = updateCommentLikes(item.childComments, id, liked, count);
+    const likeChanged = item.id === id && (item.liked !== liked || item.likeCount !== count);
+    if (!likeChanged && children === item.childComments) {
+      return item;
+    }
+    changed = true;
+    return copyCommentWithLike(item, likeChanged ? liked : item.liked,
+      likeChanged ? count : item.likeCount, children);
+  });
+  return changed ? updated : items;
 }
 
 /** 按评论 ID 去重合并（保持现有顺序在前，新条目在后）。 */

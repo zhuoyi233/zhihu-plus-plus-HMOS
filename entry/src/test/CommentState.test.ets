@@ -5,6 +5,7 @@ import {
   CommentPage,
   CommentRepository,
   CommentSortOrder,
+  copyCommentWithLike,
   HttpFailure,
   HttpFailureKind,
   LoginSessionGateway,
@@ -17,8 +18,10 @@ import {
 import {
   CommentController,
   CommentPhase,
+  CommentViewState,
   mergeComments
 } from '../main/ets/pages/CommentState';
+import { CommentLikeStateStore } from '../main/ets/pages/CommentLikeState';
 
 const ROOT_CURSOR =
   'https://www.zhihu.com/api/v4/comment_v5/answers/456/root_comment?order_by=score&limit=20&offset=20';
@@ -430,6 +433,107 @@ export default function commentStateTest(): void {
       expect(controller.snapshot().items[0].likeCount).assertEqual(4);
       expect(controller.snapshot().actionMessage).assertEqual('点赞操作失败，请重试');
       expect(controller.snapshot().likeBusy).assertFalse();
+    });
+
+    it('likesPinnedRootAndSynchronizesRootListAfterReturning', 0, async () => {
+      const repository = new ControlledCommentRepository();
+      const root = comment('1', '根评论');
+      repository.setRootPage({ items: [root], cursor: { isEnd: true, isStart: true, page: 0, total: 0 } });
+      const controller = new CommentController(CommentContentKind.ANSWER, '456', repository,
+        new TestSessionGateway(SessionStatus.AUTHENTICATED));
+      controller.activate();
+      await controller.loadInitial();
+      await controller.openChildComments(root);
+      await controller.toggleLike(root);
+      expect(repository.liked.length).assertEqual(1);
+      expect(controller.snapshot().activeRoot?.liked).assertTrue();
+      expect(controller.snapshot().activeRoot?.likeCount).assertEqual(4);
+      controller.closeChildComments();
+      expect(controller.snapshot().items[0].liked).assertTrue();
+      expect(controller.snapshot().items[0].likeCount).assertEqual(4);
+    });
+
+    it('likesInlineReplyAndRollsBackEveryCopyOnFailure', 0, async () => {
+      const repository = new ControlledCommentRepository();
+      const root = comment('1', '根评论');
+      const child = comment('10', '子评论');
+      root.childComments.push(child);
+      repository.setRootPage({ items: [root], cursor: { isEnd: true, isStart: true, page: 0, total: 0 } });
+      const controller = new CommentController(CommentContentKind.ANSWER, '456', repository,
+        new TestSessionGateway(SessionStatus.AUTHENTICATED));
+      controller.activate();
+      await controller.loadInitial();
+      await controller.toggleLike(child);
+      const updatedRoot = controller.snapshot().items[0];
+      expect(updatedRoot.childComments[0].liked).assertTrue();
+      expect(updatedRoot.childComments[0].likeCount).assertEqual(4);
+      repository.setChildPage({ items: [updatedRoot.childComments[0]],
+        cursor: { isEnd: true, isStart: true, page: 0, total: 0 } });
+      await controller.openChildComments(updatedRoot);
+      repository.failLike = true;
+      await controller.toggleLike(controller.snapshot().items[0]);
+      expect(controller.snapshot().items[0].liked).assertTrue();
+      expect(controller.snapshot().activeRoot?.childComments[0].likeCount).assertEqual(4);
+      expect(controller.snapshot().likeBusy).assertFalse();
+      repository.failLike = false;
+      await controller.toggleLike(controller.snapshot().items[0]);
+      controller.closeChildComments();
+      expect(controller.snapshot().items[0].childComments[0].liked).assertFalse();
+      expect(controller.snapshot().items[0].childComments[0].likeCount).assertEqual(3);
+    });
+
+    it('keepsOtherCommentObjectsAndLikeStatesStableDuringLikeAndRollback', 0, async () => {
+      const repository = new ControlledCommentRepository();
+      const root = comment('1', '根评论');
+      const child = comment('10', '回复');
+      const sibling = comment('11', '另一条回复');
+      const other = comment('2', '另一条评论');
+      root.childComments.push(child, sibling);
+      repository.setRootPage({ items: [root, other],
+        cursor: { isEnd: true, isStart: true, page: 0, total: 0 } });
+      const likes = new CommentLikeStateStore();
+      const controller = new CommentController(CommentContentKind.ANSWER, '456', repository,
+        new TestSessionGateway(SessionStatus.AUTHENTICATED),
+        (state: CommentViewState): void => likes.sync(state.items));
+      controller.activate();
+      await controller.loadInitial();
+      const childState = likes.get(child);
+      const siblingState = likes.get(sibling);
+      const otherState = likes.get(other);
+      repository.failLike = true;
+      const request = controller.toggleLike(child);
+      expect(controller.snapshot().likeBusy).assertTrue();
+      expect(childState.liked).assertTrue();
+      expect(childState.count).assertEqual(4);
+      expect(controller.snapshot().items[1] === other).assertTrue();
+      expect(controller.snapshot().items[0].childComments[1] === sibling).assertTrue();
+      expect(likes.get(controller.snapshot().items[0].childComments[0]) === childState).assertTrue();
+      expect(likes.get(sibling) === siblingState).assertTrue();
+      expect(likes.get(other) === otherState).assertTrue();
+      expect(otherState.liked).assertFalse();
+      expect(otherState.count).assertEqual(3);
+      await request;
+      expect(childState.liked).assertFalse();
+      expect(childState.count).assertEqual(3);
+      expect(controller.snapshot().items[1] === other).assertTrue();
+      expect(controller.snapshot().items[0].childComments[1] === sibling).assertTrue();
+      expect(likes.get(controller.snapshot().items[0].childComments[0]) === childState).assertTrue();
+      expect(controller.snapshot().likeBusy).assertFalse();
+    });
+
+    it('sharesOneLikeStateAcrossInlineAndChildViews', 0, () => {
+      const likes = new CommentLikeStateStore();
+      const root = comment('1', '根评论');
+      const child = comment('10', '回复');
+      root.childComments.push(child);
+      likes.sync([root]);
+      const state = likes.get(child);
+      const freshChild = copyCommentWithLike(child, true, 4);
+      likes.sync([freshChild]);
+      expect(likes.get(freshChild) === state).assertTrue();
+      expect(state.liked).assertTrue();
+      expect(state.count).assertEqual(4);
+      expect(likes.get(root).liked).assertFalse();
     });
 
     it('loginGateBlocksInteractionsForGuest', 0, async () => {

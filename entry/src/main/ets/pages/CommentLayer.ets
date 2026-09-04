@@ -1,6 +1,5 @@
 import { P1Destination, P1DestinationName } from 'core';
 import {
-  CommentContentKind,
   CommentItem,
   CommentRepository,
   CommentSortOrder,
@@ -12,9 +11,9 @@ import {
   CommentPhase,
   CommentViewState
 } from './CommentState';
-
-const COMMENT_EXPANDED_IDS_LIMIT = 200;
-
+import { ContentImagePreview } from './NativeContentDocument';
+import { CommentLikeButton } from './CommentLikeButton';
+import { CommentLikeState, CommentLikeStateStore } from './CommentLikeState';
 /**
  * 评论弹层组件：常驻详情页组合树内（以 visibility 切换显隐），
  * 避免关闭弹层时销毁内部状态——与上游 CommentScreenComponent
@@ -30,8 +29,8 @@ export struct CommentLayer {
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
   @Prop @Watch('onShowCommentsChange') showComments: boolean = false;
-  rootDraft: string = '';
-  replyDraft: string = '';
+  @Prop rootDraft: string = '';
+  @Prop replyDraft: string = '';
   onRootDraftChange: (value: string) => void = (_value: string): void => {
   };
   onReplyDraftChange: (value: string) => void = (_value: string): void => {
@@ -48,12 +47,13 @@ export struct CommentLayer {
   @State private activeRoot?: CommentItem = undefined;
   @State private replyTarget?: CommentItem = undefined;
   @State private submitting: boolean = false;
-  @State private likeBusy: boolean = false;
   @State private deleting: boolean = false;
   @State private actionMessage: string = '';
   @State private actionRequiresLogin: boolean = false;
-  @State private expandedRootIds: Array<string> = [];
+  @State private previewImageUrl: string = '';
+  @State private likeStates: Record<string, CommentLikeState> = {};
   private controller?: CommentController;
+  private readonly likeStateStore: CommentLikeStateStore = new CommentLikeStateStore();
   private rootScroller: Scroller = new Scroller();
   private childScroller: Scroller = new Scroller();
 
@@ -96,7 +96,7 @@ export struct CommentLayer {
     Column()
       .bindSheet(this.showComments, this.commentSheet(), {
         height: SheetSize.LARGE,
-        dragBar: true,
+        dragBar: false,
         showClose: false,
         maskColor: '#66000000',
         backgroundColor: $r('app.color.surface_background'),
@@ -106,6 +106,17 @@ export struct CommentLayer {
           }
         }
       })
+      .bindContentCover(this.previewImageUrl.length > 0, this.imagePreview(), {
+        onDisappear: (): void => { this.previewImageUrl = ''; }
+      })
+  }
+
+  @Builder
+  private imagePreview() {
+    ContentImagePreview({
+      url: this.previewImageUrl,
+      onClose: (): void => { this.previewImageUrl = ''; }
+    })
   }
 
   @Builder
@@ -141,20 +152,19 @@ export struct CommentLayer {
               this.controller?.closeChildComments();
             })
           Text('回复')
-            .fontSize($r('app.float.p1_heading_font_size'))
+            .textAlign(TextAlign.Center)
+            .fontSize(18)
             .fontWeight(FontWeight.Bold)
             .fontColor($r('app.color.primary_text'))
             .layoutWeight(1)
         } else {
+          Blank().width(40)
           Text('评论')
-            .fontSize($r('app.float.p1_heading_font_size'))
+            .textAlign(TextAlign.Center)
+            .fontSize(18)
             .fontWeight(FontWeight.Bold)
             .fontColor($r('app.color.primary_text'))
             .layoutWeight(1)
-          if (this.phase === CommentPhase.READY || this.phase === CommentPhase.EMPTY) {
-            this.sortChip(CommentSortOrder.SCORE, '最热', 'p3_comments_sort_score')
-            this.sortChip(CommentSortOrder.TIME, '最新', 'p3_comments_sort_time')
-          }
         }
         Button({ type: ButtonType.Normal, stateEffect: true }) {
           SymbolGlyph($r('sys.symbol.xmark'))
@@ -174,18 +184,20 @@ export struct CommentLayer {
       .width('100%')
     }
     .width('100%')
-    .padding($r('app.float.p1_card_padding'))
+    .padding({ left: 16, right: 16, top: 8, bottom: 4 })
   }
 
   @Builder
   private sortChip(order: CommentSortOrder, label: string, testId: string) {
-    Button(label, { type: ButtonType.Capsule })
+    Button(label, { type: ButtonType.ROUNDED_RECTANGLE })
       .id(testId)
       .fontSize($r('app.float.p1_secondary_font_size'))
-      .fontColor(this.sortOrder === order ? $r('app.color.on_brand') : $r('app.color.primary_text'))
+      .fontColor(this.sortOrder === order ? $r('app.color.brand_primary') : $r('app.color.secondary_text'))
+      .fontWeight(this.sortOrder === order ? FontWeight.Medium : FontWeight.Normal)
+      .height(32)
+      .padding({ left: 16, right: 16 })
       .backgroundColor(this.sortOrder === order
-        ? $r('app.color.brand_primary')
-        : $r('app.color.control_background'))
+        ? $r('app.color.brand_primary_container') : $r('app.color.control_background'))
       .onClick((): void => {
         this.controller?.changeSortOrder(order);
       })
@@ -223,13 +235,21 @@ export struct CommentLayer {
           .backgroundColor($r('app.color.surface_background'))
         }
 
-        if (this.phase === CommentPhase.EMPTY) {
+        if (this.phase === CommentPhase.EMPTY && this.activeRoot === undefined) {
           this.statusPanel(this.activeRoot === undefined ? '暂无评论，来发表第一条吧' : '暂无回复', false)
         } else {
           if (this.activeRoot !== undefined) {
-            List({ space: 10, scroller: this.childScroller }) {
+            List({ space: 16, scroller: this.childScroller }) {
               ListItem() {
                 this.pinnedRootCard(this.activeRoot)
+              }
+              if (this.items.length === 0) {
+                ListItem() {
+                  Text('暂无回复')
+                    .fontColor($r('app.color.secondary_text'))
+                    .width('100%')
+                    .textAlign(TextAlign.Center)
+                }
               }
               ForEach(this.items, (comment: CommentItem) => {
                 ListItem() {
@@ -248,12 +268,21 @@ export struct CommentLayer {
               }
             }
             .id('p3_comments_children_list')
+            .padding({ left: 16, right: 16, top: 8, bottom: 16 })
             .width('100%')
             .layoutWeight(1)
             .edgeEffect(EdgeEffect.Spring)
             .onReachEnd(() => this.controller?.loadMore())
           } else {
-            List({ space: 10, scroller: this.rootScroller }) {
+            List({ space: 16, scroller: this.rootScroller }) {
+              ListItem() {
+                Row({ space: 12 }) {
+                  this.sortChip(CommentSortOrder.SCORE, '最热', 'p3_comments_sort_score')
+                  this.sortChip(CommentSortOrder.TIME, '最新', 'p3_comments_sort_time')
+                }
+                .width('100%')
+                .justifyContent(FlexAlign.End)
+              }
               ForEach(this.items, (comment: CommentItem) => {
                 ListItem() {
                   this.commentCard(comment, true)
@@ -271,6 +300,7 @@ export struct CommentLayer {
               }
             }
             .id('p3_comments_root_list')
+            .padding({ left: 16, right: 16, top: 8, bottom: 16 })
             .width('100%')
             .scrollBar(BarState.Off)
             .layoutWeight(1)
@@ -287,7 +317,7 @@ export struct CommentLayer {
   @Builder
   private statusPanel(message: string, retry: boolean) {
     Column({ space: $r('app.float.p1_spacing_medium') }) {
-      if (!retry) {
+      if (this.phase === CommentPhase.LOADING || this.phase === CommentPhase.IDLE) {
         LoadingProgress()
           .id('p3_comments_loading_progress')
           .width(40)
@@ -323,93 +353,123 @@ export struct CommentLayer {
 
   @Builder
   private commentCard(comment: CommentItem, showChildSection: boolean) {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
-      this.authorRow(comment)
-      if (comment.replyToAuthor !== undefined) {
-        Text(`回复 ${comment.replyToAuthor.name}`)
-          .fontSize($r('app.float.p1_secondary_font_size'))
-          .fontColor($r('app.color.secondary_text'))
-          .width('100%')
-      }
-      Text(stripCommentHtml(comment.contentHtml))
-        .id(`p3_comments_content_${comment.id}`)
-        .fontSize($r('app.float.p1_body_font_size'))
-        .fontColor($r('app.color.primary_text'))
-        .width('100%')
-      this.commentFooter(comment, true)
+    Column({ space: 8 }) {
+      this.commentRow(comment, true)
       if (showChildSection && comment.childCommentCount > 0) {
         this.childSection(comment)
       }
     }
     .alignItems(HorizontalAlign.Start)
     .width('100%')
-    .padding($r('app.float.p1_card_padding'))
-    .borderRadius($r('app.float.p1_card_radius'))
-    .backgroundColor($r('app.color.card_background'))
   }
 
   @Builder
   private pinnedRootCard(comment: CommentItem) {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
-      this.authorRow(comment)
-      Text(stripCommentHtml(comment.contentHtml))
-        .id(`p3_comments_pinned_${comment.id}`)
-        .fontSize($r('app.float.p1_body_font_size'))
-        .fontColor($r('app.color.primary_text'))
-        .width('100%')
-      this.commentFooter(comment, false)
+    Column({ space: 16 }) {
+      this.commentRow(comment, false)
+      Divider().color($r('app.color.control_background'))
     }
-    .alignItems(HorizontalAlign.Start)
     .width('100%')
-    .padding($r('app.float.p1_card_padding'))
-    .borderRadius($r('app.float.p1_card_radius'))
-    .backgroundColor($r('app.color.surface_background'))
+  }
+
+  @Builder
+  private commentRow(comment: CommentItem, showDelete: boolean) {
+    Row({ space: 8 }) {
+      this.avatar(comment)
+      Column({ space: 4 }) {
+        this.authorRow(comment)
+        Text(stripCommentHtml(comment.contentHtml))
+          .id(`p3_comments_content_${comment.id}`)
+          .fontSize(16)
+          .lineHeight(25.6)
+          .fontColor($r('app.color.primary_text'))
+          .copyOption(CopyOptions.LocalDevice)
+          .width('100%')
+        if (commentImageUrl(comment.contentHtml).length > 0) {
+          Image(commentImageUrl(comment.contentHtml))
+            .id(`p3_comments_image_${comment.id}`)
+            .width(200)
+            .height(100)
+            .constraintSize({ maxWidth: '100%' })
+            .objectFit(ImageFit.Contain)
+            .borderRadius(12)
+            .margin({ top: 4 })
+            .accessibilityText('查看评论图片')
+            .onClick((): void => { this.previewImageUrl = commentImageUrl(comment.contentHtml); })
+        }
+        this.commentFooter(comment, showDelete)
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+    }
+    .alignItems(VerticalAlign.Top)
+    .width('100%')
+    .gesture(
+      PanGesture({ direction: PanDirection.Left, distance: 60 })
+        .onActionEnd((): void => this.controller?.setReplyTarget(comment))
+    )
+  }
+
+  @Builder
+  private avatar(comment: CommentItem) {
+    Stack({ alignContent: Alignment.Center }) {
+      Text(authorInitial(comment.author.name))
+        .fontSize(16)
+        .fontColor($r('app.color.on_brand'))
+        .textAlign(TextAlign.Center)
+        .width(36)
+        .height(36)
+        .backgroundColor($r('app.color.brand_primary'))
+      if (commentAvatarUrl(comment.author.avatarUrl).length > 0) {
+        Image(commentAvatarUrl(comment.author.avatarUrl))
+          .id(`p3_comments_avatar_${comment.id}`)
+          .width(36)
+          .height(36)
+          .objectFit(ImageFit.Cover)
+      }
+    }
+    .width(36)
+    .height(36)
+    .borderRadius(18)
+    .clip(true)
+    .accessibilityText(comment.author.name)
+    .onClick((): void => this.openAuthor(comment))
   }
 
   @Builder
   private authorRow(comment: CommentItem) {
-    Row({ space: $r('app.float.p1_spacing_small') }) {
-      Stack({ alignContent: Alignment.Center }) {
-        // 底层占位：名字首字，头像缺失或加载失败时可见。
-        Text(authorInitial(comment.author.name))
-          .fontSize($r('app.float.p1_secondary_font_size'))
-          .fontColor($r('app.color.on_brand'))
-          .textAlign(TextAlign.Center)
-          .width(32)
-          .height(32)
-          .borderRadius(16)
-          .backgroundColor($r('app.color.brand_primary'))
-        // 顶层真实头像：加载成功覆盖占位（加载失败保持透明，露出首字）。
-        if (commentAvatarUrl(comment.author.avatarUrl).length > 0) {
-          Image(commentAvatarUrl(comment.author.avatarUrl))
-            .id(`p3_comments_avatar_${comment.id}`)
-            .width(32)
-            .height(32)
-            .borderRadius(16)
-            .objectFit(ImageFit.Cover)
-        }
-      }
-      .width(32)
-      .height(32)
-      .clip(true)
+    Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
       Text(comment.author.name)
         .id(`p3_comments_author_${comment.id}`)
-        .fontSize($r('app.float.p1_body_font_size'))
-        .fontWeight(FontWeight.Medium)
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.primary_text'))
-        .onClick((): void => {
-          this.navigate({
-            name: P1DestinationName.PEOPLE,
-            id: comment.author.urlToken.length > 0 ? comment.author.urlToken : comment.author.id
-          });
-        })
+        .onClick((): void => this.openAuthor(comment))
       if (comment.authorTag !== undefined) {
         Text(comment.authorTag)
-          .fontSize($r('app.float.p1_caption_font_size'))
+          .fontSize(12)
           .fontColor($r('app.color.secondary_text'))
-          .padding({ left: 4, right: 4, top: 1, bottom: 1 })
+          .padding({ left: 3, right: 3 })
+          .margin({ left: 4 })
           .borderRadius(3)
           .border({ width: 0.5, color: $r('app.color.secondary_text') })
+      }
+      if (comment.replyToAuthor !== undefined) {
+        Text('回复')
+          .fontSize(14)
+          .fontColor($r('app.color.secondary_text'))
+          .margin({ left: 4, right: 4 })
+        Text(comment.replyToAuthor.name)
+          .fontSize(16)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.primary_text'))
+          .onClick((): void => {
+            const author = comment.replyToAuthor;
+            if (author !== undefined) {
+              this.navigate({ name: P1DestinationName.PEOPLE,
+                id: author.urlToken.length > 0 ? author.urlToken : author.id });
+            }
+          })
       }
     }
     .width('100%')
@@ -417,112 +477,129 @@ export struct CommentLayer {
 
   @Builder
   private commentFooter(comment: CommentItem, showDelete: boolean) {
-    Row() {
+    Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
       Text(formatCommentTime(comment.createdAt))
-        .fontSize($r('app.float.p1_caption_font_size'))
+        .fontSize(12)
         .fontColor($r('app.color.secondary_text'))
-      Text(this.ipLocation(comment))
-        .fontSize($r('app.float.p1_caption_font_size'))
-        .fontColor($r('app.color.secondary_text'))
-        .margin({ left: $r('app.float.p1_spacing_small') })
-
-      Blank()
-
-      Row({ space: 2 }) {
-        Text('回复')
-          .fontSize($r('app.float.p1_caption_font_size'))
+      if (this.ipLocation(comment).length > 0) {
+        Text(this.ipLocation(comment))
+          .fontSize(12)
           .fontColor($r('app.color.secondary_text'))
-        if (comment.childCommentCount > 0) {
-          Text(`${comment.childCommentCount}`)
-            .fontSize($r('app.float.p1_caption_font_size'))
-            .fontColor($r('app.color.secondary_text'))
+          .margin({ left: 8 })
+      }
+      Blank().layoutWeight(1)
+      if (showDelete && comment.isAuthor) {
+        Button({ type: ButtonType.Normal }) {
+          SymbolGlyph($r('sys.symbol.more'))
+            .fontSize(16)
+            .fontColor([$r('app.color.secondary_text')])
+        }
+        .id(`p3_comments_more_button_${comment.id}`)
+        .width(28)
+        .height(28)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .accessibilityText('更多操作')
+        .bindMenu(this.commentMenu(comment))
+      }
+      Button({ type: ButtonType.Normal }) {
+        Row({ space: 4 }) {
+          SymbolGlyph($r('sys.symbol.message'))
+            .fontSize(16)
+            .fontColor([$r('app.color.secondary_text')])
+          if (comment.childCommentCount > 0) {
+            Text(`${comment.childCommentCount}`)
+              .fontSize(12)
+              .fontColor($r('app.color.secondary_text'))
+          }
         }
       }
       .id(`p3_comments_reply_button_${comment.id}`)
-      .onClick((): void => {
-        this.controller?.setReplyTarget(comment);
+      .height(28)
+      .padding({ left: 4, right: 4 })
+      .backgroundColor(Color.Transparent)
+      .accessibilityText('回复')
+      .onClick((): void => this.openReplies(comment))
+      CommentLikeButton({
+        state: this.likeStates[comment.id],
+        interactionEnabled: !this.submitting && !this.deleting,
+        onToggle: (): void => { this.controller?.toggleLike(comment); }
       })
-
-      Row({ space: 2 }) {
-        Text(comment.liked ? '已赞' : '点赞')
-          .fontSize($r('app.float.p1_caption_font_size'))
-          .fontColor(comment.liked ? $r('app.color.brand_primary') : $r('app.color.secondary_text'))
-        Text(`${comment.likeCount}`)
-          .fontSize($r('app.float.p1_caption_font_size'))
-          .fontColor(comment.liked ? $r('app.color.brand_primary') : $r('app.color.secondary_text'))
-      }
-      .id(`p3_comments_like_button_${comment.id}`)
-      .margin({ left: $r('app.float.p1_spacing_medium') })
-      .onClick((): void => {
-        this.controller?.toggleLike(comment);
-      })
-
-      if (showDelete && comment.isAuthor) {
-        Text('删除')
-          .id(`p3_comments_delete_button_${comment.id}`)
-          .fontSize($r('app.float.p1_caption_font_size'))
-          .fontColor($r('app.color.error_text'))
-          .margin({ left: $r('app.float.p1_spacing_medium') })
-          .onClick((): void => {
-            this.controller?.deleteComment(comment.id);
-          })
-      }
     }
     .width('100%')
   }
 
   @Builder
-  private childSection(comment: CommentItem) {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
-      if (comment.childComments.length > 0 && this.isExpanded(comment.id)) {
-        ForEach(comment.childComments, (child: CommentItem) => {
-          Row({ space: $r('app.float.p1_spacing_small') }) {
-            Text(child.author.name)
-              .fontSize($r('app.float.p1_secondary_font_size'))
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.primary_text'))
-              .onClick((): void => {
-                this.navigate({
-                  name: P1DestinationName.PEOPLE,
-                  id: child.author.urlToken.length > 0 ? child.author.urlToken : child.author.id
-                });
-              })
-            Text(stripCommentHtml(child.contentHtml))
-              .fontSize($r('app.float.p1_secondary_font_size'))
-              .fontColor($r('app.color.primary_text'))
-              .layoutWeight(1)
-            Text(`${child.likeCount}`)
-              .fontSize($r('app.float.p1_caption_font_size'))
-              .fontColor($r('app.color.secondary_text'))
-          }
-          .width('100%')
-        }, (child: CommentItem): string => `child_${comment.id}_${child.id}`)
-        Button('收起回复')
-          .id(`p3_comments_collapse_${comment.id}`)
-          .fontSize($r('app.float.p1_caption_font_size'))
-          .onClick((): void => {
-            this.toggleExpanded(comment.id);
-          })
-      } else if (comment.childComments.length > 0) {
-        Button('展开回复')
-          .id(`p3_comments_expand_${comment.id}`)
-          .fontSize($r('app.float.p1_caption_font_size'))
-          .onClick((): void => {
-            this.toggleExpanded(comment.id);
-          })
-      }
-      Button(`查看全部 ${comment.childCommentCount} 条回复`)
-        .id(`p3_comments_child_button_${comment.id}`)
-        .fontSize($r('app.float.p1_caption_font_size'))
-        .enabled(!this.submitting && !this.deleting)
+  private commentMenu(comment: CommentItem) {
+    Menu() {
+      MenuItem(this.deleteMenuLabel())
+        .id(`p3_comments_delete_button_${comment.id}`)
         .onClick((): void => {
-          this.controller?.openChildComments(comment);
+          this.getUIContext().showAlertDialog({
+            title: '删除评论',
+            message: '删除后无法恢复，确认删除这条评论吗？',
+            primaryButton: { value: '取消', action: (): void => {} },
+            secondaryButton: { value: '删除', action: (): void => { this.controller?.deleteComment(comment.id); } }
+          });
         })
+    }
+  }
+
+  @Builder
+  private deleteMenuLabel() {
+    Row({ space: 8 }) {
+      SymbolGlyph($r('sys.symbol.trash'))
+        .fontSize(16)
+        .fontColor([$r('app.color.error_text')])
+      Text('删除').fontColor($r('app.color.error_text'))
+    }
+    .padding(12)
+  }
+
+  @Builder
+  private childSection(comment: CommentItem) {
+    Column({ space: 8 }) {
+      ForEach(comment.childComments, (child: CommentItem) => {
+        this.commentRow(child, false)
+      }, (child: CommentItem): string => `preview_${comment.id}_${child.id}`)
+      Button({ type: ButtonType.Capsule }) {
+        Row({ space: 4 }) {
+          SymbolGlyph($r('sys.symbol.message'))
+            .fontSize(16)
+            .fontColor([$r('app.color.secondary_text')])
+          Text(`查看 ${comment.childCommentCount} 条子评论`)
+            .fontSize(12)
+            .fontColor($r('app.color.primary_text'))
+        }
+      }
+      .id(`p3_comments_child_button_${comment.id}`)
+      .height(28)
+      .padding({ left: 16, right: 16 })
+      .backgroundColor($r('app.color.control_background'))
+      .enabled(!this.submitting && !this.deleting)
+      .onClick((): void => { this.controller?.openChildComments(comment); })
     }
     .alignItems(HorizontalAlign.Start)
     .width('100%')
+    .padding({ left: 40 })
   }
 
+  private openAuthor(comment: CommentItem): void {
+    this.navigate({ name: P1DestinationName.PEOPLE,
+      id: comment.author.urlToken.length > 0 ? comment.author.urlToken : comment.author.id });
+  }
+
+  private openReplies(comment: CommentItem): void {
+    if (this.activeRoot !== undefined) {
+      this.controller?.setReplyTarget(comment);
+      return;
+    }
+    const root = this.items.find((item: CommentItem): boolean =>
+      item.id === comment.id || item.childComments.some((child: CommentItem): boolean => child.id === comment.id));
+    if (root !== undefined) {
+      this.controller?.openChildComments(root);
+    }
+  }
   @Builder
   private inputBar() {
     Column() {
@@ -532,8 +609,17 @@ export struct CommentLayer {
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .layoutWeight(1)
-          Button('取消回复')
+          Button({ type: ButtonType.Normal }) {
+            SymbolGlyph($r('sys.symbol.xmark'))
+              .fontSize(16)
+              .fontColor([$r('app.color.secondary_text')])
+          }
             .id('p3_comments_cancel_reply')
+            .width(28)
+            .height(28)
+            .padding(0)
+            .backgroundColor(Color.Transparent)
+            .accessibilityText('取消回复')
             .fontSize($r('app.float.p1_caption_font_size'))
             .onClick((): void => {
               this.controller?.setReplyTarget(undefined);
@@ -578,8 +664,22 @@ export struct CommentLayer {
               this.onRootDraftChange(value);
             }
           })
-        Button(this.submitting ? '发送中…' : '发送')
+        Button({ type: ButtonType.Normal }) {
+          if (this.submitting) {
+            LoadingProgress().width(24).height(24)
+          } else {
+            SymbolGlyph($r('sys.symbol.paperplane'))
+              .fontSize(24)
+              .fontColor([this.currentDraft().trim().length > 0
+                ? $r('app.color.brand_primary') : $r('app.color.secondary_text')])
+          }
+        }
           .id('p3_comments_send_button')
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText(this.submitting ? '发送中' : '发送')
           .fontSize($r('app.float.p1_body_font_size'))
           .enabled(!this.submitting && this.currentDraft().trim().length > 0)
           .onClick((): void => {
@@ -612,21 +712,6 @@ export struct CommentLayer {
     });
   }
 
-  private isExpanded(commentId: string): boolean {
-    return this.expandedRootIds.includes(commentId);
-  }
-
-  private toggleExpanded(commentId: string): void {
-    if (this.expandedRootIds.includes(commentId)) {
-      this.expandedRootIds = this.expandedRootIds.filter((value: string): boolean => value !== commentId);
-    } else {
-      const next = this.expandedRootIds.concat([commentId]);
-      this.expandedRootIds = next.length > COMMENT_EXPANDED_IDS_LIMIT
-        ? next.slice(next.length - COMMENT_EXPANDED_IDS_LIMIT)
-        : next;
-    }
-  }
-
   private ipLocation(comment: CommentItem): string {
     for (const tag of comment.commentTags) {
       if (tag.type === 'ip_info' && tag.text.trim().length > 0) {
@@ -637,6 +722,11 @@ export struct CommentLayer {
   }
 
   private applyState(state: CommentViewState): void {
+    if (state.activeRoot !== undefined) {
+      this.likeStateStore.sync([state.activeRoot]);
+    }
+    this.likeStateStore.sync(state.items);
+    this.likeStates = this.likeStateStore.snapshot();
     this.phase = state.phase;
     this.items = state.items;
     this.loadingMore = state.loadingMore;
@@ -647,7 +737,6 @@ export struct CommentLayer {
     this.activeRoot = state.activeRoot;
     this.replyTarget = state.replyTarget;
     this.submitting = state.submitting;
-    this.likeBusy = state.likeBusy;
     this.deleting = state.deleting;
     this.actionMessage = state.actionMessage ?? '';
     this.actionRequiresLogin = state.actionRequiresLogin;
@@ -669,8 +758,28 @@ function commentAvatarUrl(raw: string): string {
   return url;
 }
 
+function commentImageUrl(html: string): string {
+  const anchors = html.match(/<a\b[^>]*>/gi) ?? [];
+  for (const anchor of anchors) {
+    if (!/\bclass\s*=\s*["'][^"']*\bcomment_(img|gif|sticker)\b/i.test(anchor)) {
+      continue;
+    }
+    const href = anchor.match(/\bhref\s*=\s*["']([^"']+)["']/i);
+    if (href !== null) {
+      const url = commentAvatarUrl(href[1].replace(/&amp;/gi, '&'));
+      if (/^https:\/\/(?:picx?|pic[0-9]+)\.zhimg\.com\//i.test(url)) {
+        return url;
+      }
+    }
+  }
+  return '';
+}
+
 function stripCommentHtml(html: string): string {
-  let text = html
+  const content = commentImageUrl(html).length > 0
+    ? html.replace(/<a\b[^>]*\bclass\s*=\s*["'][^"']*\bcomment_(img|gif|sticker)\b[^"']*["'][^>]*>[\s\S]*?<\/a>/gi, '')
+    : html;
+  let text = content
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(p|div|h[1-6]|li|blockquote)>/gi, '\n')
     .replace(/<[^>]+>/g, '')

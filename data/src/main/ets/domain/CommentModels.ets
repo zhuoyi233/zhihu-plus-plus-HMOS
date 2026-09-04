@@ -74,7 +74,8 @@ export function commentIdentity(comment: CommentItem): string {
 }
 
 /** 返回带新点赞状态/计数的新评论对象，供乐观更新替换列表项（保持其余字段不变）。 */
-export function copyCommentWithLike(comment: CommentItem, liked: boolean, likeCount: number): CommentItem {
+export function copyCommentWithLike(comment: CommentItem, liked: boolean, likeCount: number,
+  children: Array<CommentItem> = comment.childComments): CommentItem {
   return {
     id: comment.id,
     contentHtml: comment.contentHtml,
@@ -93,6 +94,6 @@ export function copyCommentWithLike(comment: CommentItem, liked: boolean, likeCo
     authorTag: comment.authorTag,
     commentTags: comment.commentTags,
     childCommentCount: comment.childCommentCount,
-    childComments: comment.childComments
+    childComments: children
   };
 }

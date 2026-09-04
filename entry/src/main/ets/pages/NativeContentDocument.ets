@@ -49,7 +49,7 @@ function previewImageExtension(value: string): string {
 }
 
 @Component
-struct ContentImagePreview {
+export struct ContentImagePreview {
   url: string = '';
   onClose: () => void = () => {};
   @State private previewScale: number = 1;
