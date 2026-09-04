@@ -1,6 +1,7 @@
 import { QuestionAnswerDataSource } from './QuestionAnswerDataSource';
 import { AnswerNavigationPreview, QuestionAnswerNavigator, stageQuestionAnswerNavigator, takeQuestionAnswerNavigator } from './QuestionAnswerNavigator';
 import { publishQuestionTitle } from './QuestionTitleBar';
+import { publishAnswerTitle } from './AnswerTitleBar';
 import { FeedContentSummary } from './components/FeedContentSummary';
 import { AppPageStatusKind, AppPageStatusPanel, FeedPullDownIndicatorOptions, feedPullDownIndicator } from './AppPageChrome';
 import { pasteboard } from '@kit.BasicServicesKit';
@@ -100,6 +101,10 @@ struct ContentDetailPage {
   private readonly answerDataSource: QuestionAnswerDataSource = new QuestionAnswerDataSource();
   private refreshContent?: ComponentContent<FeedPullDownIndicatorOptions>;
   private questionScrolled: boolean = false;
+  /** 回答页顶栏折叠：问题标题已滚出视口（经 AppStorage 驱动 HDS 标题栏折叠态）。 */
+  private answerQuestionScrolled: boolean = false;
+  /** 回答页滚动信息头中问题标题实测高度（vp）：折叠阈值的动态基准；未测得前按单行估算。 */
+  private answerQuestionHeightVp: number = 0;
   private pageActive: boolean = false;
   repository: ContentRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
@@ -289,7 +294,8 @@ struct ContentDetailPage {
         } else if (this.content !== undefined) {
           Column() {
             // P3-9-B：顶栏作为占位（非覆盖），正文在其下方，避免作者行与标题/统计重叠。
-            if (!this.immersiveReading && this.kind !== ContentDetailKind.QUESTION) {
+            // 回答页作者信息随滚动信息头走（对齐上游），不再渲染固定作者条。
+            if (!this.immersiveReading && this.kind === ContentDetailKind.ARTICLE) {
               this.detailTopBar(this.content)
             }
             Column() {
@@ -516,24 +522,39 @@ struct ContentDetailPage {
 
       // 上层：主内容，跟随 overscroll 偏移平移。
       Column() {
-        this.contentHeader(content)
+        // 回答页：问题/作者/时间信息头入列随正文滚动（对齐上游折叠顶栏），
+        // 滚过问题标题后经 AppStorage 通知 HDS 标题栏折叠。
+        if (this.kind === ContentDetailKind.ANSWER) {
+          NativeContentDocument({
+            html: contentHtml(content),
+            emptyMessage: contentEmptyMessage(content),
+            disableEdgeSpring: true,
+            documentHeader: (): void => { this.contentHeader(content) },
+            onScrollOffset: (offset: number): void => { this.updateAnswerTitleScrolled(content, offset) },
+            onBottomEdgeChange: (atBottom: boolean): void => {
+              this.contentAtBottom = atBottom;
+            },
+            onTopEdgeChange: (atTop: boolean): void => {
+              this.contentAtTop = atTop;
+            }
+          })
+            .layoutWeight(1)
+        } else {
+          // 文章页：信息头固定在正文上方（保持原布局）。
+          this.contentHeader(content)
 
-        NativeContentDocument({
-          html: contentHtml(content),
-          emptyMessage: contentEmptyMessage(content),
-          collapsible: this.kind === ContentDetailKind.QUESTION,
-          disableEdgeSpring: this.kind === ContentDetailKind.ANSWER,
-          onBottomEdgeChange: (atBottom: boolean): void => {
-            this.contentAtBottom = atBottom;
-          },
-          onTopEdgeChange: (atTop: boolean): void => {
-            this.contentAtTop = atTop;
-          },
-          onListReachEnd: (): void => {
-            this.answersController?.loadMore();
-          }
-        })
-          .layoutWeight(1)
+          NativeContentDocument({
+            html: contentHtml(content),
+            emptyMessage: contentEmptyMessage(content),
+            onBottomEdgeChange: (atBottom: boolean): void => {
+              this.contentAtBottom = atBottom;
+            },
+            onTopEdgeChange: (atTop: boolean): void => {
+              this.contentAtTop = atTop;
+            }
+          })
+            .layoutWeight(1)
+        }
       }
       .width('100%')
       .height('100%')
@@ -738,8 +759,6 @@ struct ContentDetailPage {
   @Builder
   private contentHeader(content: LoadedContentDetail) {
       Column({ space: $r('app.float.p1_spacing_small') }) {
-        // 作者信息由顶栏折叠作者条承载（头像+名字），内容区不再重复渲染作者行。
-
         // 主标题保留在正文信息头：回答显示所属问题，文章显示文章标题，避免仅依赖通用路由标题。
         if (contentContextTitle(content).length > 0) {
           Text(contentContextTitle(content))
@@ -749,12 +768,39 @@ struct ContentDetailPage {
             .fontColor($r('app.color.primary_text'))
             .copyOption(CopyOptions.LocalDevice)
             .width('100%')
+            .onAreaChange((_oldArea: Area, newArea: Area): void => {
+              const height = Number(newArea.height);
+              if (height > 0 && Math.abs(height - this.answerQuestionHeightVp) > 1) {
+                this.answerQuestionHeightVp = height;
+              }
+            })
             .accessibilityDescription(content.kind === ContentDetailKind.ANSWER ? '点击查看问题详情' : '')
             .onClick((): void => {
               if (content.kind === ContentDetailKind.ANSWER) {
                 this.navigate({ name: P1DestinationName.QUESTION, id: content.value.questionId });
               }
             })
+        }
+
+        // 回答页作者信息随信息头滚动（对齐上游展开顶栏）：头像 + 名称 + 一句话简介。
+        if (content.kind === ContentDetailKind.ANSWER) {
+          this.answerHeaderAuthorRow(content)
+        }
+
+        // 回答页发布/编辑时间（对齐上游 DateTexts：编辑时间与发布不同才显示）。
+        if (content.kind === ContentDetailKind.ANSWER && contentCreatedAtText(content).length > 0) {
+          Text(contentCreatedAtText(content))
+            .id(`p2_${content.kind}_detail_created_at`)
+            .fontSize($r('app.float.p1_caption_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
+        }
+        if (content.kind === ContentDetailKind.ANSWER && contentUpdatedAtText(content).length > 0) {
+          Text(contentUpdatedAtText(content))
+            .id(`p2_${content.kind}_detail_updated_at`)
+            .fontSize($r('app.float.p1_caption_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
         }
 
         if (content.kind === ContentDetailKind.QUESTION) {
@@ -804,12 +850,97 @@ struct ContentDetailPage {
       .alignItems(HorizontalAlign.Start)
       .width('100%')
       .padding({
-        left: $r('app.float.p1_page_padding'),
-        right: $r('app.float.p1_page_padding'),
-        top: this.immersiveReading ? 56 : $r('app.float.p1_spacing_medium'),
+        // 回答页信息头在列表内滚动：左右与顶部留白由 List 统一提供，避免双重内边距。
+        left: content.kind === ContentDetailKind.ANSWER ? 0 : $r('app.float.p1_page_padding'),
+        right: content.kind === ContentDetailKind.ANSWER ? 0 : $r('app.float.p1_page_padding'),
+        top: content.kind === ContentDetailKind.ANSWER ? 0
+          : (this.immersiveReading ? 56 : $r('app.float.p1_spacing_medium')),
         bottom: $r('app.float.p1_spacing_medium')
       })
       .backgroundColor($r('app.color.surface_background'))
+  }
+
+  /** 回答页滚动信息头作者行（对齐上游展开顶栏 subtitle）：头像 + 名称 + 简介，点击进入用户主页。 */
+  @Builder
+  private answerHeaderAuthorRow(content: LoadedContentDetail) {
+    if (contentAuthorName(content).length > 0) {
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Stack({ alignContent: Alignment.Center }) {
+          Circle()
+            .width(40)
+            .height(40)
+            .fill($r('app.color.control_background'))
+          Text(contentAuthorName(content).substring(0, 1))
+            .fontSize($r('app.float.p1_body_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+          if (contentAuthorAvatarUrl(content).length > 0) {
+            Image(contentAuthorAvatarUrl(content))
+              .id(`p3_${content.kind}_detail_header_avatar`)
+              .width(40)
+              .height(40)
+              .borderRadius(20)
+              .objectFit(ImageFit.Cover)
+          }
+        }
+          .width(40)
+          .height(40)
+          .clip(true)
+
+        Column({ space: 2 }) {
+          Text(contentAuthorName(content))
+            .id(`p3_${content.kind}_detail_header_author`)
+            .fontSize($r('app.float.p1_body_font_size'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.primary_text'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          if (contentAuthorHeadline(content).length > 0) {
+            Text(contentAuthorHeadline(content))
+              .fontSize($r('app.float.p1_caption_font_size'))
+              .fontColor($r('app.color.secondary_text'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+        }
+          .layoutWeight(1)
+          .alignItems(HorizontalAlign.Start)
+      }
+      .id(`p3_${content.kind}_detail_header_author_row`)
+      .width('100%')
+      .onClick((): void => {
+        const author = content.value.author;
+        if (author !== undefined && author.id.trim().length > 0) {
+          const urlToken = author.urlToken ?? author.id;
+          this.navigate({ name: P1DestinationName.PEOPLE, id: urlToken });
+        }
+      })
+    }
+  }
+
+  /** 回答页顶栏折叠联动：正文滚过问题标题（高度经 onAreaChange 实测，未测得前用 64vp 兜底）
+   * 即折叠，滚回复原；经 AppStorage 广播给 HDS 标题栏（同问题页 160px 阈值模式）。
+   * 通道键固定用路由 contentId（标题栏按 destination.id 查找，过滑切换回答不改路由，
+   * activeContentId 会随切换漂移导致顶栏读到陈旧条目）；闭包捕获的 content 是构造时
+   * 的克隆（@Builder 传值不更新已挂载子组件属性，且控制器每次 emit 都换新克隆），
+   * 陈旧判定只能按内容 id 比较——id 不同才说明是切换期间的陈旧回调，直接丢弃。 */
+  private updateAnswerTitleScrolled(content: LoadedContentDetail, offset: number): void {
+    if (content.kind !== ContentDetailKind.ANSWER || content.value.id !== this.content?.value.id) {
+      return;
+    }
+    const threshold = this.answerQuestionHeightVp > 0 ? this.answerQuestionHeightVp + 8 : 64;
+    const scrolled = offset > threshold;
+    if (scrolled !== this.answerQuestionScrolled) {
+      this.answerQuestionScrolled = scrolled;
+      this.getUIContext().animateTo({ duration: 220, curve: Curve.EaseInOut }, (): void => {
+        publishAnswerTitle({
+          id: this.contentId,
+          questionTitle: contentContextTitle(content),
+          authorName: contentAuthorName(content),
+          authorAvatarUrl: contentAuthorAvatarUrl(content),
+          scrolled: scrolled
+        });
+      });
+    }
   }
 
   @Builder
@@ -1242,6 +1373,8 @@ struct ContentDetailPage {
     // 新内容从顶部渲染：边界状态归位，避免沿用上一答的贴底状态误触发底部过滑。
     this.contentAtBottom = false;
     this.contentAtTop = true;
+    // 顶栏折叠态随新答复位：新内容从顶部渲染，问题标题回到视口内。
+    this.answerQuestionScrolled = false;
     try {
       const id = await this.answerNavigator?.move(direction);
       this.navigatorRevision += 1;
@@ -1753,6 +1886,15 @@ struct ContentDetailPage {
       if (state.content.kind === ContentDetailKind.QUESTION) {
         publishQuestionTitle({ id: this.activeContentId, title: state.content.value.title, scrolled: this.questionScrolled });
       }
+      if (state.content.kind === ContentDetailKind.ANSWER) {
+        publishAnswerTitle({
+          id: this.contentId,
+          questionTitle: contentContextTitle(state.content),
+          authorName: contentAuthorName(state.content),
+          authorAvatarUrl: contentAuthorAvatarUrl(state.content),
+          scrolled: this.answerQuestionScrolled
+        });
+      }
       if (state.content.kind === ContentDetailKind.ANSWER && this.answerNavigator === undefined) {
         this.ensureAnswerNavigator(state.content.value.questionId);
       }
@@ -2001,6 +2143,38 @@ export function contentAuthorAvatarUrl(content: LoadedContentDetail): string {
     return '';
   }
   return url;
+}
+
+/** 详情时间戳（unix 秒）转本地 yyyy-MM-dd HH:mm；对齐上游 formatArticleDateTime，非法值返回空串。 */
+export function formatContentDateTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return '';
+  }
+  const date = new Date(seconds * 1000);
+  const pad = (value: number): string => value < 10 ? `0${value}` : `${value}`;
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
+    `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** 回答发布时间文案：发布于 yyyy-MM-dd HH:mm（对齐上游 DateTexts）。 */
+export function contentCreatedAtText(content: LoadedContentDetail): string {
+  if (content.kind !== ContentDetailKind.ANSWER) {
+    return '';
+  }
+  const formatted = formatContentDateTime(content.value.createdAt);
+  return formatted.length > 0 ? `发布于 ${formatted}` : '';
+}
+
+/** 回答编辑时间文案：编辑于 yyyy-MM-dd HH:mm；与发布时间相同则不显示（对齐上游）。 */
+export function contentUpdatedAtText(content: LoadedContentDetail): string {
+  if (content.kind !== ContentDetailKind.ANSWER) {
+    return '';
+  }
+  if (content.value.updatedAt <= 0 || content.value.updatedAt === content.value.createdAt) {
+    return '';
+  }
+  const formatted = formatContentDateTime(content.value.updatedAt);
+  return formatted.length > 0 ? `编辑于 ${formatted}` : '';
 }
 
 /** P3-9-D1：回答/文章的认可徽章流（仅 ANSWER/ARTICLE 有）。 */

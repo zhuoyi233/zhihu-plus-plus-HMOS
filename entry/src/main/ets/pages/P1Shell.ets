@@ -1,4 +1,5 @@
 import { QuestionTitleBar } from './QuestionTitleBar';
+import { AnswerTitleBar } from './AnswerTitleBar';
 import {
   AppPreferencesStore,
   AppThemeMode,
@@ -396,7 +397,7 @@ export struct P1Shell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.detailTitleBar('回答'), divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.answerTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
@@ -747,6 +748,12 @@ export struct P1Shell {
   @Builder
   private questionTitleBar(id: string) {
     QuestionTitleBar({ questionId: id, onBack: (): void => { this.pathStack.pop(); } })
+  }
+
+  /** 回答页标题栏：滚动折叠时在返回键右侧显示问题单行 + 答主摘要（对齐上游折叠顶栏）。 */
+  @Builder
+  private answerTitleBar(id: string) {
+    AnswerTitleBar({ answerId: id, onBack: (): void => { this.pathStack.pop(); } })
   }
 
   @Builder
