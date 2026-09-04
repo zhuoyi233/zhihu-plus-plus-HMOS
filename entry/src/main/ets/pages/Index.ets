@@ -364,6 +364,7 @@ struct Index {
       followRepository: this.followRepository,
       collectionRepository: this.collectionRepository,
       commentRepository: this.commentRepository,
+      questionAnswerFeedFactory: this.questionAnswerFeedFactory,
       session: this.session,
       onBack: onBack
     });

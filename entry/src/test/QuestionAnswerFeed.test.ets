@@ -83,5 +83,62 @@ export default function questionAnswerFeedTest(): void {
       expect(repository.calls).assertEqual(1);
       navigator.dispose();
     });
+
+    it('navigatorSeedlessLocatesCurrentAndMovesToNext', 0, async () => {
+      // 信息流直达：无种子，控制器自动拉取问题回答列表后回填当前索引。
+      const repository = new FakeQuestionAnswerRepository([
+        { items: [content('1'), content('2'), content('3')],
+          cursor: { isEnd: false, isStart: true, next: 'next', page: 1, total: 3 } }
+      ]);
+      const navigator = new QuestionAnswerNavigator('123', '2', undefined, repository);
+      expect(navigator.hasNext()).assertFalse();
+      await new Promise<void>((resolve): void => { setTimeout(resolve, 0); });
+      expect(navigator.currentId()).assertEqual('2');
+      expect(navigator.hasNext()).assertTrue();
+      const preview = navigator.nextAnswerPreview();
+      expect(preview?.answerId).assertEqual('3');
+      expect(preview?.authorName).assertEqual('作者');
+      const previousPreview = navigator.previousAnswerPreview();
+      expect(previousPreview?.answerId).assertEqual('1');
+      expect(previousPreview?.authorName).assertEqual('作者');
+      expect(await navigator.move(1)).assertEqual('3');
+      expect(await navigator.move(-1)).assertEqual('2');
+      navigator.dispose();
+    });
+
+    it('navigatorPreviousPreviewNoneOnFirstAnswer', 0, async () => {
+      // 首答固定无上一答：预览接口返回 undefined，对应顶部过滑不生效。
+      const seed: QuestionAnswersViewState = {
+        phase: QuestionAnswersPhase.READY, items: [content('1'), content('2')], loadingMore: false,
+        canLoadMore: false, sortOrder: QuestionAnswerSortOrder.DEFAULT, errorMessage: '', requiresLogin: false
+      };
+      const repository = new FakeQuestionAnswerRepository([
+        { items: [], cursor: { isEnd: true, isStart: true, next: '', page: 1, total: 2 } }
+      ]);
+      const navigator = new QuestionAnswerNavigator('123', '2', seed, repository);
+      const preview = navigator.previousAnswerPreview();
+      expect(preview?.answerId).assertEqual('1');
+      expect(preview?.authorName).assertEqual('作者');
+      expect(await navigator.move(-1)).assertEqual('1');
+      expect(navigator.hasPrevious()).assertFalse();
+      expect(navigator.previousAnswerPreview()).assertUndefined();
+      navigator.dispose();
+    });
+
+    it('navigatorSeedlessFallsBackToFirstWhenCurrentAbsent', 0, async () => {
+      // 当前回答不在列表里（如被过滤）：首个非当前回答作为下一答。
+      const repository = new FakeQuestionAnswerRepository([
+        { items: [content('7'), content('8')],
+          cursor: { isEnd: true, isStart: true, page: 1, total: 2 } }
+      ]);
+      const navigator = new QuestionAnswerNavigator('123', '99', undefined, repository);
+      await new Promise<void>((resolve): void => { setTimeout(resolve, 0); });
+      expect(navigator.hasNext()).assertTrue();
+      const preview = navigator.nextAnswerPreview();
+      expect(preview?.answerId).assertEqual('7');
+      expect(await navigator.move(1)).assertEqual('7');
+      expect(navigator.hasPrevious()).assertFalse();
+      navigator.dispose();
+    });
   });
 }

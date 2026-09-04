@@ -410,6 +410,12 @@ export struct NativeContentDocument {
   @BuilderParam documentFooter: () => void = this.emptyFooter;
   /** 列表触底回调：问题详情页用于回答信息流分页加载。 */
   onListReachEnd?: () => void;
+  /** 回答详情页切换：正文是否贴在列表底边（用于自定义 overscroll 手势）。 */
+  onBottomEdgeChange?: (atBottom: boolean) => void;
+  /** 回答详情页切换：正文是否贴在列表顶边（顶部过滑切上一答依赖此信号）。 */
+  onTopEdgeChange?: (atTop: boolean) => void;
+  /** 回答详情页关闭 Spring 边缘效果：自定义 overscroll 需要独占边界拖动量。 */
+  disableEdgeSpring: boolean = false;
   /** 问题页正文折叠预览：正文超阈值（纯文本≥100 字或含图）时收起为 180vp 视口。 */
   collapsible: boolean = false;
   @State private detailExpanded: boolean = false;
@@ -420,6 +426,11 @@ export struct NativeContentDocument {
   private blocks: ReaderBlock[] = [];
   @State private previewUrl: string = '';
   @State private empty: boolean = true;
+  /** 正文是否贴在列表底边：onReachEnd 置位；出现任何实际滚动（回滚/内容增高后续滚）即复位。 */
+  private atBottomEdge: boolean = false;
+  /** 正文是否贴在列表顶边：初始即顶；滚动进正文（yOffset 越过容差）即复位，滚回顶部再置位。 */
+  private atTopEdge: boolean = true;
+  private lastYOffset: number = 0;
   private readonly dataSource: ReaderBlockDataSource = new ReaderBlockDataSource();
   private readonly scroller: Scroller = new Scroller();
 
@@ -564,9 +575,10 @@ export struct NativeContentDocument {
         // 末尾避让随正文滚动，避免底部 padding 压缩视口、在悬浮操作栏下方形成固定留白。
         .contentEndOffset(100)
         .cachedCount(6)
-        .edgeEffect(EdgeEffect.Spring)
+        .edgeEffect(this.disableEdgeSpring ? EdgeEffect.None : EdgeEffect.Spring)
         // 触底回调：问题详情页据此加载回答信息流下一页。
         .onReachEnd((): void => {
+          this.updateBottomEdge(true);
           const callback = this.onListReachEnd;
           if (callback !== undefined) {
             callback();
@@ -574,10 +586,18 @@ export struct NativeContentDocument {
         })
         // 用像素偏移而非 onScrollIndex 驱动顶栏折叠：索引会随视口高度变化回弹造成振荡闪烁，
         // 像素偏移在顶栏收起（视口变高）时保持不变，状态稳定。
+        // 同时维护底部边界状态：贴底后回滚（y 减小）即离开底边；y 反向增大只可能是
+        // 内容增高后继续上滚（onReachEnd 提前触发的残余滚动在 2px 容差内不复位）。
         .onDidScroll((): void => {
+          const yOffset = this.scroller.currentOffset().yOffset;
+          if (yOffset < this.lastYOffset - 0.5 || yOffset > this.lastYOffset + 2) {
+            this.updateBottomEdge(false);
+          }
+          this.updateTopEdge(yOffset <= 2);
+          this.lastYOffset = yOffset;
           const callback = this.onScrollOffset;
           if (callback !== undefined) {
-            callback(this.scroller.currentOffset().yOffset);
+            callback(yOffset);
           }
         })
 
@@ -594,6 +614,27 @@ export struct NativeContentDocument {
     }
     .width('100%')
     .height('100%')
+  }
+
+  /** 触底/离底状态变化时通知页面侧（下滑切换回答依赖此信号）。 */
+  private updateBottomEdge(atBottom: boolean): void {
+    this.lastYOffset = this.scroller.currentOffset().yOffset;
+    if (this.atBottomEdge === atBottom) { return; }
+    this.atBottomEdge = atBottom;
+    const callback = this.onBottomEdgeChange;
+    if (callback !== undefined) {
+      callback(atBottom);
+    }
+  }
+
+  /** 贴顶/离顶状态变化时通知页面侧（顶部过滑切上一答依赖此信号）。 */
+  private updateTopEdge(atTop: boolean): void {
+    if (this.atTopEdge === atTop) { return; }
+    this.atTopEdge = atTop;
+    const callback = this.onTopEdgeChange;
+    if (callback !== undefined) {
+      callback(atTop);
+    }
   }
 
   @Builder
