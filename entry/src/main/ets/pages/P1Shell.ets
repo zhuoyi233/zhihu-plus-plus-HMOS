@@ -42,6 +42,7 @@ import { getImmersiveTitleBarStyle } from '../common/style/NavStyles';
 import { ZhihuHdsTabs } from './components/ZhihuHdsTabs';
 import { materialCanvas } from './components/MaterialCanvas';
 import { ChannelFeedInteractionBridge } from './ChannelFeedState';
+import { dailyDateCursor, dailyPickerDate, formatDailyDate } from './DailyFeedDates';
 
 const PROJECT_HOME_URI: string = 'https://github.com/zhuoyi233/zhihu-plus-plus-HMOS';
 
@@ -130,8 +131,8 @@ export struct P1Shell {
   // the options in observed state instead of passing an inline object, which
   // otherwise renders the control but drops its tap callback on device.
   @State private followingSegmentOptions: SegmentButtonOptions = this.createFollowingSegmentOptions();
-  @Provide('dailyDatePickerRequest') private dailyDatePickerRequest: number = 0;
-  @Provide('dailyDateCursor') private dailyDateCursor: string = '';
+  @StorageProp('dailyViewingDate') private dailyViewingDate: string = '';
+  @State private dailyDateCursor: string = '';
   @Provide('channelFeedInteractionBridge') private channelFeedInteractionBridge: ChannelFeedInteractionBridge =
     new ChannelFeedInteractionBridge();
   @State @Watch('onTopLevelTabIndexChanged') private topLevelTabIndex: number = P1TopLevelTab.HOME;
@@ -876,6 +877,21 @@ export struct P1Shell {
       .hitTestBehavior(HitTestMode.Transparent)
     } else if (this.topLevelTabIndex === P1TopLevelTab.DAILY) {
       Row() {
+        Column({ space: 2 }) {
+          Text('知乎日报')
+            .fontSize($r('app.float.p1_heading_font_size'))
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.primary_text'))
+          if (this.dailyViewingDate.length > 0) {
+            Text(formatDailyDate(this.dailyViewingDate))
+              .id('p2_daily_titlebar_current_date')
+              .fontSize($r('app.float.p1_secondary_font_size'))
+              .fontColor($r('app.color.secondary_text'))
+              .maxLines(1)
+          }
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
         Button({ type: ButtonType.Circle, stateEffect: true }) {
           SymbolGlyph($r('sys.symbol.calendar'))
             .fontSize(20)
@@ -893,8 +909,7 @@ export struct P1Shell {
         })
       }
       .width('100%')
-      .justifyContent(FlexAlign.End)
-      .padding({ right: 12 })
+      .padding({ left: $r('app.float.p1_page_padding'), right: 12 })
       .hitTestBehavior(HitTestMode.Transparent)
     }
     }
@@ -926,23 +941,18 @@ export struct P1Shell {
   }
 
   private openDailyDatePicker(): void {
-    const selectedDate: Date = new Date();
     this.getUIContext().showDatePickerDialog({
-      selected: selectedDate,
+      selected: dailyPickerDate(this.dailyViewingDate),
       start: new Date(2000, 0, 1),
       end: new Date(),
       onDateAccept: (date: Date): void => {
-        this.dailyDateCursor = this.formatDailyDateCursor(date);
-        this.dailyReloadToken += 1;
-        this.channelFeedInteractionBridge.selectDailyDate(this.dailyDateCursor);
+        // HdsTabs 下使用 AppStorage 先写日期再广播，重复选择同一天也能重新加载。
+        this.dailyDateCursor = dailyDateCursor(date);
+        AppStorage.setOrCreate('dailySelectedDate', this.dailyDateCursor);
+        AppStorage.setOrCreate('dailyDateSelectionTick',
+          (AppStorage.get<number>('dailyDateSelectionTick') ?? 0) + 1);
       }
     });
-  }
-
-  private formatDailyDateCursor(date: Date): string {
-    const month: string = `${date.getMonth() + 1}`.padStart(2, '0');
-    const day: string = `${date.getDate()}`.padStart(2, '0');
-    return `${date.getFullYear()}${month}${day}`;
   }
 
   @Builder

@@ -91,6 +91,7 @@ export class ChannelFeedController {
   private requiresLogin: boolean = false;
   private restartFirstPageOnActivate: boolean = false;
   private errorMessage?: string;
+  private selectedDailyDate?: string;
 
   constructor(source: ChannelFeedSource, repository: ChannelFeedRepository,
     observer: ChannelFeedStateObserver = (_state: ChannelFeedViewState): void => {
@@ -108,7 +109,7 @@ export class ChannelFeedController {
     if (this.restartFirstPageOnActivate) {
       this.restartFirstPageOnActivate = false;
       this.phase = this.items.length > 0 ? ChannelFeedPhase.READY : ChannelFeedPhase.IDLE;
-      this.refresh();
+      this.loadFirstPage(this.items.length > 0, this.selectedDailyDate, this.selectedDailyDate !== undefined);
       return;
     }
     this.emit();
@@ -171,6 +172,9 @@ export class ChannelFeedController {
     if (this.retryLoadMore) {
       this.paginationBlocked = false;
       return this.loadMore();
+    }
+    if (this.selectedDailyDate !== undefined) {
+      return this.loadDate(this.selectedDailyDate);
     }
     return this.refresh();
   }
@@ -242,6 +246,7 @@ export class ChannelFeedController {
   }
 
   private async loadFirstPage(keepVisibleItems: boolean, cursor?: string, reset: boolean = false): Promise<void> {
+    this.selectedDailyDate = this.source === ChannelFeedSource.DAILY ? cursor : undefined;
     const generation = ++this.generation;
     this.refreshing = keepVisibleItems;
     this.loadingMore = false;

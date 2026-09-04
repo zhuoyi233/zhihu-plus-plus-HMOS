@@ -189,7 +189,7 @@ export default function channelFeedRepositoryTest(): void {
         'https://daily.zhihu.com/api/4/stories/latest'
       );
       expect(buildChannelFeedRequestUrl(ChannelFeedSource.DAILY, '20260810')).assertEqual(
-        'https://daily.zhihu.com/api/4/stories/before/20260811'
+        'https://daily.zhihu.com/api/4/stories/before/20260810'
       );
       expect(canonicalChannelFeedCursorKey(
         ChannelFeedSource.FOLLOWING,
@@ -342,6 +342,7 @@ export default function channelFeedRepositoryTest(): void {
       expect(latest.items[0].kind).assertEqual(ChannelFeedItemKind.DAILY_STORY);
       expect(latest.cursor.next).assertEqual('20260811');
       expect(factory.requests[0].url).assertEqual('https://daily.zhihu.com/api/4/stories/latest');
+      expect(factory.requests[1].url).assertEqual('https://daily.zhihu.com/api/4/stories/before/20260811');
       expect(factory.requests[0].headers.Cookie).assertUndefined();
       expect(JSON.stringify(factory.requests[0].headers).includes('x-zse-')).assertFalse();
       expect(older.items.length).assertEqual(0);
@@ -350,7 +351,46 @@ export default function channelFeedRepositoryTest(): void {
 
       const selectedDate = await repository.loadPage(ChannelFeedSource.DAILY, '20260810', true);
       expect(selectedDate.items.length).assertEqual(1);
-        expect(factory.requests[2].url).assertEqual('https://daily.zhihu.com/api/4/stories/before/20260811');
+      expect(factory.requests[2].url).assertEqual('https://daily.zhihu.com/api/4/stories/before/20260811');
+    });
+
+    it('loadsConsecutiveDailyEditionsAcrossYearBoundary', 0, async () => {
+      const factory = new SequenceChannelTransportFactory([
+        new ChannelOutcome(new TestHttpResponse(200, dailyEdition('20260101', '1'))),
+        new ChannelOutcome(new TestHttpResponse(200, dailyEdition('20251231', '2'))),
+        new ChannelOutcome(new TestHttpResponse(200, dailyEdition('20251230', '3')))
+      ]);
+      const repository = new DefaultChannelFeedRepository(new ZhihuHttpClient(undefined, factory));
+      const first = await repository.loadPage(ChannelFeedSource.DAILY);
+      const second = await repository.loadPage(ChannelFeedSource.DAILY, first.cursor.next);
+      const third = await repository.loadPage(ChannelFeedSource.DAILY, second.cursor.next);
+      expect(factory.requests[1].url).assertEqual('https://daily.zhihu.com/api/4/stories/before/20260101');
+      expect(factory.requests[2].url).assertEqual('https://daily.zhihu.com/api/4/stories/before/20251231');
+      expect(first.items.length + second.items.length + third.items.length).assertEqual(3);
+      expect(third.cursor.next).assertEqual('20251230');
+      expect(third.cursor.isEnd).assertFalse();
+    });
+
+    it('selectsExactDateThenContinuesHistoryAndAllowsReselecting', 0, async () => {
+      const factory = new SequenceChannelTransportFactory([
+        new ChannelOutcome(new TestHttpResponse(200, dailyEdition('20240229', '1'))),
+        new ChannelOutcome(new TestHttpResponse(200, dailyEdition('20240228', '2'))),
+        new ChannelOutcome(new TestHttpResponse(200, dailyEdition('20240229', '1'))),
+        new ChannelOutcome(new TestHttpResponse(200, dailyEdition('20251231', '3')))
+      ]);
+      const repository = new DefaultChannelFeedRepository(new ZhihuHttpClient(undefined, factory));
+      const selected = await repository.loadPage(ChannelFeedSource.DAILY, '20240229', true);
+      expect(selected.cursor.isEnd).assertFalse();
+      const older = await repository.loadPage(ChannelFeedSource.DAILY, selected.cursor.next);
+      expect(older.items.length).assertEqual(1);
+      expect(older.cursor.next).assertEqual('20240228');
+      const reselected = await repository.loadPage(ChannelFeedSource.DAILY, '20240229', true);
+      expect(reselected.items.length).assertEqual(1);
+      await repository.loadPage(ChannelFeedSource.DAILY, '20251231', true);
+      expect(factory.requests[0].url).assertEqual('https://daily.zhihu.com/api/4/stories/before/20240301');
+      expect(factory.requests[1].url).assertEqual('https://daily.zhihu.com/api/4/stories/before/20240229');
+      expect(factory.requests[2].url).assertEqual(factory.requests[0].url);
+      expect(factory.requests[3].url).assertEqual('https://daily.zhihu.com/api/4/stories/before/20260101');
     });
 
     it('fallsBackOnlyWhenPrimaryHostResolutionFails', 0, async () => {
@@ -419,4 +459,8 @@ export default function channelFeedRepositoryTest(): void {
       expect(factory.requests.length).assertEqual(3);
     });
   });
+}
+
+function dailyEdition(date: string, id: string): string {
+  return `{"date":"${date}","stories":[{"id":${id},"title":"日报标题","hint":"作者","images":[]}]}`;
 }
