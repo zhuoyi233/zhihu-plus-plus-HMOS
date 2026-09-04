@@ -559,9 +559,10 @@ export struct NativeContentDocument {
         .padding({
           left: $r('app.float.p1_page_padding'),
           right: $r('app.float.p1_page_padding'),
-          top: $r('app.float.p1_spacing_medium'),
-          bottom: 100
+          top: $r('app.float.p1_spacing_medium')
         })
+        // 末尾避让随正文滚动，避免底部 padding 压缩视口、在悬浮操作栏下方形成固定留白。
+        .contentEndOffset(100)
         .cachedCount(6)
         .edgeEffect(EdgeEffect.Spring)
         // 触底回调：问题详情页据此加载回答信息流下一页。
