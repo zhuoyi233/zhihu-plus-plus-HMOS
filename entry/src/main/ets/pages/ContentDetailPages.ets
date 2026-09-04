@@ -483,6 +483,12 @@ struct ContentDetailPage {
             .fontColor($r('app.color.primary_text'))
             .copyOption(CopyOptions.LocalDevice)
             .width('100%')
+            .accessibilityDescription(content.kind === ContentDetailKind.ANSWER ? '点击查看问题详情' : '')
+            .onClick((): void => {
+              if (content.kind === ContentDetailKind.ANSWER) {
+                this.navigate({ name: P1DestinationName.QUESTION, id: content.value.questionId });
+              }
+            })
         }
 
         if (content.kind === ContentDetailKind.QUESTION) {
