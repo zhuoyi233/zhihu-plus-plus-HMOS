@@ -1,5 +1,6 @@
 import { QuestionTitleBar } from './QuestionTitleBar';
 import { AnswerTitleBar } from './AnswerTitleBar';
+import { ArticleTitleBar } from './ArticleTitleBar';
 import {
   AppPreferencesStore,
   AppThemeMode,
@@ -411,7 +412,7 @@ export struct P1Shell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.detailTitleBar('文章'), divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.articleTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
@@ -754,6 +755,12 @@ export struct P1Shell {
   @Builder
   private answerTitleBar(id: string) {
     AnswerTitleBar({ answerId: id, onBack: (): void => { this.pathStack.pop(); } })
+  }
+
+  /** 文章页标题栏：滚动折叠时在返回键右侧显示文章标题单行（对齐问题页折叠模式）。 */
+  @Builder
+  private articleTitleBar(id: string) {
+    ArticleTitleBar({ articleId: id, onBack: (): void => { this.pathStack.pop(); } })
   }
 
   @Builder
