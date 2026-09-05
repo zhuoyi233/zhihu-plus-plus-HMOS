@@ -2,6 +2,9 @@ import { QuestionTitleBar } from './QuestionTitleBar';
 import { AnswerTitleBar } from './AnswerTitleBar';
 import { ArticleTitleBar } from './ArticleTitleBar';
 import {
+  allAnswerDoubleTapActions,
+  AnswerDoubleTapAction,
+  answerDoubleTapActionLabel,
   AppPreferencesStore,
   AppThemeMode,
   AppUpdateCheckResult,
@@ -112,6 +115,9 @@ export struct P1Shell {
   @StorageProp('sessionStateTick') @Watch('onSessionStateTick') sessionStateTick: number = 0;
   @State private sessionSnapshot?: SessionState = undefined;
   @State private themeMode: AppThemeMode = AppThemeMode.SYSTEM;
+  /** 回答页双击正文动作（对齐上游 answerDoubleTapAction）：AppStorage 广播与详情页双向同步。 */
+  @StorageProp('answerDoubleTapAction') private answerDoubleTapAction: AnswerDoubleTapAction =
+    AnswerDoubleTapAction.ASK;
   @State private installedVersionLabel: string = '正在读取已安装版本…';
   @State private aboutVersionSheetShown: boolean = false;
   /** GitHub 最新 Release 检出有新版本时非空：驱动“我的”页横幅与版本弹层下载入口。 */
@@ -149,6 +155,7 @@ export struct P1Shell {
     this.themeMounted = true;
     this.sessionSnapshot = this.session?.getState();
     this.restoreThemeMode();
+    void this.restoreAnswerDoubleTapAction();
     this.refreshInstalledVersionLabel();
     this.unsubscribeStartupDestination?.();
     const listener: StartupDestinationListener = (destination: P1Destination): void => {
@@ -1044,6 +1051,29 @@ export struct P1Shell {
                 this.themeButton('深色', AppThemeMode.DARK, 'p1_theme_dark');
               }
               .width('100%')
+            }
+            .alignItems(HorizontalAlign.Start)
+            .width('100%')
+            .padding($r('app.float.p1_card_padding'))
+            Divider().color($r('app.color.divider_color'))
+            Column({ space: $r('app.float.p1_spacing_small') }) {
+              Text('双击回答动作')
+                .fontSize($r('app.float.p1_body_font_size'))
+                .fontColor($r('app.color.primary_text'))
+              Text('双击回答正文时执行的动作。默认弹窗询问。')
+                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+              Select(this.answerDoubleTapSelectOptions())
+                .id('p3_settings_answer_double_tap_select')
+                .selected(this.answerDoubleTapAction)
+                .value(answerDoubleTapActionLabel(this.answerDoubleTapAction))
+                .fontColor($r('app.color.primary_text'))
+                .onSelect((index: number): void => {
+                  const actions = allAnswerDoubleTapActions();
+                  if (index >= 0 && index < actions.length) {
+                    void this.selectAnswerDoubleTapAction(actions[index]);
+                  }
+                })
             }
             .alignItems(HorizontalAlign.Start)
             .width('100%')
@@ -1951,6 +1981,40 @@ export struct P1Shell {
       default:
         return destination.name;
     }
+  }
+
+  private answerDoubleTapSelectOptions(): SelectOption[] {
+    return allAnswerDoubleTapActions().map((action: AnswerDoubleTapAction): SelectOption => {
+      return { value: answerDoubleTapActionLabel(action) } as SelectOption;
+    });
+  }
+
+  private async restoreAnswerDoubleTapAction(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      this.answerDoubleTapAction = await new AppPreferencesStore(context).loadAnswerDoubleTapAction();
+      AppStorage.setOrCreate('answerDoubleTapAction', this.answerDoubleTapAction);
+    } catch (_error) {
+      // 读取失败保持默认 Ask。
+    }
+  }
+
+  private async selectAnswerDoubleTapAction(action: AnswerDoubleTapAction): Promise<void> {
+    const context = getAbilityContext();
+    if (context === undefined) {
+      return;
+    }
+    AppStorage.setOrCreate('answerDoubleTapAction', action);
+    try {
+      await new AppPreferencesStore(context).saveAnswerDoubleTapAction(action);
+    } catch (_error) {
+      // 保存失败时选择已生效，重启后可能恢复此前设置。
+    }
+    this.getUIContext().getPromptAction()
+      .showToast({ message: `已设置为：${answerDoubleTapActionLabel(action)}` });
   }
 
   private async restoreThemeMode(): Promise<void> {

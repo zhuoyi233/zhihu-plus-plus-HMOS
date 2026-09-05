@@ -12,7 +12,10 @@ import {
   P1DestinationName
 } from 'core';
 import {
+  AnswerDoubleTapAction,
+  answerDoubleTapActionLabel,
   AnswerEndorsementDisplay,
+  AppPreferencesStore,
   BlockedFeedHistoryGateway,
   BlockingRuleGateway,
   ChannelContentItem,
@@ -62,6 +65,7 @@ import { NativeContentDocument } from './NativeContentDocument';
 import { stageAnswerEditSeed } from './AnswerEditSeedStore';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { createSystemShareService } from '../platform/SystemShareService';
+import { performConfirmHaptic } from '../platform/HapticFeedback';
 import { ShareOutcome, SharePayloadKind, ShareTextPayload } from '../platform/ShareContracts';
 import { hdsMaterial } from '@kit.UIDesignKit';
 import { GlassCapsule } from './components/MaterialCanvas';
@@ -143,6 +147,12 @@ struct ContentDetailPage {
   @State private interactionErrorMessage: string = '';
   @State private interactionRequiresLogin: boolean = false;
   @State private favoriteDialogShown: boolean = false;
+  /** 回答页双击正文动作（对齐上游 answerDoubleTapAction）：AppStorage 广播跨页同步
+   * （详情页 Ask 面板与设置页改动互见），默认询问并记住。 */
+  @StorageProp('answerDoubleTapAction') private answerDoubleTapAction: AnswerDoubleTapAction =
+    AnswerDoubleTapAction.ASK;
+  /** 双击动作询问面板（Ask 动作）可见性。 */
+  @State private doubleTapAskSheetShown: boolean = false;
   @State private showComments: boolean = false;
   @State private commentRootDraft: string = '';
   @State private commentReplyDraft: string = '';
@@ -175,6 +185,8 @@ struct ContentDetailPage {
     this.pageActive = true;
     if (this.activeContentId.length === 0) { this.activeContentId = this.contentId; }
     this.authenticated = this.session?.getState().status === SessionStatus.AUTHENTICATED;
+    // 双击动作偏好全局生效，返回栈重显时也刷新（可能刚在设置页改过）。
+    void this.restoreAnswerDoubleTapAction();
     this.refreshContent = new ComponentContent(this.getUIContext(), wrapBuilder(feedPullDownIndicator),
       new FeedPullDownIndicatorOptions());
     if (this.kind === ContentDetailKind.ANSWER && this.answerNavigator === undefined) {
@@ -392,6 +404,19 @@ struct ContentDetailPage {
             }
           }
         })
+      Column()
+        .bindSheet(this.doubleTapAskSheetShown, this.doubleTapAskSheet(), {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.doubleTapAskSheetShown) {
+              this.doubleTapAskSheetShown = false;
+            }
+          }
+        })
       // 切换回答期间卸载旧内容的弹层，避免普通入参 contentId 留在前一答。
       if (this.phase === ContentDetailPhase.READY && (this.kind === ContentDetailKind.ANSWER ||
         this.kind === ContentDetailKind.ARTICLE || this.kind === ContentDetailKind.QUESTION)) {
@@ -564,6 +589,14 @@ struct ContentDetailPage {
         })
         .onActionEnd((): void => {
           this.onAnswerOverscrollPanEnd();
+        })
+    )
+    // 双击正文赞同一键：互斥手势默认子组件优先，图片/链接等可点区域不触发；
+    // 与上方 parallelGesture 过滑 PanGesture 并存（tap 与 pan 不互斥）。
+    .gesture(
+      TapGesture({ count: 2 })
+        .onAction((): void => {
+          this.onAnswerDoubleTap();
         })
     )
   }
@@ -1380,6 +1413,60 @@ struct ContentDetailPage {
   private navigatorHasNext(): boolean {
     return this.navigatorRevision >= 0 && (this.answerNavigator?.hasNext() ?? false);
   }
+  /** 双击正文动作分发（对齐上游 performAnswerDoubleTapAction）：仅回答页生效；
+   * 震感仅点赞与打开评论区有；Ask 弹询问面板，选择后记住。 */
+  private onAnswerDoubleTap(): void {
+    if (this.kind !== ContentDetailKind.ANSWER) {
+      return;
+    }
+    const action = this.answerDoubleTapAction;
+    if (action === AnswerDoubleTapAction.NONE) {
+      return;
+    }
+    if (action === AnswerDoubleTapAction.OPEN_COMMENTS) {
+      performConfirmHaptic();
+      this.showComments = true;
+      return;
+    }
+    if (action === AnswerDoubleTapAction.TOGGLE_IMMERSIVE) {
+      this.immersiveReading = !this.immersiveReading;
+      return;
+    }
+    if (action === AnswerDoubleTapAction.VOTE_UP) {
+      performConfirmHaptic();
+      void this.voteController?.voteUpFromDoubleTap();
+      return;
+    }
+    this.doubleTapAskSheetShown = true;
+  }
+
+  /** 读取双击动作偏好；失败保持默认 Ask，不影响双击可用性。 */
+  private async restoreAnswerDoubleTapAction(): Promise<void> {
+    const context = getAbilityContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const action = await new AppPreferencesStore(context).loadAnswerDoubleTapAction();
+      if (this.pageActive) {
+        AppStorage.setOrCreate('answerDoubleTapAction', action);
+      }
+    } catch (_error) {
+    }
+  }
+
+  /** 保存双击动作（询问面板与设置页共用）：先广播 AppStorage 再落盘，提示文案对齐上游。 */
+  private saveAnswerDoubleTapAction(action: AnswerDoubleTapAction): void {
+    AppStorage.setOrCreate('answerDoubleTapAction', action);
+    const context = getAbilityContext();
+    if (context !== undefined) {
+      void new AppPreferencesStore(context).saveAnswerDoubleTapAction(action).catch((_error: Object): void => {
+      });
+    }
+    this.getUIContext().getPromptAction()
+      .showToast({ message: `已将双击回答动作设为：${answerDoubleTapActionLabel(action)}` });
+  }
+
   private async moveAnswer(direction: number): Promise<void> {
     if (this.navigatorBusy) { return; }
     this.navigatorBusy = true;
@@ -1634,6 +1721,74 @@ struct ContentDetailPage {
 
     }
     .id('p3_detail_menu_sheet')
+    .width('100%')
+    .padding($r('app.float.p1_spacing_medium'))
+  }
+
+  /** 双击动作询问面板（对齐上游 showDoubleTapActionDialog）：每项保存偏好并立即执行该动作。 */
+  @Builder
+  private doubleTapAskSheet() {
+    Column({ space: $r('app.float.p1_spacing_small') }) {
+      Text('设置双击回答动作')
+        .fontSize($r('app.float.p1_heading_font_size'))
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.primary_text'))
+        .width('100%')
+      Text('选择以后双击回答时默认执行的动作。选择后会立即保存到设置，你也可以稍后在设置中修改。')
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
+      Button('设为无操作', { type: ButtonType.Normal, stateEffect: true })
+        .id('p3_answer_double_tap_none')
+        .width('100%')
+        .fontSize($r('app.float.p1_body_font_size'))
+        .fontColor($r('app.color.primary_text'))
+        .backgroundColor($r('app.color.control_background'))
+        .borderRadius($r('app.float.p1_card_radius'))
+        .onClick((): void => {
+          this.doubleTapAskSheetShown = false;
+          this.saveAnswerDoubleTapAction(AnswerDoubleTapAction.NONE);
+        })
+      Button('设为点赞', { type: ButtonType.Normal, stateEffect: true })
+        .id('p3_answer_double_tap_vote_up')
+        .width('100%')
+        .fontSize($r('app.float.p1_body_font_size'))
+        .fontColor($r('app.color.primary_text'))
+        .backgroundColor($r('app.color.control_background'))
+        .borderRadius($r('app.float.p1_card_radius'))
+        .onClick((): void => {
+          this.doubleTapAskSheetShown = false;
+          this.saveAnswerDoubleTapAction(AnswerDoubleTapAction.VOTE_UP);
+          performConfirmHaptic();
+          void this.voteController?.voteUpFromDoubleTap();
+        })
+      Button('设为打开评论区', { type: ButtonType.Normal, stateEffect: true })
+        .id('p3_answer_double_tap_open_comments')
+        .width('100%')
+        .fontSize($r('app.float.p1_body_font_size'))
+        .fontColor($r('app.color.primary_text'))
+        .backgroundColor($r('app.color.control_background'))
+        .borderRadius($r('app.float.p1_card_radius'))
+        .onClick((): void => {
+          this.doubleTapAskSheetShown = false;
+          this.saveAnswerDoubleTapAction(AnswerDoubleTapAction.OPEN_COMMENTS);
+          performConfirmHaptic();
+          this.showComments = true;
+        })
+      Button('设为开关沉浸式', { type: ButtonType.Normal, stateEffect: true })
+        .id('p3_answer_double_tap_toggle_immersive')
+        .width('100%')
+        .fontSize($r('app.float.p1_body_font_size'))
+        .fontColor($r('app.color.primary_text'))
+        .backgroundColor($r('app.color.control_background'))
+        .borderRadius($r('app.float.p1_card_radius'))
+        .onClick((): void => {
+          this.doubleTapAskSheetShown = false;
+          this.saveAnswerDoubleTapAction(AnswerDoubleTapAction.TOGGLE_IMMERSIVE);
+          this.immersiveReading = !this.immersiveReading;
+        })
+    }
+    .id('p3_answer_double_tap_sheet')
     .width('100%')
     .padding($r('app.float.p1_spacing_medium'))
   }

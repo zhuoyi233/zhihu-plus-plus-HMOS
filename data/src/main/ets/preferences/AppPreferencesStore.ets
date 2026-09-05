@@ -23,6 +23,8 @@ const TOPIC_BLOCKING_THRESHOLD_KEY = 'topic_blocking_threshold';
 const NOTIFICATION_DISPLAY_PREFIX = 'notification_display_in_app_';
 const NOTIFICATION_AUTO_MARK_READ_KEY = 'notification_auto_mark_as_read';
 const NOTIFICATION_UNREAD_BADGE_KEY = 'notification_unread_badge';
+// 键与存储值对齐上游 answerDoubleTapAction 偏好（"none"/"ask"/"voteUp"/"openComments"/"toggleImmersive"）。
+const ANSWER_DOUBLE_TAP_ACTION_KEY = 'answerDoubleTapAction';
 
 function notificationDisplayKey(kind: NotificationKind): string {
   if (kind === NotificationKind.LIKE_COMMENT) {
@@ -51,6 +53,76 @@ export function decodeAppThemeMode(value: preferences.ValueType): AppThemeMode {
     return AppThemeMode.DARK;
   }
   return AppThemeMode.SYSTEM;
+}
+
+/** 回答页双击正文动作（对齐上游 AnswerDoubleTapAction），默认询问并记住。 */
+export enum AnswerDoubleTapAction {
+  NONE = 0,
+  ASK = 1,
+  VOTE_UP = 2,
+  OPEN_COMMENTS = 3,
+  TOGGLE_IMMERSIVE = 4
+}
+
+export function answerDoubleTapActionPreferenceValue(action: AnswerDoubleTapAction): string {
+  switch (action) {
+    case AnswerDoubleTapAction.NONE:
+      return 'none';
+    case AnswerDoubleTapAction.VOTE_UP:
+      return 'voteUp';
+    case AnswerDoubleTapAction.OPEN_COMMENTS:
+      return 'openComments';
+    case AnswerDoubleTapAction.TOGGLE_IMMERSIVE:
+      return 'toggleImmersive';
+    default:
+      return 'ask';
+  }
+}
+
+export function answerDoubleTapActionLabel(action: AnswerDoubleTapAction): string {
+  switch (action) {
+    case AnswerDoubleTapAction.NONE:
+      return '无操作';
+    case AnswerDoubleTapAction.ASK:
+      return '询问并记住';
+    case AnswerDoubleTapAction.VOTE_UP:
+      return '点赞';
+    case AnswerDoubleTapAction.OPEN_COMMENTS:
+      return '打开评论区';
+    case AnswerDoubleTapAction.TOGGLE_IMMERSIVE:
+      return '开关沉浸式';
+    default:
+      return '询问并记住';
+  }
+}
+
+/** 未知/缺失值一律回退 Ask（对齐上游 fromPreference）。 */
+export function decodeAnswerDoubleTapAction(value: preferences.ValueType): AnswerDoubleTapAction {
+  if (typeof value === 'string') {
+    if (value === 'none') {
+      return AnswerDoubleTapAction.NONE;
+    }
+    if (value === 'voteUp') {
+      return AnswerDoubleTapAction.VOTE_UP;
+    }
+    if (value === 'openComments') {
+      return AnswerDoubleTapAction.OPEN_COMMENTS;
+    }
+    if (value === 'toggleImmersive') {
+      return AnswerDoubleTapAction.TOGGLE_IMMERSIVE;
+    }
+  }
+  return AnswerDoubleTapAction.ASK;
+}
+
+export function allAnswerDoubleTapActions(): AnswerDoubleTapAction[] {
+  return [
+    AnswerDoubleTapAction.NONE,
+    AnswerDoubleTapAction.ASK,
+    AnswerDoubleTapAction.VOTE_UP,
+    AnswerDoubleTapAction.OPEN_COMMENTS,
+    AnswerDoubleTapAction.TOGGLE_IMMERSIVE
+  ];
 }
 
 export function appPreferencesFailureMessage(operation: string, error: Object | null | undefined): string {
@@ -93,6 +165,30 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
       (): void => {},
       (): void => {}
     );
+    return operation;
+  }
+
+  async loadAnswerDoubleTapAction(): Promise<AnswerDoubleTapAction> {
+    await this.saveQueue;
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      return decodeAnswerDoubleTapAction(await store.get(ANSWER_DOUBLE_TAP_ACTION_KEY,
+        answerDoubleTapActionPreferenceValue(AnswerDoubleTapAction.ASK)));
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('Answer double tap action load', error));
+      }
+      throw new Error(appPreferencesFailureMessage('Answer double tap action load', undefined));
+    }
+  }
+
+  saveAnswerDoubleTapAction(action: AnswerDoubleTapAction): Promise<void> {
+    const normalizedAction = decodeAnswerDoubleTapAction(answerDoubleTapActionPreferenceValue(action));
+    const operation = this.saveQueue.then(
+      (): Promise<void> => this.writeAnswerDoubleTapAction(normalizedAction),
+      (): Promise<void> => this.writeAnswerDoubleTapAction(normalizedAction)
+    );
+    this.saveQueue = operation.then((): void => {}, (): void => {});
     return operation;
   }
 
@@ -139,6 +235,19 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
         throw new Error(appPreferencesFailureMessage('Theme mode save', error));
       }
       throw new Error(appPreferencesFailureMessage('Theme mode save', undefined));
+    }
+  }
+
+  private async writeAnswerDoubleTapAction(action: AnswerDoubleTapAction): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      await store.put(ANSWER_DOUBLE_TAP_ACTION_KEY, answerDoubleTapActionPreferenceValue(action));
+      await store.flush();
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('Answer double tap action save', error));
+      }
+      throw new Error(appPreferencesFailureMessage('Answer double tap action save', undefined));
     }
   }
 

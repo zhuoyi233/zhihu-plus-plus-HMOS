@@ -316,6 +316,42 @@ export default function contentInteractionStateTest(): void {
       expect(controller.snapshot().pending).assertTrue();
     });
 
+    it('doubleTapVoteUpSendsUpFromNeutralAndDown', 0, async () => {
+      const repository = new FakeVoteRepository();
+      const controller = new ContentVoteController(
+        repository, new FixedSessionGateway(SessionStatus.AUTHENTICATED),
+        ContentDetailKind.ANSWER, '2'
+      );
+      controller.activate();
+      controller.applyInitial(answerContent(ContentVoteState.NEUTRAL, 10, false, 0));
+
+      await controller.voteUpFromDoubleTap();
+      expect(repository.voteCalls.length).assertEqual(1);
+      expect(repository.voteCalls[0].state).assertEqual(ContentVoteState.UP);
+      expect(controller.snapshot().voteState).assertEqual(ContentVoteState.UP);
+
+      controller.applyInitial(answerContent(ContentVoteState.DOWN, 10, false, 0));
+      await controller.voteUpFromDoubleTap();
+      expect(repository.voteCalls.length).assertEqual(2);
+      expect(repository.voteCalls[1].state).assertEqual(ContentVoteState.UP);
+      expect(controller.snapshot().voteState).assertEqual(ContentVoteState.UP);
+    });
+
+    it('doubleTapVoteUpKeepsStateWhenAlreadyUpvoted', 0, async () => {
+      const repository = new FakeVoteRepository();
+      const controller = new ContentVoteController(
+        repository, new FixedSessionGateway(SessionStatus.AUTHENTICATED),
+        ContentDetailKind.ANSWER, '2'
+      );
+      controller.activate();
+      controller.applyInitial(answerContent(ContentVoteState.UP, 10, false, 0));
+
+      await controller.voteUpFromDoubleTap();
+      expect(repository.voteCalls.length).assertEqual(0);
+      expect(controller.snapshot().voteState).assertEqual(ContentVoteState.UP);
+      expect(controller.snapshot().voteupCount).assertEqual(10);
+    });
+
     it('followsOptimisticallyAndRollsBackOnFailure', 0, async () => {
       const repository = new FakeFollowRepository();
       repository.result = { followerCount: 99 };

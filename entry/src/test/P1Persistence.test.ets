@@ -1,8 +1,13 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
+  allAnswerDoubleTapActions,
+  answerDoubleTapActionLabel,
+  answerDoubleTapActionPreferenceValue,
+  AnswerDoubleTapAction,
   AppThemeMode,
   appPreferencesFailureMessage,
   DatabaseOpenPlan,
+  decodeAnswerDoubleTapAction,
   decodeAppThemeMode,
   pendingSchemaVersions,
   planDatabaseOpen
@@ -19,6 +24,28 @@ export default function p1PersistenceTest(): void {
     it('decodesPersistedThemeValues', 0, () => {
       expect(decodeAppThemeMode(AppThemeMode.LIGHT)).assertEqual(AppThemeMode.LIGHT);
       expect(decodeAppThemeMode(AppThemeMode.DARK)).assertEqual(AppThemeMode.DARK);
+    });
+
+    it('decodesAnswerDoubleTapActionPreferenceValues', 0, () => {
+      expect(decodeAnswerDoubleTapAction('none')).assertEqual(AnswerDoubleTapAction.NONE);
+      expect(decodeAnswerDoubleTapAction('ask')).assertEqual(AnswerDoubleTapAction.ASK);
+      expect(decodeAnswerDoubleTapAction('voteUp')).assertEqual(AnswerDoubleTapAction.VOTE_UP);
+      expect(decodeAnswerDoubleTapAction('openComments')).assertEqual(AnswerDoubleTapAction.OPEN_COMMENTS);
+      expect(decodeAnswerDoubleTapAction('toggleImmersive')).assertEqual(AnswerDoubleTapAction.TOGGLE_IMMERSIVE);
+      // 缺失/未知值一律回退 Ask（对齐上游 fromPreference）。
+      expect(decodeAnswerDoubleTapAction('')).assertEqual(AnswerDoubleTapAction.ASK);
+      expect(decodeAnswerDoubleTapAction('unknown')).assertEqual(AnswerDoubleTapAction.ASK);
+      expect(decodeAnswerDoubleTapAction(123)).assertEqual(AnswerDoubleTapAction.ASK);
+    });
+
+    it('roundTripsAnswerDoubleTapActionPreferenceValues', 0, () => {
+      const actions = allAnswerDoubleTapActions();
+      expect(actions.length).assertEqual(5);
+      actions.forEach((action: AnswerDoubleTapAction): void => {
+        expect(decodeAnswerDoubleTapAction(answerDoubleTapActionPreferenceValue(action))).assertEqual(action);
+      });
+      expect(answerDoubleTapActionLabel(AnswerDoubleTapAction.ASK)).assertEqual('询问并记住');
+      expect(answerDoubleTapActionLabel(AnswerDoubleTapAction.VOTE_UP)).assertEqual('点赞');
     });
 
     it('plansOnlyContiguousPendingMigrations', 0, () => {
