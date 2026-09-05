@@ -65,6 +65,7 @@ import { NativeContentDocument } from './NativeContentDocument';
 import { stageAnswerEditSeed } from './AnswerEditSeedStore';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { createSystemShareService } from '../platform/SystemShareService';
+import { setStatusBarHidden } from '../platform/SystemBars';
 import { performConfirmHaptic } from '../platform/HapticFeedback';
 import { ShareOutcome, SharePayloadKind, ShareTextPayload } from '../platform/ShareContracts';
 import { hdsMaterial } from '@kit.UIDesignKit';
@@ -172,8 +173,13 @@ struct ContentDetailPage {
   @State private actionMenuShown: boolean = false;
   /** P3-9-C：菜单操作反馈（复制链接结果等）。 */
   @State private menuStatus: string = '';
-  /** 沉浸式阅读仅收起页面 Chrome，不改变正文、互动或滚动状态。 */
-  @State private immersiveReading: boolean = false;
+  /** 沉浸式阅读仅收起页面 Chrome，不改变正文、互动或滚动状态。
+   * 变化经 AppStorage 广播给 P1Shell 隐藏/恢复 NavDestination 顶栏（对齐上游 topBar={}）。 */
+  @State @Watch('onImmersiveReadingChanged') private immersiveReading: boolean = false;
+  /** P1Shell Back 拦截发出的"先退沉浸式"信号（跨页面信号必须走 AppStorage 广播）。 */
+  @StorageProp('detailImmersiveExitTick') @Watch('onImmersiveExitSignal') private immersiveExitTick: number = 0;
+  /** 状态栏高度（vp，EntryAbility 广播）：沉浸式隐藏顶栏后正文的顶部留空。 */
+  @StorageProp('statusBarHeight') private statusBarHeightVp: number = 0;
   /** 设备支持沉浸材质：玻璃胶囊走 HDS 画布，否则回落组件模糊。 */
   private immersiveMaterialSupported: boolean = false;
   private controller?: ContentDetailController;
@@ -187,6 +193,8 @@ struct ContentDetailPage {
     this.authenticated = this.session?.getState().status === SessionStatus.AUTHENTICATED;
     // 双击动作偏好全局生效，返回栈重显时也刷新（可能刚在设置页改过）。
     void this.restoreAnswerDoubleTapAction();
+    // 同步沉浸式初始/保留态给 P1Shell（返回栈重显时实例与状态均保留）。
+    AppStorage.setOrCreate('detailImmersiveActive', this.immersiveReading);
     this.refreshContent = new ComponentContent(this.getUIContext(), wrapBuilder(feedPullDownIndicator),
       new FeedPullDownIndicatorOptions());
     if (this.kind === ContentDetailKind.ANSWER && this.answerNavigator === undefined) {
@@ -274,6 +282,21 @@ struct ContentDetailPage {
     this.commentRootDraft = '';
     this.commentReplyDraft = '';
     this.immersiveReading = false;
+    AppStorage.setOrCreate('detailImmersiveActive', false);
+    // 对齐上游 LeaveImmersiveModeCleanup：页面销毁时确保状态栏恢复。
+    setStatusBarHidden(false);
+  }
+
+  private onImmersiveReadingChanged(): void {
+    AppStorage.setOrCreate('detailImmersiveActive', this.immersiveReading);
+    // 真全屏：沉浸中隐藏状态栏（对齐上游 WindowInsetsController.hide(statusBars)）。
+    setStatusBarHidden(this.immersiveReading);
+  }
+
+  private onImmersiveExitSignal(): void {
+    if (this.immersiveReading) {
+      this.immersiveReading = false;
+    }
   }
 
   private async refreshQuestion(): Promise<void> {
@@ -327,7 +350,8 @@ struct ContentDetailPage {
       .id(`p2_${this.kind}_detail_page`)
       .width('100%')
       .height('100%')
-      .padding({ top: 94 })
+      // 94vp 为顶栏叠加预留；沉浸式隐藏顶栏后仅保留状态栏高度（对齐上游 topBar={}）。
+      .padding({ top: this.immersiveReading ? Math.max(this.statusBarHeightVp, 0) : 94 })
       .backgroundColor($r('app.color.page_background'))
 
       // 底部操作栏：全屏悬浮层单实例承载（正文从下方穿透直至物理底边）。
@@ -363,10 +387,6 @@ struct ContentDetailPage {
             this.answerFabOverlayHeightVp = height;
           }
         })
-      }
-
-      if (this.immersiveReading) {
-        this.immersiveExitControl()
       }
 
       if (this.phase === ContentDetailPhase.READY &&
@@ -497,30 +517,6 @@ struct ContentDetailPage {
     .width('100%')
     .layoutWeight(1)
     .padding($r('app.float.p1_page_padding'))
-  }
-
-  @Builder
-  private immersiveExitControl() {
-    Button({ type: ButtonType.Normal, stateEffect: true }) {
-      SymbolGlyph($r('sys.symbol.xmark'))
-        .fontSize(20)
-        .fontColor([$r('app.color.primary_text')])
-    }
-      .id(`p3_${this.kind}_detail_exit_immersive`)
-      .width(40)
-      .height(40)
-      .padding(0)
-      .backgroundColor($r('app.color.surface_background'))
-      .borderRadius(20)
-      .accessibilityText('退出沉浸式阅读')
-      .align(Alignment.TopStart)
-      .margin({
-        left: $r('app.float.p1_page_padding'),
-        top: $r('app.float.p1_spacing_medium')
-      })
-      .onClick((): void => {
-        this.immersiveReading = false;
-      })
   }
 
   @Builder
@@ -780,6 +776,11 @@ struct ContentDetailPage {
 
   @Builder
   private contentHeader(content: LoadedContentDetail) {
+    if ((content.kind === ContentDetailKind.ANSWER || content.kind === ContentDetailKind.ARTICLE) &&
+      this.immersiveReading) {
+      // 沉浸式：收起问题标题/时间/统计等完整信息头，仅留窄作者行（对齐上游 isImmersiveMode 分支）。
+      this.immersiveAuthorRow(content)
+    } else {
       Column({ space: $r('app.float.p1_spacing_small') }) {
         // 主标题保留在正文信息头：回答显示所属问题，文章显示文章标题，避免仅依赖通用路由标题。
         if (contentContextTitle(content).length > 0) {
@@ -882,6 +883,54 @@ struct ContentDetailPage {
         bottom: $r('app.float.p1_spacing_medium')
       })
       .backgroundColor($r('app.color.surface_background'))
+    }
+  }
+
+  /** 沉浸式窄作者行（对齐上游 isImmersiveMode 分支）：24vp 头像 + 名称，点击进作者主页。 */
+  @Builder
+  private immersiveAuthorRow(content: LoadedContentDetail) {
+    if (contentAuthorName(content).length > 0) {
+      Row({ space: 6 }) {
+        Stack({ alignContent: Alignment.Center }) {
+          Circle()
+            .width(24)
+            .height(24)
+            .fill($r('app.color.control_background'))
+          Text(contentAuthorName(content).substring(0, 1))
+            .fontSize($r('app.float.p1_caption_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+          if (contentAuthorAvatarUrl(content).length > 0) {
+            Image(contentAuthorAvatarUrl(content))
+              .id(`p3_${content.kind}_immersive_author_avatar`)
+              .width(24)
+              .height(24)
+              .borderRadius(12)
+              .objectFit(ImageFit.Cover)
+          }
+        }
+          .width(24)
+          .height(24)
+          .clip(true)
+
+        Text(contentAuthorName(content))
+          .id(`p3_${content.kind}_immersive_author_name`)
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor($r('app.color.primary_text'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+      }
+      .id(`p3_${content.kind}_immersive_author_row`)
+      .width('100%')
+      .padding({ top: 8, bottom: 8 })
+      .onClick((): void => {
+        const author = content.value.author;
+        if (author !== undefined && author.id.trim().length > 0) {
+          const urlToken = author.urlToken ?? author.id;
+          this.navigate({ name: P1DestinationName.PEOPLE, id: urlToken });
+        }
+      })
+    }
   }
 
   /** 回答/文章页滚动信息头作者行（对齐上游展开顶栏 subtitle）：头像 + 名称 + 简介，点击进入用户主页。 */
@@ -1683,6 +1732,9 @@ struct ContentDetailPage {
           .onClick((): void => {
             this.actionMenuShown = false;
             this.immersiveReading = true;
+            // 对齐上游菜单提示：沉浸式下返回键优先退出沉浸式而非退出回答。
+            this.getUIContext().getPromptAction()
+              .showToast({ message: '已进入沉浸式，按返回键即可退出' });
           })
       }
 

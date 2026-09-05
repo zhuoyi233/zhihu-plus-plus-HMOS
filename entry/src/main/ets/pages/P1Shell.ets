@@ -118,6 +118,8 @@ export struct P1Shell {
   /** 回答页双击正文动作（对齐上游 answerDoubleTapAction）：AppStorage 广播与详情页双向同步。 */
   @StorageProp('answerDoubleTapAction') private answerDoubleTapAction: AnswerDoubleTapAction =
     AnswerDoubleTapAction.ASK;
+  /** 回答/文章详情页沉浸式阅读中（页面广播）：隐藏 NavDestination 顶栏（对齐上游 topBar={}）。 */
+  @StorageProp('detailImmersiveActive') private detailImmersiveActive: boolean = false;
   @State private installedVersionLabel: string = '正在读取已安装版本…';
   @State private aboutVersionSheetShown: boolean = false;
   /** GitHub 最新 Release 检出有新版本时非空：驱动“我的”页横幅与版本弹层下载入口。 */
@@ -407,6 +409,16 @@ export struct P1Shell {
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.answerTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
+      // 沉浸式隐藏顶栏（对齐上游）；返回键优先退沉浸式（对齐上游 PlatformBackHandler）。
+      .hideTitleBar(this.detailImmersiveActive)
+      .onBackPressed((): boolean => {
+        if (this.detailImmersiveActive) {
+          AppStorage.setOrCreate('detailImmersiveExitTick',
+            (AppStorage.get<number>('detailImmersiveExitTick') ?? 0) + 1);
+          return true;
+        }
+        return false;
+      })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.ARTICLE) {
@@ -421,6 +433,16 @@ export struct P1Shell {
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.articleTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
+      // 与回答页一致：沉浸式隐藏顶栏，返回键优先退沉浸式。
+      .hideTitleBar(this.detailImmersiveActive)
+      .onBackPressed((): boolean => {
+        if (this.detailImmersiveActive) {
+          AppStorage.setOrCreate('detailImmersiveExitTick',
+            (AppStorage.get<number>('detailImmersiveExitTick') ?? 0) + 1);
+          return true;
+        }
+        return false;
+      })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.VIDEO) {
