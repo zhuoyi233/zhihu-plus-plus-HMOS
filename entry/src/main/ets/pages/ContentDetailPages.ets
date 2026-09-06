@@ -1,5 +1,6 @@
 import { QuestionAnswerDataSource } from './QuestionAnswerDataSource';
 import { AnswerNavigationPreview, QuestionAnswerNavigator, stageQuestionAnswerNavigator, takeQuestionAnswerNavigator } from './QuestionAnswerNavigator';
+import { ContentImagePreview } from './NativeContentDocument';
 import { publishQuestionTitle } from './QuestionTitleBar';
 import { publishAnswerTitle } from './AnswerTitleBar';
 import { publishArticleTitle } from './ArticleTitleBar';
@@ -102,6 +103,9 @@ struct ContentDetailPage {
   private answerFabOverlayWidthVp: number = 0;
   private answerFabOverlayHeightVp: number = 0;
   @StorageProp('loginFeedReloadTick') @Watch('onLoginChanged') private loginTick: number = 0;
+  /** 全屏图片查看器：正文/评论图点击后经 AppStorage 广播，在页面根 Stack 叠层渲染
+   *（正文列表惰性树与模态覆盖层树内均无法可靠驱动状态更新，见 NativeContentDocument 注释）。 */
+  @StorageProp('p2ImagePreviewUrl') @Watch('onImagePreviewChanged') private imagePreviewUrl: string = '';
   @State private authenticated: boolean = false;
   private answerNavigator?: QuestionAnswerNavigator;
   private readonly answerDataSource: QuestionAnswerDataSource = new QuestionAnswerDataSource();
@@ -283,6 +287,7 @@ struct ContentDetailPage {
     this.commentReplyDraft = '';
     this.immersiveReading = false;
     AppStorage.setOrCreate('detailImmersiveActive', false);
+    AppStorage.setOrCreate('p2ImagePreviewUrl', '');
     // 对齐上游 LeaveImmersiveModeCleanup：页面销毁时确保状态栏恢复。
     setStatusBarHidden(false);
   }
@@ -291,6 +296,11 @@ struct ContentDetailPage {
     AppStorage.setOrCreate('detailImmersiveActive', this.immersiveReading);
     // 真全屏：沉浸中隐藏状态栏（对齐上游 WindowInsetsController.hide(statusBars)）。
     setStatusBarHidden(this.immersiveReading);
+  }
+
+  /** 全屏图片查看器打开时同步隐藏状态栏（对齐沉浸阅读的真全屏处理），关闭时恢复。 */
+  private onImagePreviewChanged(): void {
+    setStatusBarHidden(this.immersiveReading || this.imagePreviewUrl.length > 0);
   }
 
   private onImmersiveExitSignal(): void {
@@ -460,6 +470,22 @@ struct ContentDetailPage {
             this.showComments = false;
           }
         })
+      }
+
+      // 全屏图片查看器叠层：置于根 Stack 最后一个子节点，盖住正文/底部操作栏；
+      // 标题栏由 P1Shell 监听同一 AppStorage 键隐藏（hideTitleBar）。
+      if (this.imagePreviewUrl.length > 0) {
+        Stack({ alignContent: Alignment.Center }) {
+          ContentImagePreview({
+            url: this.imagePreviewUrl,
+            onClose: (): void => {
+              AppStorage.setOrCreate('p2ImagePreviewUrl', '');
+            }
+          })
+        }
+        .id('p2_image_preview_overlay')
+        .width('100%')
+        .height('100%')
       }
     }
     .width('100%')

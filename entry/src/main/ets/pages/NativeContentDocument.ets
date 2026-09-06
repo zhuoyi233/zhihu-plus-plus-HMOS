@@ -1,7 +1,7 @@
 import { image } from '@kit.ImageKit';
 import { http } from '@kit.NetworkKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
-import { abilityAccessCtrl } from '@kit.AbilityKit';
+import { abilityAccessCtrl, Want } from '@kit.AbilityKit';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import {
   createSystemShareService
@@ -29,8 +29,18 @@ function inlineFormulaWidth(tex: string): number {
   return Math.min(220, Math.max(20, tex.length * 9));
 }
 
+/** 对齐上游 telephoto 默认 ZoomSpec(maxZoomFactor = 2f)。 */
+const IMAGE_PREVIEW_MAX_SCALE = 2;
+
 function clampPreviewScale(value: number): number {
-  return Math.min(4, Math.max(1, value));
+  return Math.min(IMAGE_PREVIEW_MAX_SCALE, Math.max(1, value));
+}
+
+function clampValue(value: number, limit: number): number {
+  if (limit <= 0) {
+    return 0;
+  }
+  return Math.min(limit, Math.max(-limit, value));
 }
 
 function isTrustedPreviewImageUrl(value: string): boolean {
@@ -50,21 +60,35 @@ function previewImageExtension(value: string): string {
 
 @Component
 export struct ContentImagePreview {
-  url: string = '';
+  @Prop url: string = '';
   onClose: () => void = () => {};
   @State private previewScale: number = 1;
+  @State private previewOffsetX: number = 0;
+  @State private previewOffsetY: number = 0;
   @State private actionStatus: string = '';
   private saveInFlight: boolean = false;
   private pinchStartScale: number = 1;
+  /** 源图宽高比与容器尺寸：用于计算放大后允许的平移范围。 */
+  private imageRatio: number = 0;
+  private containerWidth: number = 0;
+  private containerHeight: number = 0;
+  private panStartX: number = 0;
+  private panStartY: number = 0;
 
   build() {
-    Stack({ alignContent: Alignment.TopEnd }) {
+    Stack({ alignContent: Alignment.Center }) {
       Image(this.url)
         .id('p2_content_image_preview')
         .width('100%')
         .height('100%')
         .objectFit(ImageFit.Contain)
+        .onComplete((event) => {
+          if (event !== undefined && event.width > 0 && event.height > 0) {
+            this.imageRatio = event.width / event.height;
+          }
+        })
         .scale({ x: this.previewScale, y: this.previewScale, z: 1 })
+        .translate({ x: this.previewOffsetX, y: this.previewOffsetY })
         .gesture(
           PinchGesture({ fingers: 2 })
             .onActionStart((): void => {
@@ -72,53 +96,121 @@ export struct ContentImagePreview {
             })
             .onActionUpdate((event: GestureEvent): void => {
               this.previewScale = clampPreviewScale(this.pinchStartScale * event.scale);
+              this.clampPreviewOffset();
             })
         )
-        .parallelGesture(
-          TapGesture({ count: 2 })
-            .onAction((): void => {
-              this.previewScale = 1;
-              this.actionStatus = '已恢复原始大小';
+        .gesture(
+          PanGesture({ fingers: 1 })
+            .onActionStart((): void => {
+              this.panStartX = this.previewOffsetX;
+              this.panStartY = this.previewOffsetY;
+            })
+            .onActionUpdate((event: GestureEvent): void => {
+              const maxX = this.maxPreviewOffsetX();
+              const maxY = this.maxPreviewOffsetY();
+              this.previewOffsetX = clampValue(this.panStartX + event.offsetX, maxX);
+              this.previewOffsetY = clampValue(this.panStartY + event.offsetY, maxY);
             })
         )
-        .parallelGesture(
-          LongPressGesture({ duration: 600 })
-            .onAction((): void => {
-              this.saveImage();
-            })
+        .gesture(
+          GestureGroup(GestureMode.Exclusive,
+            TapGesture({ count: 2 })
+              .onAction((): void => {
+                // 对齐上游 telephoto 双击：在适配屏幕与最大倍数间切换，缩放回 1 时复位平移。
+                this.previewScale = this.previewScale > 1 ? 1 : IMAGE_PREVIEW_MAX_SCALE;
+                this.clampPreviewOffset();
+              }),
+            TapGesture({ count: 1 })
+              .onAction((): void => {
+                this.onClose();
+              })
+          )
         )
+        // 对齐上游 OpenImageDialog：长按在按压点弹出操作菜单（无顶栏按钮）。
+        .bindContextMenu(this.imageContextMenu, ResponseType.LongPress)
 
-      Column({ space: $r('app.float.p1_spacing_small') }) {
-        Row({ space: $r('app.float.p1_spacing_small') }) {
-          Button('保存')
-            .id('p2_content_image_preview_save')
-            .onClick((): void => {
-              this.saveImage();
-            })
-          Button('分享')
-            .id('p2_content_image_preview_share')
-            .onClick((): void => {
-              this.shareImage();
-            })
-          Button('关闭')
-            .id('p2_content_image_preview_close')
-            .onClick((): void => {
-              this.onClose();
-            })
-        }
-        if (this.actionStatus.length > 0) {
+      if (this.actionStatus.length > 0) {
+        Column() {
+          Blank()
           Text(this.actionStatus)
             .id('p2_content_image_preview_status')
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor(Color.White)
+            .margin({ bottom: 64 })
         }
+        .width('100%')
+        .height('100%')
+        .hitTestBehavior(HitTestMode.None)
       }
-      .margin($r('app.float.p1_page_padding'))
-      .alignItems(HorizontalAlign.End)
     }
     .width('100%')
     .height('100%')
     .backgroundColor('#EE000000')
+    .onAreaChange((_oldArea: Area, newArea: Area): void => {
+      this.containerWidth = Number(newArea.width);
+      this.containerHeight = Number(newArea.height);
+    })
+  }
+
+  /** 放大后单指平移的最大位移：超出适配尺寸的部分才允许拖动（对齐 telephoto 平移边界）。 */
+  private maxPreviewOffsetX(): number {
+    if (this.containerWidth <= 0 || this.containerHeight <= 0 || this.imageRatio <= 0) {
+      return 0;
+    }
+    const ratio = this.containerWidth / this.containerHeight;
+    const baseWidth = this.imageRatio > ratio ? this.containerWidth : this.containerHeight * this.imageRatio;
+    return Math.max(0, (baseWidth * this.previewScale - this.containerWidth) / 2);
+  }
+
+  private maxPreviewOffsetY(): number {
+    if (this.containerWidth <= 0 || this.containerHeight <= 0 || this.imageRatio <= 0) {
+      return 0;
+    }
+    const ratio = this.containerWidth / this.containerHeight;
+    const baseHeight = this.imageRatio > ratio ? this.containerWidth / this.imageRatio : this.containerHeight;
+    return Math.max(0, (baseHeight * this.previewScale - this.containerHeight) / 2);
+  }
+
+  private clampPreviewOffset(): void {
+    this.previewOffsetX = clampValue(this.previewOffsetX, this.maxPreviewOffsetX());
+    this.previewOffsetY = clampValue(this.previewOffsetY, this.maxPreviewOffsetY());
+  }
+
+  @Builder
+  private imageContextMenu() {
+    Menu() {
+      MenuItem({ content: '保存图片' })
+        .id('p2_content_image_preview_menu_save')
+        .onClick((): void => {
+          this.saveImage();
+        })
+      MenuItem({ content: '分享图片' })
+        .id('p2_content_image_preview_menu_share')
+        .onClick((): void => {
+          this.shareImage();
+        })
+      MenuItem({ content: '在浏览器中打开' })
+        .id('p2_content_image_preview_menu_browser')
+        .onClick((): void => {
+          this.openInBrowser();
+        })
+    }
+  }
+
+  private async openInBrowser(): Promise<void> {
+    const context = getAbilityContext();
+    if (context === undefined || !isTrustedPreviewImageUrl(this.url)) {
+      return;
+    }
+    const want: Want = {
+      action: 'ohos.want.action.viewData',
+      uri: this.url
+    };
+    try {
+      await context.startAbility(want);
+    } catch (_error) {
+      this.getUIContext().getPromptAction().showToast({ message: '暂时无法在浏览器中打开' });
+    }
   }
 
   private async saveImage(): Promise<void> {
@@ -424,7 +516,6 @@ export struct NativeContentDocument {
    * 首帧测量偏小若被存死，内容长高后视口将永久被压小（正文整块消失）。 */
   @State private naturalHeightVp: number = 0;
   private blocks: ReaderBlock[] = [];
-  @State private previewUrl: string = '';
   @State private empty: boolean = true;
   /** 正文是否贴在列表底边：onReachEnd 置位；出现任何实际滚动（回滚/内容增高后续滚）即复位。 */
   private atBottomEdge: boolean = false;
@@ -601,16 +692,6 @@ export struct NativeContentDocument {
           }
         })
 
-      if (this.previewUrl.length > 0) {
-        ContentImagePreview({
-          url: this.previewUrl,
-          onClose: (): void => {
-            this.previewUrl = '';
-          }
-        })
-        .width('100%')
-        .height('100%')
-      }
     }
     .width('100%')
     .height('100%')
@@ -654,7 +735,9 @@ export struct NativeContentDocument {
         item: item,
         secondaryTextColor: $r('app.color.secondary_text'),
         onPreview: (url: string): void => {
-          this.previewUrl = url;
+          // 全屏查看器由详情页根 Stack 叠层渲染（AppStorage 广播）：正文组件处于列表
+          // 惰性树内，本地渲染全屏层会受标题栏约束，且模态覆盖层树不响应状态更新。
+          AppStorage.setOrCreate('p2ImagePreviewUrl', url);
         }
       })
     } else if (item.inlineRuns.length > 0) {

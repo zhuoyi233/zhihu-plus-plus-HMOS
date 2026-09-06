@@ -11,7 +11,6 @@ import {
   CommentPhase,
   CommentViewState
 } from './CommentState';
-import { ContentImagePreview } from './NativeContentDocument';
 import { CommentLikeButton } from './CommentLikeButton';
 import { CommentLikeState, CommentLikeStateStore } from './CommentLikeState';
 /**
@@ -50,7 +49,6 @@ export struct CommentLayer {
   @State private deleting: boolean = false;
   @State private actionMessage: string = '';
   @State private actionRequiresLogin: boolean = false;
-  @State private previewImageUrl: string = '';
   @State private likeStates: Record<string, CommentLikeState> = {};
   private controller?: CommentController;
   private readonly likeStateStore: CommentLikeStateStore = new CommentLikeStateStore();
@@ -106,17 +104,6 @@ export struct CommentLayer {
           }
         }
       })
-      .bindContentCover(this.previewImageUrl.length > 0, this.imagePreview(), {
-        onDisappear: (): void => { this.previewImageUrl = ''; }
-      })
-  }
-
-  @Builder
-  private imagePreview() {
-    ContentImagePreview({
-      url: this.previewImageUrl,
-      onClose: (): void => { this.previewImageUrl = ''; }
-    })
   }
 
   @Builder
@@ -395,7 +382,9 @@ export struct CommentLayer {
             .borderRadius(12)
             .margin({ top: 4 })
             .accessibilityText('查看评论图片')
-            .onClick((): void => { this.previewImageUrl = commentImageUrl(comment.contentHtml); })
+            .onClick((): void => {
+              AppStorage.setOrCreate('p2ImagePreviewUrl', commentImageUrl(comment.contentHtml));
+            })
         }
         this.commentFooter(comment, showDelete)
       }

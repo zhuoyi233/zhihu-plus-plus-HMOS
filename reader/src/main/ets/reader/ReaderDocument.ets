@@ -81,9 +81,15 @@ function contentOf(blockHtml: string): string {
   return start >= 0 && end > start ? blockHtml.slice(start + 1, end) : '';
 }
 
+/** 对齐上游 ZhihuUtils.extractImageUrl：v2- 原图 token 优先，缩略图字段只作兜底。 */
 function preferredImageSource(tag: string): string {
-  const candidate = decodeHtml(attributeValue(tag, 'data-actualsrc') ||
-    attributeValue(tag, 'data-original') || attributeValue(tag, 'src')).trim();
+  const token = decodeHtml(attributeValue(tag, 'data-original-token')).trim();
+  if (token.startsWith('v2-')) {
+    return `https://pic1.zhimg.com/${token}`;
+  }
+  const candidate = decodeHtml(attributeValue(tag, 'data-original') ||
+    attributeValue(tag, 'data-default-watermark-src') || attributeValue(tag, 'data-actualsrc') ||
+    attributeValue(tag, 'data-thumbnail') || attributeValue(tag, 'src')).trim();
   if (candidate.startsWith('//')) {
     return `https:${candidate}`;
   }

@@ -120,6 +120,8 @@ export struct P1Shell {
     AnswerDoubleTapAction.ASK;
   /** 回答/文章详情页沉浸式阅读中（页面广播）：隐藏 NavDestination 顶栏（对齐上游 topBar={}）。 */
   @StorageProp('detailImmersiveActive') private detailImmersiveActive: boolean = false;
+  /** 全屏图片查看器打开中（详情页广播）：同样隐藏顶栏，使查看器真全屏。 */
+  @StorageProp('p2ImagePreviewUrl') private imagePreviewUrl: string = '';
   @State private installedVersionLabel: string = '正在读取已安装版本…';
   @State private aboutVersionSheetShown: boolean = false;
   /** GitHub 最新 Release 检出有新版本时非空：驱动“我的”页横幅与版本弹层下载入口。 */
@@ -395,6 +397,15 @@ export struct P1Shell {
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.questionTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
+      // 问题页正文图片同样可打开全屏查看器：隐藏顶栏，返回键优先关查看器。
+      .hideTitleBar(this.detailImmersiveActive || this.imagePreviewUrl.length > 0)
+      .onBackPressed((): boolean => {
+        if (this.imagePreviewUrl.length > 0) {
+          AppStorage.setOrCreate('p2ImagePreviewUrl', '');
+          return true;
+        }
+        return false;
+      })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.ANSWER) {
@@ -409,9 +420,13 @@ export struct P1Shell {
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.answerTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
-      // 沉浸式隐藏顶栏（对齐上游）；返回键优先退沉浸式（对齐上游 PlatformBackHandler）。
-      .hideTitleBar(this.detailImmersiveActive)
+      // 沉浸式/图片查看器中隐藏顶栏（对齐上游 topBar={}）；返回键优先关查看器、再退沉浸式。
+      .hideTitleBar(this.detailImmersiveActive || this.imagePreviewUrl.length > 0)
       .onBackPressed((): boolean => {
+        if (this.imagePreviewUrl.length > 0) {
+          AppStorage.setOrCreate('p2ImagePreviewUrl', '');
+          return true;
+        }
         if (this.detailImmersiveActive) {
           AppStorage.setOrCreate('detailImmersiveExitTick',
             (AppStorage.get<number>('detailImmersiveExitTick') ?? 0) + 1);
@@ -433,9 +448,13 @@ export struct P1Shell {
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.articleTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
-      // 与回答页一致：沉浸式隐藏顶栏，返回键优先退沉浸式。
-      .hideTitleBar(this.detailImmersiveActive)
+      // 与回答页一致：沉浸式/图片查看器中隐藏顶栏，返回键优先关查看器。
+      .hideTitleBar(this.detailImmersiveActive || this.imagePreviewUrl.length > 0)
       .onBackPressed((): boolean => {
+        if (this.imagePreviewUrl.length > 0) {
+          AppStorage.setOrCreate('p2ImagePreviewUrl', '');
+          return true;
+        }
         if (this.detailImmersiveActive) {
           AppStorage.setOrCreate('detailImmersiveExitTick',
             (AppStorage.get<number>('detailImmersiveExitTick') ?? 0) + 1);
