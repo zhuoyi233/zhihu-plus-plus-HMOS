@@ -29,6 +29,8 @@ const ANSWER_DOUBLE_TAP_ACTION_KEY = 'answerDoubleTapAction';
 // 键与容量对齐上游搜索历史（searchHistoryQueries，最多 20 条）。
 const SEARCH_HISTORY_KEY = 'searchHistoryQueries';
 export const SEARCH_HISTORY_MAX_SIZE = 20;
+// 键与语义对齐上游 UpdateManager.PREF_LAST_UPDATE_CHECK（自动检查更新节流时间戳，毫秒）。
+const LAST_UPDATE_CHECK_KEY = 'lastUpdateCheck';
 
 function notificationDisplayKey(kind: NotificationKind): string {
   if (kind === NotificationKind.LIKE_COMMENT) {
@@ -268,6 +270,42 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
         throw new Error(appPreferencesFailureMessage('Search history save', error));
       }
       throw new Error(appPreferencesFailureMessage('Search history save', undefined));
+    }
+  }
+
+  async loadLastUpdateCheckAt(): Promise<number> {
+    await this.saveQueue;
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      const value = await store.get(LAST_UPDATE_CHECK_KEY, 0);
+      return typeof value === 'number' ? value : 0;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('Last update check load', error));
+      }
+      throw new Error(appPreferencesFailureMessage('Last update check load', undefined));
+    }
+  }
+
+  saveLastUpdateCheckAt(tick: number): Promise<void> {
+    const operation = this.saveQueue.then(
+      (): Promise<void> => this.writeLastUpdateCheckAt(tick),
+      (): Promise<void> => this.writeLastUpdateCheckAt(tick)
+    );
+    this.saveQueue = operation.then((): void => {}, (): void => {});
+    return operation;
+  }
+
+  private async writeLastUpdateCheckAt(tick: number): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      await store.put(LAST_UPDATE_CHECK_KEY, tick);
+      await store.flush();
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('Last update check save', error));
+      }
+      throw new Error(appPreferencesFailureMessage('Last update check save', undefined));
     }
   }
 

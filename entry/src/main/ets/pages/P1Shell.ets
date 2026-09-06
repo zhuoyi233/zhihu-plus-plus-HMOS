@@ -14,7 +14,8 @@ import {
   AppUpdateRelease,
   LoginSessionGateway,
   SessionState,
-  SessionStatus
+  SessionStatus,
+  shouldAutoCheckForUpdate
 } from 'data';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import bundleManager from '@ohos.bundle.bundleManager';
@@ -1752,7 +1753,8 @@ export struct P1Shell {
     }
   }
 
-  /** verbose=true 供“应用与版本”弹层手动检查（展示状态）；false 供启动静默检查（仅检出新版本时提示）。 */
+  /** verbose=true 供“应用与版本”弹层手动检查（展示状态、不受节流限制）；false 供启动静默检查
+    * （3 小时节流，对齐上游 shouldPerformAutoCheck）。检出新版本时经 AppStorage 广播驱动首页更新卡片。 */
   private async runUpdateCheck(verbose: boolean): Promise<void> {
     if (this.updateCheckBusy) {
       return;
@@ -1763,6 +1765,10 @@ export struct P1Shell {
       }
       return;
     }
+    if (!verbose && !(await this.shouldAutoCheckUpdateNow())) {
+      return;
+    }
+    await this.markUpdateCheckedNow();
     this.updateCheckBusy = true;
     if (verbose) {
       this.updateCheckMessage = '正在检查更新…';
@@ -1772,20 +1778,60 @@ export struct P1Shell {
         await this.updateClient.checkLatestRelease(this.installedVersionName);
       if (result.status === AppUpdateCheckStatus.UPDATE_AVAILABLE && result.release !== undefined) {
         this.pendingUpdateRelease = result.release;
+        this.broadcastHomeUpdateAnnouncement(result.release.versionName, this.releaseDownloadUrl(result.release));
         if (verbose) {
           this.updateCheckMessage = `发现新版本 ${result.release.versionName}，可前往下载`;
         }
       } else if (result.status === AppUpdateCheckStatus.UP_TO_DATE) {
         this.pendingUpdateRelease = undefined;
+        this.broadcastHomeUpdateAnnouncement('', '');
         if (verbose) {
           this.updateCheckMessage = '当前已是最新版本';
         }
       } else if (verbose) {
         this.updateCheckMessage = result.message.length > 0 ? result.message : '检查更新失败，请稍后重试';
       }
+      hilog.info(0x0000, 'AppUpdate', 'check status=%{public}s remoteVersion=%{public}s',
+        result.status, result.release !== undefined ? result.release.versionName : '');
     } finally {
       this.updateCheckBusy = false;
     }
+  }
+
+  private async shouldAutoCheckUpdateNow(): Promise<boolean> {
+    const context = getAbilityContext();
+    if (context === undefined) {
+      return true;
+    }
+    try {
+      const lastUpdateCheckAt = await new AppPreferencesStore(context).loadLastUpdateCheckAt();
+      return shouldAutoCheckForUpdate(lastUpdateCheckAt, Date.now());
+    } catch (_error) {
+      // 节流时间戳读取失败按未节流处理，宁可多检查一次。
+      return true;
+    }
+  }
+
+  private async markUpdateCheckedNow(): Promise<void> {
+    const context = getAbilityContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      await new AppPreferencesStore(context).saveLastUpdateCheckAt(Date.now());
+    } catch (_error) {
+      // 节流时间戳保存失败仅影响下次自动检查频率，不打扰用户。
+    }
+  }
+
+  /** 首页更新卡片经 AppStorage 广播（HdsTabs 树下跨页面信号唯一可靠通道）。 */
+  private broadcastHomeUpdateAnnouncement(version: string, url: string): void {
+    AppStorage.setOrCreate('homeUpdateAnnouncementVersion', version);
+    AppStorage.setOrCreate('homeUpdateAnnouncementUrl', url);
+  }
+
+  private releaseDownloadUrl(release: AppUpdateRelease): string {
+    return release.htmlUrl.length > 0 ? release.htmlUrl : PROJECT_HOME_URI + '/releases/latest';
   }
 
   private pendingUpdateTitle(): string {
