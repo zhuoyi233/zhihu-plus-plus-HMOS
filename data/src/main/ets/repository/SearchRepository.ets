@@ -1,6 +1,7 @@
-import { SearchResultPage } from '../domain/SearchModels';
+import { SearchFilters, SearchHotItem, SearchTab, SearchResultPage } from '../domain/SearchModels';
 
 export interface SearchRepository {
-  search(query: string, cursor?: string): Promise<SearchResultPage>;
+  search(query: string, filters?: SearchFilters, tab?: SearchTab, cursor?: string): Promise<SearchResultPage>;
+  hotSearch(): Promise<Array<SearchHotItem>>;
   cancel(): void;
 }

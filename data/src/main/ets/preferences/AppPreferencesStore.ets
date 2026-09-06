@@ -13,6 +13,7 @@ import {
   NotificationSettingsGateway,
   normalizeNotificationPreferences
 } from '../domain/NotificationModels';
+import { JsonArrayValue, JsonStringValue, parseStrictJson } from 'core';
 
 const PREFERENCES_NAME = 'app_preferences';
 const THEME_MODE_KEY = 'theme_mode';
@@ -25,6 +26,9 @@ const NOTIFICATION_AUTO_MARK_READ_KEY = 'notification_auto_mark_as_read';
 const NOTIFICATION_UNREAD_BADGE_KEY = 'notification_unread_badge';
 // 键与存储值对齐上游 answerDoubleTapAction 偏好（"none"/"ask"/"voteUp"/"openComments"/"toggleImmersive"）。
 const ANSWER_DOUBLE_TAP_ACTION_KEY = 'answerDoubleTapAction';
+// 键与容量对齐上游搜索历史（searchHistoryQueries，最多 20 条）。
+const SEARCH_HISTORY_KEY = 'searchHistoryQueries';
+export const SEARCH_HISTORY_MAX_SIZE = 20;
 
 function notificationDisplayKey(kind: NotificationKind): string {
   if (kind === NotificationKind.LIKE_COMMENT) {
@@ -134,8 +138,41 @@ export function appPreferencesFailureMessage(operation: string, error: Object | 
   return `${operation} failed`;
 }
 
-export class AppPreferencesStore implements BlockingPreferencesGateway, NotificationSettingsGateway {
-  private readonly context: common.Context;
+/** 解析历史 JSON（字符串数组）；损坏内容静默丢弃，最多保留 SEARCH_HISTORY_MAX_SIZE 条。 */
+function decodeSearchHistory(value: string): Array<string> {
+  let parsed: Object;
+  try {
+    parsed = parseStrictJson(value);
+  } catch (_error) {
+    return [];
+  }
+  if (!(parsed instanceof JsonArrayValue)) {
+    return [];
+  }
+  const items: Array<string> = [];
+  parsed.items.forEach((item: Object): void => {
+    if (item instanceof JsonStringValue) {
+      const text = item.value.trim();
+      if (text.length > 0 && !items.includes(text)) {
+        items.push(text);
+      }
+    }
+  });
+  return items.slice(0, SEARCH_HISTORY_MAX_SIZE);
+}
+
+function normalizeSearchHistory(history: Array<string>): Array<string> {
+  const items: Array<string> = [];
+  history.forEach((item: string): void => {
+    const text = item.trim();
+    if (text.length > 0 && text.length <= 200 && !items.includes(text)) {
+      items.push(text);
+    }
+  });
+  return items.slice(0, SEARCH_HISTORY_MAX_SIZE);
+}
+
+export class AppPreferencesStore implements BlockingPreferencesGateway, NotificationSettingsGateway {  private readonly context: common.Context;
   private saveQueue: Promise<void> = Promise.resolve();
 
   constructor(context: common.Context) {
@@ -190,6 +227,48 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
     );
     this.saveQueue = operation.then((): void => {}, (): void => {});
     return operation;
+  }
+
+  async loadSearchHistory(): Promise<Array<string>> {
+    await this.saveQueue;
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      const value = await store.get(SEARCH_HISTORY_KEY, '[]');
+      if (typeof value !== 'string') {
+        return [];
+      }
+      return decodeSearchHistory(value);
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('Search history load', error));
+      }
+      throw new Error(appPreferencesFailureMessage('Search history load', undefined));
+    }
+  }
+
+  saveSearchHistory(history: Array<string>): Promise<void> {
+    const normalized = normalizeSearchHistory(history);
+    const operation = this.saveQueue.then(
+      (): Promise<void> => this.writeSearchHistory(normalized),
+      (): Promise<void> => this.writeSearchHistory(normalized)
+    );
+    this.saveQueue = operation.then((): void => {
+    }, (): void => {
+    });
+    return operation;
+  }
+
+  private async writeSearchHistory(history: Array<string>): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      await store.put(SEARCH_HISTORY_KEY, JSON.stringify(history));
+      await store.flush();
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('Search history save', error));
+      }
+      throw new Error(appPreferencesFailureMessage('Search history save', undefined));
+    }
   }
 
   async loadBlockingPreferences(): Promise<BlockingPreferences> {

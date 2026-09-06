@@ -327,6 +327,7 @@ struct Index {
     SearchPage({
       initialQuery: query,
       repository: this.searchRepository,
+      preferences: this.preferencesStore,
       navigate: navigate,
       onBack: onBack
     });

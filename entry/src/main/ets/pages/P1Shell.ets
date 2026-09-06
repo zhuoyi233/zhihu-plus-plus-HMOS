@@ -1,4 +1,5 @@
 import { QuestionTitleBar } from './QuestionTitleBar';
+import { SearchTitleBar } from './SearchTitleBar';
 import { AnswerTitleBar } from './AnswerTitleBar';
 import { ArticleTitleBar } from './ArticleTitleBar';
 import {
@@ -346,7 +347,16 @@ export struct P1Shell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '搜索' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({
+        style: getImmersiveTitleBarStyle(),
+        avoidLayoutSafeArea: true,
+        // 返回键用 HDS 标题栏自带 backIcon（自定义 action 接管），避免与 stackBuilder 内自绘返回键重叠。
+        content: {
+          stackBuilder: (): void => this.searchTitleBar(),
+          backIcon: { action: (): void => { this.pathStack.pop(); } },
+          divider: { showType: DividerShowType.OFF }
+        }
+      })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.FOLLOWING) {
@@ -797,6 +807,12 @@ export struct P1Shell {
   @Builder
   private questionTitleBar(id: string) {
     QuestionTitleBar({ questionId: id, onBack: (): void => { this.pathStack.pop(); } })
+  }
+
+  /** 搜索页 HDS 标题栏内容：返回键 + 搜索框 + 排序方式菜单（对齐上游搜索顶栏）。 */
+  @Builder
+  private searchTitleBar() {
+    SearchTitleBar()
   }
 
   /** 回答页标题栏：滚动折叠时在返回键右侧显示问题单行 + 答主摘要（对齐上游折叠顶栏）。 */

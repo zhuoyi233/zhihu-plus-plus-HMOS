@@ -1,5 +1,13 @@
 import { FeedTargetKind, PageCursor } from './DomainModels';
-import { SearchResultItem, SearchResultPage } from './SearchModels';
+import {
+  SearchEntity,
+  SearchHotItem,
+  searchEntityOfContent,
+  searchEntityOfPerson,
+  searchEntityOfTopic,
+  SearchResultItem,
+  SearchResultPage
+} from './SearchModels';
 import {
   JsonArrayValue,
   jsonIntegerLiteral,
@@ -32,6 +40,12 @@ export class SearchDecodeError extends Error {
   }
 }
 
+interface IndexedEntry {
+  readonly order: number;
+  readonly index: number;
+  readonly value: JsonObjectValue;
+}
+
 export function decodeSearchResultPage(json: string): SearchResultPage {
   const envelope = root(json);
   const errorValue = envelope.get('error');
@@ -50,12 +64,21 @@ export function decodeSearchResultPage(json: string): SearchResultPage {
     !(pagingValue instanceof JsonObjectValue)) {
     throw malformed('search.paging 结构无效');
   }
-  const items: Array<SearchResultItem> = [];
-  data.items.forEach((value: JsonValue): void => {
+  // 对齐上游：search_result 包裹层带 index 字段时按其重排序（服务端顺序信号），缺失时保持响应顺序。
+  const entries: Array<IndexedEntry> = [];
+  data.items.forEach((value: JsonValue, order: number): void => {
     const candidate = jsonObject(value);
     if (candidate === undefined) {
       throw malformed('search.item 结构无效');
     }
+    entries.push({ order: order, index: wrapperIndex(candidate), value: candidate });
+  });
+  entries.sort((left: IndexedEntry, right: IndexedEntry): number => {
+    return left.index !== right.index ? left.index - right.index : left.order - right.order;
+  });
+  const entities: Array<SearchEntity> = [];
+  entries.forEach((entry: IndexedEntry): void => {
+    const candidate = entry.value;
     const wrapperType = requiredText(candidate.get('type'), 'search.item.type');
     if (wrapperType !== 'search_result') {
       return;
@@ -64,28 +87,110 @@ export function decodeSearchResultPage(json: string): SearchResultPage {
     if (object === undefined) {
       throw malformed('search.item.object 结构无效');
     }
-    const kind = searchKind(requiredText(object.get('type'), 'search.item.object.type'));
-    if (kind === undefined) {
-      return;
+    const objectType = requiredText(object.get('type'), 'search.item.object.type');
+    let entity: SearchEntity | undefined;
+    if (objectType === 'people') {
+      entity = decodePerson(object);
+    } else if (objectType === 'topic') {
+      entity = decodeTopic(object);
+    } else {
+      const item = decodeContent(object, candidate.get('id'), objectType);
+      entity = item === undefined ? undefined : searchEntityOfContent(item);
     }
-    const contentId = requiredId(object.get('id'), 'search.item.object.id');
-    const author = optionalObject(object.get('author'), 'search.item.object.author');
-    items.push({
-      wrapperId: searchWrapperId(candidate.get('id'), contentId),
-      kind: kind,
-      contentId: contentId,
-      title: searchTitle(object, kind),
-      excerpt: textOrEmpty(object.get('excerpt'), 'search.item.object.excerpt'),
-      authorId: authorId(author),
-      authorName: author === undefined ? undefined : optionalText(author.get('name'),
-        'search.item.object.author.name'),
-      topicIds: searchTopicIds(object),
-      voteupCount: numberOrDefault(object.get('voteup_count'), 0, 'search.item.object.voteup_count'),
-      commentCount: numberOrDefault(object.get('comment_count'), 0, 'search.item.object.comment_count')
-    });
+    if (entity !== undefined) {
+      entities.push(entity);
+    }
   });
   const paging = pagingValue instanceof JsonObjectValue ? pagingValue : undefined;
-  return { items: items, cursor: searchCursor(paging) };
+  return { entities: entities, cursor: searchCursor(paging) };
+}
+
+/** 热搜接口：`hot_search_queries` 缺失或为空时返回空数组（对齐上游失败静默降级）。 */
+export function decodeSearchHotList(json: string): Array<SearchHotItem> {
+  const envelope = root(json);
+  const queries = envelope.get('hot_search_queries');
+  if (queries === undefined || queries instanceof JsonNullValue) {
+    return [];
+  }
+  if (!(queries instanceof JsonArrayValue)) {
+    throw malformed('search.hot_search_queries 结构无效');
+  }
+  const items: Array<SearchHotItem> = [];
+  queries.items.forEach((value: JsonValue): void => {
+    const object = jsonObject(value);
+    if (object === undefined) {
+      throw malformed('search.hot_search_queries.item 结构无效');
+    }
+    const query = requiredText(object.get('query'), 'search.hot_search_queries.item.query');
+    items.push({
+      query: query,
+      hotShow: textOrEmpty(object.get('hot_show'), 'search.hot_search_queries.item.hot_show'),
+      label: textOrEmpty(object.get('label'), 'search.hot_search_queries.item.label')
+    });
+  });
+  return items;
+}
+
+/** 包裹层 index 排序键：服务端返回数字或数字字符串（对齐上游 toIntOrNull 容忍），无效时保持响应顺序。 */
+function wrapperIndex(candidate: JsonObjectValue): number {
+  const value = candidate.get('index');
+  const integerLiteral = jsonIntegerLiteral(value);
+  if (integerLiteral !== undefined && integerLiteral.length <= 7) {
+    return parseInt(integerLiteral, 10);
+  }
+  if (value instanceof JsonStringValue && /^[0-9]{1,7}$/.test(value.value.trim())) {
+    return parseInt(value.value.trim(), 10);
+  }
+  return -1;
+}
+
+function decodePerson(object: JsonObjectValue): SearchEntity {
+  const id = requiredId(object.get('id'), 'search.item.object.id');
+  return searchEntityOfPerson({
+    id: id,
+    name: requiredText(object.get('name'), 'search.item.object.name'),
+    urlToken: optionalText(object.get('url_token'), 'search.item.object.url_token'),
+    avatarUrl: optionalText(object.get('avatar_url'), 'search.item.object.avatar_url'),
+    headline: textOrEmpty(object.get('headline'), 'search.item.object.headline'),
+    followerCount: numberOrDefault(object.get('follower_count'), 0, 'search.item.object.follower_count'),
+    answerCount: numberOrDefault(object.get('answer_count'), 0, 'search.item.object.answer_count')
+  });
+}
+
+function decodeTopic(object: JsonObjectValue): SearchEntity {
+  const id = requiredId(object.get('id'), 'search.item.object.id');
+  return searchEntityOfTopic({
+    id: id,
+    name: requiredText(object.get('name'), 'search.item.object.name'),
+    avatarUrl: optionalText(object.get('avatar_url'), 'search.item.object.avatar_url'),
+    excerpt: textOrEmpty(object.get('excerpt'), 'search.item.object.excerpt'),
+    visitCount: numberOrDefault(object.get('visit_count'), 0, 'search.item.object.visit_count'),
+    discussCount: numberOrDefault(object.get('top_answer_count'), 0, 'search.item.object.top_answer_count'),
+    isFollowing: booleanOrDefault(object.get('is_following'), false, 'search.item.object.is_following')
+  });
+}
+
+function decodeContent(object: JsonObjectValue, wrapperIdValue: JsonValue | undefined,
+  objectType: string): SearchResultItem | undefined {
+  const kind = searchKind(objectType);
+  if (kind === undefined) {
+    return undefined;
+  }
+  const contentId = requiredId(object.get('id'), 'search.item.object.id');
+  const author = optionalObject(object.get('author'), 'search.item.object.author');
+  return {
+    wrapperId: searchWrapperId(wrapperIdValue, contentId),
+    kind: kind,
+    contentId: contentId,
+    title: searchTitle(object, kind),
+    excerpt: textOrEmpty(object.get('excerpt'), 'search.item.object.excerpt'),
+    authorId: authorId(author),
+    authorName: author === undefined ? undefined : optionalText(author.get('name'),
+      'search.item.object.author.name'),
+    topicIds: searchTopicIds(object),
+    voteupCount: numberOrDefault(object.get('voteup_count'), 0, 'search.item.object.voteup_count'),
+    commentCount: numberOrDefault(object.get('comment_count'), 0, 'search.item.object.comment_count')
+  };
 }
 
 function root(json: string): JsonObjectValue {

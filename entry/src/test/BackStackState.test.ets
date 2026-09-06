@@ -19,9 +19,14 @@ import {
   FeedRepository,
   FeedTargetKind,
   LoginSessionGateway,
+  SearchEntity,
+  SearchFilters,
+  SearchHotItem,
   SearchRepository,
   SearchResultItem,
   SearchResultPage,
+  SearchTab,
+  searchEntityOfContent,
   SessionCookie,
   SessionLoginOperation,
   SessionState,
@@ -113,9 +118,13 @@ class CountingSearchRepository implements SearchRepository {
     this.page = page;
   }
 
-  search(_query: string, _cursor?: string): Promise<SearchResultPage> {
+  search(_query: string, _filters?: SearchFilters, _tab?: SearchTab, _cursor?: string): Promise<SearchResultPage> {
     this.searchCount += 1;
     return Promise.resolve(this.page);
+  }
+
+  hotSearch(): Promise<Array<SearchHotItem>> {
+    return Promise.resolve([]);
   }
 
   cancel(): void {
@@ -245,7 +254,7 @@ function searchResult(contentId: string, kind: FeedTargetKind = FeedTargetKind.A
 
 function searchPage(items: Array<SearchResultItem>, next?: string, isEnd: boolean = false): SearchResultPage {
   return {
-    items: items,
+    entities: items.map((item: SearchResultItem): SearchEntity => searchEntityOfContent(item)),
     cursor: {
       isEnd: isEnd,
       isStart: true,
@@ -417,13 +426,13 @@ export default function backStackStateTest(): void {
       controller.activate();
       await controller.submit('arkts');
       expect(controller.snapshot().phase).assertEqual(SearchPhase.READY);
-      expect(controller.snapshot().items.length).assertEqual(1);
+      expect(controller.snapshot().entities.length).assertEqual(1);
 
       controller.deactivate();
       controller.activate();
 
       expect(controller.snapshot().phase).assertEqual(SearchPhase.READY);
-      expect(controller.snapshot().items.length).assertEqual(1);
+      expect(controller.snapshot().entities.length).assertEqual(1);
       expect(repository.searchCount).assertEqual(1);
     });
   });

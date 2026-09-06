@@ -1,19 +1,46 @@
-import { P1Destination, P1DestinationName } from 'core';
-import { FeedTargetKind, SearchRepository, SearchResultItem, searchResultIdentity } from 'data';
+import { Want } from '@kit.AbilityKit';
+import { P1Destination, P1DestinationName, isSafePeopleIdentifier } from 'core';
+import {
+  AppPreferencesStore,
+  SEARCH_HISTORY_MAX_SIZE,
+  FeedTargetKind,
+  SearchEntity,
+  SearchEntityKind,
+  SearchHotItem,
+  SearchPersonItem,
+  SearchRepository,
+  isContentSearchTab,
+  SearchSortOption,
+  SearchTab,
+  SearchTimeRange,
+  SearchTopicItem,
+  SearchResultItem
+} from 'data';
+import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { SearchController, SearchPhase, SearchViewState } from './SearchState';
+import {
+  SEARCH_FILTER_ENABLED_KEY,
+  SEARCH_FILTER_TICK_KEY,
+  SEARCH_INPUT_ENTRY_TICK_KEY,
+  SEARCH_INPUT_VALUE_KEY,
+  SEARCH_SORT_OPTION_KEY,
+  SEARCH_SUBMIT_QUERY_KEY,
+  SEARCH_SUBMIT_TICK_KEY,
+  SEARCH_TIME_RANGE_KEY
+} from './SearchTitleBar';
 
 interface EmphasisPart {
   text: string;
   emphasized: boolean;
 }
 
-/** 当前搜索接口稳定返回内容实体，结果页按实体类型在端侧切换。 */
-export enum SearchResultFilter {
-  ALL = 0,
-  QUESTION = 1,
-  ANSWER = 2,
-  ARTICLE = 3
-}
+const SEARCH_TABS: Array<SearchTab> = [
+  SearchTab.GENERAL,
+  SearchTab.PEOPLE,
+  SearchTab.ANSWER,
+  SearchTab.ARTICLE,
+  SearchTab.TOPIC
+];
 
 /** 把搜索接口返回的 `<em>关键词</em>` 拆成高亮片段（无标签时整段普通文本）。 */
 function splitEmphasis(text: string): Array<EmphasisPart> {
@@ -41,31 +68,62 @@ function splitEmphasis(text: string): Array<EmphasisPart> {
   return parts;
 }
 
+function stripEmphasis(text: string): string {
+  return splitEmphasis(text).map((part: EmphasisPart): string => part.text).join('');
+}
+
+export function searchTabLabel(tab: SearchTab): string {
+  if (tab === SearchTab.PEOPLE) {
+    return '用户';
+  }
+  if (tab === SearchTab.ANSWER) {
+    return '回答';
+  }
+  if (tab === SearchTab.ARTICLE) {
+    return '文章';
+  }
+  if (tab === SearchTab.TOPIC) {
+    return '话题';
+  }
+  return '综合';
+}
+
 @Component
 export struct SearchPage {
   initialQuery: string = '';
   repository: SearchRepository | undefined = undefined;
+  preferences: AppPreferencesStore | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
   onBack: () => void = (): void => {
   };
-  @State private input: string = '';
   @State private phase: SearchPhase = SearchPhase.IDLE;
   @State private query: string = '';
-  @State private items: Array<SearchResultItem> = [];
+  @State private entities: Array<SearchEntity> = [];
+  @State private activeTabIndex: number = 0;
   @State private loadingMore: boolean = false;
   @State private canLoadMore: boolean = false;
   @State private requiresLogin: boolean = false;
   @State private errorMessage: string = '';
-  @State private selectedResultFilter: number = SearchResultFilter.ALL;
+  @State private history: Array<string> = [];
+  @State private hotItems: Array<SearchHotItem> = [];
+  // @StorageProp 键用字面量（装饰器要求编译期常量），值与 SearchTitleBar 导出的常量一一对应。
+  @StorageProp('searchSubmitTick') @Watch('onSubmitTick') private submitTick: number = 0;
+  @StorageProp('searchFilterTick') @Watch('onFilterTick') private filterTick: number = 0;
   private controller?: SearchController;
+  private lastSubmitTick: number = -1;
+  private lastFilterTick: number = -1;
 
   aboutToAppear(): void {
-    if (this.controller !== undefined) {
-      this.controller.activate();
-      return;
-    }
-    this.input = this.initialQuery;
+    this.lastSubmitTick = AppStorage.get<number>(SEARCH_SUBMIT_TICK_KEY) ?? 0;
+    this.lastFilterTick = AppStorage.get<number>(SEARCH_FILTER_TICK_KEY) ?? 0;
+    AppStorage.setOrCreate(SEARCH_INPUT_VALUE_KEY, this.initialQuery);
+    // 每次进入递增 entryTick，标题栏据此强制清空输入框（TextInput 内部状态不随外部 text 更新）。
+    AppStorage.setOrCreate(SEARCH_INPUT_ENTRY_TICK_KEY,
+      (AppStorage.get<number>(SEARCH_INPUT_ENTRY_TICK_KEY) ?? 0) + 1);
+    AppStorage.setOrCreate(SEARCH_FILTER_ENABLED_KEY, false);
+    AppStorage.setOrCreate(SEARCH_SORT_OPTION_KEY, SearchSortOption.DEFAULT);
+    AppStorage.setOrCreate(SEARCH_TIME_RANGE_KEY, SearchTimeRange.ALL);
     if (this.repository === undefined) {
       return;
     }
@@ -75,6 +133,9 @@ export struct SearchPage {
     this.controller.activate();
     if (this.initialQuery.trim().length > 0) {
       this.controller.submit(this.initialQuery);
+    } else {
+      void this.loadHistory();
+      void this.loadHotSearch();
     }
   }
 
@@ -82,149 +143,115 @@ export struct SearchPage {
     this.controller?.deactivate();
   }
 
+  private onSubmitTick(): void {
+    const tick = AppStorage.get<number>(SEARCH_SUBMIT_TICK_KEY) ?? 0;
+    if (tick === this.lastSubmitTick) {
+      return;
+    }
+    this.lastSubmitTick = tick;
+    const query = AppStorage.get<string>(SEARCH_SUBMIT_QUERY_KEY) ?? '';
+    this.performSubmit(query);
+  }
+
+  private onFilterTick(): void {
+    const tick = AppStorage.get<number>(SEARCH_FILTER_TICK_KEY) ?? 0;
+    if (tick === this.lastFilterTick) {
+      return;
+    }
+    this.lastFilterTick = tick;
+    const sort = AppStorage.get<string>(SEARCH_SORT_OPTION_KEY) ?? SearchSortOption.DEFAULT;
+    const timeRange = AppStorage.get<string>(SEARCH_TIME_RANGE_KEY) ?? SearchTimeRange.ALL;
+    void this.controller?.updateFilters(sort as SearchSortOption, timeRange as SearchTimeRange);
+  }
+
+  private async loadHistory(): Promise<void> {
+    if (this.preferences === undefined) {
+      return;
+    }
+    try {
+      this.history = await this.preferences.loadSearchHistory();
+    } catch (_error) {
+      // 历史读取失败按空历史展示，不阻塞搜索主流程。
+    }
+  }
+
+  private async loadHotSearch(): Promise<void> {
+    if (this.repository === undefined) {
+      return;
+    }
+    try {
+      this.hotItems = (await this.repository.hotSearch()).slice(0, 15);
+    } catch (_error) {
+      this.hotItems = [];
+    }
+  }
+
+  private recordHistory(query: string): void {
+    if (this.preferences === undefined) {
+      return;
+    }
+    const next: Array<string> = [query].concat(
+      this.history.filter((item: string): boolean => item !== query)).slice(0, SEARCH_HISTORY_MAX_SIZE);
+    this.history = next;
+    this.preferences.saveSearchHistory(next).catch((_error: Object): void => {
+    });
+  }
+
+  private performSubmit(rawQuery: string): void {
+    const query = rawQuery.trim();
+    if (query.length === 0) {
+      this.controller?.submit('');
+      return;
+    }
+    AppStorage.setOrCreate(SEARCH_INPUT_VALUE_KEY, query);
+    this.recordHistory(query);
+    this.activeTabIndex = 0;
+    void this.controller?.submit(query);
+  }
+
+  private clearHistory(): void {
+    this.history = [];
+    this.preferences?.saveSearchHistory([]).catch((_error: Object): void => {
+    });
+  }
+
+  private applyState(state: SearchViewState): void {
+    this.phase = state.phase;
+    this.query = state.query;
+    this.entities = state.entities;
+    this.loadingMore = state.loadingMore;
+    this.canLoadMore = state.canLoadMore;
+    this.requiresLogin = state.requiresLogin;
+    this.errorMessage = state.errorMessage ?? '';
+    const tabIndex = SEARCH_TABS.indexOf(state.activeTab);
+    if (tabIndex >= 0) {
+      this.activeTabIndex = tabIndex;
+    }
+    // 排序菜单只在有结果时可用（含加载更多失败回退的 READY 态）。
+    AppStorage.setOrCreate(SEARCH_FILTER_ENABLED_KEY, state.phase === SearchPhase.READY && isContentSearchTab(state.activeTab));
+    AppStorage.setOrCreate(SEARCH_SORT_OPTION_KEY, state.sort);
+    AppStorage.setOrCreate(SEARCH_TIME_RANGE_KEY, state.timeRange);
+  }
+
   build() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
-        Row({ space: $r('app.float.p1_spacing_xsmall') }) {
-          SymbolGlyph($r('sys.symbol.magnifyingglass'))
-            .fontSize(18)
-            .fontColor([$r('app.color.secondary_text')])
-          TextInput({ text: this.input, placeholder: '搜索知乎内容' })
-            .id('p2_search_input')
-            .layoutWeight(1)
-            .fontSize($r('app.float.p1_body_font_size'))
-            .maxLength(200)
-            .enterKeyType(EnterKeyType.Search)
-            .backgroundColor(Color.Transparent)
-            .onChange((value: string): void => {
-              this.input = value;
-            })
-            .onSubmit((): void => {
-              this.submitInput();
-            })
-
-          if (this.input.length > 0) {
-            Button({ type: ButtonType.Normal, stateEffect: true }) {
-              SymbolGlyph($r('sys.symbol.xmark'))
-                .fontSize(16)
-                .fontColor([$r('app.color.secondary_text')])
-            }
-            .id('p2_search_clear')
-            .width(32)
-            .height(32)
-            .padding(0)
-            .backgroundColor(Color.Transparent)
-            .accessibilityText('清除搜索内容')
-            .onClick((): void => {
-              this.input = '';
-              this.controller?.submit('');
-            })
-          }
-        }
-        .id('p2_search_input_container')
-          .layoutWeight(1)
-        .height(40)
-        .padding({ left: $r('app.float.p1_spacing_small'), right: $r('app.float.p1_spacing_xsmall') })
-        .backgroundColor($r('app.color.control_background'))
-        .borderRadius($r('app.float.p1_card_radius'))
-        .alignItems(VerticalAlign.Center)
-
-        Button({ type: ButtonType.Normal, stateEffect: true }) {
-          SymbolGlyph($r('sys.symbol.line_3_horizontal'))
-            .fontSize(20)
-            .fontColor([$r('app.color.primary_text')])
-        }
-        .id('p2_search_filter')
-        .width(40)
-        .height(40)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .accessibilityText(`筛选搜索结果，当前${searchResultFilterLabel(this.selectedResultFilter)}`)
-        .bindMenu(this.filterMenu())
-
-      }
-      .id('p2_search_input_row')
-      .width('100%')
-      .padding({ top: 94 })
-
-      if (this.query.length > 0) {
-        this.resultTabs();
-      }
-
+    Column() {
       if (this.repository === undefined) {
         this.statusPanel('搜索数据源未配置', false, 'p2_search_unconfigured');
-      } else if (this.phase === SearchPhase.IDLE) {
-        this.statusPanel('输入关键词开始搜索', false, 'p2_search_idle');
-      } else if (this.phase === SearchPhase.LOADING) {
-        this.statusPanel('正在搜索…', false, 'p2_search_loading');
-      } else if (this.phase === SearchPhase.ERROR) {
-        this.statusPanel(this.errorMessage, true, 'p2_search_error');
-      } else if (this.phase === SearchPhase.EMPTY) {
-        this.statusPanel('没有找到可显示的相关结果', true, 'p2_search_empty');
+      } else if (this.query.length === 0 && this.phase === SearchPhase.IDLE) {
+        this.idlePanel();
       } else {
-        if (this.errorMessage.length > 0) {
-          Column({ space: $r('app.float.p1_spacing_small') }) {
-            Text(this.errorMessage)
-              .id('p2_search_recoverable_error_text')
-              .fontSize($r('app.float.p1_secondary_font_size'))
-              .fontColor($r('app.color.secondary_text'))
-              .width('100%')
-            Row({ space: $r('app.float.p1_spacing_small') }) {
-              Button('重试')
-                .id('p2_search_recoverable_error_retry')
-                .layoutWeight(1)
-                .onClick(() => this.controller?.retry())
-              if (this.requiresLogin) {
-                Button('去登录')
-                  .id('p2_search_recoverable_error_login')
-                  .layoutWeight(1)
-                  .onClick(() => this.openLogin())
-              }
-            }
-            .width('100%')
-          }
-          .alignItems(HorizontalAlign.Start)
-          .width('100%')
-          .padding($r('app.float.p1_spacing_small'))
-          .borderRadius($r('app.float.p1_card_radius'))
-          .backgroundColor($r('app.color.surface_background'))
+        if (this.query.length > 0) {
+          this.resultTabs();
         }
-
-        if (this.filteredItems().length === 0) {
-          Text(`${searchResultFilterLabel(this.selectedResultFilter)}分类下暂无结果`)
-            .id('p2_search_filtered_empty')
-            .fontSize($r('app.float.p1_body_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .textAlign(TextAlign.Center)
-            .width('100%')
-            .padding($r('app.float.p1_spacing_large'))
+        if (this.phase === SearchPhase.LOADING) {
+          this.statusPanel('正在搜索…', false, 'p2_search_loading');
+        } else if (this.phase === SearchPhase.ERROR) {
+          this.statusPanel(this.errorMessage, true, 'p2_search_error');
+        } else if (this.phase === SearchPhase.EMPTY) {
+          this.statusPanel('没有找到可显示的相关结果', false, 'p2_search_empty');
+        } else {
+          this.resultList();
         }
-
-        List() {
-          ForEach(this.filteredItems(), (item: SearchResultItem) => {
-            ListItem() {
-              this.resultCard(item);
-            }
-            .margin({ bottom: $r('app.float.p1_spacing_medium') })
-          }, (item: SearchResultItem): string => searchResultIdentity(item))
-
-          if (this.loadingMore || this.canLoadMore) {
-            ListItem() {
-              Button(this.loadingMore ? '正在加载更多…' : '加载更多')
-                .id('p2_search_load_more')
-                .width('100%')
-                .fontSize($r('app.float.p1_secondary_font_size'))
-                .enabled(!this.loadingMore)
-                .onClick(() => this.controller?.loadMore())
-            }
-          }
-        }
-        .id('p2_search_result_list')
-        .width('100%')
-        .scrollBar(BarState.Off)
-        .layoutWeight(1)
-        .edgeEffect(EdgeEffect.Spring)
-        .onReachEnd(() => this.controller?.loadMore())
       }
     }
     .alignItems(HorizontalAlign.Start)
@@ -233,73 +260,199 @@ export struct SearchPage {
     .padding({
       left: $r('app.float.p1_page_padding'),
       right: $r('app.float.p1_page_padding'),
+      // 94vp 为标题栏（stackBuilder 注入的搜索框行）叠加预留，对齐详情页约定。
+      top: 94,
       bottom: $r('app.float.p1_page_padding')
     })
     .backgroundColor($r('app.color.page_background'))
   }
 
   @Builder
+  private idlePanel() {
+    Scroll() {
+      Column() {
+        if (this.history.length > 0) {
+          Row() {
+            Text('搜索历史')
+              .fontSize($r('app.float.p1_body_font_size'))
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.secondary_text'))
+            Blank()
+            Button({ type: ButtonType.Normal, stateEffect: true }) {
+              SymbolGlyph($r('sys.symbol.ellipsis_circle'))
+                .fontSize(18)
+                .fontColor([$r('app.color.secondary_text')])
+            }
+            .id('p2_search_history_more')
+            .width(36)
+            .height(36)
+            .padding(0)
+            .backgroundColor(Color.Transparent)
+            .accessibilityText('搜索历史选项')
+            .bindMenu([{
+              value: '清空搜索历史',
+              action: (): void => {
+                this.clearHistory();
+              }
+            } as MenuElement])
+          }
+          .width('100%')
+          .margin({ top: 8 })
+
+          ForEach(this.history, (item: string) => {
+            Row({ space: 8 }) {
+              SymbolGlyph($r('sys.symbol.magnifyingglass'))
+                .fontSize(16)
+                .fontColor([$r('app.color.secondary_text')])
+              Text(item)
+                .fontSize($r('app.float.p1_body_font_size'))
+                .fontColor($r('app.color.primary_text'))
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+            }
+            .id(`p2_search_history_${item}`)
+            .width('100%')
+            .height(40)
+            .onClick((): void => this.performSubmit(item))
+          }, (item: string): string => item)
+
+          Divider()
+            .color($r('app.color.control_background'))
+            .margin({ top: 12, bottom: 12 })
+        }
+
+        Row() {
+          Text('热搜')
+            .fontSize($r('app.float.p1_body_font_size'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.secondary_text'))
+          Blank()
+          Button({ type: ButtonType.Normal, stateEffect: true }) {
+            SymbolGlyph($r('sys.symbol.arrow_clockwise'))
+              .fontSize(18)
+              .fontColor([$r('app.color.secondary_text')])
+          }
+          .id('p2_search_hot_refresh')
+          .width(36)
+          .height(36)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('刷新热搜')
+          .onClick((): void => {
+            void this.loadHotSearch();
+          })
+        }
+        .width('100%')
+
+        if (this.hotItems.length === 0) {
+          Text('暂无热搜内容')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
+            .padding(12)
+        } else {
+          ForEach(this.hotItems, (item: SearchHotItem, index: number) => {
+            Row({ space: 8 }) {
+              Text(`${index + 1}`)
+                .fontSize($r('app.float.p1_body_font_size'))
+                .fontColor(index < 3 ? $r('app.color.error_text') : $r('app.color.secondary_text'))
+                .width(24)
+              Text(item.query)
+                .fontSize($r('app.float.p1_body_font_size'))
+                .fontColor($r('app.color.primary_text'))
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .layoutWeight(1)
+              if (item.hotShow.length > 0) {
+                Text(item.hotShow)
+                  .fontSize($r('app.float.p1_secondary_font_size'))
+                  .fontColor($r('app.color.secondary_text'))
+              }
+            }
+            .id(`p2_search_hot_${index}`)
+            .width('100%')
+            .height(40)
+            .onClick((): void => this.performSubmit(item.query))
+          }, (item: SearchHotItem, index: number): string => `${index}:${item.query}`)
+        }
+
+        if (this.history.length === 0 && this.hotItems.length === 0) {
+          Text('暂无搜索历史，输入关键词搜索后会保存在这里')
+            .fontSize($r('app.float.p1_body_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
+            .padding(12)
+        }
+      }
+      .width('100%')
+    }
+    .id('p2_search_idle_panel')
+    .width('100%')
+    .layoutWeight(1)
+    .align(Alignment.Top)
+    .scrollBar(BarState.Off)
+  }
+
+  @Builder
   private resultTabs() {
-    Tabs({ barPosition: BarPosition.Start, index: $$this.selectedResultFilter }) {
-      TabContent() {
-        Column() {
-          Blank();
+    Tabs({ barPosition: BarPosition.Start, index: this.activeTabIndex }) {
+      ForEach(SEARCH_TABS, (tab: SearchTab) => {
+        TabContent() {
+          Column() {
+            Blank();
+          }
         }
-      }
-      .tabBar(searchResultFilterLabel(SearchResultFilter.ALL))
-      TabContent() {
-        Column() {
-          Blank();
-        }
-      }
-      .tabBar(searchResultFilterLabel(SearchResultFilter.QUESTION))
-      TabContent() {
-        Column() {
-          Blank();
-        }
-      }
-      .tabBar(searchResultFilterLabel(SearchResultFilter.ANSWER))
-      TabContent() {
-        Column() {
-          Blank();
-        }
-      }
-      .tabBar(searchResultFilterLabel(SearchResultFilter.ARTICLE))
+        .tabBar(searchTabLabel(tab))
+      }, (tab: SearchTab): string => tab)
     }
     .id('p2_search_result_tabs')
     .width('100%')
     .height(44)
     .barHeight(44)
-    .barMode(BarMode.Fixed)
+    .barMode(BarMode.Scrollable)
     .scrollable(false)
     .onChange((index: number): void => {
-      if (isSearchResultFilter(index)) {
-        this.selectedResultFilter = index;
+      if (index >= 0 && index < SEARCH_TABS.length) {
+        this.activeTabIndex = index;
+        void this.controller?.selectTab(SEARCH_TABS[index]);
       }
     })
   }
 
-  private filteredItems(): Array<SearchResultItem> {
-    return filterSearchResults(this.items, this.selectedResultFilter);
-  }
-
-  private filterMenu(): Array<MenuElement> {
-    const menu: Array<MenuElement> = [];
-    const filters: Array<SearchResultFilter> = [
-      SearchResultFilter.ALL,
-      SearchResultFilter.QUESTION,
-      SearchResultFilter.ANSWER,
-      SearchResultFilter.ARTICLE
-    ];
-    filters.forEach((filter: SearchResultFilter): void => {
-      menu.push({
-        value: searchResultFilterLabel(filter),
-        action: (): void => {
-          this.selectedResultFilter = filter;
+  @Builder
+  private resultList() {
+    List() {
+      ForEach(this.entities, (entity: SearchEntity) => {
+        ListItem() {
+          if (entity.kind === SearchEntityKind.CONTENT && entity.content !== undefined) {
+            this.resultCard(entity.content);
+          } else if (entity.kind === SearchEntityKind.PERSON && entity.person !== undefined) {
+            this.personRow(entity.person);
+          } else if (entity.kind === SearchEntityKind.TOPIC && entity.topic !== undefined) {
+            this.topicRow(entity.topic);
+          }
         }
-      });
-    });
-    return menu;
+        .margin({ top: $r('app.float.p1_spacing_medium') })
+      }, (entity: SearchEntity): string => entity.id)
+
+      if (this.loadingMore || this.canLoadMore) {
+        ListItem() {
+          Button(this.loadingMore ? '正在加载更多…' : '加载更多')
+            .id('p2_search_load_more')
+            .width('100%')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .enabled(!this.loadingMore)
+            .onClick(() => this.controller?.loadMore())
+        }
+        .margin({ top: $r('app.float.p1_spacing_medium') })
+      }
+    }
+    .id('p2_search_result_list')
+    .width('100%')
+    .scrollBar(BarState.Off)
+    .layoutWeight(1)
+    .edgeEffect(EdgeEffect.Spring)
+    .onReachEnd(() => this.controller?.loadMore())
   }
 
   @Builder
@@ -365,7 +518,7 @@ export struct SearchPage {
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.brand_primary'))
           if (item.authorName !== undefined) {
-            Text(item.authorName)
+            Text(stripEmphasis(item.authorName))
               .fontSize($r('app.float.p1_secondary_font_size'))
               .fontColor($r('app.color.secondary_text'))
               .layoutWeight(1)
@@ -396,33 +549,122 @@ export struct SearchPage {
     .padding($r('app.float.p1_card_padding'))
     .borderRadius($r('app.float.p1_card_radius'))
     .backgroundColor($r('app.color.surface_background'))
-    .accessibilityText(`打开${searchKindLabel(item.kind)}：${item.title}`)
+    .accessibilityText(`打开${searchKindLabel(item.kind)}：${stripEmphasis(item.title)}`)
     .onClick(() => this.navigate(searchResultDestination(item)))
   }
 
-  private submitInput(): void {
-    const query = this.input.trim();
-    if (query.length === 0) {
-      this.controller?.submit('');
-      return;
+  @Builder
+  private personRow(item: SearchPersonItem) {
+    Row({ space: 12 }) {
+      if (item.avatarUrl !== undefined && item.avatarUrl.length > 0) {
+        Image(item.avatarUrl)
+          .width(48)
+          .height(48)
+          .borderRadius(24)
+          .objectFit(ImageFit.Cover)
+      }
+      Column({ space: 4 }) {
+        this.highlightedText(item.name, $r('app.float.p1_heading_font_size'),
+          $r('app.color.primary_text'), FontWeight.Medium)
+        if (item.headline.length > 0) {
+          Text(item.headline)
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width('100%')
+        }
+        Text(`${item.followerCount} 粉丝 · ${item.answerCount} 回答`)
+          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .width('100%')
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
     }
-    this.input = query;
-    this.controller?.submit(query);
+    .id(`p2_search_person_${item.id}`)
+    .width('100%')
+    .padding({ top: 8, bottom: 8 })
+    .alignItems(VerticalAlign.Center)
+    .accessibilityText(`打开用户主页：${stripEmphasis(item.name)}`)
+    .onClick(() => this.openPerson(item))
   }
 
-  private applyState(state: SearchViewState): void {
-    this.phase = state.phase;
-    this.query = state.query;
-    this.items = state.items;
-    this.loadingMore = state.loadingMore;
-    this.canLoadMore = state.canLoadMore;
-    this.requiresLogin = state.requiresLogin;
-    this.errorMessage = state.errorMessage ?? '';
+  @Builder
+  private topicRow(item: SearchTopicItem) {
+    Row({ space: 12 }) {
+      if (item.avatarUrl !== undefined && item.avatarUrl.length > 0) {
+        Image(item.avatarUrl)
+          .width(48)
+          .height(48)
+          .borderRadius(24)
+          .objectFit(ImageFit.Cover)
+      }
+      Column({ space: 4 }) {
+        this.highlightedText(item.name, $r('app.float.p1_heading_font_size'),
+          $r('app.color.primary_text'), FontWeight.Medium)
+        if (item.excerpt.length > 0) {
+          Text(stripEmphasis(item.excerpt))
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width('100%')
+        }
+        Text(`${formatSearchCount(item.visitCount)} 浏览 · ${formatSearchCount(item.discussCount)} 讨论`)
+          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .width('100%')
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+    }
+    .id(`p2_search_topic_${item.id}`)
+    .width('100%')
+    .padding({ top: 8, bottom: 8 })
+    .alignItems(VerticalAlign.Center)
+    .accessibilityText(`在浏览器打开话题：${stripEmphasis(item.name)}`)
+    .onClick(() => this.openTopicInBrowser(item))
+  }
+
+  private openPerson(item: SearchPersonItem): void {
+    const identifier = isSafePeopleIdentifier(item.id) ? item.id :
+      (item.urlToken !== undefined && isSafePeopleIdentifier(item.urlToken) ? item.urlToken : undefined);
+    if (identifier === undefined) {
+      return;
+    }
+    this.navigate({ name: P1DestinationName.PEOPLE, id: identifier });
+  }
+
+  private async openTopicInBrowser(item: SearchTopicItem): Promise<void> {
+    const context = getAbilityContext();
+    if (context === undefined || !/^[A-Za-z0-9_-]{1,64}$/.test(item.id)) {
+      return;
+    }
+    const want: Want = {
+      action: 'ohos.want.action.viewData',
+      uri: `https://www.zhihu.com/topic/${item.id}`
+    };
+    try {
+      await context.startAbility(want);
+    } catch (_error) {
+      this.getUIContext().getPromptAction().showToast({ message: '暂时无法打开话题页面' });
+    }
   }
 
   private openLogin(): void {
     this.navigate({ name: P1DestinationName.LOGIN });
   }
+}
+
+function formatSearchCount(value: number): string {
+  if (value >= 100000000) {
+    return `${(value / 100000000).toFixed(1)} 亿`;
+  }
+  if (value >= 10000) {
+    return `${(value / 10000).toFixed(1)} 万`;
+  }
+  return `${value}`;
 }
 
 export function searchResultDestination(item: SearchResultItem): P1Destination {
@@ -443,35 +685,4 @@ export function searchKindLabel(kind: FeedTargetKind): string {
     return '回答';
   }
   return '文章';
-}
-
-export function isSearchResultFilter(value: number): boolean {
-  return value === SearchResultFilter.ALL || value === SearchResultFilter.QUESTION ||
-    value === SearchResultFilter.ANSWER || value === SearchResultFilter.ARTICLE;
-}
-
-export function searchResultFilterLabel(filter: number): string {
-  if (filter === SearchResultFilter.QUESTION) {
-    return '问题';
-  }
-  if (filter === SearchResultFilter.ANSWER) {
-    return '回答';
-  }
-  if (filter === SearchResultFilter.ARTICLE) {
-    return '文章';
-  }
-  return '综合';
-}
-
-export function filterSearchResults(items: Array<SearchResultItem>, filter: number): Array<SearchResultItem> {
-  if (filter === SearchResultFilter.QUESTION) {
-    return items.filter((item: SearchResultItem): boolean => item.kind === FeedTargetKind.QUESTION);
-  }
-  if (filter === SearchResultFilter.ANSWER) {
-    return items.filter((item: SearchResultItem): boolean => item.kind === FeedTargetKind.ANSWER);
-  }
-  if (filter === SearchResultFilter.ARTICLE) {
-    return items.filter((item: SearchResultItem): boolean => item.kind === FeedTargetKind.ARTICLE);
-  }
-  return items.slice();
 }
