@@ -1900,11 +1900,13 @@ struct ContentDetailPage {
       this.menuStatus = '暂时无法打开分享面板';
       return;
     }
+    const contextTitle = contentContextTitle(content);
     const payload: ShareTextPayload = {
       kind: SharePayloadKind.TEXT,
-      title: contentDetailPageTitle(content.kind),
-      summary: '来自知乎++的受信内容链接',
-      contentUrl: content.value.url
+      title: contextTitle.length > 0 ? contextTitle : contentDetailPageTitle(content.kind),
+      summary: contentShareSummary(content),
+      contentUrl: content.value.url,
+      thumbnailUrl: contentShareThumbnailUrl(content)
     };
     createSystemShareService(context).share(payload).then((outcome: ShareOutcome): void => {
       this.menuStatus = outcome === ShareOutcome.CANCELLED ? '' : '已打开系统分享面板';
@@ -2276,6 +2278,23 @@ export function contentContextTitle(content: LoadedContentDetail): string {
     return content.value.questionTitle?.trim() ?? '';
   }
   return contentTitle(content).trim();
+}
+
+/** 分享面板摘要：回答/文章用正文摘录，问题与缺失时用固定文案。 */
+export function contentShareSummary(content: LoadedContentDetail): string {
+  if (content.kind === ContentDetailKind.ANSWER || content.kind === ContentDetailKind.ARTICLE) {
+    const excerpt = content.value.excerpt.trim();
+    if (excerpt.length > 0) {
+      return excerpt;
+    }
+  }
+  return '来自知乎++的受信内容链接';
+}
+
+/** 分享卡片缩略图：仅接受受信 zhimg 头像 URL，其余返回 undefined（卡片退回默认图标）。 */
+export function contentShareThumbnailUrl(content: LoadedContentDetail): string | undefined {
+  const url = contentAuthorAvatarUrl(content);
+  return /^https:\/\/(?:pic|pica|picx|pic[0-9]+)\.zhimg\.com\//.test(url) ? url : undefined;
 }
 
 export function contentHtml(content: LoadedContentDetail): string {

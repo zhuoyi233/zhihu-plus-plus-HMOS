@@ -1,10 +1,11 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
-  createSystemShareWant,
-  ShareAbilityLauncher,
+  createSystemShareRecords,
   ShareFileUriResolver,
-  SystemShareService,
-  SystemShareWant
+  SharePanelLauncher,
+  ShareRecordSpec,
+  ShareThumbnailFetcher,
+  SystemShareService
 } from '../main/ets/platform/SystemShareService';
 import {
   createTemporaryShareLifecycle,
@@ -27,21 +28,33 @@ import {
 const NOW: number = 1770000000000;
 const CACHE_DIR: string = '/data/storage/el2/base/cache';
 
-class RecordingShareLauncher implements ShareAbilityLauncher {
-  readonly wants: Array<SystemShareWant> = [];
+class RecordingShareLauncher implements SharePanelLauncher {
+  readonly panels: Array<Array<ShareRecordSpec>> = [];
   nextError: Error | undefined = undefined;
 
-  async startShare(want: SystemShareWant): Promise<void> {
+  async showPanel(records: Array<ShareRecordSpec>): Promise<void> {
     if (this.nextError !== undefined) {
       throw this.nextError;
     }
-    this.wants.push(want);
+    this.panels.push(records);
   }
 }
 
 class FixedFileUriResolver implements ShareFileUriResolver {
   getUriFromPath(path: string): string {
     return `file://sandbox${path}`;
+  }
+}
+
+class StubShareThumbnailFetcher implements ShareThumbnailFetcher {
+  private readonly result: Uint8Array | undefined;
+
+  constructor(result: Uint8Array | undefined) {
+    this.result = result;
+  }
+
+  async fetchThumbnail(_url: string): Promise<Uint8Array | undefined> {
+    return this.result;
   }
 }
 
@@ -192,28 +205,104 @@ export default function shareServiceTest(): void {
       expect(opened.cleanupAfterMillis <= lifecycle.createdAtMillis + 24 * 60 * 60 * 1000).assertTrue();
     });
 
-    it('buildsNoHeaderWantForTrustedLink', 0, () => {
-      const want = createSystemShareWant(prepareSharePayload(textPayload(), policy()), new FixedFileUriResolver());
-      const serialized = JSON.stringify(want);
+    it('buildsHyperlinkRecordWithoutSensitivePayloadForTrustedLink', 0, () => {
+      const records = createSystemShareRecords(
+        prepareSharePayload(textPayload(), policy()), new FixedFileUriResolver()
+      );
+      const serialized = JSON.stringify(records);
 
-      expect(want.action).assertEqual('ohos.want.action.sendData');
-      expect(want.type).assertEqual('text/plain');
-      expect(want.uri).assertEqual('https://www.zhihu.com/question/123/answer/456');
+      expect(records.length).assertEqual(1);
+      expect(records[0].utd).assertEqual('general.hyperlink');
+      expect(records[0].content).assertEqual('https://www.zhihu.com/question/123/answer/456');
+      expect(records[0].title).assertEqual('鸿蒙迁移进展');
       expect(serialized.includes('cookie')).assertFalse();
       expect(serialized.includes('authorization')).assertFalse();
       expect(serialized.includes('headers')).assertFalse();
     });
 
-    it('usesReadOnlyStreamAuthorizationForTemporaryFiles', 0, () => {
-      const prepared = prepareSharePayload(filePayload(temporaryFile(
+    it('buildsTypedFileRecordForTemporaryFiles', 0, () => {
+      const imagePrepared = prepareSharePayload(temporaryImagePayload(temporaryFile()), policy());
+      const imageRecords = createSystemShareRecords(imagePrepared, new FixedFileUriResolver());
+      const filePrepared = prepareSharePayload(filePayload(temporaryFile(
         `${CACHE_DIR}/p4-share/export-123.pdf`, 'application/pdf', NOW
       )), policy());
-      const want = createSystemShareWant(prepared, new FixedFileUriResolver());
+      const fileRecords = createSystemShareRecords(filePrepared, new FixedFileUriResolver());
 
-      expect(want.type).assertEqual('application/pdf');
-      expect(want.uri).assertEqual(`file://sandbox${CACHE_DIR}/p4-share/export-123.pdf`);
-      expect(want.flags).assertEqual(1);
-      expect(JSON.stringify(want.parameters).includes('ability.params.stream')).assertTrue();
+      expect(imageRecords.length).assertEqual(1);
+      expect(imageRecords[0].utd).assertEqual('general.image');
+      expect(imageRecords[0].uri).assertEqual(`file://sandbox${CACHE_DIR}/p4-share/image-123.png`);
+      expect(fileRecords[0].utd).assertEqual('general.file');
+      expect(fileRecords[0].uri).assertEqual(`file://sandbox${CACHE_DIR}/p4-share/export-123.pdf`);
+    });
+
+    it('validatesOptionalTrustedThumbnailUrlOnTextPayload', 0, () => {
+      const withThumbnail = textPayload();
+      const payload: ShareTextPayload = {
+        kind: withThumbnail.kind,
+        title: withThumbnail.title,
+        summary: withThumbnail.summary,
+        contentUrl: withThumbnail.contentUrl,
+        thumbnailUrl: 'https://picx.zhimg.com/v2-avatar.jpg'
+      };
+      const prepared = prepareSharePayload(payload, policy());
+
+      expect(prepared.thumbnailUrl).assertEqual('https://picx.zhimg.com/v2-avatar.jpg');
+
+      const untrusted: ShareTextPayload = {
+        kind: withThumbnail.kind,
+        title: withThumbnail.title,
+        summary: withThumbnail.summary,
+        contentUrl: withThumbnail.contentUrl,
+        thumbnailUrl: 'https://evil.example/avatar.jpg'
+      };
+
+      expect((): void => { prepareSharePayload(untrusted, policy()); }).assertThrowError('分享内容不受支持');
+    });
+
+    it('attachesFetchedThumbnailAndDescriptionToHyperlinkRecord', 0, async () => {
+      const launcher = new RecordingShareLauncher();
+      const thumbnail = new Uint8Array([1, 2, 3]);
+      const service = new SystemShareService(
+        launcher, policy(), new FixedFileUriResolver(), new StubShareThumbnailFetcher(thumbnail)
+      );
+      const payload = textPayload();
+      const payloadWithThumbnail: ShareTextPayload = {
+        kind: payload.kind,
+        title: payload.title,
+        summary: payload.summary,
+        contentUrl: payload.contentUrl,
+        thumbnailUrl: 'https://picx.zhimg.com/v2-avatar.jpg'
+      };
+
+      const outcome = await service.share(payloadWithThumbnail);
+      const records = launcher.panels[0];
+
+      expect(outcome).assertEqual(ShareOutcome.OPENED);
+      expect(records.length).assertEqual(1);
+      expect(records[0].description).assertEqual('知乎++ 的 P4 执行计划');
+      expect(records[0].thumbnail?.length).assertEqual(3);
+    });
+
+    it('opensPanelWithoutThumbnailWhenFetcherFails', 0, async () => {
+      const launcher = new RecordingShareLauncher();
+      const service = new SystemShareService(
+        launcher, policy(), new FixedFileUriResolver(), new StubShareThumbnailFetcher(undefined)
+      );
+      const payload = textPayload();
+      const payloadWithThumbnail: ShareTextPayload = {
+        kind: payload.kind,
+        title: payload.title,
+        summary: payload.summary,
+        contentUrl: payload.contentUrl,
+        thumbnailUrl: 'https://picx.zhimg.com/v2-avatar.jpg'
+      };
+
+      const outcome = await service.share(payloadWithThumbnail);
+      const records = launcher.panels[0];
+
+      expect(outcome).assertEqual(ShareOutcome.OPENED);
+      expect(records[0].thumbnail).assertUndefined();
+      expect(records[0].content).assertEqual('https://www.zhihu.com/question/123/answer/456');
     });
 
     it('treatsShareCancellationAsNormalOutcome', 0, async () => {
@@ -224,7 +313,7 @@ export default function shareServiceTest(): void {
       const outcome = await service.share(textPayload());
 
       expect(outcome).assertEqual(ShareOutcome.CANCELLED);
-      expect(launcher.wants.length).assertEqual(0);
+      expect(launcher.panels.length).assertEqual(0);
     });
 
     it('mapsMissingHandlerToFixedFailureWithoutRawMessage', 0, async () => {
