@@ -23,6 +23,7 @@ import {
   DefaultPinRepository,
   DefaultPinPublishRepository,
   DefaultQuestionAnswerFeedRepository,
+  DefaultRecentFollowingUsersRepository,
   DefaultSearchRepository,
   DefaultOnlineHistoryRepository,
   DefaultNotificationRepository,
@@ -37,6 +38,7 @@ import {
   OnlineHistoryRepository,
   PeopleContentRepository,
   PeopleDetailRepository,
+  RecentFollowingUsersRepository,
   PinRepository,
   SearchRepository,
   SessionRepository,
@@ -108,6 +110,7 @@ struct Index {
   @State private searchRepository?: SearchRepository = undefined;
   @State private followingRepository?: ChannelFeedRepository = undefined;
   @State private followingRecommendRepository?: ChannelFeedRepository = undefined;
+  @State private followingUsersRepository?: RecentFollowingUsersRepository = undefined;
   @State private hotRepository?: ChannelFeedRepository = undefined;
   private hotQuestionRepositoryFactory: () => ContentRepository | undefined = () => undefined;
   @State private dailyRepository?: ChannelFeedRepository = undefined;
@@ -160,6 +163,7 @@ struct Index {
       this.searchRepository = new DefaultSearchRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.followingRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.followingRecommendRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
+      this.followingUsersRepository = new DefaultRecentFollowingUsersRepository(new ZhihuHttpClient(session));
       this.hotRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.hotQuestionRepositoryFactory = (): ContentRepository => new DefaultContentRepository(new ZhihuHttpClient(session));
       this.dailyRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(), blockingMatcher);
@@ -280,6 +284,7 @@ struct Index {
     selectedTabIndex: number) {
     FollowingFeedPage({
       recommendRepository: this.followingRecommendRepository,
+      usersRepository: this.followingUsersRepository,
       dynamicRepository: this.followingRepository,
       reloadToken: reloadToken,
       selectedTabIndex: selectedTabIndex,

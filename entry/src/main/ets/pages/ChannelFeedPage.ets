@@ -46,6 +46,12 @@ export struct ChannelFeedPage {
   source: ChannelFeedSource = ChannelFeedSource.HOT;
   /** 关注页的两个子 Tab 共用列表实现，标题由外层 Tabs 提供。 */
   showHeader: boolean = true;
+  /**
+   * 列表顶部内容插槽（随列表滚动），关注推荐页用于渲染“最近更新的关注用户”一行；
+   * 需与 topContentVisible 同时开启，否则不占列表项。
+   */
+  @BuilderParam topContent: () => void = this.emptyTopContent;
+  topContentVisible: boolean = false;
   repository: ChannelFeedRepository | undefined = new DefaultChannelFeedRepository();
   questionRepositoryFactory: () => ContentRepository | undefined = () => undefined;
   dailyStoryRepository: DailyStoryRepository | undefined = undefined;
@@ -225,6 +231,12 @@ export struct ChannelFeedPage {
           friction: 100
         }) {
           List({ scroller: this.listScroller }) {
+            if (this.topContentVisible) {
+              ListItem() {
+                this.topContent()
+              }
+              .width('100%')
+            }
             ForEach(this.items, (item: ChannelFeedItem, index: number) => {
               ListItem() {
                 if (item.kind === ChannelFeedItemKind.CONTENT) {
@@ -352,6 +364,10 @@ export struct ChannelFeedPage {
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.page_background'))
+  }
+
+  @Builder
+  private emptyTopContent() {
   }
 
   @Builder

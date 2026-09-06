@@ -5,7 +5,8 @@ import {
   ChannelFeedItemKind,
   ChannelFeedPage,
   DailyStorySummary,
-  isDailyFeedDateCursor
+  isDailyFeedDateCursor,
+  RecentFollowingUser
 } from './ChannelFeedModels';
 import { FeedItem, FeedPage, FeedTargetKind, FeedTargetSummary, PageCursor, UserProfile } from './DomainModels';
 import {
@@ -200,6 +201,45 @@ export function decodeDailyFeedPage(json: string): ChannelFeedPage {
     total: items.length
   };
   return { items: items, cursor: cursor };
+}
+
+/**
+ * 最近更新的关注用户（/moments/recent?type=raw）解码。
+ * 对齐上游 RecentMomentsViewModel：逐条独立解析，失败条目直接跳过不中断整行。
+ */
+export function decodeRecentFollowingUsers(json: string): Array<RecentFollowingUser> {
+  const object = root(json, '关注动态');
+  const data = requiredArray(object, 'data', 'recent.data');
+  const users: Array<RecentFollowingUser> = [];
+  data.items.forEach((value: JsonValue): void => {
+    const item = jsonObject(value);
+    if (item === undefined) {
+      return;
+    }
+    const actor = jsonObject(item.get('actor'));
+    if (actor === undefined) {
+      return;
+    }
+    const id = optionalText(actor.get('id'), 'recent.actor.id');
+    const name = requiredText(actor.get('name'), 'recent.actor.name');
+    const avatarUrl = optionalText(actor.get('avatar_url'), 'recent.actor.avatar_url');
+    const urlToken = optionalText(actor.get('url_token'), 'recent.actor.url_token');
+    if (id.trim().length === 0 || name.trim().length === 0 || avatarUrl.trim().length === 0) {
+      return;
+    }
+    const unreadCount = jsonNumber(item.get('unread_count'));
+    users.push({
+      actor: {
+        id: id,
+        urlToken: urlToken.trim().length > 0 ? urlToken : id,
+        name: name,
+        avatarUrl: avatarUrl
+      },
+      unreadCount: unreadCount !== undefined && Number.isSafeInteger(unreadCount) && unreadCount > 0
+        ? unreadCount : 0
+    });
+  });
+  return users;
 }
 
 function invalid(message: string): DomainDecodeError {

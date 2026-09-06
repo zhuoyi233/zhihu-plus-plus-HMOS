@@ -39,7 +39,6 @@ export class ChannelFeedInteractionBridge {
   private hotRefreshAction: (() => void) | undefined = undefined;
   private dailyRefreshAction: (() => void) | undefined = undefined;
   private dailyDateAction: ((date: string) => void) | undefined = undefined;
-  private followingTabAction: ((index: number) => void) | undefined = undefined;
 
   registerHotRefresh(action: () => void): void {
     this.hotRefreshAction = action;
@@ -53,10 +52,6 @@ export class ChannelFeedInteractionBridge {
     this.dailyDateAction = action;
   }
 
-  registerFollowingTab(action: (index: number) => void): void {
-    this.followingTabAction = action;
-  }
-
   refreshHot(): void {
     this.hotRefreshAction?.();
   }
@@ -67,10 +62,6 @@ export class ChannelFeedInteractionBridge {
 
   selectDailyDate(date: string): void {
     this.dailyDateAction?.(date);
-  }
-
-  selectFollowingTab(index: number): void {
-    this.followingTabAction?.(index);
   }
 }
 

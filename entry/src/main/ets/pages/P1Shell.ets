@@ -20,8 +20,6 @@ import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import bundleManager from '@ohos.bundle.bundleManager';
 import { Want } from '@kit.AbilityKit';
 import {
-  SegmentButton,
-  SegmentButtonOptions,
   SymbolGlyphModifier
 } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -140,10 +138,9 @@ export struct P1Shell {
   @State private followingReloadToken: number = 0;
   @State private hotReloadToken: number = 0;
   @State private dailyReloadToken: number = 0;
-  // SegmentButtonOptions is an @ObjectLink in the framework component. Keep
-  // the options in observed state instead of passing an inline object, which
-  // otherwise renders the control but drops its tap callback on device.
-  @State private followingSegmentOptions: SegmentButtonOptions = this.createFollowingSegmentOptions();
+  // 关注页子页签（推荐/动态）当前选中项：经 AppStorage 与关注页 Swiper 双向同步
+  // （标题栏点选写 tick，关注页滑动写 index），@Consume 在 HdsTabs 树下实测不链接。
+  @StorageProp('followingSelectedTabIndex') private followingTitleSelectedIndex: number = 0;
   @StorageProp('dailyViewingDate') private dailyViewingDate: string = '';
   @State private dailyDateCursor: string = '';
   @Provide('channelFeedInteractionBridge') private channelFeedInteractionBridge: ChannelFeedInteractionBridge =
@@ -363,7 +360,7 @@ export struct P1Shell {
       HdsNavDestination() {
         this.followingContent(this.followingReloadToken,
           (destination: P1Destination): void => this.navigate(destination),
-          this.followingTitleBarIndexes[0]);
+          this.followingTitleSelectedIndex);
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '关注' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
@@ -711,7 +708,7 @@ export struct P1Shell {
         TabContent() {
           this.followingContent(this.followingReloadToken,
             (destination: P1Destination): void => this.navigate(destination),
-            this.followingTitleBarIndexes[0]);
+            this.followingTitleSelectedIndex);
         }
         .id('p1_top_level_following_content')
         .tabBar(this.topLevelTabBarStyle(P1TopLevelTab.FOLLOWING))
@@ -918,13 +915,12 @@ export struct P1Shell {
       .hitTestBehavior(HitTestMode.Transparent)
     } else if (this.topLevelTabIndex === P1TopLevelTab.FOLLOWING) {
       Column() {
-        SegmentButton({
-          options: this.followingSegmentOptions,
-          selectedIndexes: $followingTitleBarIndexes,
-          onItemClicked: (index: number): void => this.selectFollowingTitleBarTab(index)
-        })
-          .width('52%')
-          .height(44)
+        Row() {
+          this.followingTitleTabItem('推荐', 0)
+          this.followingTitleTabItem('动态', 1)
+        }
+          .width(180)
+          .height(40)
       }
       .width('100%')
       .height('100%')
@@ -997,25 +993,39 @@ export struct P1Shell {
     .monopolizeEvents(false)
   }
 
-  // SegmentButton uses two-way binding; keep the selected index as observable
-  // component state so taps immediately rebuild the following feed content.
-  @State private followingTitleBarIndexes: number[] = [0];
+  // 关注子页签：鸿蒙规范的文字页签（选中加重 + 短下划线指示条），
+  // 点选经 AppStorage 广播给关注页 Swiper。
+  @Builder
+  private followingTitleTabItem(title: string, index: number) {
+    Column({ space: 4 }) {
+      Text(title)
+        .fontSize(16)
+        .fontWeight(this.followingTitleSelectedIndex === index ? FontWeight.Medium : FontWeight.Regular)
+        .fontColor(this.followingTitleSelectedIndex === index
+          ? $r('app.color.primary_text')
+          : $r('app.color.secondary_text'))
+      Row()
+        .width(this.followingTitleSelectedIndex === index ? 24 : 0)
+        .height(3)
+        .borderRadius(1.5)
+        .backgroundColor($r('app.color.zhihu_blue'))
+        .animation({ duration: 250, curve: Curve.EaseInOut })
+    }
+      .id(`p2_following_titlebar_tab_${index}`)
+      .layoutWeight(1)
+      .height(40)
+      .justifyContent(FlexAlign.Center)
+      .accessibilityText(`切换到${title}`)
+      .onClick((): void => this.selectFollowingTitleBarTab(index))
+  }
 
   private selectFollowingTitleBarTab(index: number): void {
     if (index < 0 || index > 1) {
       return;
     }
-    this.followingTitleBarIndexes = [index];
-    this.channelFeedInteractionBridge.selectFollowingTab(index);
-  }
-
-  private createFollowingSegmentOptions(): SegmentButtonOptions {
-    return SegmentButtonOptions.tab({
-      buttons: [{ text: '推荐' }, { text: '动态' }],
-      backgroundColor: Color.Transparent,
-      selectedBackgroundColor: $r('app.color.brand_primary_container'),
-      buttonPadding: 10
-    });
+    AppStorage.setOrCreate('followingSelectedTabIndex', index);
+    AppStorage.setOrCreate('followingTabSelectionTick',
+      (AppStorage.get<number>('followingTabSelectionTick') ?? 0) + 1);
   }
 
   private openDailyDatePicker(): void {
