@@ -1,4 +1,12 @@
+import { QuestionTitleBar } from './QuestionTitleBar';
+import { SearchTitleBar } from './SearchTitleBar';
+import { HistoryTitleBar } from './HistoryTitleBar';
+import { AnswerTitleBar } from './AnswerTitleBar';
+import { ArticleTitleBar } from './ArticleTitleBar';
 import {
+  allAnswerDoubleTapActions,
+  AnswerDoubleTapAction,
+  answerDoubleTapActionLabel,
   AppPreferencesStore,
   AppThemeMode,
   AppUpdateCheckResult,
@@ -7,14 +15,13 @@ import {
   AppUpdateRelease,
   LoginSessionGateway,
   SessionState,
-  SessionStatus
+  SessionStatus,
+  shouldAutoCheckForUpdate
 } from 'data';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import bundleManager from '@ohos.bundle.bundleManager';
 import { Want } from '@kit.AbilityKit';
 import {
-  SegmentButton,
-  SegmentButtonOptions,
   SymbolGlyphModifier
 } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -41,6 +48,7 @@ import { getImmersiveTitleBarStyle } from '../common/style/NavStyles';
 import { ZhihuHdsTabs } from './components/ZhihuHdsTabs';
 import { materialCanvas } from './components/MaterialCanvas';
 import { ChannelFeedInteractionBridge } from './ChannelFeedState';
+import { dailyDateCursor, dailyPickerDate, formatDailyDate } from './DailyFeedDates';
 
 const PROJECT_HOME_URI: string = 'https://github.com/zhuoyi233/zhihu-plus-plus-HMOS';
 
@@ -92,6 +100,8 @@ export struct P1Shell {
   @BuilderParam blockedFeedHistoryContent: (onBack: () => void) => void = this.emptyPage;
   @BuilderParam readHistoryContent: (navigate: (destination: P1Destination) => void, onBack: () => void) => void =
     this.emptyHome;
+  @BuilderParam localHistoryContent: (navigate: (destination: P1Destination) => void, onBack: () => void) => void =
+    this.emptyHome;
   @BuilderParam loginContent: (onBack: () => void, onAuthenticated: () => void,
     onScanDesktopLogin: () => void) => void = this.emptyLogin;
   @BuilderParam readerProbeContent: (onBack: () => void) => void = this.emptyProbe;
@@ -108,6 +118,13 @@ export struct P1Shell {
   @StorageProp('sessionStateTick') @Watch('onSessionStateTick') sessionStateTick: number = 0;
   @State private sessionSnapshot?: SessionState = undefined;
   @State private themeMode: AppThemeMode = AppThemeMode.SYSTEM;
+  /** 回答页双击正文动作（对齐上游 answerDoubleTapAction）：AppStorage 广播与详情页双向同步。 */
+  @StorageProp('answerDoubleTapAction') private answerDoubleTapAction: AnswerDoubleTapAction =
+    AnswerDoubleTapAction.ASK;
+  /** 回答/文章详情页沉浸式阅读中（页面广播）：隐藏 NavDestination 顶栏（对齐上游 topBar={}）。 */
+  @StorageProp('detailImmersiveActive') private detailImmersiveActive: boolean = false;
+  /** 全屏图片查看器打开中（详情页广播）：同样隐藏顶栏，使查看器真全屏。 */
+  @StorageProp('p2ImagePreviewUrl') private imagePreviewUrl: string = '';
   @State private installedVersionLabel: string = '正在读取已安装版本…';
   @State private aboutVersionSheetShown: boolean = false;
   /** GitHub 最新 Release 检出有新版本时非空：驱动“我的”页横幅与版本弹层下载入口。 */
@@ -125,12 +142,11 @@ export struct P1Shell {
   @State private followingReloadToken: number = 0;
   @State private hotReloadToken: number = 0;
   @State private dailyReloadToken: number = 0;
-  // SegmentButtonOptions is an @ObjectLink in the framework component. Keep
-  // the options in observed state instead of passing an inline object, which
-  // otherwise renders the control but drops its tap callback on device.
-  @State private followingSegmentOptions: SegmentButtonOptions = this.createFollowingSegmentOptions();
-  @Provide('dailyDatePickerRequest') private dailyDatePickerRequest: number = 0;
-  @Provide('dailyDateCursor') private dailyDateCursor: string = '';
+  // 关注页子页签（推荐/动态）当前选中项：经 AppStorage 与关注页 Swiper 双向同步
+  // （标题栏点选写 tick，关注页滑动写 index），@Consume 在 HdsTabs 树下实测不链接。
+  @StorageProp('followingSelectedTabIndex') private followingTitleSelectedIndex: number = 0;
+  @StorageProp('dailyViewingDate') private dailyViewingDate: string = '';
+  @State private dailyDateCursor: string = '';
   @Provide('channelFeedInteractionBridge') private channelFeedInteractionBridge: ChannelFeedInteractionBridge =
     new ChannelFeedInteractionBridge();
   @State @Watch('onTopLevelTabIndexChanged') private topLevelTabIndex: number = P1TopLevelTab.HOME;
@@ -145,6 +161,7 @@ export struct P1Shell {
     this.themeMounted = true;
     this.sessionSnapshot = this.session?.getState();
     this.restoreThemeMode();
+    void this.restoreAnswerDoubleTapAction();
     this.refreshInstalledVersionLabel();
     this.unsubscribeStartupDestination?.();
     const listener: StartupDestinationListener = (destination: P1Destination): void => {
@@ -298,7 +315,26 @@ export struct P1Shell {
           this.pathStack.pop();
         });
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '已读记录' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({
+        style: getImmersiveTitleBarStyle(),
+        avoidLayoutSafeArea: true,
+        // 返回键用 HDS 标题栏自带 backIcon，右上角选项菜单由 stackBuilder 注入（同搜索页模式）。
+        content: {
+          stackBuilder: (): void => this.readHistoryTitleBar(),
+          backIcon: { action: (): void => { this.pathStack.pop(); } },
+          divider: { showType: DividerShowType.OFF }
+        }
+      })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.LOCAL_HISTORY) {
+      HdsNavDestination() {
+        this.localHistoryContent((nextDestination: P1Destination): void => this.navigate(nextDestination),
+          (): void => {
+            this.pathStack.pop();
+          });
+      }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '本地历史记录' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.TECHNICAL_LAB) {
@@ -331,14 +367,23 @@ export struct P1Shell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '搜索' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({
+        style: getImmersiveTitleBarStyle(),
+        avoidLayoutSafeArea: true,
+        // 返回键用 HDS 标题栏自带 backIcon（自定义 action 接管），避免与 stackBuilder 内自绘返回键重叠。
+        content: {
+          stackBuilder: (): void => this.searchTitleBar(),
+          backIcon: { action: (): void => { this.pathStack.pop(); } },
+          divider: { showType: DividerShowType.OFF }
+        }
+      })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.FOLLOWING) {
       HdsNavDestination() {
         this.followingContent(this.followingReloadToken,
           (destination: P1Destination): void => this.navigate(destination),
-          this.followingTitleBarIndexes[0]);
+          this.followingTitleSelectedIndex);
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '关注' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
@@ -380,8 +425,17 @@ export struct P1Shell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.detailTitleBar('问题'), divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.questionTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
+      // 问题页正文图片同样可打开全屏查看器：隐藏顶栏，返回键优先关查看器。
+      .hideTitleBar(this.detailImmersiveActive || this.imagePreviewUrl.length > 0)
+      .onBackPressed((): boolean => {
+        if (this.imagePreviewUrl.length > 0) {
+          AppStorage.setOrCreate('p2ImagePreviewUrl', '');
+          return true;
+        }
+        return false;
+      })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.ANSWER) {
@@ -394,8 +448,22 @@ export struct P1Shell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.detailTitleBar('回答'), divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.answerTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
+      // 沉浸式/图片查看器中隐藏顶栏（对齐上游 topBar={}）；返回键优先关查看器、再退沉浸式。
+      .hideTitleBar(this.detailImmersiveActive || this.imagePreviewUrl.length > 0)
+      .onBackPressed((): boolean => {
+        if (this.imagePreviewUrl.length > 0) {
+          AppStorage.setOrCreate('p2ImagePreviewUrl', '');
+          return true;
+        }
+        if (this.detailImmersiveActive) {
+          AppStorage.setOrCreate('detailImmersiveExitTick',
+            (AppStorage.get<number>('detailImmersiveExitTick') ?? 0) + 1);
+          return true;
+        }
+        return false;
+      })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.ARTICLE) {
@@ -408,8 +476,22 @@ export struct P1Shell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.detailTitleBar('文章'), divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.articleTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
+      // 与回答页一致：沉浸式/图片查看器中隐藏顶栏，返回键优先关查看器。
+      .hideTitleBar(this.detailImmersiveActive || this.imagePreviewUrl.length > 0)
+      .onBackPressed((): boolean => {
+        if (this.imagePreviewUrl.length > 0) {
+          AppStorage.setOrCreate('p2ImagePreviewUrl', '');
+          return true;
+        }
+        if (this.detailImmersiveActive) {
+          AppStorage.setOrCreate('detailImmersiveExitTick',
+            (AppStorage.get<number>('detailImmersiveExitTick') ?? 0) + 1);
+          return true;
+        }
+        return false;
+      })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.VIDEO) {
@@ -649,7 +731,7 @@ export struct P1Shell {
         TabContent() {
           this.followingContent(this.followingReloadToken,
             (destination: P1Destination): void => this.navigate(destination),
-            this.followingTitleBarIndexes[0]);
+            this.followingTitleSelectedIndex);
         }
         .id('p1_top_level_following_content')
         .tabBar(this.topLevelTabBarStyle(P1TopLevelTab.FOLLOWING))
@@ -743,6 +825,35 @@ export struct P1Shell {
 
   /** 详情页 HDS 标题栏内容：返回键 + 页面标题（替代各详情页自绘页头，消除标题栏空置占位）。 */
   @Builder
+  private questionTitleBar(id: string) {
+    QuestionTitleBar({ questionId: id, onBack: (): void => { this.pathStack.pop(); } })
+  }
+
+  /** 搜索页 HDS 标题栏内容：返回键 + 搜索框 + 排序方式菜单（对齐上游搜索顶栏）。 */
+  @Builder
+  private searchTitleBar() {
+    SearchTitleBar()
+  }
+
+  /** 历史记录页 HDS 标题栏内容：标题 + 右上角溢出菜单（查看本地历史记录/清除历史记录）。 */
+  @Builder
+  private readHistoryTitleBar() {
+    HistoryTitleBar()
+  }
+
+  /** 回答页标题栏：滚动折叠时在返回键右侧显示问题单行 + 答主摘要（对齐上游折叠顶栏）。 */
+  @Builder
+  private answerTitleBar(id: string) {
+    AnswerTitleBar({ answerId: id, onBack: (): void => { this.pathStack.pop(); } })
+  }
+
+  /** 文章页标题栏：滚动折叠时在返回键右侧显示文章标题单行（对齐问题页折叠模式）。 */
+  @Builder
+  private articleTitleBar(id: string) {
+    ArticleTitleBar({ articleId: id, onBack: (): void => { this.pathStack.pop(); } })
+  }
+
+  @Builder
   private detailTitleBar(title: string) {
     Row({ space: $r('app.float.p1_spacing_small') }) {
       Stack({ alignContent: Alignment.Center }) {
@@ -833,13 +944,12 @@ export struct P1Shell {
       .hitTestBehavior(HitTestMode.Transparent)
     } else if (this.topLevelTabIndex === P1TopLevelTab.FOLLOWING) {
       Column() {
-        SegmentButton({
-          options: this.followingSegmentOptions,
-          selectedIndexes: $followingTitleBarIndexes,
-          onItemClicked: (index: number): void => this.selectFollowingTitleBarTab(index)
-        })
-          .width('52%')
-          .height(44)
+        Row() {
+          this.followingTitleTabItem('推荐', 0)
+          this.followingTitleTabItem('动态', 1)
+        }
+          .width(180)
+          .height(40)
       }
       .width('100%')
       .height('100%')
@@ -870,6 +980,21 @@ export struct P1Shell {
       .hitTestBehavior(HitTestMode.Transparent)
     } else if (this.topLevelTabIndex === P1TopLevelTab.DAILY) {
       Row() {
+        Column({ space: 2 }) {
+          Text('知乎日报')
+            .fontSize($r('app.float.p1_heading_font_size'))
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.primary_text'))
+          if (this.dailyViewingDate.length > 0) {
+            Text(formatDailyDate(this.dailyViewingDate))
+              .id('p2_daily_titlebar_current_date')
+              .fontSize($r('app.float.p1_secondary_font_size'))
+              .fontColor($r('app.color.secondary_text'))
+              .maxLines(1)
+          }
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
         Button({ type: ButtonType.Circle, stateEffect: true }) {
           SymbolGlyph($r('sys.symbol.calendar'))
             .fontSize(20)
@@ -887,8 +1012,7 @@ export struct P1Shell {
         })
       }
       .width('100%')
-      .justifyContent(FlexAlign.End)
-      .padding({ right: 12 })
+      .padding({ left: $r('app.float.p1_page_padding'), right: 12 })
       .hitTestBehavior(HitTestMode.Transparent)
     }
     }
@@ -898,45 +1022,54 @@ export struct P1Shell {
     .monopolizeEvents(false)
   }
 
-  // SegmentButton uses two-way binding; keep the selected index as observable
-  // component state so taps immediately rebuild the following feed content.
-  @State private followingTitleBarIndexes: number[] = [0];
+  // 关注子页签：鸿蒙规范的文字页签（选中加重 + 短下划线指示条），
+  // 点选经 AppStorage 广播给关注页 Swiper。
+  @Builder
+  private followingTitleTabItem(title: string, index: number) {
+    Column({ space: 4 }) {
+      Text(title)
+        .fontSize(16)
+        .fontWeight(this.followingTitleSelectedIndex === index ? FontWeight.Medium : FontWeight.Regular)
+        .fontColor(this.followingTitleSelectedIndex === index
+          ? $r('app.color.primary_text')
+          : $r('app.color.secondary_text'))
+      Row()
+        .width(this.followingTitleSelectedIndex === index ? 24 : 0)
+        .height(3)
+        .borderRadius(1.5)
+        .backgroundColor($r('app.color.zhihu_blue'))
+        .animation({ duration: 250, curve: Curve.EaseInOut })
+    }
+      .id(`p2_following_titlebar_tab_${index}`)
+      .layoutWeight(1)
+      .height(40)
+      .justifyContent(FlexAlign.Center)
+      .accessibilityText(`切换到${title}`)
+      .onClick((): void => this.selectFollowingTitleBarTab(index))
+  }
 
   private selectFollowingTitleBarTab(index: number): void {
     if (index < 0 || index > 1) {
       return;
     }
-    this.followingTitleBarIndexes = [index];
-    this.channelFeedInteractionBridge.selectFollowingTab(index);
-  }
-
-  private createFollowingSegmentOptions(): SegmentButtonOptions {
-    return SegmentButtonOptions.tab({
-      buttons: [{ text: '推荐' }, { text: '动态' }],
-      backgroundColor: Color.Transparent,
-      selectedBackgroundColor: $r('app.color.brand_primary_container'),
-      buttonPadding: 10
-    });
+    AppStorage.setOrCreate('followingSelectedTabIndex', index);
+    AppStorage.setOrCreate('followingTabSelectionTick',
+      (AppStorage.get<number>('followingTabSelectionTick') ?? 0) + 1);
   }
 
   private openDailyDatePicker(): void {
-    const selectedDate: Date = new Date();
     this.getUIContext().showDatePickerDialog({
-      selected: selectedDate,
+      selected: dailyPickerDate(this.dailyViewingDate),
       start: new Date(2000, 0, 1),
       end: new Date(),
       onDateAccept: (date: Date): void => {
-        this.dailyDateCursor = this.formatDailyDateCursor(date);
-        this.dailyReloadToken += 1;
-        this.channelFeedInteractionBridge.selectDailyDate(this.dailyDateCursor);
+        // HdsTabs 下使用 AppStorage 先写日期再广播，重复选择同一天也能重新加载。
+        this.dailyDateCursor = dailyDateCursor(date);
+        AppStorage.setOrCreate('dailySelectedDate', this.dailyDateCursor);
+        AppStorage.setOrCreate('dailyDateSelectionTick',
+          (AppStorage.get<number>('dailyDateSelectionTick') ?? 0) + 1);
       }
     });
-  }
-
-  private formatDailyDateCursor(date: Date): string {
-    const month: string = `${date.getMonth() + 1}`.padStart(2, '0');
-    const day: string = `${date.getDate()}`.padStart(2, '0');
-    return `${date.getFullYear()}${month}${day}`;
   }
 
   @Builder
@@ -977,9 +1110,6 @@ export struct P1Shell {
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
           Column() {
-            AppNavigationRow({ title: '历史', description: '查看已打开的内容', testId: 'p2_open_read_history', grouped: true,
-              onRowClick: (): void => this.navigate({ name: P1DestinationName.READ_HISTORY }) });
-            Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '内容屏蔽', description: '管理作者与关键词屏蔽规则', testId: 'p2_open_blocking_rules', grouped: true,
               onRowClick: (): void => this.navigate({ name: P1DestinationName.BLOCKING_RULES }) });
             Divider().color($r('app.color.divider_color'))
@@ -1014,6 +1144,29 @@ export struct P1Shell {
                 this.themeButton('深色', AppThemeMode.DARK, 'p1_theme_dark');
               }
               .width('100%')
+            }
+            .alignItems(HorizontalAlign.Start)
+            .width('100%')
+            .padding($r('app.float.p1_card_padding'))
+            Divider().color($r('app.color.divider_color'))
+            Column({ space: $r('app.float.p1_spacing_small') }) {
+              Text('双击回答动作')
+                .fontSize($r('app.float.p1_body_font_size'))
+                .fontColor($r('app.color.primary_text'))
+              Text('双击回答正文时执行的动作。默认弹窗询问。')
+                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+              Select(this.answerDoubleTapSelectOptions())
+                .id('p3_settings_answer_double_tap_select')
+                .selected(this.answerDoubleTapAction)
+                .value(answerDoubleTapActionLabel(this.answerDoubleTapAction))
+                .fontColor($r('app.color.primary_text'))
+                .onSelect((index: number): void => {
+                  const actions = allAnswerDoubleTapActions();
+                  if (index >= 0 && index < actions.length) {
+                    void this.selectAnswerDoubleTapAction(actions[index]);
+                  }
+                })
             }
             .alignItems(HorizontalAlign.Start)
             .width('100%')
@@ -1230,7 +1383,7 @@ export struct P1Shell {
 
       Button({ type: ButtonType.Normal, stateEffect: true }) {
         Column({ space: $r('app.float.p1_spacing_xsmall') }) {
-          SymbolGlyph($r('sys.symbol.line_3_horizontal'))
+          SymbolGlyph($r('sys.symbol.arrow_counterclockwise_clock'))
             .fontSize(20)
             .fontColor([$r('app.color.brand_primary')])
           Text('历史')
@@ -1308,10 +1461,6 @@ export struct P1Shell {
       if (this.settingsSearchMatches('我的收藏夹', '查看自己的知乎收藏夹')) {
         AppNavigationRow({ title: '我的收藏夹', description: '查看自己的知乎收藏夹', testId: 'p3_open_my_collections',
           onRowClick: (): void => this.openMyCollections() });
-      }
-      if (this.settingsSearchMatches('历史', '查看已打开的内容')) {
-        AppNavigationRow({ title: '历史', description: '查看已打开的内容', testId: 'p2_open_read_history',
-          onRowClick: (): void => this.navigate({ name: P1DestinationName.READ_HISTORY }) });
       }
       if (this.settingsSearchMatches('内容屏蔽', '管理作者与关键词屏蔽规则')) {
         AppNavigationRow({ title: '内容屏蔽', description: '管理作者与关键词屏蔽规则', testId: 'p2_open_blocking_rules',
@@ -1625,7 +1774,8 @@ export struct P1Shell {
     }
   }
 
-  /** verbose=true 供“应用与版本”弹层手动检查（展示状态）；false 供启动静默检查（仅检出新版本时提示）。 */
+  /** verbose=true 供“应用与版本”弹层手动检查（展示状态、不受节流限制）；false 供启动静默检查
+    * （3 小时节流，对齐上游 shouldPerformAutoCheck）。检出新版本时经 AppStorage 广播驱动首页更新卡片。 */
   private async runUpdateCheck(verbose: boolean): Promise<void> {
     if (this.updateCheckBusy) {
       return;
@@ -1636,6 +1786,10 @@ export struct P1Shell {
       }
       return;
     }
+    if (!verbose && !(await this.shouldAutoCheckUpdateNow())) {
+      return;
+    }
+    await this.markUpdateCheckedNow();
     this.updateCheckBusy = true;
     if (verbose) {
       this.updateCheckMessage = '正在检查更新…';
@@ -1645,20 +1799,60 @@ export struct P1Shell {
         await this.updateClient.checkLatestRelease(this.installedVersionName);
       if (result.status === AppUpdateCheckStatus.UPDATE_AVAILABLE && result.release !== undefined) {
         this.pendingUpdateRelease = result.release;
+        this.broadcastHomeUpdateAnnouncement(result.release.versionName, this.releaseDownloadUrl(result.release));
         if (verbose) {
           this.updateCheckMessage = `发现新版本 ${result.release.versionName}，可前往下载`;
         }
       } else if (result.status === AppUpdateCheckStatus.UP_TO_DATE) {
         this.pendingUpdateRelease = undefined;
+        this.broadcastHomeUpdateAnnouncement('', '');
         if (verbose) {
           this.updateCheckMessage = '当前已是最新版本';
         }
       } else if (verbose) {
         this.updateCheckMessage = result.message.length > 0 ? result.message : '检查更新失败，请稍后重试';
       }
+      hilog.info(0x0000, 'AppUpdate', 'check status=%{public}s remoteVersion=%{public}s',
+        result.status, result.release !== undefined ? result.release.versionName : '');
     } finally {
       this.updateCheckBusy = false;
     }
+  }
+
+  private async shouldAutoCheckUpdateNow(): Promise<boolean> {
+    const context = getAbilityContext();
+    if (context === undefined) {
+      return true;
+    }
+    try {
+      const lastUpdateCheckAt = await new AppPreferencesStore(context).loadLastUpdateCheckAt();
+      return shouldAutoCheckForUpdate(lastUpdateCheckAt, Date.now());
+    } catch (_error) {
+      // 节流时间戳读取失败按未节流处理，宁可多检查一次。
+      return true;
+    }
+  }
+
+  private async markUpdateCheckedNow(): Promise<void> {
+    const context = getAbilityContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      await new AppPreferencesStore(context).saveLastUpdateCheckAt(Date.now());
+    } catch (_error) {
+      // 节流时间戳保存失败仅影响下次自动检查频率，不打扰用户。
+    }
+  }
+
+  /** 首页更新卡片经 AppStorage 广播（HdsTabs 树下跨页面信号唯一可靠通道）。 */
+  private broadcastHomeUpdateAnnouncement(version: string, url: string): void {
+    AppStorage.setOrCreate('homeUpdateAnnouncementVersion', version);
+    AppStorage.setOrCreate('homeUpdateAnnouncementUrl', url);
+  }
+
+  private releaseDownloadUrl(release: AppUpdateRelease): string {
+    return release.htmlUrl.length > 0 ? release.htmlUrl : PROJECT_HOME_URI + '/releases/latest';
   }
 
   private pendingUpdateTitle(): string {
@@ -1680,7 +1874,6 @@ export struct P1Shell {
       this.settingsSearchMatches('发布想法', '创建一条新的想法') ||
       this.settingsSearchMatches('想法草稿', '继续编辑本地保存的草稿') ||
       this.settingsSearchMatches('我的收藏夹', '查看自己的知乎收藏夹') ||
-      this.settingsSearchMatches('历史', '查看已打开的内容') ||
       this.settingsSearchMatches('内容屏蔽', '管理作者与关键词屏蔽规则') ||
       this.settingsSearchMatches('屏蔽记录', '查看最近隐藏的内容') ||
       this.settingsSearchMatches('通知', '查看互动和系统消息') ||
@@ -1921,6 +2114,40 @@ export struct P1Shell {
       default:
         return destination.name;
     }
+  }
+
+  private answerDoubleTapSelectOptions(): SelectOption[] {
+    return allAnswerDoubleTapActions().map((action: AnswerDoubleTapAction): SelectOption => {
+      return { value: answerDoubleTapActionLabel(action) } as SelectOption;
+    });
+  }
+
+  private async restoreAnswerDoubleTapAction(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      this.answerDoubleTapAction = await new AppPreferencesStore(context).loadAnswerDoubleTapAction();
+      AppStorage.setOrCreate('answerDoubleTapAction', this.answerDoubleTapAction);
+    } catch (_error) {
+      // 读取失败保持默认 Ask。
+    }
+  }
+
+  private async selectAnswerDoubleTapAction(action: AnswerDoubleTapAction): Promise<void> {
+    const context = getAbilityContext();
+    if (context === undefined) {
+      return;
+    }
+    AppStorage.setOrCreate('answerDoubleTapAction', action);
+    try {
+      await new AppPreferencesStore(context).saveAnswerDoubleTapAction(action);
+    } catch (_error) {
+      // 保存失败时选择已生效，重启后可能恢复此前设置。
+    }
+    this.getUIContext().getPromptAction()
+      .showToast({ message: `已设置为：${answerDoubleTapActionLabel(action)}` });
   }
 
   private async restoreThemeMode(): Promise<void> {

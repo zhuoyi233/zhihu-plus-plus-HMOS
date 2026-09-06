@@ -2,10 +2,13 @@ import { describe, expect, it } from '@ohos/hypium';
 import {
   AppUpdateCheckStatus,
   AppUpdateRelease,
+  AUTO_UPDATE_CHECK_INTERVAL_MS,
   compareVersionNames,
   decodeLatestRelease,
+  isUpdateAnnouncementVisible,
   parseHmosTagVersion,
-  resolveAppUpdateCheck
+  resolveAppUpdateCheck,
+  shouldAutoCheckForUpdate
 } from 'data';
 
 function releaseFixture(tag: string, version: string): AppUpdateRelease {
@@ -73,6 +76,20 @@ export default function appUpdateParserTest(): void {
       const failed = resolveAppUpdateCheck('0.2.1', undefined, '网络不可用');
       expect(failed.status).assertEqual(AppUpdateCheckStatus.FAILED);
       expect(failed.message).assertEqual('网络不可用');
+    });
+
+    it('throttlesAutoCheckByInterval', 0, () => {
+      expect(shouldAutoCheckForUpdate(0, 1000)).assertTrue();
+      expect(shouldAutoCheckForUpdate(1000, 1000 + AUTO_UPDATE_CHECK_INTERVAL_MS)).assertTrue();
+      expect(shouldAutoCheckForUpdate(1000, 1000 + AUTO_UPDATE_CHECK_INTERVAL_MS - 1)).assertFalse();
+      expect(shouldAutoCheckForUpdate(5000, 1000)).assertFalse();
+    });
+
+    it('gatesUpdateAnnouncementVisibility', 0, () => {
+      expect(isUpdateAnnouncementVisible('0.3.3', '')).assertTrue();
+      expect(isUpdateAnnouncementVisible('0.3.3', '0.3.2')).assertTrue();
+      expect(isUpdateAnnouncementVisible('0.3.3', '0.3.3')).assertFalse();
+      expect(isUpdateAnnouncementVisible('', '')).assertFalse();
     });
   });
 }

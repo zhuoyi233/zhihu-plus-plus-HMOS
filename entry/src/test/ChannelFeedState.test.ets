@@ -13,6 +13,7 @@ import {
 } from 'data';
 import { P1DestinationName } from 'core';
 import { channelFeedDestination } from '../main/ets/pages/ChannelFeedPage';
+import { dailyFeedDateAtIndex, dailyDateCursor, dailyPickerDate } from '../main/ets/pages/DailyFeedDates';
 import {
   ChannelFeedController,
   ChannelFeedPhase,
@@ -153,6 +154,35 @@ export default function channelFeedStateTest(): void {
       expect((controller.snapshot().items[0] as ChannelDailyStoryItem).story.id).assertEqual('selected');
     });
 
+    it('retriesTheSelectedDailyDateAndRefreshesBackToLatest', 0, async () => {
+      const repository = new ControlledChannelRepository();
+      const controller = new ChannelFeedController(ChannelFeedSource.DAILY, repository);
+      controller.activate();
+      const selected = controller.loadDate('20260808');
+      repository.fail(0);
+      await selected;
+      const retried = controller.retry();
+      expect(repository.cursors[1]).assertEqual('20260808');
+      expect(repository.resetFlags[1]).assertTrue();
+      repository.succeed(1, page([daily('1')], '20260808'));
+      await retried;
+      const refreshed = controller.refresh();
+      expect(repository.cursors[2]).assertUndefined();
+      repository.succeed(2, page([daily('2')], '20260904'));
+      await refreshed;
+    });
+
+    it('resolvesVisibleDailyDateAcrossSectionsAndLoadingFooter', 0, () => {
+      const first = daily('1') as ChannelDailyStoryItem;
+      const older = daily('2', '20260810');
+      const items: Array<ChannelFeedItem> = [first, first, older];
+      expect(dailyFeedDateAtIndex(items, 1)).assertEqual(first.story.date);
+      expect(dailyFeedDateAtIndex(items, 2)).assertEqual('20260810');
+      expect(dailyFeedDateAtIndex(items, 3)).assertEqual('20260810');
+      expect(dailyFeedDateAtIndex([], 0)).assertEqual('');
+      expect(dailyDateCursor(dailyPickerDate('20240229'))).assertEqual('20240229');
+    });
+
     it('continuesAfterEmptyNonTerminalPage', 0, async () => {
       const repository = new ControlledChannelRepository();
       const controller = new ChannelFeedController(ChannelFeedSource.HOT, repository);
@@ -275,7 +305,7 @@ function content(id: string, kind: FeedTargetKind = FeedTargetKind.ANSWER): Chan
   };
 }
 
-function daily(id: string): ChannelFeedItem {
+function daily(id: string, date: string = '20260811'): ChannelFeedItem {
   return {
     kind: ChannelFeedItemKind.DAILY_STORY,
     story: {
@@ -284,7 +314,7 @@ function daily(id: string): ChannelFeedItem {
       hint: 'hint',
       url: `https://daily.zhihu.com/story/${id}`,
       storyType: 0,
-      date: '20260811'
+      date: date
     }
   };
 }

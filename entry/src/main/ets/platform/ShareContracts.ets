@@ -48,6 +48,8 @@ export interface ShareTextPayload {
   readonly title: string;
   readonly summary: string;
   readonly contentUrl: string;
+  /** 可选：受信 zhimg 图片 URL，用于系统分享面板的链接卡片缩略图。 */
+  readonly thumbnailUrl?: string;
 }
 
 export interface ShareTemporaryFile {
@@ -89,6 +91,8 @@ export interface PreparedSharePayload {
   readonly mimeType: string;
   /** 只会是受信知乎 HTTPS URL 或已经通过专用 cache 目录检查的临时文件路径。 */
   readonly source: string;
+  /** 仅 TEXT 链接可能有：已通过 zhimg 域白名单校验的缩略图 URL。 */
+  readonly thumbnailUrl?: string;
 }
 
 export interface TemporaryShareLifecycle {
@@ -117,13 +121,24 @@ export function prepareSharePayload(payload: SharePayload, policy: ShareRuntimeP
   const summary = normalizeSummary(payload.summary);
   if (payload.kind === SharePayloadKind.TEXT) {
     const contentUrl = normalizeTrustedContentUrl(payload.contentUrl);
-    return {
+    const thumbnailUrl = payload.thumbnailUrl === undefined ?
+      undefined : normalizeTrustedImageUrl(payload.thumbnailUrl);
+    const prepared: PreparedSharePayload = {
       kind: SharePayloadKind.TEXT,
       dispatchKind: ShareDispatchKind.TEXT_LINK,
       title: title,
       summary: summary,
       mimeType: 'text/plain',
       source: contentUrl
+    };
+    return thumbnailUrl === undefined ? prepared : {
+      kind: prepared.kind,
+      dispatchKind: prepared.dispatchKind,
+      title: prepared.title,
+      summary: prepared.summary,
+      mimeType: prepared.mimeType,
+      source: prepared.source,
+      thumbnailUrl: thumbnailUrl
     };
   }
   if (payload.kind === SharePayloadKind.IMAGE) {

@@ -11,14 +11,19 @@ import {
 import {
   ContentDetailController,
   ContentDetailPhase,
-  contentDetailIdentity
+  contentDetailIdentity,
+  LoadedAnswerDetail,
+  LoadedQuestionDetail
 } from '../main/ets/pages/ContentDetailState';
 import {
   contentContextTitle,
+  contentCreatedAtText,
   contentEmptyMessage,
   contentHtml,
   contentStatistics,
-  contentTitle
+  contentTitle,
+  contentUpdatedAtText,
+  formatContentDateTime
 } from '../main/ets/pages/ContentDetailPages';
 import { parseZhihuHtml, ReaderBlockKind, ReaderInlineKind } from 'reader';
 
@@ -223,6 +228,30 @@ export default function contentDetailStateTest(): void {
         'src="https://evil.example/formula.svg"></p>');
       expect(fallback[0].inlineRuns.length).assertEqual(0);
       expect(fallback[0].text.includes('secret')).assertTrue();
+    });
+
+    it('formatsAnswerPublishAndEditTimeLikeUpstreamDateTexts', 0, () => {
+      // 本地日历构造再取 unix 秒：期望值与被测函数同走本地时区，单双位数补零均覆盖。
+      const created = new Date(2026, 0, 2, 3, 4, 5);
+      const updated = new Date(2026, 8, 30, 23, 59, 0);
+      const answer = answerFixture();
+      answer.createdAt = Math.floor(created.getTime() / 1000);
+      answer.updatedAt = Math.floor(updated.getTime() / 1000);
+      const detail: LoadedAnswerDetail = { kind: ContentDetailKind.ANSWER, value: answer };
+
+      expect(formatContentDateTime(answer.createdAt)).assertEqual('2026-01-02 03:04');
+      expect(contentCreatedAtText(detail)).assertEqual('发布于 2026-01-02 03:04');
+      expect(contentUpdatedAtText(detail)).assertEqual('编辑于 2026-09-30 23:59');
+
+      // 编辑时间与发布相同（未编辑）不显示；非法时间戳返回空串；非回答类型返回空串。
+      answer.updatedAt = answer.createdAt;
+      expect(contentUpdatedAtText(detail)).assertEqual('');
+      answer.createdAt = 0;
+      expect(contentCreatedAtText(detail)).assertEqual('');
+      const question = questionFixture();
+      const questionDetail: LoadedQuestionDetail = { kind: ContentDetailKind.QUESTION, value: question };
+      expect(contentCreatedAtText(questionDetail)).assertEqual('');
+      expect(contentUpdatedAtText(questionDetail)).assertEqual('');
     });
   });
 }

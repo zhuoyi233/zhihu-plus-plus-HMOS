@@ -5,12 +5,13 @@ import {
   JsonNullValue,
   JsonNumberValue,
   JsonObjectValue,
+  jsonString,
   JsonStringValue,
   JsonValue,
   parseStrictJson,
   StrictJsonError
 } from 'core';
-import { Answer, AnswerEndorsementDisplay, Article, ContentVoteState, Question, UserProfile } from './DomainModels';
+import { Answer, AnswerEndorsementDisplay, Article, ContentVoteState, Question, QuestionTopicSummary, UserProfile } from './DomainModels';
 import { DomainDecodeError, DomainDecodeFailureKind } from './ZhihuDomainDecoder';
 
 function parseRoot(json: string, contentName: string): JsonObjectValue {
@@ -289,13 +290,45 @@ export function decodeQuestionDetail(json: string, expectedId: string): Question
     answerCount: nonNegativeInteger(wire.get('answer_count'), 'question.answer_count'),
     commentCount: nonNegativeInteger(wire.get('comment_count'), 'question.comment_count'),
     followerCount: nonNegativeInteger(wire.get('follower_count'), 'question.follower_count'),
+    visitCount: questionVisitCount(wire.get('visit_count')),
     createdAt: nonNegativeInteger(wire.get('created'), 'question.created'),
     updatedAt: nonNegativeInteger(wire.get('updated_time'), 'question.updated_time'),
     author: authorFromWire(optionalObject(wire.get('author'), 'author')),
     isFollowing: relationship === undefined
       ? undefined
-      : optionalBoolean(relationship.get('is_following'), 'question.relationship.is_following')
+      : optionalBoolean(relationship.get('is_following'), 'question.relationship.is_following'),
+    topics: questionTopicsFromWire(wire.get('topics'))
   };
+}
+
+function questionVisitCount(value: JsonValue | undefined): number | undefined {
+  if (value === undefined || value instanceof JsonNullValue) {
+    return undefined;
+  }
+  return nonNegativeInteger(value, 'question.visit_count');
+}
+
+function questionTopicsFromWire(value: JsonValue | undefined): QuestionTopicSummary[] {
+  if (value === undefined || value instanceof JsonNullValue) {
+    return [];
+  }
+  if (!(value instanceof JsonArrayValue)) {
+    throw invalid('question.topics 结构无效');
+  }
+  const topics: QuestionTopicSummary[] = [];
+  value.items.forEach((item: JsonValue): void => {
+    const object = item instanceof JsonObjectValue ? item : undefined;
+    if (object === undefined) {
+      return;
+    }
+    const id = jsonString(object.get('id')) ?? jsonIntegerLiteral(object.get('id'));
+    const name = jsonString(object.get('name')) ?? jsonString(object.get('title'));
+    if (id === undefined || id.trim().length === 0 || name === undefined || name.trim().length === 0) {
+      return;
+    }
+    topics.push({ id: id, name: name });
+  });
+  return topics;
 }
 
 export function decodeAnswerDetail(json: string, expectedId: string): Answer {

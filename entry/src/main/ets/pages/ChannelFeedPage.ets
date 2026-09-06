@@ -1,3 +1,5 @@
+import { FeedContentSummary } from './components/FeedContentSummary';
+import { HotQuestionStatistics } from './components/HotQuestionStatistics';
 import { isSafeDecimalContentId, P1Destination, P1DestinationName } from 'core';
 import {
   BlockedFeedHistoryGateway,
@@ -9,6 +11,7 @@ import {
   channelFeedItemIdentity,
   ChannelFeedRepository,
   ChannelFeedSource,
+  ContentRepository,
   DailyStoryRepository,
   DefaultChannelFeedRepository,
   FeedItem,
@@ -36,18 +39,28 @@ import {
   ChannelFeedInteractionBridge
 } from './ChannelFeedState';
 import { dailyStoryDetailErrorMessage } from './DailyStoryDetailState';
+import { dailyFeedDateAtIndex, formatDailyDate } from './DailyFeedDates';
 
 @Component
 export struct ChannelFeedPage {
   source: ChannelFeedSource = ChannelFeedSource.HOT;
   /** 关注页的两个子 Tab 共用列表实现，标题由外层 Tabs 提供。 */
   showHeader: boolean = true;
+  /**
+   * 列表顶部内容插槽（随列表滚动），关注推荐页用于渲染“最近更新的关注用户”一行；
+   * 需与 topContentVisible 同时开启，否则不占列表项。
+   */
+  @BuilderParam topContent: () => void = this.emptyTopContent;
+  topContentVisible: boolean = false;
   repository: ChannelFeedRepository | undefined = new DefaultChannelFeedRepository();
+  questionRepositoryFactory: () => ContentRepository | undefined = () => undefined;
   dailyStoryRepository: DailyStoryRepository | undefined = undefined;
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
   @Prop @Watch('reloadAfterAuthentication') reloadToken: number = 0;
-  @Prop @Watch('loadDateFromTitleBar') dateCursor: string = '';
+  @Prop dateCursor: string = '';
+  @StorageProp('dailySelectedDate') dailySelectedDate: string = '';
+  @StorageProp('dailyDateSelectionTick') @Watch('loadDateFromTitleBar') dailyDateSelectionTick: number = 0;
   // 登录成功重载信号：经 AppStorage 广播（@Consume 在 HdsTabs 树下实测不链接）
   @StorageProp('loginFeedReloadTick') @Watch('onLoginFeedReloadTick') loginFeedReloadTick: number = 0;
   // 双击底栏页签刷新：关注=1、热榜=2、日报=3（P1TopLevelTab），复用下拉刷新链路
@@ -76,8 +89,13 @@ export struct ChannelFeedPage {
   private controller?: ChannelFeedController;
   private blockingAction?: BlockingActionController;
   private pendingBlockItem?: ChannelContentItem = undefined;
+  private readonly listScroller: ListScroller = new ListScroller();
+  private firstVisibleIndex: number = 0;
+  private handledDateSelectionTick: number = 0;
+  private pageActive: boolean = false;
 
   aboutToAppear(): void {
+    this.pageActive = true;
     this.refreshContent = new ComponentContent(this.getUIContext(), wrapBuilder(feedPullDownIndicator),
       new FeedPullDownIndicatorOptions());
     // P3-7：返回栈重显（页面实例与状态保留）时 aboutToAppear 可能再次触发；
@@ -85,6 +103,7 @@ export struct ChannelFeedPage {
     if (this.controller !== undefined) {
       this.controller.activate();
       this.registerTitleBarActions();
+      this.loadDateFromTitleBar();
       return;
     }
     const repository = this.repository;
@@ -98,8 +117,8 @@ export struct ChannelFeedPage {
     });
     this.registerTitleBarActions();
     this.controller.activate();
-    if (this.source === ChannelFeedSource.DAILY && /^\d{8}$/.test(this.dateCursor)) {
-      this.controller.loadDate(this.dateCursor);
+    if (this.source === ChannelFeedSource.DAILY && this.dailyDateSelectionTick > 0) {
+      this.loadDateFromTitleBar();
     } else {
       this.controller.loadInitial();
     }
@@ -107,6 +126,7 @@ export struct ChannelFeedPage {
   }
 
   aboutToDisappear(): void {
+    this.pageActive = false;
     this.refreshContent?.dispose();
     this.refreshContent = undefined;
     this.controller?.deactivate();
@@ -135,13 +155,6 @@ export struct ChannelFeedPage {
     if (this.source === ChannelFeedSource.HOT) {
       this.interactionBridge.registerHotRefresh((): void => {
         controller.reloadNow();
-      });
-    } else if (this.source === ChannelFeedSource.DAILY) {
-      this.interactionBridge.registerDailyRefresh((): void => {
-        controller.reloadNow();
-      });
-      this.interactionBridge.registerDailyDate((date: string): void => {
-        controller.loadDate(date);
       });
     }
   }
@@ -172,8 +185,10 @@ export struct ChannelFeedPage {
   }
 
   private loadDateFromTitleBar(): void {
-    if (this.source === ChannelFeedSource.DAILY && /^\d{8}$/.test(this.dateCursor)) {
-      this.controller?.loadDate(this.dateCursor);
+    if (this.source === ChannelFeedSource.DAILY && this.pageActive && this.controller !== undefined &&
+      this.dailyDateSelectionTick !== this.handledDateSelectionTick && /^\d{8}$/.test(this.dailySelectedDate)) {
+      this.handledDateSelectionTick = this.dailyDateSelectionTick;
+      this.controller.loadDate(this.dailySelectedDate);
     }
   }
 
@@ -215,13 +230,25 @@ export struct ChannelFeedPage {
           offset: 80,
           friction: 100
         }) {
-          List() {
+          List({ scroller: this.listScroller }) {
+            if (this.topContentVisible) {
+              ListItem() {
+                this.topContent()
+              }
+              .width('100%')
+            }
             ForEach(this.items, (item: ChannelFeedItem, index: number) => {
               ListItem() {
                 if (item.kind === ChannelFeedItemKind.CONTENT) {
                   this.contentCard(item, index);
                 } else {
-                  this.dailyCard(item);
+                  Column({ space: 12 }) {
+                    if (index === 0 || dailyFeedDateAtIndex(this.items, index - 1) !== item.story.date) {
+                      this.dailyDateDivider(item.story.date);
+                    }
+                    this.dailyCard(item);
+                  }
+                  .width('100%')
                 }
               }
               .margin({ bottom: $r('app.float.p1_spacing_medium') })
@@ -247,6 +274,15 @@ export struct ChannelFeedPage {
           .height('100%')
           .edgeEffect(EdgeEffect.Spring)
           .onReachEnd(() => this.controller?.loadMore())
+          .onScrollIndex((start: number, end: number): void => {
+            if (this.source === ChannelFeedSource.DAILY) {
+              this.firstVisibleIndex = start;
+              this.publishDailyViewingDate();
+              if (end >= this.items.length - 3) {
+                this.controller?.loadMore();
+              }
+            }
+          })
         }
         .width('100%')
         .layoutWeight(1)
@@ -331,6 +367,10 @@ export struct ChannelFeedPage {
   }
 
   @Builder
+  private emptyTopContent() {
+  }
+
+  @Builder
   private centeredStatus(message: string, retry: boolean) {
     AppPageStatusPanel({
       kind: retry ? AppPageStatusKind.ERROR : AppPageStatusKind.LOADING,
@@ -386,41 +426,10 @@ export struct ChannelFeedPage {
           .accessibilityText('屏蔽作者或关键词')
         }
         .width('100%')
-        // 对齐上游 FeedCard：标题 2 行、摘要 3 行、作者与元信息各 1 行，控制一屏卡片数量。
-        Text(item.feedItem.target.title)
-          .fontSize($r('app.float.p1_heading_font_size'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.primary_text'))
-          .maxLines(2)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .width('100%')
-        if (item.feedItem.target.excerpt.trim().length > 0) {
-          Text(item.feedItem.target.excerpt)
-            .fontSize($r('app.float.p1_body_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .maxLines(3)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
+        FeedContentSummary({ target: item.feedItem.target, showStatistics: this.source !== ChannelFeedSource.HOT })
+        if (this.source === ChannelFeedSource.HOT) {
+          HotQuestionStatistics({ target: item.feedItem.target, repositoryFactory: this.questionRepositoryFactory })
         }
-        Row({ space: $r('app.float.p1_spacing_medium') }) {
-          if (item.feedItem.target.author !== undefined) {
-            Text(item.feedItem.target.author.name)
-              .fontSize($r('app.float.p1_secondary_font_size'))
-              .fontColor($r('app.color.secondary_text'))
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .layoutWeight(1)
-          } else {
-            Blank().layoutWeight(1)
-          }
-          Text(`${item.feedItem.target.voteupCount} 赞同`)
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-          Text(`${item.feedItem.target.commentCount} 评论`)
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-        }
-        .width('100%')
       }
       .alignItems(HorizontalAlign.Start)
       .width('100%')
@@ -440,30 +449,43 @@ export struct ChannelFeedPage {
   }
 
   @Builder
+  private dailyDateDivider(date: string) {
+    Row({ space: 16 }) {
+      Divider().layoutWeight(1).color($r('app.color.secondary_text')).opacity(0.2)
+      Text(formatDailyDate(date))
+        .id(`p2_daily_section_${date}`)
+        .fontSize($r('app.float.p1_body_font_size'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.brand_primary'))
+      Divider().layoutWeight(1).color($r('app.color.secondary_text')).opacity(0.2)
+    }
+    .width('100%')
+    .padding({ top: 12, bottom: 4 })
+  }
+
+  @Builder
   private dailyCard(item: ChannelDailyStoryItem) {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
       Row({ space: $r('app.float.p1_spacing_medium') }) {
+        if (item.story.imageUrl !== undefined && /^https:\/\/[^\s]+$/i.test(item.story.imageUrl)) {
+          Image(item.story.imageUrl)
+            .width('28%')
+            .aspectRatio(1)
+            .borderRadius($r('app.float.p1_spacing_small'))
+            .objectFit(ImageFit.Cover)
+            .alt('日报缩略图')
+        }
         Column({ space: $r('app.float.p1_spacing_small') }) {
-          Row({ space: $r('app.float.p1_spacing_small') }) {
-            Text('知乎日报')
-              .fontSize($r('app.float.p1_secondary_font_size'))
-              .fontColor($r('app.color.brand_primary'))
-              .layoutWeight(1)
-            Text(formatDailyDate(item.story.date))
-              .fontSize($r('app.float.p1_secondary_font_size'))
-              .fontColor($r('app.color.secondary_text'))
-          }
-          .width('100%')
           Text(item.story.title)
-            .fontSize($r('app.float.p1_heading_font_size'))
+            .fontSize($r('app.float.p1_body_font_size'))
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.primary_text'))
-            .maxLines(2)
+            .maxLines(4)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%')
           if (item.story.hint.trim().length > 0) {
             Text(item.story.hint)
-              .fontSize($r('app.float.p1_body_font_size'))
+              .fontSize($r('app.float.p1_secondary_font_size'))
               .fontColor($r('app.color.secondary_text'))
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -472,14 +494,6 @@ export struct ChannelFeedPage {
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
-        if (item.story.imageUrl !== undefined && /^https:\/\/[^\s]+$/i.test(item.story.imageUrl)) {
-          Image(item.story.imageUrl)
-            .width(84)
-            .height(64)
-            .borderRadius($r('app.float.p1_spacing_small'))
-            .objectFit(ImageFit.Cover)
-            .alt('日报缩略图')
-        }
       }
       .alignItems(VerticalAlign.Top)
       .width('100%')
@@ -656,6 +670,16 @@ export struct ChannelFeedPage {
   }
 
   private applyState(state: ChannelFeedViewState): void {
+    const replacedDailyPage = this.source === ChannelFeedSource.DAILY &&
+      (this.phase === ChannelFeedPhase.INITIAL_LOADING || this.refreshing) &&
+      !state.refreshing && (state.phase === ChannelFeedPhase.READY || state.phase === ChannelFeedPhase.EMPTY) &&
+      state.errorMessage === undefined;
+    if (replacedDailyPage) {
+      this.firstVisibleIndex = 0;
+      if (this.refreshing) {
+        this.listScroller.scrollToIndex(0, false, ScrollAlign.START);
+      }
+    }
     this.phase = state.phase;
     this.items = state.items;
     this.refreshing = state.refreshing;
@@ -663,41 +687,17 @@ export struct ChannelFeedPage {
     this.canLoadMore = state.canLoadMore;
     this.requiresLogin = state.requiresLogin;
     this.errorMessage = state.errorMessage ?? '';
+    if (this.source === ChannelFeedSource.DAILY &&
+      (state.phase === ChannelFeedPhase.READY || state.phase === ChannelFeedPhase.EMPTY)) {
+      this.publishDailyViewingDate();
+    }
   }
 
-  private headerTitle(): string {
-    if (this.source !== ChannelFeedSource.DAILY) {
-      return channelFeedTitle(this.source);
+  private publishDailyViewingDate(): void {
+    const date = dailyFeedDateAtIndex(this.items, this.firstVisibleIndex);
+    if (AppStorage.get<string>('dailyViewingDate') !== date) {
+      AppStorage.setOrCreate('dailyViewingDate', date);
     }
-    const first = this.items.find((item: ChannelFeedItem): boolean => item.kind === ChannelFeedItemKind.DAILY_STORY);
-    if (first === undefined || first.kind !== ChannelFeedItemKind.DAILY_STORY) {
-      return '知乎日报';
-    }
-    return `知乎日报 · ${formatDailyDate(first.story.date)}`;
-  }
-
-  private showDailyDatePicker(): void {
-    const selectedDate: Date = this.currentDailyDate();
-    this.getUIContext().showDatePickerDialog({
-      selected: selectedDate,
-      start: new Date(2000, 0, 1),
-      end: new Date(),
-      onDateAccept: (date: Date): void => {
-        const cursor = dailyDateCursor(date);
-        this.controller?.loadDate(cursor);
-      }
-    });
-  }
-
-  private currentDailyDate(): Date {
-    const first = this.items.find((item: ChannelFeedItem): boolean => item.kind === ChannelFeedItemKind.DAILY_STORY);
-    if (first === undefined || first.kind !== ChannelFeedItemKind.DAILY_STORY || !/^\d{8}$/.test(first.story.date)) {
-      return new Date();
-    }
-    const year: number = Number(first.story.date.substring(0, 4));
-    const month: number = Number(first.story.date.substring(4, 6)) - 1;
-    const day: number = Number(first.story.date.substring(6, 8));
-    return new Date(year, month, day);
   }
 }
 
@@ -738,17 +738,4 @@ export function channelActionLabel(item: FeedItem, source: ChannelFeedSource): s
     return '推荐内容';
   }
   return '热榜内容';
-}
-
-export function formatDailyDate(value: string): string {
-  if (!/^\d{8}$/.test(value)) {
-    return value;
-  }
-  return `${value.substring(0, 4)}年${Number(value.substring(4, 6))}月${Number(value.substring(6, 8))}日`;
-}
-
-export function dailyDateCursor(date: Date): string {
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
-  return `${date.getFullYear()}${month}${day}`;
 }

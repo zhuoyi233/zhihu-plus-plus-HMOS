@@ -13,6 +13,7 @@ import {
   NotificationSettingsGateway,
   normalizeNotificationPreferences
 } from '../domain/NotificationModels';
+import { JsonArrayValue, JsonStringValue, parseStrictJson } from 'core';
 
 const PREFERENCES_NAME = 'app_preferences';
 const THEME_MODE_KEY = 'theme_mode';
@@ -23,6 +24,13 @@ const TOPIC_BLOCKING_THRESHOLD_KEY = 'topic_blocking_threshold';
 const NOTIFICATION_DISPLAY_PREFIX = 'notification_display_in_app_';
 const NOTIFICATION_AUTO_MARK_READ_KEY = 'notification_auto_mark_as_read';
 const NOTIFICATION_UNREAD_BADGE_KEY = 'notification_unread_badge';
+// 键与存储值对齐上游 answerDoubleTapAction 偏好（"none"/"ask"/"voteUp"/"openComments"/"toggleImmersive"）。
+const ANSWER_DOUBLE_TAP_ACTION_KEY = 'answerDoubleTapAction';
+// 键与容量对齐上游搜索历史（searchHistoryQueries，最多 20 条）。
+const SEARCH_HISTORY_KEY = 'searchHistoryQueries';
+export const SEARCH_HISTORY_MAX_SIZE = 20;
+// 键与语义对齐上游 UpdateManager.PREF_LAST_UPDATE_CHECK（自动检查更新节流时间戳，毫秒）。
+const LAST_UPDATE_CHECK_KEY = 'lastUpdateCheck';
 
 function notificationDisplayKey(kind: NotificationKind): string {
   if (kind === NotificationKind.LIKE_COMMENT) {
@@ -53,6 +61,76 @@ export function decodeAppThemeMode(value: preferences.ValueType): AppThemeMode {
   return AppThemeMode.SYSTEM;
 }
 
+/** 回答页双击正文动作（对齐上游 AnswerDoubleTapAction），默认询问并记住。 */
+export enum AnswerDoubleTapAction {
+  NONE = 0,
+  ASK = 1,
+  VOTE_UP = 2,
+  OPEN_COMMENTS = 3,
+  TOGGLE_IMMERSIVE = 4
+}
+
+export function answerDoubleTapActionPreferenceValue(action: AnswerDoubleTapAction): string {
+  switch (action) {
+    case AnswerDoubleTapAction.NONE:
+      return 'none';
+    case AnswerDoubleTapAction.VOTE_UP:
+      return 'voteUp';
+    case AnswerDoubleTapAction.OPEN_COMMENTS:
+      return 'openComments';
+    case AnswerDoubleTapAction.TOGGLE_IMMERSIVE:
+      return 'toggleImmersive';
+    default:
+      return 'ask';
+  }
+}
+
+export function answerDoubleTapActionLabel(action: AnswerDoubleTapAction): string {
+  switch (action) {
+    case AnswerDoubleTapAction.NONE:
+      return '无操作';
+    case AnswerDoubleTapAction.ASK:
+      return '询问并记住';
+    case AnswerDoubleTapAction.VOTE_UP:
+      return '点赞';
+    case AnswerDoubleTapAction.OPEN_COMMENTS:
+      return '打开评论区';
+    case AnswerDoubleTapAction.TOGGLE_IMMERSIVE:
+      return '开关沉浸式';
+    default:
+      return '询问并记住';
+  }
+}
+
+/** 未知/缺失值一律回退 Ask（对齐上游 fromPreference）。 */
+export function decodeAnswerDoubleTapAction(value: preferences.ValueType): AnswerDoubleTapAction {
+  if (typeof value === 'string') {
+    if (value === 'none') {
+      return AnswerDoubleTapAction.NONE;
+    }
+    if (value === 'voteUp') {
+      return AnswerDoubleTapAction.VOTE_UP;
+    }
+    if (value === 'openComments') {
+      return AnswerDoubleTapAction.OPEN_COMMENTS;
+    }
+    if (value === 'toggleImmersive') {
+      return AnswerDoubleTapAction.TOGGLE_IMMERSIVE;
+    }
+  }
+  return AnswerDoubleTapAction.ASK;
+}
+
+export function allAnswerDoubleTapActions(): AnswerDoubleTapAction[] {
+  return [
+    AnswerDoubleTapAction.NONE,
+    AnswerDoubleTapAction.ASK,
+    AnswerDoubleTapAction.VOTE_UP,
+    AnswerDoubleTapAction.OPEN_COMMENTS,
+    AnswerDoubleTapAction.TOGGLE_IMMERSIVE
+  ];
+}
+
 export function appPreferencesFailureMessage(operation: string, error: Object | null | undefined): string {
   if (error instanceof Error) {
     if (error.message.trim().length > 0) {
@@ -62,8 +140,41 @@ export function appPreferencesFailureMessage(operation: string, error: Object | 
   return `${operation} failed`;
 }
 
-export class AppPreferencesStore implements BlockingPreferencesGateway, NotificationSettingsGateway {
-  private readonly context: common.Context;
+/** 解析历史 JSON（字符串数组）；损坏内容静默丢弃，最多保留 SEARCH_HISTORY_MAX_SIZE 条。 */
+function decodeSearchHistory(value: string): Array<string> {
+  let parsed: Object;
+  try {
+    parsed = parseStrictJson(value);
+  } catch (_error) {
+    return [];
+  }
+  if (!(parsed instanceof JsonArrayValue)) {
+    return [];
+  }
+  const items: Array<string> = [];
+  parsed.items.forEach((item: Object): void => {
+    if (item instanceof JsonStringValue) {
+      const text = item.value.trim();
+      if (text.length > 0 && !items.includes(text)) {
+        items.push(text);
+      }
+    }
+  });
+  return items.slice(0, SEARCH_HISTORY_MAX_SIZE);
+}
+
+function normalizeSearchHistory(history: Array<string>): Array<string> {
+  const items: Array<string> = [];
+  history.forEach((item: string): void => {
+    const text = item.trim();
+    if (text.length > 0 && text.length <= 200 && !items.includes(text)) {
+      items.push(text);
+    }
+  });
+  return items.slice(0, SEARCH_HISTORY_MAX_SIZE);
+}
+
+export class AppPreferencesStore implements BlockingPreferencesGateway, NotificationSettingsGateway {  private readonly context: common.Context;
   private saveQueue: Promise<void> = Promise.resolve();
 
   constructor(context: common.Context) {
@@ -94,6 +205,108 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
       (): void => {}
     );
     return operation;
+  }
+
+  async loadAnswerDoubleTapAction(): Promise<AnswerDoubleTapAction> {
+    await this.saveQueue;
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      return decodeAnswerDoubleTapAction(await store.get(ANSWER_DOUBLE_TAP_ACTION_KEY,
+        answerDoubleTapActionPreferenceValue(AnswerDoubleTapAction.ASK)));
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('Answer double tap action load', error));
+      }
+      throw new Error(appPreferencesFailureMessage('Answer double tap action load', undefined));
+    }
+  }
+
+  saveAnswerDoubleTapAction(action: AnswerDoubleTapAction): Promise<void> {
+    const normalizedAction = decodeAnswerDoubleTapAction(answerDoubleTapActionPreferenceValue(action));
+    const operation = this.saveQueue.then(
+      (): Promise<void> => this.writeAnswerDoubleTapAction(normalizedAction),
+      (): Promise<void> => this.writeAnswerDoubleTapAction(normalizedAction)
+    );
+    this.saveQueue = operation.then((): void => {}, (): void => {});
+    return operation;
+  }
+
+  async loadSearchHistory(): Promise<Array<string>> {
+    await this.saveQueue;
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      const value = await store.get(SEARCH_HISTORY_KEY, '[]');
+      if (typeof value !== 'string') {
+        return [];
+      }
+      return decodeSearchHistory(value);
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('Search history load', error));
+      }
+      throw new Error(appPreferencesFailureMessage('Search history load', undefined));
+    }
+  }
+
+  saveSearchHistory(history: Array<string>): Promise<void> {
+    const normalized = normalizeSearchHistory(history);
+    const operation = this.saveQueue.then(
+      (): Promise<void> => this.writeSearchHistory(normalized),
+      (): Promise<void> => this.writeSearchHistory(normalized)
+    );
+    this.saveQueue = operation.then((): void => {
+    }, (): void => {
+    });
+    return operation;
+  }
+
+  private async writeSearchHistory(history: Array<string>): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      await store.put(SEARCH_HISTORY_KEY, JSON.stringify(history));
+      await store.flush();
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('Search history save', error));
+      }
+      throw new Error(appPreferencesFailureMessage('Search history save', undefined));
+    }
+  }
+
+  async loadLastUpdateCheckAt(): Promise<number> {
+    await this.saveQueue;
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      const value = await store.get(LAST_UPDATE_CHECK_KEY, 0);
+      return typeof value === 'number' ? value : 0;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('Last update check load', error));
+      }
+      throw new Error(appPreferencesFailureMessage('Last update check load', undefined));
+    }
+  }
+
+  saveLastUpdateCheckAt(tick: number): Promise<void> {
+    const operation = this.saveQueue.then(
+      (): Promise<void> => this.writeLastUpdateCheckAt(tick),
+      (): Promise<void> => this.writeLastUpdateCheckAt(tick)
+    );
+    this.saveQueue = operation.then((): void => {}, (): void => {});
+    return operation;
+  }
+
+  private async writeLastUpdateCheckAt(tick: number): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      await store.put(LAST_UPDATE_CHECK_KEY, tick);
+      await store.flush();
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('Last update check save', error));
+      }
+      throw new Error(appPreferencesFailureMessage('Last update check save', undefined));
+    }
   }
 
   async loadBlockingPreferences(): Promise<BlockingPreferences> {
@@ -139,6 +352,19 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
         throw new Error(appPreferencesFailureMessage('Theme mode save', error));
       }
       throw new Error(appPreferencesFailureMessage('Theme mode save', undefined));
+    }
+  }
+
+  private async writeAnswerDoubleTapAction(action: AnswerDoubleTapAction): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      await store.put(ANSWER_DOUBLE_TAP_ACTION_KEY, answerDoubleTapActionPreferenceValue(action));
+      await store.flush();
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('Answer double tap action save', error));
+      }
+      throw new Error(appPreferencesFailureMessage('Answer double tap action save', undefined));
     }
   }
 

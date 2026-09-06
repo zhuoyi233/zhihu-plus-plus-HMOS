@@ -1,5 +1,6 @@
 import { http } from '@kit.NetworkKit';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { SessionCookie, toCookieHeader } from '../session/CookieSession';
 import { HttpFailure, HttpFailureKind, httpFailureFromStatus, httpFailureFromTransport } from './HttpFailure';
 import { createZse96Header, ZHIHU_WEB_ZSE93 } from './ZhihuFetchSignature';
@@ -343,8 +344,12 @@ export class ZhihuHttpClient {
       return response;
     } catch (error) {
       if (error instanceof HttpFailure) {
+        hilog.warn(0xD001, 'ZhihuHttp', 'kind=%{public}s status=%{public}d transport=%{public}d',
+          error.kind, error.status ?? 0, error.transportCode ?? 0);
         throw new HttpFailure(error.kind, error.status, error.transportCode);
       }
+      // 只记录错误类别和错误码，不输出 URL、Cookie、请求体或原始错误文本。
+      hilog.warn(0xD001, 'ZhihuHttp', 'kind=unexpected');
       throw httpFailureFromTransport();
     } finally {
       if (activeRequest !== undefined) {

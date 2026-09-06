@@ -6,8 +6,12 @@ import {
   feedItemIdentity,
   FeedItem,
   FeedRepository,
-  FeedTargetKind
+  FeedTargetKind,
+  isUpdateAnnouncementVisible
 } from 'data';
+import { Want } from '@kit.AbilityKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import {
   BlockingActionContext,
   BlockingActionController,
@@ -24,6 +28,8 @@ import {
 } from './AppPageChrome';
 import { HomeFeedController, HomeFeedPhase, HomeFeedViewState } from './HomeFeedState';
 
+const PROJECT_RELEASES_URI: string = 'https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/latest';
+
 @Component
 export struct HomeFeedPage {
   repository: FeedRepository | undefined = new DefaultFeedRepository();
@@ -36,6 +42,11 @@ export struct HomeFeedPage {
   // 双击底栏“首页”页签刷新：复用下拉刷新链路
   @StorageProp('tabRefreshTick') @Watch('onTabRefreshRequested') tabRefreshTick: number = 0;
   @StorageProp('tabRefreshTabIndex') tabRefreshTabIndex: number = -1;
+  // 首页更新卡片（对齐上游 HomeScreen 顶部 AnnouncementCard）：P1Shell 启动检查到新版本后经
+  // AppStorage 广播（HdsTabs 树下跨页面信号唯一可靠通道）。“以后”仅本次会话内忽略，对齐上游。
+  @StorageProp('homeUpdateAnnouncementVersion') private pendingUpdateVersion: string = '';
+  @StorageProp('homeUpdateAnnouncementUrl') private pendingUpdateUrl: string = '';
+  @State private dismissedUpdateVersion: string = '';
   // 下拉刷新自定义加载圆圈（refreshingContent 需 ComponentContent，随页面销毁释放）
   private refreshContent?: ComponentContent<FeedPullDownIndicatorOptions> = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
@@ -148,6 +159,13 @@ export struct HomeFeedPage {
             friction: 100
           }) {
             List() {
+              if (isUpdateAnnouncementVisible(this.pendingUpdateVersion, this.dismissedUpdateVersion)) {
+                ListItem() {
+                  this.updateAnnouncementCard()
+                }
+                .margin({ bottom: $r('app.float.p1_spacing_medium') })
+              }
+
               ForEach(this.items, (item: FeedItem) => {
                 ListItem() {
                   this.feedCard(item);
@@ -210,6 +228,84 @@ export struct HomeFeedPage {
     .height('100%')
     .alignContent(Alignment.TopStart)
     .backgroundColor($r('app.color.page_background'))
+  }
+
+  @Builder
+  private updateAnnouncementCard() {
+    // 对齐上游 AnnouncementCard colorsImportant：主色底、圆形图标位、右侧“以后/查看更新”操作区。
+    Column({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Row() {
+          SymbolGlyph($r('sys.symbol.arrow_up'))
+            .fontSize(16)
+            .fontColor([Color.White])
+        }
+          .width(28)
+          .height(28)
+          .borderRadius(14)
+          .backgroundColor('#33FFFFFF')
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+        Text(`发现新版本：${this.pendingUpdateVersion}`)
+          .id('p2_home_update_card_title')
+          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor(Color.White)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+      }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Button('以后', { type: ButtonType.ROUNDED_RECTANGLE, stateEffect: true })
+          .id('p2_home_update_card_dismiss')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor(Color.White)
+          .backgroundColor(Color.Transparent)
+          .borderRadius(12)
+          .onClick((): void => {
+            this.dismissedUpdateVersion = this.pendingUpdateVersion;
+          })
+        Button('查看更新', { type: ButtonType.ROUNDED_RECTANGLE, stateEffect: true })
+          .id('p2_home_update_card_open')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor($r('app.color.brand_primary'))
+          .backgroundColor(Color.White)
+          .borderRadius(12)
+          .onClick((): void => this.openUpdateReleasePage())
+      }
+        .width('100%')
+        .justifyContent(FlexAlign.End)
+    }
+      .width('100%')
+      .padding($r('app.float.p1_card_padding'))
+      .borderRadius($r('app.float.p1_card_radius'))
+      .backgroundColor($r('app.color.brand_primary'))
+      .accessibilityText('发现新版本，可查看更新或稍后忽略')
+  }
+
+  private openUpdateReleasePage(): void {
+    const url = this.pendingUpdateUrl.length > 0 ? this.pendingUpdateUrl : PROJECT_RELEASES_URI;
+    const context = getAbilityContext();
+    if (context === undefined) {
+      hilog.warn(0x0000, 'AppUpdate', 'cannot open release page: no ability context');
+      return;
+    }
+    const want: Want = {
+      action: 'ohos.want.action.viewData',
+      uri: url
+    };
+    try {
+      void context.startAbility(want).then((): void => {}, (error: Object): void => {
+        const detail = error instanceof Error ? error.message : '';
+        hilog.warn(0x0000, 'AppUpdate', 'failed to open release page %{public}s', detail);
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : '';
+      hilog.warn(0x0000, 'AppUpdate', 'failed to open release page %{public}s', detail);
+    }
   }
 
   @Builder

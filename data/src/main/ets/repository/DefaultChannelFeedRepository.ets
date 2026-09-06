@@ -83,11 +83,8 @@ export function buildChannelFeedRequestUrl(source: ChannelFeedSource, cursor?: s
     if (!isDailyFeedDateCursor(cursor)) {
       throw new ChannelFeedRepositoryFailure(ChannelFeedRepositoryFailureKind.INVALID_CURSOR);
     }
-    // The Zhihu Daily endpoint is exclusive: /before/YYYYMMDD returns the
-    // edition before that date. Add one day so a user-selected date is the
-    // edition rendered by the first page; subsequent cursors are returned by
-    // the API and continue to work unchanged.
-    return `${DAILY_PRIMARY_BASE_URL}/before/${dailyBeforeCursor(cursor)}`;
+    // 分页游标是排他日期：直接读取该日期之前的一期。
+    return `${DAILY_PRIMARY_BASE_URL}/before/${cursor}`;
   }
   const sourceUrl = cursor ?? contentBaseUrl(source);
   if (cursor !== undefined && !isChannelFeedCursorUrl(source, cursor)) {
@@ -187,8 +184,14 @@ export class DefaultChannelFeedRepository implements ChannelFeedRepository {
       throw new ChannelFeedRepositoryFailure(ChannelFeedRepositoryFailureKind.SOURCE_CHANGED);
     }
     const requestGeneration = this.generation;
-    const requestUrl = buildChannelFeedRequestUrl(source, cursor);
-    const cursorKey = canonicalChannelFeedCursorKey(source, cursor);
+    // 只有显式选择日期才加一天；按实际请求游标去重，避免选中日期与下一页冲突。
+    if (source === ChannelFeedSource.DAILY && cursor !== undefined && !isDailyFeedDateCursor(cursor)) {
+      throw new ChannelFeedRepositoryFailure(ChannelFeedRepositoryFailureKind.INVALID_CURSOR);
+    }
+    const requestCursor = source === ChannelFeedSource.DAILY && reset && cursor !== undefined
+      ? dailyBeforeCursor(cursor) : cursor;
+    const requestUrl = buildChannelFeedRequestUrl(source, requestCursor);
+    const cursorKey = canonicalChannelFeedCursorKey(source, requestCursor);
     if (cursor !== undefined && !reset && this.requestedCursors.has(cursorKey)) {
       throw new ChannelFeedRepositoryFailure(ChannelFeedRepositoryFailureKind.REPEATED_CURSOR);
     }

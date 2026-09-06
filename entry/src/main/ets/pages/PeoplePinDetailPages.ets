@@ -1031,11 +1031,13 @@ export struct PinDetailPage {
       this.shareStatus = '暂时无法打开分享面板';
       return;
     }
+    const avatarUrl = pin.author.avatarUrl?.trim() ?? '';
     const payload: ShareTextPayload = {
       kind: SharePayloadKind.TEXT,
       title: '想法',
       summary: '来自知乎++的受信想法链接',
-      contentUrl: pin.url
+      contentUrl: pin.url,
+      thumbnailUrl: /^https:\/\/(?:pic|pica|picx|pic[0-9]+)\.zhimg\.com\//.test(avatarUrl) ? avatarUrl : undefined
     };
     createSystemShareService(context).share(payload).then((outcome: ShareOutcome): void => {
       this.shareStatus = outcome === ShareOutcome.CANCELLED ? '' : '已打开系统分享面板';

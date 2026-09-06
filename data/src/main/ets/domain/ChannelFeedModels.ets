@@ -40,6 +40,19 @@ export interface ChannelFeedPage {
   readonly cursor: PageCursor;
 }
 
+/** 对齐上游 RecentMomentsViewModel.FollowingUserItem：最近有更新的关注用户。 */
+export interface RecentFollowingActor {
+  readonly id: string;
+  readonly urlToken: string;
+  readonly name: string;
+  readonly avatarUrl: string;
+}
+
+export interface RecentFollowingUser {
+  readonly actor: RecentFollowingActor;
+  readonly unreadCount: number;
+}
+
 export function isDailyFeedDateCursor(value: string): boolean {
   if (!/^\d{8}$/.test(value)) {
     return false;

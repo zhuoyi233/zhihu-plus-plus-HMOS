@@ -3,9 +3,9 @@
 > 状态：规划稿<br>
 > 制定日期：2026-07-20<br>
 > 迁移基线：Android Lite 版本<br>
-> 开发工具：DevEco Studio 6.1.1 Release<br>
-> HarmonyOS SDK：26.0.0（API 26）<br>
-> 目标兼容版本：HarmonyOS 26.0.0（API 26）<br>
+> 开发工具：DevEco Studio 26.0.0 Beta2<br>
+> HarmonyOS SDK（编译）：26.0.0（API 26）<br>
+> 目标版本：HarmonyOS 26.0.0（API 26）；最低兼容：HarmonyOS 6.1.0（API 23）<br>
 > 目标分支：`dev`（开发）、`main`（发布）<br>
 > Android 上游镜像：`Android-master`
 
@@ -26,9 +26,9 @@
 
 ## 2. 目标平台与官方技术基线
 
-- 开发工具固定为 DevEco Studio 6.1.1 Release。
-- HarmonyOS 开发、运行与验证主基线固定为 26.0.0（API 26）。工程的 `targetSdkVersion` 与 `compatibleSdkVersion` 均使用 API 26，编译环境使用 DevEco Studio 的 API 26 SDK。
-- 不再维护 API 24 或更低版本的兼容路径；设备验收只在 `ZhihuPlus_API26` 模拟器与后续 API 26 设备上进行。
+- 开发工具为 DevEco Studio 26.0.0 Beta2，配套 HarmonyOS 26.0.0（API 26）编译 SDK；工程不显式配置 `compileSdkVersion`，实际编译 SDK 由 Studio 配套 SDK 决定。
+- 版本矩阵为「API 26 编译 + API 26 目标行为 + API 23 最低兼容」：`targetSdkVersion` 为 `26.0.0`，`compatibleSdkVersion` 为 `6.1.0(23)`，最低支持 HarmonyOS 6.1.0（API 23）设备。
+- 设备验收主基线为 `ZhihuPlus_API26` 模拟器与 API 26 设备，API 23 真机承担最低兼容抽验；API 26 专属能力（如 `uiMaterial` 全家族）禁止无门禁直接使用，需以版本门禁或 HDS 组件兜底，避免 API 23 设备载入即崩。
 - 使用 Stage 模型。
 - 第一阶段支持 Phone，随后适配 Tablet、折叠屏和自由窗口。
 - 开发语言为 ArkTS，UI 使用 ArkUI 声明式范式。
@@ -49,6 +49,8 @@
 从 2026-08-10 起，版本矩阵收敛为 API 24 单一基线：开发、编译、目标行为、最低兼容和设备回归均只考虑 API 24。DevEco Studio 6.1.1 官方模板不单独写 `compileSdkVersion`；实际编译 SDK 由构建环境中的 API 24 SDK 决定。此前 API 20 的实验结果保留为历史记录，但不再约束新实现，也不再要求 API 20 降级路径。
 
 从 2026-08-25 起，P4 将版本矩阵升级为 API 26 单一基线：`targetSdkVersion`、`compatibleSdkVersion`、构建和设备验收统一为 API 26。此前 API 24 的阶段记录保留为历史证据，不再构成后续 P4 的实现或验收约束。
+
+从 2026-08-30 起，最低兼容版本放宽至 HarmonyOS 6.1.0（API 23）：`targetSdkVersion` 保持 `26.0.0`，`compatibleSdkVersion` 调整为 `6.1.0(23)`，编译 SDK 仍为 API 26。版本矩阵从「API 26 单一基线」变为「API 26 编译与目标行为 + API 23 最低兼容」；API 26 专属接口必须带版本门禁或降级路径（如 `uiMaterial` 全家族禁止直接 import，普通玻璃效果用 `backgroundBlurStyle` 兜底、系统材质走 HDS 组件）。注意 API 10–25 的版本值必须使用 `'X.Y.Z(N)'` 旧格式，`'26.0.0'` 新格式仅 API 26+ 合法。编译/兼容版本拆分背景见 [`docs/api26-api24-migration-plan.md`](api26-api24-migration-plan.md)。
 
 ## 3. AI 能力边界
 
@@ -403,7 +405,7 @@ P0 阶段结论（2026-08-10）：TaskPool 只解决并发计算，不提供后�
 
 执行切片、依赖顺序和验收门禁见 [`docs/p4/p4-slicing-plan.md`](p4/p4-slicing-plan.md)。
 
-状态（2026-08-26）：P4-0～P4-7 的 API 26 生产接线、自动化和无写入模拟器回归已完成；回答/想法图片发布链路受最终确认保护，自动化 Hypium `516/516` 通过，签名 HAP 为 `target=26`、`compatible=26`。真实发布、真实 OSS 上传、电脑端登录确认、真实视频和外部分享会改变外部状态，只由用户在专用测试目标手动验收；P4-8 以 TTS 可行性后置结论收口。详见 [`p4-api26-final-validation.md`](p4/p4-api26-final-validation.md)。
+状态（2026-08-26）：P4-0～P4-7 的 API 26 生产接线、自动化和无写入模拟器回归已完成；回答/想法图片发布链路受最终确认保护，自动化 Hypium `516/516` 通过，签名 HAP 为 `target=26`、`compatible=26`（2026-08-30 起 `compatibleSdkVersion` 已放宽至 `6.1.0(23)`，见第 2 节）。真实发布、真实 OSS 上传、电脑端登录确认、真实视频和外部分享会改变外部状态，只由用户在专用测试目标手动验收；P4-8 以 TTS 可行性后置结论收口。详见 [`p4-api26-final-validation.md`](p4/p4-api26-final-validation.md)。
 
 - 写回答和写想法
 - 草稿恢复

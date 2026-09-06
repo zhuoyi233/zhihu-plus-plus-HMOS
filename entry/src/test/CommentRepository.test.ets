@@ -1,7 +1,6 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
   buildChildCommentsUrl,
-  buildCommentLikeBody,
   buildCommentLikeUrl,
   buildDeleteCommentUrl,
   buildRootCommentsUrl,
@@ -116,8 +115,7 @@ export default function commentRepositoryTest(): void {
         'https://www.zhihu.com/api/v4/comment_v5/answers/456/comment'
       );
       expect(buildDeleteCommentUrl('1001')).assertEqual('https://www.zhihu.com/api/v4/comments/1001');
-      expect(buildCommentLikeUrl('1001')).assertEqual('https://www.zhihu.com/api/v4/comments/1001/voters');
-      expect(buildCommentLikeBody()).assertEqual('{"type":"up"}');
+      expect(buildCommentLikeUrl('1001')).assertEqual('https://www.zhihu.com/api/v4/comments/1001/like');
 
       expect(escapeCommentHtml('<a href="x">&</a>')).assertEqual(
         '&lt;a href=&quot;x&quot;&gt;&amp;&lt;/a&gt;'
@@ -373,7 +371,7 @@ export default function commentRepositoryTest(): void {
       expect(JSON.stringify(request.headers).includes('"x-zse-96":"2.0_')).assertTrue();
     });
 
-    it('togglesCommentLikeWithVotersPostAndDelete', 0, async () => {
+    it('togglesCommentLikeWithBodylessSignedPostAndDelete', 0, async () => {
       const factory = new CommentTransportFactory([
         { statusCode: 200, body: '{}' },
         { statusCode: 200, body: '{}' }
@@ -386,15 +384,15 @@ export default function commentRepositoryTest(): void {
 
       expect(factory.requests.length).assertEqual(2);
       const like = factory.requests[0];
-      expect(like.url).assertEqual('https://www.zhihu.com/api/v4/comments/1001/voters');
+      expect(like.url).assertEqual('https://www.zhihu.com/api/v4/comments/1001/like');
       expect(like.method).assertEqual(ZhihuHttpMethod.POST);
-      expect(like.body).assertEqual('{"type":"up"}');
+      expect(like.body).assertUndefined();
       expect(JSON.stringify(like.headers).includes('"x-zse-96":"2.0_')).assertTrue();
 
       const unlike = factory.requests[1];
-      expect(unlike.url).assertEqual('https://www.zhihu.com/api/v4/comments/1001/voters');
+      expect(unlike.url).assertEqual('https://www.zhihu.com/api/v4/comments/1001/like');
       expect(unlike.method).assertEqual(ZhihuHttpMethod.DELETE);
-      expect(unlike.body).assertEqual('{"type":"up"}');
+      expect(unlike.body).assertUndefined();
     });
 
     it('rejectsRepeatedCursorAndStopsPagination', 0, async () => {

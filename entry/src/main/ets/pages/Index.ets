@@ -22,6 +22,8 @@ import {
   DefaultPeopleRepository,
   DefaultPinRepository,
   DefaultPinPublishRepository,
+  DefaultQuestionAnswerFeedRepository,
+  DefaultRecentFollowingUsersRepository,
   DefaultSearchRepository,
   DefaultOnlineHistoryRepository,
   DefaultNotificationRepository,
@@ -36,6 +38,7 @@ import {
   OnlineHistoryRepository,
   PeopleContentRepository,
   PeopleDetailRepository,
+  RecentFollowingUsersRepository,
   PinRepository,
   SearchRepository,
   SessionRepository,
@@ -46,6 +49,7 @@ import {
   ImageUploadSource,
   AnswerPublishRepository,
   PinPublishRepository,
+  QuestionAnswerFeedRepository,
   VoteRepository,
   ZhihuHttpClient
 } from 'data';
@@ -85,6 +89,7 @@ import { PeopleDetailPage, PinDetailPage } from './PeoplePinDetailPages';
 import { BlockingRulesPage } from './BlockingRulesPage';
 import { BlockedFeedHistoryPage } from './BlockedFeedHistoryPage';
 import { ReadHistoryPage } from './ReadHistoryPage';
+import { LocalHistoryPage } from './LocalHistoryPage';
 import { CollectionPage } from './CollectionPage';
 import { CollectionContentPage } from './CollectionContentPage';
 import { NotificationPage } from './NotificationPage';
@@ -106,10 +111,13 @@ struct Index {
   @State private searchRepository?: SearchRepository = undefined;
   @State private followingRepository?: ChannelFeedRepository = undefined;
   @State private followingRecommendRepository?: ChannelFeedRepository = undefined;
+  @State private followingUsersRepository?: RecentFollowingUsersRepository = undefined;
   @State private hotRepository?: ChannelFeedRepository = undefined;
+  private hotQuestionRepositoryFactory: () => ContentRepository | undefined = () => undefined;
   @State private dailyRepository?: ChannelFeedRepository = undefined;
   @State private dailyStoryRepository?: DailyStoryRepository = undefined;
   @State private questionRepository?: ContentRepository = undefined;
+  private questionAnswerFeedFactory: () => QuestionAnswerFeedRepository | undefined = () => undefined;
   @State private answerRepository?: ContentRepository = undefined;
   @State private articleRepository?: ContentRepository = undefined;
   @State private peopleRepository?: PeopleDetailRepository = undefined;
@@ -156,10 +164,14 @@ struct Index {
       this.searchRepository = new DefaultSearchRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.followingRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.followingRecommendRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
+      this.followingUsersRepository = new DefaultRecentFollowingUsersRepository(new ZhihuHttpClient(session));
       this.hotRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
+      this.hotQuestionRepositoryFactory = (): ContentRepository => new DefaultContentRepository(new ZhihuHttpClient(session));
       this.dailyRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(), blockingMatcher);
       this.dailyStoryRepository = new DefaultDailyStoryRepository(new ZhihuHttpClient());
       this.questionRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
+      this.questionAnswerFeedFactory = (): QuestionAnswerFeedRepository =>
+        new DefaultQuestionAnswerFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.answerRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
       this.articleRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
       this.peopleRepository = new DefaultPeopleRepository(new ZhihuHttpClient(session));
@@ -236,6 +248,8 @@ struct Index {
           blockedFeedHistoryContent: (onBack: () => void): void => this.blockedFeedHistoryContent(onBack),
           readHistoryContent: (navigate: (destination: P1Destination) => void, onBack: () => void): void =>
             this.readHistoryContent(navigate, onBack),
+          localHistoryContent: (navigate: (destination: P1Destination) => void, onBack: () => void): void =>
+            this.localHistoryContent(navigate, onBack),
           loginContent: (onBack: () => void, onAuthenticated: () => void, onScanDesktopLogin: () => void): void =>
             this.loginContent(onBack, onAuthenticated, onScanDesktopLogin),
           technicalLabContent: (navigate: (destination: P1Destination) => void): void =>
@@ -273,6 +287,7 @@ struct Index {
     selectedTabIndex: number) {
     FollowingFeedPage({
       recommendRepository: this.followingRecommendRepository,
+      usersRepository: this.followingUsersRepository,
       dynamicRepository: this.followingRepository,
       reloadToken: reloadToken,
       selectedTabIndex: selectedTabIndex,
@@ -287,6 +302,7 @@ struct Index {
     ChannelFeedPage({
       source: ChannelFeedSource.HOT,
       repository: this.hotRepository,
+      questionRepositoryFactory: this.hotQuestionRepositoryFactory,
       reloadToken: reloadToken,
       navigate: navigate,
       rules: this.blockingRuleStore,
@@ -319,6 +335,7 @@ struct Index {
     SearchPage({
       initialQuery: query,
       repository: this.searchRepository,
+      preferences: this.preferencesStore,
       navigate: navigate,
       onBack: onBack
     });
@@ -337,6 +354,7 @@ struct Index {
       followRepository: this.followRepository,
       collectionRepository: this.collectionRepository,
       commentRepository: this.commentRepository,
+      questionAnswerFeedFactory: this.questionAnswerFeedFactory,
       session: this.session,
       onBack: onBack
     });
@@ -355,6 +373,7 @@ struct Index {
       followRepository: this.followRepository,
       collectionRepository: this.collectionRepository,
       commentRepository: this.commentRepository,
+      questionAnswerFeedFactory: this.questionAnswerFeedFactory,
       session: this.session,
       onBack: onBack
     });
@@ -511,27 +530,44 @@ struct Index {
   }
 
   @Builder
-  readHistoryContent(navigate: (destination: P1Destination) => void, onBack: () => void) {
+  readHistoryContent(navigate: (destination: P1Destination) => void, _onBack: () => void) {
     ReadHistoryPage({
       history: this.openedContentStore,
       onlineHistory: this.onlineHistoryRepository,
       session: this.session,
       onOpen: (target: ReadHistoryOpenTarget): void => {
-        if (target.kind === ReadHistoryContentKind.QUESTION) {
-          navigate({ name: P1DestinationName.QUESTION, id: target.id });
-        } else if (target.kind === ReadHistoryContentKind.ANSWER) {
-          navigate({ name: P1DestinationName.ANSWER, id: target.id });
-        } else if (target.kind === ReadHistoryContentKind.ARTICLE) {
-          navigate({ name: P1DestinationName.ARTICLE, id: target.id });
-        } else {
-          navigate({ name: P1DestinationName.PIN, id: target.id });
-        }
+        this.navigateReadHistoryTarget(navigate, target);
       },
       onGoLogin: (): void => {
         navigate({ name: P1DestinationName.LOGIN });
       },
-      onBack: onBack
+      onNavigateLocal: (): void => {
+        navigate({ name: P1DestinationName.LOCAL_HISTORY });
+      }
     });
+  }
+
+  @Builder
+  localHistoryContent(navigate: (destination: P1Destination) => void, _onBack: () => void) {
+    LocalHistoryPage({
+      history: this.openedContentStore,
+      onOpen: (target: ReadHistoryOpenTarget): void => {
+        this.navigateReadHistoryTarget(navigate, target);
+      }
+    });
+  }
+
+  private navigateReadHistoryTarget(navigate: (destination: P1Destination) => void,
+    target: ReadHistoryOpenTarget): void {
+    if (target.kind === ReadHistoryContentKind.QUESTION) {
+      navigate({ name: P1DestinationName.QUESTION, id: target.id });
+    } else if (target.kind === ReadHistoryContentKind.ANSWER) {
+      navigate({ name: P1DestinationName.ANSWER, id: target.id });
+    } else if (target.kind === ReadHistoryContentKind.ARTICLE) {
+      navigate({ name: P1DestinationName.ARTICLE, id: target.id });
+    } else {
+      navigate({ name: P1DestinationName.PIN, id: target.id });
+    }
   }
 
   @Builder

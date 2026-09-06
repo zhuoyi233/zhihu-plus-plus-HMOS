@@ -23,6 +23,7 @@ import zhihuQrLoginClientTest from './ZhihuQrLoginClient.test';
 import searchRepositoryTest from './SearchRepository.test';
 import searchStateTest from './SearchState.test';
 import contentDetailRepositoryTest from './ContentDetailRepository.test';
+import questionAnswerFeedTest from './QuestionAnswerFeed.test';
 import contentDetailStateTest from './ContentDetailState.test';
 import loginControllerTest from './LoginController.test';
 import channelFeedRepositoryTest from './ChannelFeedRepository.test';
@@ -97,6 +98,7 @@ export default function testsuite(): void {
   searchRepositoryTest();
   searchStateTest();
   contentDetailRepositoryTest();
+  questionAnswerFeedTest();
   contentDetailStateTest();
   loginControllerTest();
   channelFeedRepositoryTest();

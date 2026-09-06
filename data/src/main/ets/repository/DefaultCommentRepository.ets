@@ -129,13 +129,9 @@ export function buildDeleteCommentUrl(commentIdValue: string): string {
   return `https://www.zhihu.com/api/v4/comments/${normalizeCommentId(commentIdValue)}`;
 }
 
-/** 评论点赞端点：与上游 ArticleViewModel 的 /voters 语义一致。 */
+/** 评论使用 /like 空请求体；/voters 是回答投票接口，不能用于评论。 */
 export function buildCommentLikeUrl(commentIdValue: string): string {
-  return `https://www.zhihu.com/api/v4/comments/${normalizeCommentId(commentIdValue)}/voters`;
-}
-
-export function buildCommentLikeBody(): string {
-  return JSON.stringify({ type: 'up' });
+  return `https://www.zhihu.com/api/v4/comments/${normalizeCommentId(commentIdValue)}/like`;
 }
 
 export function buildSubmitCommentBody(input: SubmitCommentInput): string {
@@ -293,8 +289,7 @@ export class DefaultCommentRepository implements CommentRepository {
     const requestGeneration = this.generation;
     await this.execute(
       buildCommentLikeUrl(commentId),
-      liked ? ZhihuHttpMethod.POST : ZhihuHttpMethod.DELETE,
-      buildCommentLikeBody()
+      liked ? ZhihuHttpMethod.POST : ZhihuHttpMethod.DELETE
     );
     if (requestGeneration !== this.generation) {
       throw new CommentRepositoryFailure(CommentRepositoryFailureKind.CANCELLED);

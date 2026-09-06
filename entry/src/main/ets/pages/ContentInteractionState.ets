@@ -108,6 +108,14 @@ export class ContentVoteController {
     this.emit();
   }
 
+  /** 双击正文赞同一键（对齐上游 upVoteFromDoubleTap）：已赞时静默幂等，不取消赞。 */
+  async voteUpFromDoubleTap(): Promise<void> {
+    if (this.voteState === ContentVoteState.UP) {
+      return;
+    }
+    await this.toggleVote(true);
+  }
+
   async toggleVote(up: boolean): Promise<void> {
     if (!this.active || this.pending) {
       return;

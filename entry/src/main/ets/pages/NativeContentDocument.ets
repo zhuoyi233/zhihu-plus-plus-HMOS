@@ -1,7 +1,7 @@
 import { image } from '@kit.ImageKit';
 import { http } from '@kit.NetworkKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
-import { abilityAccessCtrl } from '@kit.AbilityKit';
+import { abilityAccessCtrl, Want } from '@kit.AbilityKit';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import {
   createSystemShareService
@@ -29,8 +29,18 @@ function inlineFormulaWidth(tex: string): number {
   return Math.min(220, Math.max(20, tex.length * 9));
 }
 
+/** 对齐上游 telephoto 默认 ZoomSpec(maxZoomFactor = 2f)。 */
+const IMAGE_PREVIEW_MAX_SCALE = 2;
+
 function clampPreviewScale(value: number): number {
-  return Math.min(4, Math.max(1, value));
+  return Math.min(IMAGE_PREVIEW_MAX_SCALE, Math.max(1, value));
+}
+
+function clampValue(value: number, limit: number): number {
+  if (limit <= 0) {
+    return 0;
+  }
+  return Math.min(limit, Math.max(-limit, value));
 }
 
 function isTrustedPreviewImageUrl(value: string): boolean {
@@ -49,22 +59,36 @@ function previewImageExtension(value: string): string {
 }
 
 @Component
-struct ContentImagePreview {
-  url: string = '';
+export struct ContentImagePreview {
+  @Prop url: string = '';
   onClose: () => void = () => {};
   @State private previewScale: number = 1;
+  @State private previewOffsetX: number = 0;
+  @State private previewOffsetY: number = 0;
   @State private actionStatus: string = '';
   private saveInFlight: boolean = false;
   private pinchStartScale: number = 1;
+  /** 源图宽高比与容器尺寸：用于计算放大后允许的平移范围。 */
+  private imageRatio: number = 0;
+  private containerWidth: number = 0;
+  private containerHeight: number = 0;
+  private panStartX: number = 0;
+  private panStartY: number = 0;
 
   build() {
-    Stack({ alignContent: Alignment.TopEnd }) {
+    Stack({ alignContent: Alignment.Center }) {
       Image(this.url)
         .id('p2_content_image_preview')
         .width('100%')
         .height('100%')
         .objectFit(ImageFit.Contain)
+        .onComplete((event) => {
+          if (event !== undefined && event.width > 0 && event.height > 0) {
+            this.imageRatio = event.width / event.height;
+          }
+        })
         .scale({ x: this.previewScale, y: this.previewScale, z: 1 })
+        .translate({ x: this.previewOffsetX, y: this.previewOffsetY })
         .gesture(
           PinchGesture({ fingers: 2 })
             .onActionStart((): void => {
@@ -72,53 +96,121 @@ struct ContentImagePreview {
             })
             .onActionUpdate((event: GestureEvent): void => {
               this.previewScale = clampPreviewScale(this.pinchStartScale * event.scale);
+              this.clampPreviewOffset();
             })
         )
-        .parallelGesture(
-          TapGesture({ count: 2 })
-            .onAction((): void => {
-              this.previewScale = 1;
-              this.actionStatus = '已恢复原始大小';
+        .gesture(
+          PanGesture({ fingers: 1 })
+            .onActionStart((): void => {
+              this.panStartX = this.previewOffsetX;
+              this.panStartY = this.previewOffsetY;
+            })
+            .onActionUpdate((event: GestureEvent): void => {
+              const maxX = this.maxPreviewOffsetX();
+              const maxY = this.maxPreviewOffsetY();
+              this.previewOffsetX = clampValue(this.panStartX + event.offsetX, maxX);
+              this.previewOffsetY = clampValue(this.panStartY + event.offsetY, maxY);
             })
         )
-        .parallelGesture(
-          LongPressGesture({ duration: 600 })
-            .onAction((): void => {
-              this.saveImage();
-            })
+        .gesture(
+          GestureGroup(GestureMode.Exclusive,
+            TapGesture({ count: 2 })
+              .onAction((): void => {
+                // 对齐上游 telephoto 双击：在适配屏幕与最大倍数间切换，缩放回 1 时复位平移。
+                this.previewScale = this.previewScale > 1 ? 1 : IMAGE_PREVIEW_MAX_SCALE;
+                this.clampPreviewOffset();
+              }),
+            TapGesture({ count: 1 })
+              .onAction((): void => {
+                this.onClose();
+              })
+          )
         )
+        // 对齐上游 OpenImageDialog：长按在按压点弹出操作菜单（无顶栏按钮）。
+        .bindContextMenu(this.imageContextMenu, ResponseType.LongPress)
 
-      Column({ space: $r('app.float.p1_spacing_small') }) {
-        Row({ space: $r('app.float.p1_spacing_small') }) {
-          Button('保存')
-            .id('p2_content_image_preview_save')
-            .onClick((): void => {
-              this.saveImage();
-            })
-          Button('分享')
-            .id('p2_content_image_preview_share')
-            .onClick((): void => {
-              this.shareImage();
-            })
-          Button('关闭')
-            .id('p2_content_image_preview_close')
-            .onClick((): void => {
-              this.onClose();
-            })
-        }
-        if (this.actionStatus.length > 0) {
+      if (this.actionStatus.length > 0) {
+        Column() {
+          Blank()
           Text(this.actionStatus)
             .id('p2_content_image_preview_status')
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor(Color.White)
+            .margin({ bottom: 64 })
         }
+        .width('100%')
+        .height('100%')
+        .hitTestBehavior(HitTestMode.None)
       }
-      .margin($r('app.float.p1_page_padding'))
-      .alignItems(HorizontalAlign.End)
     }
     .width('100%')
     .height('100%')
     .backgroundColor('#EE000000')
+    .onAreaChange((_oldArea: Area, newArea: Area): void => {
+      this.containerWidth = Number(newArea.width);
+      this.containerHeight = Number(newArea.height);
+    })
+  }
+
+  /** 放大后单指平移的最大位移：超出适配尺寸的部分才允许拖动（对齐 telephoto 平移边界）。 */
+  private maxPreviewOffsetX(): number {
+    if (this.containerWidth <= 0 || this.containerHeight <= 0 || this.imageRatio <= 0) {
+      return 0;
+    }
+    const ratio = this.containerWidth / this.containerHeight;
+    const baseWidth = this.imageRatio > ratio ? this.containerWidth : this.containerHeight * this.imageRatio;
+    return Math.max(0, (baseWidth * this.previewScale - this.containerWidth) / 2);
+  }
+
+  private maxPreviewOffsetY(): number {
+    if (this.containerWidth <= 0 || this.containerHeight <= 0 || this.imageRatio <= 0) {
+      return 0;
+    }
+    const ratio = this.containerWidth / this.containerHeight;
+    const baseHeight = this.imageRatio > ratio ? this.containerWidth / this.imageRatio : this.containerHeight;
+    return Math.max(0, (baseHeight * this.previewScale - this.containerHeight) / 2);
+  }
+
+  private clampPreviewOffset(): void {
+    this.previewOffsetX = clampValue(this.previewOffsetX, this.maxPreviewOffsetX());
+    this.previewOffsetY = clampValue(this.previewOffsetY, this.maxPreviewOffsetY());
+  }
+
+  @Builder
+  private imageContextMenu() {
+    Menu() {
+      MenuItem({ content: '保存图片' })
+        .id('p2_content_image_preview_menu_save')
+        .onClick((): void => {
+          this.saveImage();
+        })
+      MenuItem({ content: '分享图片' })
+        .id('p2_content_image_preview_menu_share')
+        .onClick((): void => {
+          this.shareImage();
+        })
+      MenuItem({ content: '在浏览器中打开' })
+        .id('p2_content_image_preview_menu_browser')
+        .onClick((): void => {
+          this.openInBrowser();
+        })
+    }
+  }
+
+  private async openInBrowser(): Promise<void> {
+    const context = getAbilityContext();
+    if (context === undefined || !isTrustedPreviewImageUrl(this.url)) {
+      return;
+    }
+    const want: Want = {
+      action: 'ohos.want.action.viewData',
+      uri: this.url
+    };
+    try {
+      await context.startAbility(want);
+    } catch (_error) {
+      this.getUIContext().getPromptAction().showToast({ message: '暂时无法在浏览器中打开' });
+    }
   }
 
   private async saveImage(): Promise<void> {
@@ -403,15 +495,130 @@ export struct NativeContentDocument {
   emptyMessage: string = '正文为空';
   /** P3-9-B：正文滚动像素偏移回调（用于详情页顶栏折叠联动）。 */
   onScrollOffset?: (offset: number) => void;
-  @State private previewUrl: string = '';
+  /** 问题详情页在正文末尾追加的 section（回答信息流）；未传入时渲染空。 */
+  @BuilderParam documentHeader: () => void = this.emptyFooter;
+  @BuilderParam documentBodyFooter: () => void = this.emptyFooter;
+  @BuilderParam documentItems: () => void = this.emptyFooter;
+  @BuilderParam documentFooter: () => void = this.emptyFooter;
+  /** 列表触底回调：问题详情页用于回答信息流分页加载。 */
+  onListReachEnd?: () => void;
+  /** 回答详情页切换：正文是否贴在列表底边（用于自定义 overscroll 手势）。 */
+  onBottomEdgeChange?: (atBottom: boolean) => void;
+  /** 回答详情页切换：正文是否贴在列表顶边（顶部过滑切上一答依赖此信号）。 */
+  onTopEdgeChange?: (atTop: boolean) => void;
+  /** 回答详情页关闭 Spring 边缘效果：自定义 overscroll 需要独占边界拖动量。 */
+  disableEdgeSpring: boolean = false;
+  /** 问题页正文折叠预览：正文超阈值（纯文本≥100 字或含图）时收起为 180vp 视口。 */
+  collapsible: boolean = false;
+  @State private detailExpanded: boolean = false;
+  @State private collapsibleActive: boolean = false;
+  /** 正文自然高度（vp）：由内层 onAreaChange 单调更新；视口高度据此派生，勿存快照——
+   * 首帧测量偏小若被存死，内容长高后视口将永久被压小（正文整块消失）。 */
+  @State private naturalHeightVp: number = 0;
+  private blocks: ReaderBlock[] = [];
   @State private empty: boolean = true;
+  /** 正文是否贴在列表底边：onReachEnd 置位；出现任何实际滚动（回滚/内容增高后续滚）即复位。 */
+  private atBottomEdge: boolean = false;
+  /** 正文是否贴在列表顶边：初始即顶；滚动进正文（yOffset 越过容差）即复位，滚回顶部再置位。 */
+  private atTopEdge: boolean = true;
+  private lastYOffset: number = 0;
   private readonly dataSource: ReaderBlockDataSource = new ReaderBlockDataSource();
   private readonly scroller: Scroller = new Scroller();
+
+  @Builder
+  private emptyFooter(): void {
+  }
+
+  /**
+   * 问题正文折叠视口（对齐上游 QuestionAnimatedBodyHeader）：收起 180vp + 底部渐变遮罩 +
+   * 右下角展开/收起开关，420ms FastOutSlowIn 动画。内层 Scroll 让子列不受视口高度约束、
+   * 始终按自然高度测量（onAreaChange 回填展开目标高度），规避"父锁高→子测量被压缩"死锁。
+   */
+  @Builder
+  private collapsibleBodyViewport() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      Scroll() {
+        Column({ space: 12 }) {
+          ForEach(this.blocks, (item: ReaderBlock) => {
+            this.readerBlock(item)
+          }, (item: ReaderBlock): string => item.id)
+        }
+        .width('100%')
+        .onAreaChange((_oldArea: Area, newArea: Area): void => {
+          const height = Number(newArea.height);
+          if (height > 0 && Math.abs(height - this.naturalHeightVp) > 1) {
+            this.naturalHeightVp = height;
+          }
+        })
+      }
+      .scrollBar(BarState.Off)
+      .align(Alignment.Top)
+      .width('100%')
+      // 该 Scroll 仅用于让子列按自然高度测量（无约束约束），自身永不滚动；
+      // 不禁用滚动交互会抢占全部滑动手势，外层列表（回答流）将无法滚动。
+      .enableScrollInteraction(false)
+
+      Column()
+          .linearGradient({
+            angle: 180,
+            colors: [['rgba(0,0,0,0)', 0], [$r('app.color.page_background'), 1]]
+          })
+          .width('100%')
+          .height(88)
+          .opacity(this.detailExpanded ? 0 : 1)
+          .hitTestBehavior(HitTestMode.None)
+
+      Row() {
+        Blank()
+        Row({ space: 4 }) {
+          SymbolGlyph(this.detailExpanded ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
+            .fontSize(16)
+            .fontColor([$r('app.color.brand_primary')])
+          Text(this.detailExpanded ? '收起详情' : '展开详情')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.brand_primary'))
+        }
+        .padding({ left: 12, right: 12 }).height(56)
+        .borderRadius(16)
+        .backgroundColor($r('app.color.surface_background'))
+        .onClick((): void => this.toggleDetailExpanded())
+        .accessibilityText(this.detailExpanded ? '收起问题详情' : '展开问题详情')
+      }
+      .id('p3_question_detail_toggle')
+      .width('100%')
+      .padding({ left: 12, right: 12, bottom: 8 })
+    }
+    .id('p3_question_detail_content')
+    .height(this.detailExpanded ? this.expandedViewportHeight() : this.collapsedViewportHeight())
+    .clip(true)
+    .width('100%')
+  }
+
+  /** 收起态视口高：未测得自然高前用 180，测得后取 min(自然高,180) 兜底短正文。 */
+  private collapsedViewportHeight(): number {
+    return this.naturalHeightVp > 0 ? Math.min(this.naturalHeightVp, 180) : 180;
+  }
+
+  private expandedViewportHeight(): number {
+    return Math.max(this.naturalHeightVp, 1) + 64;
+  }
+
+  private toggleDetailExpanded(): void {
+    this.getUIContext().animateTo({
+      duration: 420,
+      curve: Curve.FastOutSlowIn
+    }, (): void => {
+      this.detailExpanded = !this.detailExpanded;
+    });
+  }
 
   aboutToAppear(): void {
     const blocks = parseZhihuHtml(this.html);
     this.empty = blocks.length === 0;
+    this.blocks = blocks;
     this.dataSource.replace(blocks);
+    const plainLength = this.html.replace(/<[^>]*>/g, '').trim().length;
+    this.collapsibleActive = this.collapsible && (plainLength >= 100 || this.html.includes('<img'));
   }
 
   aboutToDisappear(): void {
@@ -420,21 +627,32 @@ export struct NativeContentDocument {
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
-      if (this.empty) {
-        Text(this.emptyMessage)
-          .id('p2_content_document_empty')
-          .fontSize($r('app.float.p1_body_font_size'))
-          .fontColor($r('app.color.secondary_text'))
-          .textAlign(TextAlign.Center)
-          .width('100%')
-          .padding($r('app.float.p1_page_padding'))
-      } else {
-        List({ space: 12, scroller: this.scroller }) {
-          LazyForEach(this.dataSource, (item: ReaderBlock) => {
+      List({ space: 12, scroller: this.scroller }) {
+          ListItem() { this.documentHeader() }
+          if (this.empty) {
             ListItem() {
-              this.readerBlock(item)
+              Text(this.emptyMessage).id('p2_content_document_empty')
+                .fontColor($r('app.color.secondary_text')).padding(12)
             }
-          }, (item: ReaderBlock): string => item.id)
+          }
+          if (this.collapsibleActive) {
+            ListItem() {
+              this.collapsibleBodyViewport()
+            }
+            .width('100%')
+          } else {
+            LazyForEach(this.dataSource, (item: ReaderBlock) => {
+              ListItem() {
+                this.readerBlock(item)
+              }
+            }, (item: ReaderBlock): string => item.id)
+          }
+          ListItem() { this.documentBodyFooter() }
+          this.documentItems()
+          ListItem() {
+            this.documentFooter()
+          }
+          .width('100%')
         }
         .id('p2_content_document_list')
         .width('100%')
@@ -443,34 +661,61 @@ export struct NativeContentDocument {
         .padding({
           left: $r('app.float.p1_page_padding'),
           right: $r('app.float.p1_page_padding'),
-          top: $r('app.float.p1_spacing_medium'),
-          bottom: $r('app.float.p1_page_padding')
+          top: $r('app.float.p1_spacing_medium')
         })
+        // 末尾避让随正文滚动，避免底部 padding 压缩视口、在悬浮操作栏下方形成固定留白。
+        .contentEndOffset(100)
         .cachedCount(6)
-        .edgeEffect(EdgeEffect.Spring)
+        .edgeEffect(this.disableEdgeSpring ? EdgeEffect.None : EdgeEffect.Spring)
+        // 触底回调：问题详情页据此加载回答信息流下一页。
+        .onReachEnd((): void => {
+          this.updateBottomEdge(true);
+          const callback = this.onListReachEnd;
+          if (callback !== undefined) {
+            callback();
+          }
+        })
         // 用像素偏移而非 onScrollIndex 驱动顶栏折叠：索引会随视口高度变化回弹造成振荡闪烁，
         // 像素偏移在顶栏收起（视口变高）时保持不变，状态稳定。
+        // 同时维护底部边界状态：贴底后回滚（y 减小）即离开底边；y 反向增大只可能是
+        // 内容增高后继续上滚（onReachEnd 提前触发的残余滚动在 2px 容差内不复位）。
         .onDidScroll((): void => {
+          const yOffset = this.scroller.currentOffset().yOffset;
+          if (yOffset < this.lastYOffset - 0.5 || yOffset > this.lastYOffset + 2) {
+            this.updateBottomEdge(false);
+          }
+          this.updateTopEdge(yOffset <= 2);
+          this.lastYOffset = yOffset;
           const callback = this.onScrollOffset;
           if (callback !== undefined) {
-            callback(this.scroller.currentOffset().yOffset);
+            callback(yOffset);
           }
         })
-      }
 
-      if (this.previewUrl.length > 0) {
-        ContentImagePreview({
-          url: this.previewUrl,
-          onClose: (): void => {
-            this.previewUrl = '';
-          }
-        })
-        .width('100%')
-        .height('100%')
-      }
     }
     .width('100%')
     .height('100%')
+  }
+
+  /** 触底/离底状态变化时通知页面侧（下滑切换回答依赖此信号）。 */
+  private updateBottomEdge(atBottom: boolean): void {
+    this.lastYOffset = this.scroller.currentOffset().yOffset;
+    if (this.atBottomEdge === atBottom) { return; }
+    this.atBottomEdge = atBottom;
+    const callback = this.onBottomEdgeChange;
+    if (callback !== undefined) {
+      callback(atBottom);
+    }
+  }
+
+  /** 贴顶/离顶状态变化时通知页面侧（顶部过滑切上一答依赖此信号）。 */
+  private updateTopEdge(atTop: boolean): void {
+    if (this.atTopEdge === atTop) { return; }
+    this.atTopEdge = atTop;
+    const callback = this.onTopEdgeChange;
+    if (callback !== undefined) {
+      callback(atTop);
+    }
   }
 
   @Builder
@@ -490,7 +735,9 @@ export struct NativeContentDocument {
         item: item,
         secondaryTextColor: $r('app.color.secondary_text'),
         onPreview: (url: string): void => {
-          this.previewUrl = url;
+          // 全屏查看器由详情页根 Stack 叠层渲染（AppStorage 广播）：正文组件处于列表
+          // 惰性树内，本地渲染全屏层会受标题栏约束，且模态覆盖层树不响应状态更新。
+          AppStorage.setOrCreate('p2ImagePreviewUrl', url);
         }
       })
     } else if (item.inlineRuns.length > 0) {

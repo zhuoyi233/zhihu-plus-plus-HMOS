@@ -3,10 +3,14 @@ import {
   HttpFailureKind,
   SearchDecodeError,
   SearchDecodeFailureKind,
+  SearchEntity,
+  SearchFilters,
+  searchEntityIdentity,
   SearchRepository,
-  SearchResultItem,
   SearchResultPage,
-  searchResultIdentity
+  SearchSortOption,
+  SearchTab,
+  SearchTimeRange
 } from 'data';
 
 export enum SearchPhase {
@@ -20,7 +24,10 @@ export enum SearchPhase {
 export interface SearchViewState {
   readonly phase: SearchPhase;
   readonly query: string;
-  readonly items: Array<SearchResultItem>;
+  readonly entities: Array<SearchEntity>;
+  readonly activeTab: SearchTab;
+  readonly sort: SearchSortOption;
+  readonly timeRange: SearchTimeRange;
   readonly loadingMore: boolean;
   readonly canLoadMore: boolean;
   readonly requiresLogin: boolean;
@@ -36,7 +43,9 @@ export class SearchController {
   private generation: number = 0;
   private phase: SearchPhase = SearchPhase.IDLE;
   private query: string = '';
-  private items: Array<SearchResultItem> = [];
+  private entities: Array<SearchEntity> = [];
+  private tab: SearchTab = SearchTab.GENERAL;
+  private filters: SearchFilters = { sort: SearchSortOption.DEFAULT, timeRange: SearchTimeRange.ALL };
   private loadingMore: boolean = false;
   private nextCursor?: string;
   private reachedEnd: boolean = true;
@@ -59,6 +68,7 @@ export class SearchController {
     this.active = true;
     if (this.restartFirstPageOnActivate && this.query.length > 0) {
       this.restartFirstPageOnActivate = false;
+      // 绕过 reload 的 LOADING 守卫：失活时被中断的首页请求在复活时原样重启（对齐上游）。
       this.submit(this.query);
       return;
     }
@@ -80,7 +90,10 @@ export class SearchController {
     return {
       phase: this.phase,
       query: this.query,
-      items: this.items.slice(),
+      entities: this.entities.slice(),
+      activeTab: this.tab,
+      sort: this.filters.sort,
+      timeRange: this.filters.timeRange,
       loadingMore: this.loadingMore,
       canLoadMore: !this.paginationBlocked && this.hasNextPage(),
       requiresLogin: this.requiresLogin,
@@ -94,31 +107,32 @@ export class SearchController {
     }
     const query = rawQuery.trim();
     this.repository.cancel();
-    const generation = ++this.generation;
+    this.generation += 1;
     this.query = query;
-    this.items = [];
-    this.loadingMore = false;
-    this.nextCursor = undefined;
-    this.reachedEnd = true;
-    this.retryLoadMore = false;
-    this.paginationBlocked = false;
-    this.requiresLogin = false;
-    this.errorMessage = undefined;
-    if (query.length === 0) {
-      this.phase = SearchPhase.IDLE;
-      this.emit();
-      return Promise.resolve();
-    }
-    this.phase = SearchPhase.LOADING;
-    this.emit();
-    return this.loadFirstPage(query, generation);
+    // 新搜索回到综合 tab（对齐上游每次搜索新建 ViewModel 的行为），筛选保留本页会话选择。
+    this.tab = SearchTab.GENERAL;
+    return this.resetForReload(query.length > 0);
   }
 
-  refresh(): Promise<void> {
-    if (!this.active || this.phase === SearchPhase.LOADING || this.loadingMore || this.query.length === 0) {
+  selectTab(tab: SearchTab): Promise<void> {
+    if (!this.active || tab === this.tab || this.query.length === 0) {
       return Promise.resolve();
     }
-    return this.submit(this.query);
+    this.repository.cancel();
+    this.generation += 1;
+    this.tab = tab;
+    return this.resetForReload(true);
+  }
+
+  updateFilters(sort: SearchSortOption, timeRange: SearchTimeRange): Promise<void> {
+    if (!this.active || this.query.length === 0 ||
+      (sort === this.filters.sort && timeRange === this.filters.timeRange)) {
+      return Promise.resolve();
+    }
+    this.repository.cancel();
+    this.generation += 1;
+    this.filters = { sort: sort, timeRange: timeRange };
+    return this.resetForReload(true);
   }
 
   retry(): Promise<void> {
@@ -126,7 +140,36 @@ export class SearchController {
       this.paginationBlocked = false;
       return this.loadMore();
     }
-    return this.refresh();
+    return this.reload();
+  }
+
+  private resetForReload(loading: boolean): Promise<void> {
+    this.entities = [];
+    this.loadingMore = false;
+    this.nextCursor = undefined;
+    this.reachedEnd = true;
+    this.retryLoadMore = false;
+    this.paginationBlocked = false;
+    this.requiresLogin = false;
+    this.errorMessage = undefined;
+    if (!loading) {
+      this.phase = SearchPhase.IDLE;
+      this.emit();
+      return Promise.resolve();
+    }
+    this.phase = SearchPhase.LOADING;
+    this.emit();
+    return this.loadFirstPage(this.query, this.generation);
+  }
+
+  private reload(): Promise<void> {
+    if (!this.active || this.phase === SearchPhase.LOADING || this.loadingMore ||
+      this.query.length === 0) {
+      return Promise.resolve();
+    }
+    this.repository.cancel();
+    this.generation += 1;
+    return this.resetForReload(true);
   }
 
   async loadMore(): Promise<void> {
@@ -146,28 +189,20 @@ export class SearchController {
     this.errorMessage = undefined;
     this.emit();
     try {
-      const page = await this.repository.search(this.query, cursor);
+      const page = await this.repository.search(this.query, this.filters, this.tab, cursor);
       if (!this.isCurrent(generation)) {
         return;
       }
-      this.items = mergeSearchResults(this.items, page.items);
+      this.entities = mergeSearchEntities(this.entities, page.entities);
       this.applyCursor(page);
-      this.phase = this.items.length > 0 ? SearchPhase.READY : SearchPhase.EMPTY;
-      this.retryLoadMore = this.items.length === 0 && this.hasNextPage();
+      this.phase = this.entities.length > 0 ? SearchPhase.READY : SearchPhase.EMPTY;
+      this.retryLoadMore = this.entities.length === 0 && this.hasNextPage();
     } catch (error) {
       if (!this.isCurrent(generation)) {
         return;
       }
-      let authenticationStatus: number | undefined = undefined;
-      let authenticationFailure: boolean = false;
-      if (error instanceof HttpFailure && error.kind === HttpFailureKind.AUTHENTICATION) {
-        authenticationFailure = true;
-        authenticationStatus = error.status;
-      }
-      this.requiresLogin = authenticationFailure &&
-        (authenticationStatus === undefined || authenticationStatus === 401);
-      this.errorMessage = searchErrorMessage(error, this.requiresLogin, authenticationStatus, true);
-      this.phase = this.items.length > 0 ? SearchPhase.READY : SearchPhase.ERROR;
+      this.applyLoadFailure(error as Object, true);
+      this.phase = this.entities.length > 0 ? SearchPhase.READY : SearchPhase.ERROR;
       this.retryLoadMore = true;
       this.paginationBlocked = true;
     } finally {
@@ -180,33 +215,37 @@ export class SearchController {
 
   private async loadFirstPage(query: string, generation: number): Promise<void> {
     try {
-      const page = await this.repository.search(query);
+      const page = await this.repository.search(query, this.filters, this.tab);
       if (!this.isCurrent(generation)) {
         return;
       }
-      this.items = mergeSearchResults([], page.items);
+      this.entities = mergeSearchEntities([], page.entities);
       this.applyCursor(page);
-      this.phase = this.items.length > 0 ? SearchPhase.READY : SearchPhase.EMPTY;
-      this.retryLoadMore = this.items.length === 0 && this.hasNextPage();
+      this.phase = this.entities.length > 0 ? SearchPhase.READY : SearchPhase.EMPTY;
+      this.retryLoadMore = this.entities.length === 0 && this.hasNextPage();
     } catch (error) {
       if (!this.isCurrent(generation)) {
         return;
       }
       this.phase = SearchPhase.ERROR;
-      let authenticationStatus: number | undefined = undefined;
-      let authenticationFailure: boolean = false;
-      if (error instanceof HttpFailure && error.kind === HttpFailureKind.AUTHENTICATION) {
-        authenticationFailure = true;
-        authenticationStatus = error.status;
-      }
-      this.requiresLogin = authenticationFailure &&
-        (authenticationStatus === undefined || authenticationStatus === 401);
-      this.errorMessage = searchErrorMessage(error, this.requiresLogin, authenticationStatus, false);
+      this.applyLoadFailure(error as Object, false);
     } finally {
       if (this.isCurrent(generation)) {
         this.emit();
       }
     }
+  }
+
+  private applyLoadFailure(error: Object, loadingMore: boolean): void {
+    let authenticationStatus: number | undefined = undefined;
+    let authenticationFailure: boolean = false;
+    if (error instanceof HttpFailure && error.kind === HttpFailureKind.AUTHENTICATION) {
+      authenticationFailure = true;
+      authenticationStatus = error.status;
+    }
+    this.requiresLogin = authenticationFailure &&
+      (authenticationStatus === undefined || authenticationStatus === 401);
+    this.errorMessage = searchErrorMessage(error, this.requiresLogin, authenticationStatus, loadingMore);
   }
 
   private applyCursor(page: SearchResultPage): void {
@@ -230,7 +269,7 @@ export class SearchController {
   }
 }
 
-function searchErrorMessage(error: Error, requiresLogin: boolean, authenticationStatus: number | undefined,
+function searchErrorMessage(error: Object, requiresLogin: boolean, authenticationStatus: number | undefined,
   loadingMore: boolean): string {
   const action = loadingMore ? '加载更多搜索结果' : '搜索';
   if (authenticationStatus === 403) {
@@ -261,15 +300,15 @@ function searchErrorMessage(error: Error, requiresLogin: boolean, authentication
   return `${action}失败，请检查网络后重试`;
 }
 
-export function mergeSearchResults(current: Array<SearchResultItem>, incoming: Array<SearchResultItem>):
-  Array<SearchResultItem> {
-  const merged: Array<SearchResultItem> = [];
+export function mergeSearchEntities(current: Array<SearchEntity>, incoming: Array<SearchEntity>):
+  Array<SearchEntity> {
+  const merged: Array<SearchEntity> = [];
   const identities: Set<string> = new Set<string>();
-  current.concat(incoming).forEach((item: SearchResultItem): void => {
-    const identity = searchResultIdentity(item);
+  current.concat(incoming).forEach((entity: SearchEntity): void => {
+    const identity = searchEntityIdentity(entity);
     if (!identities.has(identity)) {
       identities.add(identity);
-      merged.push(item);
+      merged.push(entity);
     }
   });
   return merged;

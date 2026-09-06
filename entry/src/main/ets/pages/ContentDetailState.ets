@@ -10,6 +10,7 @@ import {
   HttpFailureKind,
   OpenedContentStore,
   Question,
+  QuestionTopicSummary,
   UserProfile
 } from 'data';
 
@@ -262,6 +263,15 @@ function cloneAuthor(author?: UserProfile): UserProfile | undefined {
   };
 }
 
+function cloneQuestionTopics(topics?: QuestionTopicSummary[]): QuestionTopicSummary[] | undefined {
+  if (topics === undefined) {
+    return undefined;
+  }
+  return topics.map((topic: QuestionTopicSummary): QuestionTopicSummary => {
+    return { id: topic.id, name: topic.name };
+  });
+}
+
 function cloneLoadedContent(content: LoadedContentDetail): LoadedContentDetail {
   switch (content.kind) {
     case ContentDetailKind.QUESTION:
@@ -275,10 +285,12 @@ function cloneLoadedContent(content: LoadedContentDetail): LoadedContentDetail {
           answerCount: content.value.answerCount,
           commentCount: content.value.commentCount,
           followerCount: content.value.followerCount,
+          visitCount: content.value.visitCount,
           createdAt: content.value.createdAt,
           updatedAt: content.value.updatedAt,
           author: cloneAuthor(content.value.author),
-          isFollowing: content.value.isFollowing
+          isFollowing: content.value.isFollowing,
+          topics: cloneQuestionTopics(content.value.topics)
         }
       };
     case ContentDetailKind.ANSWER:

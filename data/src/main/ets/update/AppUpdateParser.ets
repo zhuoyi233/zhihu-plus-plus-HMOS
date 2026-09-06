@@ -79,6 +79,22 @@ export function decodeLatestRelease(payload: string): AppUpdateRelease | undefin
   return release;
 }
 
+/** 自动检查更新的节流间隔，对齐上游 UpdateManager 的 3 小时。 */
+export const AUTO_UPDATE_CHECK_INTERVAL_MS: number = 3 * 60 * 60 * 1000;
+
+/** 距上次检查超过节流间隔才允许自动检查（对齐上游 shouldPerformAutoCheck）；从未检查或时钟回拨视为到期。 */
+export function shouldAutoCheckForUpdate(lastUpdateCheckAt: number, now: number): boolean {
+  if (lastUpdateCheckAt <= 0) {
+    return true;
+  }
+  return now - lastUpdateCheckAt >= AUTO_UPDATE_CHECK_INTERVAL_MS;
+}
+
+/** 首页更新卡片可见性：有待更新版本且未在本次会话内被“以后”忽略。 */
+export function isUpdateAnnouncementVisible(pendingVersion: string, dismissedVersion: string): boolean {
+  return pendingVersion.length > 0 && pendingVersion !== dismissedVersion;
+}
+
 /** 结合本机版本得出检测结论：本机不比远端新时视为已是最新。 */
 export function resolveAppUpdateCheck(localVersionName: string, release: AppUpdateRelease | undefined,
   message: string): AppUpdateCheckResult {

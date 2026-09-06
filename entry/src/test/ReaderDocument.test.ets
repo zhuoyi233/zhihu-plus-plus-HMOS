@@ -76,15 +76,23 @@ export default function readerDocumentTest(): void {
       expect(isTrustedFormulaUrl('https://www.zhihu.com/equation/extra?tex=x')).assertFalse();
     });
 
-    it('prefersActualZhihuImageAndCaption', 0, () => {
+    it('prefersOriginalZhihuImageAndCaption', 0, () => {
       const blocks = parseZhihuHtml('<figure><noscript><img src="fallback.jpg"></noscript>' +
-        '<img src="placeholder.svg" data-original="https://picx.zhimg.com/original.jpg" ' +
-        'data-actualsrc="https://picx.zhimg.com/reading.jpg">' +
+        '<img src="placeholder.svg" data-actualsrc="https://picx.zhimg.com/reading.jpg" ' +
+        'data-original="https://picx.zhimg.com/original.jpg">' +
         '<figcaption>图片说明</figcaption></figure>');
       expect(blocks.length).assertEqual(1);
       expect(blocks[0].kind).assertEqual(ReaderBlockKind.IMAGE);
-      expect(blocks[0].sourceUrl).assertEqual('https://picx.zhimg.com/reading.jpg');
+      expect(blocks[0].sourceUrl).assertEqual('https://picx.zhimg.com/original.jpg');
       expect(blocks[0].text).assertEqual('图片说明');
+    });
+
+    it('prefersOriginalTokenOverThumbnailAttributes', 0, () => {
+      const blocks = parseZhihuHtml('<figure><img data-actualsrc="https://picx.zhimg.com/reading.jpg" ' +
+        'data-original-token="v2-abc123def" src="https://picx.zhimg.com/thumb.jpg"></figure>');
+      expect(blocks.length).assertEqual(1);
+      expect(blocks[0].kind).assertEqual(ReaderBlockKind.IMAGE);
+      expect(blocks[0].sourceUrl).assertEqual('https://pic1.zhimg.com/v2-abc123def');
     });
 
     it('parsesBlockquoteAndPreAsParagraphs', 0, () => {
