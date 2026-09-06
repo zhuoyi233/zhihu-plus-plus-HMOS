@@ -1,9 +1,10 @@
 import { OnlineHistoryEntry, OnlineHistoryPage } from '../domain/OnlineHistoryModels';
 import { decodeOnlineHistoryPage } from '../domain/ZhihuOnlineHistoryDecoder';
-import { ZhihuHttpClient, ZhihuHttpResponse } from '../network/ZhihuHttpClient';
+import { ZhihuHttpClient, ZhihuHttpMethod, ZhihuHttpResponse } from '../network/ZhihuHttpClient';
 import { OnlineHistoryRepository } from './OnlineHistoryRepository';
 
 export const ONLINE_HISTORY_BASE_URL = 'https://www.zhihu.com/api/v4/unify-consumption/read_history';
+export const ONLINE_HISTORY_BATCH_DEL_URL = 'https://api.zhihu.com/read_history/batch_del';
 export const ONLINE_HISTORY_LIMIT: number = 10;
 export const ONLINE_HISTORY_MAX_OFFSET: number = 100000;
 const ONLINE_HISTORY_CURSOR_MAX_LENGTH: number = 4096;
@@ -11,6 +12,7 @@ const ONLINE_HISTORY_CURSOR_MAX_LENGTH: number = 4096;
 export enum OnlineHistoryRepositoryFailureKind {
   INVALID_CURSOR = 'invalid_cursor',
   REPEATED_CURSOR = 'repeated_cursor',
+  INVALID_CONTENT_KEY = 'invalid_content_key',
   CANCELLED = 'cancelled'
 }
 
@@ -23,11 +25,39 @@ export class OnlineHistoryRepositoryFailure extends Error {
       message = '在线历史分页地址不受信任';
     } else if (kind === OnlineHistoryRepositoryFailureKind.REPEATED_CURSOR) {
       message = '在线历史分页游标已被请求';
+    } else if (kind === OnlineHistoryRepositoryFailureKind.INVALID_CONTENT_KEY) {
+      message = '在线历史记录标识无效';
     }
     super(message);
     this.name = 'OnlineHistoryRepositoryFailure';
     this.kind = kind;
   }
+}
+
+/** 对齐上游 OnlineHistoryDeletePair：batch_del 请求的最小删除单元。 */
+export interface OnlineHistoryDeletePair {
+  contentToken: string;
+  contentType: string;
+}
+
+export function buildBatchDelBody(pairs: Array<OnlineHistoryDeletePair>, clear: boolean): string {
+  const encodedPairs = pairs.map((pair: OnlineHistoryDeletePair): string =>
+    `{"content_token":"${pair.contentToken}","content_type":"${pair.contentType}"}`);
+  return `{"pairs":[${encodedPairs.join(',')}],"clear":${clear ? 'true' : 'false'}}`;
+}
+
+/** contentKey 形如 "answer:123456"；与解码器 decodeEntry 的 `${kind}:${id}` 约定一致。 */
+export function onlineHistoryDeletePairOf(contentKey: string): OnlineHistoryDeletePair {
+  const separator = contentKey.indexOf(':');
+  if (separator <= 0 || separator !== contentKey.lastIndexOf(':')) {
+    throw new OnlineHistoryRepositoryFailure(OnlineHistoryRepositoryFailureKind.INVALID_CONTENT_KEY);
+  }
+  const contentType = contentKey.substring(0, separator);
+  const contentToken = contentKey.substring(separator + 1);
+  if (!/^(?:question|answer|article|pin)$/.test(contentType) || !/^[1-9][0-9]{0,29}$/.test(contentToken)) {
+    throw new OnlineHistoryRepositoryFailure(OnlineHistoryRepositoryFailureKind.INVALID_CONTENT_KEY);
+  }
+  return { contentToken: contentToken, contentType: contentType };
 }
 
 export function buildOnlineHistoryUrl(offset: number): string {
@@ -179,6 +209,39 @@ export class DefaultOnlineHistoryRepository implements OnlineHistoryRepository {
       }
     };
     return cursorLoops ? terminalCursor(page) : page;
+  }
+
+  async clearAll(): Promise<void> {
+    const requestGeneration = this.generation;
+    await this.httpClient.execute({
+      url: ONLINE_HISTORY_BATCH_DEL_URL,
+      method: ZhihuHttpMethod.POST,
+      body: buildBatchDelBody([], true),
+      accept: 'application/json',
+      useSession: true,
+      signWithZse: true
+    });
+    if (requestGeneration !== this.generation) {
+      throw new OnlineHistoryRepositoryFailure(OnlineHistoryRepositoryFailureKind.CANCELLED);
+    }
+    this.requestedCursors = new Set<string>();
+    this.deliveredIdentities = new Set<string>();
+  }
+
+  async deleteEntry(contentKey: string): Promise<void> {
+    const pair = onlineHistoryDeletePairOf(contentKey);
+    const requestGeneration = this.generation;
+    await this.httpClient.execute({
+      url: ONLINE_HISTORY_BATCH_DEL_URL,
+      method: ZhihuHttpMethod.POST,
+      body: buildBatchDelBody([pair], false),
+      accept: 'application/json',
+      useSession: true,
+      signWithZse: true
+    });
+    if (requestGeneration !== this.generation) {
+      throw new OnlineHistoryRepositoryFailure(OnlineHistoryRepositoryFailureKind.CANCELLED);
+    }
   }
 }
 

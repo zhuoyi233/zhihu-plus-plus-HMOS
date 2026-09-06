@@ -1,5 +1,6 @@
 import { QuestionTitleBar } from './QuestionTitleBar';
 import { SearchTitleBar } from './SearchTitleBar';
+import { HistoryTitleBar } from './HistoryTitleBar';
 import { AnswerTitleBar } from './AnswerTitleBar';
 import { ArticleTitleBar } from './ArticleTitleBar';
 import {
@@ -98,6 +99,8 @@ export struct P1Shell {
   @BuilderParam blockingRulesContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam blockedFeedHistoryContent: (onBack: () => void) => void = this.emptyPage;
   @BuilderParam readHistoryContent: (navigate: (destination: P1Destination) => void, onBack: () => void) => void =
+    this.emptyHome;
+  @BuilderParam localHistoryContent: (navigate: (destination: P1Destination) => void, onBack: () => void) => void =
     this.emptyHome;
   @BuilderParam loginContent: (onBack: () => void, onAuthenticated: () => void,
     onScanDesktopLogin: () => void) => void = this.emptyLogin;
@@ -312,7 +315,26 @@ export struct P1Shell {
           this.pathStack.pop();
         });
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '已读记录' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({
+        style: getImmersiveTitleBarStyle(),
+        avoidLayoutSafeArea: true,
+        // 返回键用 HDS 标题栏自带 backIcon，右上角选项菜单由 stackBuilder 注入（同搜索页模式）。
+        content: {
+          stackBuilder: (): void => this.readHistoryTitleBar(),
+          backIcon: { action: (): void => { this.pathStack.pop(); } },
+          divider: { showType: DividerShowType.OFF }
+        }
+      })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.LOCAL_HISTORY) {
+      HdsNavDestination() {
+        this.localHistoryContent((nextDestination: P1Destination): void => this.navigate(nextDestination),
+          (): void => {
+            this.pathStack.pop();
+          });
+      }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '本地历史记录' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.TECHNICAL_LAB) {
@@ -813,6 +835,12 @@ export struct P1Shell {
     SearchTitleBar()
   }
 
+  /** 历史记录页 HDS 标题栏内容：标题 + 右上角溢出菜单（查看本地历史记录/清除历史记录）。 */
+  @Builder
+  private readHistoryTitleBar() {
+    HistoryTitleBar()
+  }
+
   /** 回答页标题栏：滚动折叠时在返回键右侧显示问题单行 + 答主摘要（对齐上游折叠顶栏）。 */
   @Builder
   private answerTitleBar(id: string) {
@@ -1082,9 +1110,6 @@ export struct P1Shell {
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
           Column() {
-            AppNavigationRow({ title: '历史', description: '查看已打开的内容', testId: 'p2_open_read_history', grouped: true,
-              onRowClick: (): void => this.navigate({ name: P1DestinationName.READ_HISTORY }) });
-            Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '内容屏蔽', description: '管理作者与关键词屏蔽规则', testId: 'p2_open_blocking_rules', grouped: true,
               onRowClick: (): void => this.navigate({ name: P1DestinationName.BLOCKING_RULES }) });
             Divider().color($r('app.color.divider_color'))
@@ -1358,7 +1383,7 @@ export struct P1Shell {
 
       Button({ type: ButtonType.Normal, stateEffect: true }) {
         Column({ space: $r('app.float.p1_spacing_xsmall') }) {
-          SymbolGlyph($r('sys.symbol.line_3_horizontal'))
+          SymbolGlyph($r('sys.symbol.arrow_counterclockwise_clock'))
             .fontSize(20)
             .fontColor([$r('app.color.brand_primary')])
           Text('历史')
@@ -1436,10 +1461,6 @@ export struct P1Shell {
       if (this.settingsSearchMatches('我的收藏夹', '查看自己的知乎收藏夹')) {
         AppNavigationRow({ title: '我的收藏夹', description: '查看自己的知乎收藏夹', testId: 'p3_open_my_collections',
           onRowClick: (): void => this.openMyCollections() });
-      }
-      if (this.settingsSearchMatches('历史', '查看已打开的内容')) {
-        AppNavigationRow({ title: '历史', description: '查看已打开的内容', testId: 'p2_open_read_history',
-          onRowClick: (): void => this.navigate({ name: P1DestinationName.READ_HISTORY }) });
       }
       if (this.settingsSearchMatches('内容屏蔽', '管理作者与关键词屏蔽规则')) {
         AppNavigationRow({ title: '内容屏蔽', description: '管理作者与关键词屏蔽规则', testId: 'p2_open_blocking_rules',
@@ -1853,7 +1874,6 @@ export struct P1Shell {
       this.settingsSearchMatches('发布想法', '创建一条新的想法') ||
       this.settingsSearchMatches('想法草稿', '继续编辑本地保存的草稿') ||
       this.settingsSearchMatches('我的收藏夹', '查看自己的知乎收藏夹') ||
-      this.settingsSearchMatches('历史', '查看已打开的内容') ||
       this.settingsSearchMatches('内容屏蔽', '管理作者与关键词屏蔽规则') ||
       this.settingsSearchMatches('屏蔽记录', '查看最近隐藏的内容') ||
       this.settingsSearchMatches('通知', '查看互动和系统消息') ||

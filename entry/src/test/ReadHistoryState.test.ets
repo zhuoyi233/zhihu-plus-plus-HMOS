@@ -11,17 +11,14 @@ import {
 } from 'data';
 import {
   decodeReadHistoryItem,
-  filterReadHistoryItems,
-  groupReadHistoryItems,
-  mergeReadHistoryItems,
+  LocalHistoryController,
   ReadHistoryContentKind,
   ReadHistoryController,
   ReadHistoryItem,
   readHistoryKindLabel,
   readHistoryOpenTarget,
   ReadHistoryPhase,
-  ReadHistorySourceFilter,
-  readHistorySourceFilterLabel
+  readHistoryTimeLabel
 } from '../main/ets/pages/ReadHistoryState';
 
 class FakeReadHistory implements ReadHistoryGateway {
@@ -53,11 +50,17 @@ class FakeOnlineHistory implements OnlineHistoryRepository {
   pages: Array<OnlineHistoryPage> = [];
   fail: boolean = false;
   authFail: boolean = false;
-  requestedCursors: Array<string | undefined> = [];
-  cancelCount: number = 0;
+  clearAllCount: number = 0;
+  deletedKeys: Array<string> = [];
+  // 与真实仓库一致：首页请求（cursor 为空）总是重置分页进度并返回第一页。
+  private pageIndex: number = 0;
 
   loadPage(cursor?: string): Promise<OnlineHistoryPage> {
-    this.requestedCursors.push(cursor);
+    if (cursor === undefined) {
+      this.pageIndex = 0;
+    } else {
+      this.pageIndex += 1;
+    }
     if (this.fail) {
       return Promise.reject(new Error('sensitive upstream payload'));
     }
@@ -71,13 +74,21 @@ class FakeOnlineHistory implements OnlineHistoryRepository {
       };
       return Promise.resolve(emptyPage);
     }
-    const index = this.requestedCursors.length - 1;
-    const page = this.pages[Math.min(index, this.pages.length - 1)];
+    const page = this.pages[Math.min(this.pageIndex, this.pages.length - 1)];
     return Promise.resolve(page);
   }
 
+  clearAll(): Promise<void> {
+    this.clearAllCount += 1;
+    return Promise.resolve();
+  }
+
+  deleteEntry(contentKey: string): Promise<void> {
+    this.deletedKeys.push(contentKey);
+    return Promise.resolve();
+  }
+
   cancel(): void {
-    this.cancelCount += 1;
   }
 }
 
@@ -105,7 +116,6 @@ export default function readHistoryStateTest(): void {
       const valid = decodeReadHistoryItem({ contentKey: 'answer:123', contentType: 'answer', openedAt: 1 });
       expect(valid?.kind).assertEqual(ReadHistoryContentKind.ANSWER);
       expect(valid?.id).assertEqual('123');
-      expect(valid?.deletable).assertTrue();
       expect(decodeReadHistoryItem({ contentKey: 'answer:../123', contentType: 'answer', openedAt: 1 }))
         .assertUndefined();
       expect(decodeReadHistoryItem({ contentKey: 'answer:123', contentType: 'article', openedAt: 1 }))
@@ -133,98 +143,32 @@ export default function readHistoryStateTest(): void {
       expect(untitled?.title ?? '').assertEqual('');
     });
 
-    it('filtersCorruptRowsAndPublishesReadyHistory', 0, async () => {
-      const history = new FakeReadHistory();
-      history.items = [
-        { contentKey: 'article:3', contentType: 'article', openedAt: 30 },
-        { contentKey: 'bad', contentType: 'answer', openedAt: 20 }
-      ];
-      const controller = new ReadHistoryController(history);
-      controller.activate();
-      await controller.reload();
-      expect(controller.snapshot().phase).assertEqual(ReadHistoryPhase.READY);
-      expect(controller.snapshot().items.length).assertEqual(1);
-      expect(controller.snapshot().items[0].contentKey).assertEqual('article:3');
+    it('formatsCardTimeLabelToMinutePrecision', 0, () => {
+      const label = readHistoryTimeLabel(new Date(2026, 7, 28, 9, 5).getTime());
+      expect(label).assertEqual('2026-08-28 09:05');
+      expect(readHistoryTimeLabel(Number.NaN)).assertEqual('');
     });
 
-    it('deletesOneRecordAndClearsAllWithReloadedState', 0, async () => {
+    it('loadsOnlineHistoryPagesAndMapsEntriesToCards', 0, async () => {
       const history = new FakeReadHistory();
-      history.items = [
-        { contentKey: 'question:1', contentType: 'question', openedAt: 20 },
-        { contentKey: 'answer:2', contentType: 'answer', openedAt: 10 },
-        { contentKey: 'pin:3', contentType: 'pin', openedAt: 5 }
-      ];
-      const controller = new ReadHistoryController(history);
-      controller.activate();
-      await controller.reload();
-      await controller.delete('pin:3');
-      expect(controller.snapshot().items.length).assertEqual(2);
-      expect(controller.snapshot().items.some((item): boolean => item.kind === ReadHistoryContentKind.PIN))
-        .assertFalse();
-      await controller.clear();
-      expect(controller.snapshot().phase).assertEqual(ReadHistoryPhase.EMPTY);
-      expect(history.clearCount).assertEqual(1);
-    });
-
-    it('usesFixedReadErrorWithoutLeakingStoredValues', 0, async () => {
-      const history = new FakeReadHistory();
-      history.fail = true;
-      const controller = new ReadHistoryController(history);
-      controller.activate();
-      await controller.reload();
-      expect(controller.snapshot().phase).assertEqual(ReadHistoryPhase.ERROR);
-      expect(controller.snapshot().message).assertEqual('已读记录读取失败，请重试');
-      expect(controller.snapshot().message.includes('record value')).assertFalse();
-    });
-
-    it('ignoresMutationsAfterDeactivation', 0, async () => {
-      const history = new FakeReadHistory();
-      history.items = [{ contentKey: 'question:1', contentType: 'question', openedAt: 1 }];
-      const controller = new ReadHistoryController(history);
-      controller.activate();
-      await controller.reload();
-      controller.deactivate();
-      await controller.clear();
-      expect(history.clearCount).assertEqual(0);
-      expect(history.items.length).assertEqual(1);
-    });
-
-    it('showsLoginGateAndLocalOnlyWhenOnlineHistoryIsDisabled', 0, async () => {
-      const history = new FakeReadHistory();
-      history.items = [{ contentKey: 'question:1', contentType: 'question', openedAt: 20 }];
-      const controller = new ReadHistoryController(history);
-      controller.activate();
-      await controller.reload();
-      const state = controller.snapshot();
-      expect(state.requiresLogin).assertTrue();
-      expect(state.onlineEnabled).assertFalse();
-      expect(state.canLoadMore).assertFalse();
-      expect(state.items.length).assertEqual(1);
-      expect(state.items[0].deletable).assertTrue();
-      expect(state.items[0].inOnline).assertFalse();
-    });
-
-    it('mergesOnlineHistoryAndDeduplicatesByContentKey', 0, async () => {
-      const history = new FakeReadHistory();
-      history.items = [{ contentKey: 'answer:2', contentType: 'answer', openedAt: 10 }];
       const online = new FakeOnlineHistory();
-      online.pages = [onlinePage([
-        onlineEntry(OnlineHistoryKind.ANSWER, '2', 20, '在线回答标题'),
-        onlineEntry(OnlineHistoryKind.QUESTION, '1', 30)
-      ], undefined, true)];
+      online.pages = [
+        onlinePage([
+          onlineEntry(OnlineHistoryKind.ANSWER, '2', 20, '在线回答标题'),
+          onlineEntry(OnlineHistoryKind.QUESTION, '1', 30)
+        ], 'offset=10', false)
+      ];
       const controller = new ReadHistoryController(history, online, true);
       controller.activate();
       await controller.reload();
       const state = controller.snapshot();
+      expect(state.phase).assertEqual(ReadHistoryPhase.READY);
       expect(state.requiresLogin).assertFalse();
-      expect(state.onlineEnabled).assertTrue();
+      expect(state.canLoadMore).assertTrue();
       expect(state.items.length).assertEqual(2);
-      expect(state.items[0].contentKey).assertEqual('question:1');
-      expect(state.items[1].contentKey).assertEqual('answer:2');
-      expect(state.items[1].title).assertEqual('在线回答标题');
-      expect(state.items[1].openedAt).assertEqual(20);
-      expect(state.items[1].deletable).assertTrue();
-      expect(state.items[1].inOnline).assertTrue();
+      expect(state.items[0].title).assertEqual('在线回答标题');
+      expect(state.items[0].kind).assertEqual(ReadHistoryContentKind.ANSWER);
+      expect(state.items[0].openedAt).assertEqual(20);
     });
 
     it('loadsMoreOnlinePagesUntilEnd', 0, async () => {
@@ -246,123 +190,140 @@ export default function readHistoryStateTest(): void {
       expect(state.loadingMore).assertFalse();
     });
 
-    it('keepsLocalHistoryWhenOnlineFetchFails', 0, async () => {
+    it('deduplicatesItemsAcrossPages', 0, async () => {
       const history = new FakeReadHistory();
-      history.items = [
-        { contentKey: 'question:1', contentType: 'question', openedAt: 20 },
-        { contentKey: 'answer:2', contentType: 'answer', openedAt: 10 }
-      ];
       const online = new FakeOnlineHistory();
-      online.fail = true;
+      online.pages = [
+        onlinePage([onlineEntry(OnlineHistoryKind.ANSWER, '2', 20)], 'offset=10', false),
+        onlinePage([onlineEntry(OnlineHistoryKind.ANSWER, '2', 30)], undefined, true)
+      ];
       const controller = new ReadHistoryController(history, online, true);
       controller.activate();
       await controller.reload();
-      const state = controller.snapshot();
-      expect(state.phase).assertEqual(ReadHistoryPhase.READY);
-      expect(state.items.length).assertEqual(2);
-      expect(state.message.includes('在线历史加载失败')).assertTrue();
-      expect(state.message.includes('sensitive')).assertFalse();
+      await controller.loadMore();
+      expect(controller.snapshot().items.length).assertEqual(1);
+      expect(controller.snapshot().items[0].openedAt).assertEqual(20);
     });
 
-    it('marksSessionExpiredOnOnlineAuthenticationFailure', 0, async () => {
+    it('showsLoginGateWithoutOnlineSession', 0, async () => {
       const history = new FakeReadHistory();
       history.items = [{ contentKey: 'question:1', contentType: 'question', openedAt: 20 }];
-      const online = new FakeOnlineHistory();
-      online.authFail = true;
-      const controller = new ReadHistoryController(history, online, true);
+      const controller = new ReadHistoryController(history);
       controller.activate();
       await controller.reload();
       const state = controller.snapshot();
       expect(state.requiresLogin).assertTrue();
-      expect(state.items.length).assertEqual(1);
-      expect(state.message.includes('登录已失效')).assertTrue();
+      expect(state.phase).assertEqual(ReadHistoryPhase.EMPTY);
+      expect(state.canLoadMore).assertFalse();
+      expect(state.items.length).assertEqual(0);
     });
 
-    it('showsOnlineFailureMessageWhenMergedListIsEmpty', 0, async () => {
-      const history = new FakeReadHistory();
+    it('marksSessionExpiredOnOnlineAuthenticationFailure', 0, async () => {
       const online = new FakeOnlineHistory();
-      online.fail = true;
-      const controller = new ReadHistoryController(history, online, true);
+      online.authFail = true;
+      const controller = new ReadHistoryController(new FakeReadHistory(), online, true);
       controller.activate();
       await controller.reload();
       const state = controller.snapshot();
       expect(state.phase).assertEqual(ReadHistoryPhase.EMPTY);
-      expect(state.items.length).assertEqual(0);
-      expect(state.message.includes('在线历史加载失败')).assertTrue();
+      expect(state.message.includes('登录已失效')).assertTrue();
+      expect(state.message.includes('401')).assertFalse();
+    });
+
+    it('reportsFixedLoadErrorWithoutLeakingUpstreamPayload', 0, async () => {
+      const online = new FakeOnlineHistory();
+      online.fail = true;
+      const controller = new ReadHistoryController(new FakeReadHistory(), online, true);
+      controller.activate();
+      await controller.reload();
+      const state = controller.snapshot();
+      expect(state.phase).assertEqual(ReadHistoryPhase.ERROR);
+      expect(state.message).assertEqual('历史记录加载失败，请重试');
       expect(state.message.includes('sensitive')).assertFalse();
     });
 
-    it('deleteAndClearOnlyAffectLocalRecordsInMergedMode', 0, async () => {
-      const history = new FakeReadHistory();
-      history.items = [
-        { contentKey: 'question:1', contentType: 'question', openedAt: 5 },
-        { contentKey: 'answer:2', contentType: 'answer', openedAt: 4 }
-      ];
+    it('deletesOneOnlineEntryAndRemovesCardFromList', 0, async () => {
       const online = new FakeOnlineHistory();
       online.pages = [onlinePage([
         onlineEntry(OnlineHistoryKind.QUESTION, '1', 30),
         onlineEntry(OnlineHistoryKind.PIN, '3', 40)
       ], undefined, true)];
+      const controller = new ReadHistoryController(new FakeReadHistory(), online, true);
+      controller.activate();
+      await controller.reload();
+      expect(controller.snapshot().items.length).assertEqual(2);
+      await controller.deleteEntry('question:1');
+      const afterDelete = controller.snapshot();
+      expect(afterDelete.items.length).assertEqual(1);
+      expect(afterDelete.items[0].contentKey).assertEqual('pin:3');
+      expect(online.deletedKeys).assertDeepEquals(['question:1']);
+    });
+
+    it('clearAllClearsBothLocalStoreAndOnlineHistory', 0, async () => {
+      const history = new FakeReadHistory();
+      history.items = [{ contentKey: 'question:1', contentType: 'question', openedAt: 5 }];
+      const online = new FakeOnlineHistory();
+      online.pages = [onlinePage([onlineEntry(OnlineHistoryKind.ANSWER, '2', 20)], undefined, true)];
       const controller = new ReadHistoryController(history, online, true);
       controller.activate();
       await controller.reload();
-      expect(controller.snapshot().items.length).assertEqual(3);
-      await controller.delete('question:1');
-      const afterDelete = controller.snapshot();
-      expect(afterDelete.items.length).assertEqual(3);
-      const question = afterDelete.items.find((item): boolean => item.contentKey === 'question:1');
-      expect(question?.deletable).assertFalse();
-      expect(question?.inOnline).assertTrue();
-      await controller.clear();
+      await controller.clearAll();
       const afterClear = controller.snapshot();
       expect(history.clearCount).assertEqual(1);
-      expect(afterClear.items.length).assertEqual(2);
-      expect(afterClear.items.every((item): boolean => !item.deletable)).assertTrue();
+      expect(online.clearAllCount).assertEqual(1);
+      expect(afterClear.phase).assertEqual(ReadHistoryPhase.EMPTY);
+      expect(afterClear.items.length).assertEqual(0);
+      expect(afterClear.message).assertEqual('已清除所有历史记录');
     });
 
-    it('groupsAndMergesItemsInStableOrder', 0, () => {
-      const local: Array<ReadHistoryItem> = [
-        { contentKey: 'answer:1', kind: ReadHistoryContentKind.ANSWER, id: '1', openedAt: Date.UTC(2026, 7, 28, 12),
-          deletable: true, inOnline: false },
-        { contentKey: 'question:2', kind: ReadHistoryContentKind.QUESTION, id: '2', openedAt: Date.UTC(2026, 7, 27, 8),
-          deletable: true, inOnline: false }
-      ];
-      const online: Array<ReadHistoryItem> = [
-        { contentKey: 'answer:1', kind: ReadHistoryContentKind.ANSWER, id: '1', openedAt: Date.UTC(2026, 7, 28, 9),
-          title: '在线回答', deletable: false, inOnline: true },
-        { contentKey: 'pin:3', kind: ReadHistoryContentKind.PIN, id: '3', openedAt: Date.UTC(2026, 7, 27, 10),
-          deletable: false, inOnline: true }
-      ];
-      const merged = mergeReadHistoryItems(local, online);
-      expect(merged.length).assertEqual(3);
-      const mergedAnswer = merged.find((item): boolean => item.contentKey === 'answer:1');
-      expect(mergedAnswer?.deletable).assertTrue();
-      expect(mergedAnswer?.inOnline).assertTrue();
-      expect(mergedAnswer?.title).assertEqual('在线回答');
-      const groups = groupReadHistoryItems(merged);
-      expect(groups.map((group): string => group.dayKey)).assertDeepEquals(['2026-08-28', '2026-08-27']);
-      expect(groups[0].items[0].contentKey).assertEqual('answer:1');
-      expect(groups[1].items.map((item: ReadHistoryItem): string => item.contentKey))
-        .assertDeepEquals(['pin:3', 'question:2']);
+    it('ignoresMutationsAfterDeactivation', 0, async () => {
+      const history = new FakeReadHistory();
+      history.items = [{ contentKey: 'question:1', contentType: 'question', openedAt: 1 }];
+      const online = new FakeOnlineHistory();
+      online.pages = [onlinePage([onlineEntry(OnlineHistoryKind.ANSWER, '2', 20)], undefined, true)];
+      const controller = new ReadHistoryController(history, online, true);
+      controller.activate();
+      await controller.reload();
+      controller.deactivate();
+      await controller.clearAll();
+      await controller.deleteEntry('answer:2');
+      expect(history.clearCount).assertEqual(0);
+      expect(online.clearAllCount).assertEqual(0);
+      expect(online.deletedKeys.length).assertEqual(0);
     });
 
-    it('filtersMergedHistoryByRequestedSourceWithoutDroppingSharedRecords', 0, () => {
-      const items: Array<ReadHistoryItem> = [
-        { contentKey: 'question:1', kind: ReadHistoryContentKind.QUESTION, id: '1', openedAt: 30,
-          deletable: true, inOnline: false },
-        { contentKey: 'answer:2', kind: ReadHistoryContentKind.ANSWER, id: '2', openedAt: 20,
-          deletable: true, inOnline: true },
-        { contentKey: 'article:3', kind: ReadHistoryContentKind.ARTICLE, id: '3', openedAt: 10,
-          deletable: false, inOnline: true }
+    it('localControllerLoadsDeletesAndClearsRecords', 0, async () => {
+      const history = new FakeReadHistory();
+      history.items = [
+        { contentKey: 'article:3', contentType: 'article', openedAt: 30, title: '本地文章' },
+        { contentKey: 'bad', contentType: 'answer', openedAt: 20 },
+        { contentKey: 'question:1', contentType: 'question', openedAt: 10 }
       ];
-      expect(filterReadHistoryItems(items, ReadHistorySourceFilter.ALL).length).assertEqual(3);
-      expect(filterReadHistoryItems(items, ReadHistorySourceFilter.LOCAL)
-        .map((item: ReadHistoryItem): string => item.contentKey)).assertDeepEquals(['question:1', 'answer:2']);
-      expect(filterReadHistoryItems(items, ReadHistorySourceFilter.ONLINE)
-        .map((item: ReadHistoryItem): string => item.contentKey)).assertDeepEquals(['answer:2', 'article:3']);
-      expect(readHistorySourceFilterLabel(ReadHistorySourceFilter.ALL)).assertEqual('全部记录');
-      expect(readHistorySourceFilterLabel(ReadHistorySourceFilter.LOCAL)).assertEqual('本地记录');
-      expect(readHistorySourceFilterLabel(ReadHistorySourceFilter.ONLINE)).assertEqual('在线记录');
+      const controller = new LocalHistoryController(history);
+      controller.activate();
+      await controller.reload();
+      const state = controller.snapshot();
+      expect(state.phase).assertEqual(ReadHistoryPhase.READY);
+      expect(state.items.length).assertEqual(2);
+      expect(state.items[0].contentKey).assertEqual('article:3');
+      expect(state.items[0].title).assertEqual('本地文章');
+      await controller.delete('article:3');
+      expect(controller.snapshot().items.length).assertEqual(1);
+      await controller.clear();
+      expect(history.clearCount).assertEqual(1);
+      expect(controller.snapshot().phase).assertEqual(ReadHistoryPhase.EMPTY);
+    });
+
+    it('localControllerReportsReadFailureWithFixedMessage', 0, async () => {
+      const history = new FakeReadHistory();
+      history.fail = true;
+      const controller = new LocalHistoryController(history);
+      controller.activate();
+      await controller.reload();
+      const state = controller.snapshot();
+      expect(state.phase).assertEqual(ReadHistoryPhase.ERROR);
+      expect(state.message).assertEqual('本地历史记录读取失败，请重试');
+      expect(state.message.includes('record value')).assertFalse();
     });
   });
 }

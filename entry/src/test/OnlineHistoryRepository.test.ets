@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
+  buildBatchDelBody,
   buildOnlineHistoryUrl,
   canonicalOnlineHistoryCursorKey,
   decodeOnlineHistoryPage,
@@ -10,14 +11,17 @@ import {
   OnlineHistoryDecodeError,
   OnlineHistoryDecodeFailureKind,
   OnlineHistoryKind,
+  ONLINE_HISTORY_BATCH_DEL_URL,
   OnlineHistoryRepositoryFailure,
   OnlineHistoryRepositoryFailureKind,
+  onlineHistoryDeletePairOf,
   onlineHistoryOffsetOf,
   PreparedZhihuHttpRequest,
   SessionCookie,
   SessionCookieProvider,
   ZhihuHttpClient,
   ZhihuHttpResponse,
+  ZhihuHttpMethod,
   ZhihuHttpTransport,
   ZhihuHttpTransportFactory
 } from 'data';
@@ -312,6 +316,57 @@ export default function onlineHistoryRepositoryTest(): void {
       expect(page.items.length).assertEqual(0);
       expect(page.cursor.isEnd).assertTrue();
       expect(page.cursor.next).assertUndefined();
+    });
+
+    it('clearAllPostsBatchDelWithClearFlagAndResetsPagination', 0, async () => {
+      const factory = new OnlineTransportFactory([
+        { statusCode: 200, body: FIRST_PAGE },
+        { statusCode: 200, body: '{"data":[],"paging":{"is_end":true}}' },
+        { statusCode: 200, body: FIRST_PAGE }
+      ]);
+      const repository = new DefaultOnlineHistoryRepository(
+        new ZhihuHttpClient(new OnlineCookieProvider(), factory)
+      );
+      await repository.loadPage();
+      await repository.clearAll();
+      const clearRequest = factory.requests[1];
+      expect(clearRequest.url).assertEqual(ONLINE_HISTORY_BATCH_DEL_URL);
+      expect(clearRequest.method).assertEqual(ZhihuHttpMethod.POST);
+      expect(clearRequest.body).assertEqual('{"pairs":[],"clear":true}');
+      // 清空后分页游标状态一并重置：可重新从首页拉取（对齐上游 displayItems.clear() 后的重新加载）。
+      const reload = await repository.loadPage();
+      expect(reload.items.length).assertEqual(4);
+      expect(factory.requests[2].url).assertEqual(`${ONLINE_BASE}?offset=0&limit=10`);
+    });
+
+    it('deleteEntryPostsSinglePairBuiltFromContentKey', 0, async () => {
+      const factory = new OnlineTransportFactory([{ statusCode: 200, body: '{"data":[]}' }]);
+      const repository = new DefaultOnlineHistoryRepository(
+        new ZhihuHttpClient(new OnlineCookieProvider(), factory)
+      );
+      await repository.deleteEntry('article:300001');
+      expect(factory.requests[0].url).assertEqual(ONLINE_HISTORY_BATCH_DEL_URL);
+      expect(factory.requests[0].method).assertEqual(ZhihuHttpMethod.POST);
+      expect(factory.requests[0].body)
+        .assertEqual('{"pairs":[{"content_token":"300001","content_type":"article"}],"clear":false}');
+      expect(buildBatchDelBody([onlineHistoryDeletePairOf('pin:42')], false))
+        .assertEqual('{"pairs":[{"content_token":"42","content_type":"pin"}],"clear":false}');
+    });
+
+    it('rejectsInvalidContentKeysForDeletion', 0, () => {
+      const invalidKeys: Array<string> = ['bad', 'answer:', ':123', 'answer:../123', 'video:123',
+        'answer:1:2', 'answer:0', 'article:not-a-number'];
+      invalidKeys.forEach((contentKey: string): void => {
+        let failure: OnlineHistoryRepositoryFailure | undefined = undefined;
+        try {
+          onlineHistoryDeletePairOf(contentKey);
+        } catch (error) {
+          if (error instanceof OnlineHistoryRepositoryFailure) {
+            failure = error;
+          }
+        }
+        expect(failure?.kind).assertEqual(OnlineHistoryRepositoryFailureKind.INVALID_CONTENT_KEY);
+      });
     });
 
     it('cancelsPendingTransportWithoutWaitingForItToSettle', 0, async () => {

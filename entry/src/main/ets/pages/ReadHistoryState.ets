@@ -23,28 +23,16 @@ export enum ReadHistoryContentKind {
   PIN = 'pin'
 }
 
-export enum ReadHistorySourceFilter {
-  ALL = 'all',
-  LOCAL = 'local',
-  ONLINE = 'online'
-}
-
+/** 历史卡片条目：在线与本地两个页面共用，对齐上游 FeedDisplayItem 的展示字段。 */
 export interface ReadHistoryItem {
   contentKey: string;
   kind: ReadHistoryContentKind;
   id: string;
+  /** 毫秒时间戳；本地为打开时间，在线为知乎 read_time。 */
   openedAt: number;
-  title?: string;
-  summary?: string;
+  title: string;
+  summary: string;
   authorName?: string;
-  deletable: boolean;
-  inOnline: boolean;
-}
-
-export interface ReadHistoryGroup {
-  dayKey: string;
-  label: string;
-  items: Array<ReadHistoryItem>;
 }
 
 export interface ReadHistoryOpenTarget {
@@ -58,7 +46,6 @@ export interface ReadHistoryViewState {
   busy: boolean;
   message: string;
   requiresLogin: boolean;
-  onlineEnabled: boolean;
   loadingMore: boolean;
   canLoadMore: boolean;
 }
@@ -95,9 +82,9 @@ export function decodeReadHistoryItem(content: OpenedContent): ReadHistoryItem |
     kind: contentKind,
     id: id,
     openedAt: content.openedAt,
-    title: content.title,
-    deletable: true,
-    inOnline: false
+    title: content.title ?? '',
+    summary: '',
+    authorName: undefined
   };
 }
 
@@ -113,9 +100,7 @@ export function onlineHistoryEntryToReadItem(entry: OnlineHistoryEntry): ReadHis
     openedAt: entry.readTime,
     title: entry.title,
     summary: entry.summary,
-    authorName: entry.authorName,
-    deletable: false,
-    inOnline: true
+    authorName: entry.authorName
   };
 }
 
@@ -136,118 +121,28 @@ export function readHistoryKindLabel(kind: ReadHistoryContentKind): string {
   return '想法';
 }
 
-export function readHistorySourceLabel(item: ReadHistoryItem): string {
-  if (item.deletable && item.inOnline) {
-    return '本地+在线';
-  }
-  return item.deletable ? '本地' : '在线';
-}
-
-export function readHistorySourceFilterLabel(filter: ReadHistorySourceFilter): string {
-  if (filter === ReadHistorySourceFilter.LOCAL) {
-    return '本地记录';
-  }
-  if (filter === ReadHistorySourceFilter.ONLINE) {
-    return '在线记录';
-  }
-  return '全部记录';
-}
-
-export function filterReadHistoryItems(items: Array<ReadHistoryItem>,
-  filter: ReadHistorySourceFilter): Array<ReadHistoryItem> {
-  if (filter === ReadHistorySourceFilter.LOCAL) {
-    return items.filter((item: ReadHistoryItem): boolean => item.deletable);
-  }
-  if (filter === ReadHistorySourceFilter.ONLINE) {
-    return items.filter((item: ReadHistoryItem): boolean => item.inOnline);
-  }
-  return items.slice();
-}
-
-export function groupReadHistoryItems(items: Array<ReadHistoryItem>): Array<ReadHistoryGroup> {
-  const groups = new Map<string, ReadHistoryGroup>();
-  const orderedKeys: Array<string> = [];
-  const orderedItems = items.slice().sort((left: ReadHistoryItem, right: ReadHistoryItem): number =>
-    right.openedAt - left.openedAt);
-  orderedItems.forEach((item: ReadHistoryItem): void => {
-    const dayKey = readHistoryDayKey(item.openedAt);
-    const current = groups.get(dayKey);
-    if (current === undefined) {
-      groups.set(dayKey, { dayKey: dayKey, label: readHistoryDayLabel(item.openedAt), items: [item] });
-      orderedKeys.push(dayKey);
-      return;
+/** 卡片元信息行的时间段：与知乎客户端一致展示到分钟。 */
+export function readHistoryTimeLabel(openedAt: number): string {
+  try {
+    if (!Number.isFinite(openedAt)) {
+      return '';
     }
-    current.items.push(item);
-  });
-  const result: Array<ReadHistoryGroup> = [];
-  orderedKeys.forEach((key: string): void => {
-    const group = groups.get(key);
-    if (group !== undefined) {
-      result.push(group);
+    const value = new Date(openedAt);
+    if (Number.isNaN(value.getFullYear())) {
+      return '';
     }
-  });
-  return result;
-}
-
-function readHistoryDayKey(openedAt: number): string {
-  const value = new Date(openedAt);
-  return `${value.getFullYear()}-${`${value.getMonth() + 1}`.padStart(2, '0')}-${`${value.getDate()}`.padStart(2, '0')}`;
-}
-
-function readHistoryDayLabel(openedAt: number): string {
-  const value = new Date(openedAt);
-  return `${value.getFullYear()}年${value.getMonth() + 1}月${value.getDate()}日`;
-}
-
-export function mergeReadHistoryItems(local: Array<ReadHistoryItem>,
-  online: Array<ReadHistoryItem>): Array<ReadHistoryItem> {
-  const byKey = new Map<string, ReadHistoryItem>();
-  local.forEach((item: ReadHistoryItem): void => {
-    byKey.set(item.contentKey, copyReadHistoryItem(item));
-  });
-  online.forEach((item: ReadHistoryItem): void => {
-    const existing = byKey.get(item.contentKey);
-    if (existing === undefined) {
-      byKey.set(item.contentKey, copyReadHistoryItem(item));
-      return;
-    }
-    byKey.set(item.contentKey, {
-      contentKey: existing.contentKey,
-      kind: existing.kind,
-      id: existing.id,
-      openedAt: Math.max(existing.openedAt, item.openedAt),
-      title: existing.title ?? item.title,
-      summary: existing.summary ?? item.summary,
-      authorName: existing.authorName ?? item.authorName,
-      deletable: true,
-      inOnline: true
-    });
-  });
-  const merged: Array<ReadHistoryItem> = [];
-  byKey.forEach((item: ReadHistoryItem): void => {
-    merged.push(item);
-  });
-  merged.sort((a: ReadHistoryItem, b: ReadHistoryItem): number => b.openedAt - a.openedAt);
-  return merged;
-}
-
-function readHistoryKindFromOnline(kind: OnlineHistoryKind): ReadHistoryContentKind | undefined {
-  if (kind === OnlineHistoryKind.QUESTION) {
-    return ReadHistoryContentKind.QUESTION;
+    const month = `${value.getMonth() + 1}`.padStart(2, '0');
+    const day = `${value.getDate()}`.padStart(2, '0');
+    const hour = `${value.getHours()}`.padStart(2, '0');
+    const minute = `${value.getMinutes()}`.padStart(2, '0');
+    return `${value.getFullYear()}-${month}-${day} ${hour}:${minute}`;
+  } catch (_error) {
+    return '';
   }
-  if (kind === OnlineHistoryKind.ANSWER) {
-    return ReadHistoryContentKind.ANSWER;
-  }
-  if (kind === OnlineHistoryKind.ARTICLE) {
-    return ReadHistoryContentKind.ARTICLE;
-  }
-  if (kind === OnlineHistoryKind.PIN) {
-    return ReadHistoryContentKind.PIN;
-  }
-  return undefined;
 }
 
 export class ReadHistoryController {
+  /** 在线历史（主页面）：分页拉取知乎服务端浏览历史；清除时同时清空本地已读记录（对齐上游 clearAllHistory）。 */
   private readonly history: ReadHistoryGateway;
   private readonly onlineHistory?: OnlineHistoryRepository;
   private readonly onlineEnabled: boolean;
@@ -255,12 +150,8 @@ export class ReadHistoryController {
   private active: boolean = false;
   private generation: number = 0;
   private state: ReadHistoryViewState;
-  private localItems: Array<ReadHistoryItem> = [];
-  private onlineItems: Array<ReadHistoryItem> = [];
   private onlineCursor?: string;
   private onlineEnded: boolean;
-  private onlineFailureMessage?: string;
-  private requiresLogin: boolean;
 
   constructor(history: ReadHistoryGateway,
     onlineHistory?: OnlineHistoryRepository,
@@ -271,14 +162,12 @@ export class ReadHistoryController {
     this.onlineEnabled = onlineEnabled;
     this.observer = observer;
     this.onlineEnded = !onlineEnabled;
-    this.requiresLogin = !onlineEnabled;
     this.state = {
       phase: ReadHistoryPhase.LOADING,
       items: [],
       busy: false,
-      message: '正在读取本地已读记录',
-      requiresLogin: this.requiresLogin,
-      onlineEnabled: onlineEnabled,
+      message: onlineEnabled ? '正在加载历史记录' : '登录后可查看知乎账号的浏览历史',
+      requiresLogin: !onlineEnabled,
       loadingMore: false,
       canLoadMore: false
     };
@@ -289,7 +178,7 @@ export class ReadHistoryController {
       return;
     }
     this.active = true;
-    this.reload();
+    void this.reload();
   }
 
   deactivate(): void {
@@ -309,82 +198,74 @@ export class ReadHistoryController {
     if (!this.active) {
       return Promise.resolve();
     }
-    const generation = ++this.generation;
-    this.publishWith(this.state.items, ReadHistoryPhase.LOADING, true,
-      this.onlineEnabled ? '正在读取浏览记录' : '正在读取本地已读记录', false, false);
-    return this.loadIntoState(generation, this.onlineEnabled ? '浏览记录已更新' : '已读记录已更新');
-  }
-
-  delete(contentKey: string): Promise<void> {
-    return this.mutate((): Promise<boolean> => this.history.delete(contentKey),
-      '已删除这条记录', '删除失败，请重试');
-  }
-
-  clear(): Promise<void> {
-    return this.mutate(async (): Promise<boolean> => {
-      await this.history.clear();
-      return true;
-    }, this.onlineEnabled ? '已清空本地已读记录，在线历史保留' : '已清空本地已读记录', '清空失败，请重试');
-  }
-
-  loadMore(): Promise<void> {
-    if (!this.active || this.state.busy || this.onlineEnded || this.onlineCursor === undefined) {
+    if (!this.onlineEnabled) {
+      this.publish(ReadHistoryPhase.EMPTY, [], false, '登录后可查看知乎账号的浏览历史', false, false);
       return Promise.resolve();
     }
     const generation = ++this.generation;
-    this.publishWith(this.state.items, this.state.phase, true, '正在加载更多在线历史', true, false);
-    return this.appendOnlinePage(generation, '在线历史已更新');
+    this.onlineCursor = undefined;
+    this.onlineEnded = false;
+    this.publish(ReadHistoryPhase.LOADING, this.state.items, true, '正在加载历史记录', false, false);
+    return this.appendOnlinePage(generation, '历史记录已更新');
   }
 
-  private async mutate(operation: () => Promise<boolean>, successMessage: string,
-    failureMessage: string): Promise<void> {
-    if (!this.active || this.state.busy) {
+  loadMore(): Promise<void> {
+    if (!this.active || this.state.busy || this.state.loadingMore || this.onlineEnded ||
+      this.onlineCursor === undefined) {
+      return Promise.resolve();
+    }
+    const generation = ++this.generation;
+    this.publish(this.state.phase, this.state.items, false, this.state.message, true, this.state.canLoadMore);
+    return this.appendOnlinePage(generation, '历史记录已更新');
+  }
+
+  /** 对齐上游 deleteItem：batch_del 单条删除成功后从列表移除。 */
+  async deleteEntry(contentKey: string): Promise<void> {
+    const repository = this.onlineHistory;
+    if (!this.active || this.state.busy || repository === undefined) {
       return;
     }
     const generation = ++this.generation;
-    this.publishWith(this.state.items, this.state.phase, true, '正在更新本地已读记录', false,
-      this.state.canLoadMore);
+    this.publish(this.state.phase, this.state.items, true, '正在删除该条历史记录', false, this.state.canLoadMore);
     try {
-      await operation();
-      if (this.isCurrent(generation)) {
-        await this.loadIntoState(generation, successMessage);
+      await repository.deleteEntry(contentKey);
+      if (!this.isCurrent(generation)) {
+        return;
       }
+      const remaining = this.state.items.filter((item: ReadHistoryItem): boolean =>
+        item.contentKey !== contentKey);
+      this.publish(this.phaseOf(remaining), remaining, false, '已删除该条历史记录', false,
+        !this.onlineEnded && this.onlineCursor !== undefined);
     } catch (_error) {
       if (this.isCurrent(generation)) {
-        this.publishWith(this.state.items, ReadHistoryPhase.ERROR, false, failureMessage, false,
-          this.onlineEnabled && !this.onlineEnded && this.onlineCursor !== undefined);
+        this.publish(this.state.phase, this.state.items, false, '操作失败，请重试', false,
+          !this.onlineEnded && this.onlineCursor !== undefined);
       }
     }
   }
 
-  private async loadIntoState(generation: number, successMessage: string): Promise<void> {
+  /** 对齐上游 clearAllHistory：一次清空服务端在线历史 + 本机已读记录。 */
+  async clearAll(): Promise<void> {
+    const repository = this.onlineHistory;
+    if (!this.active || this.state.busy || repository === undefined) {
+      return;
+    }
+    const generation = ++this.generation;
+    this.publish(this.state.phase, this.state.items, true, '正在清除历史记录', false, false);
     try {
-      const stored = await this.history.queryRecent(MAX_READ_HISTORY_ITEMS);
-      const localItems: Array<ReadHistoryItem> = [];
-      stored.forEach((content: OpenedContent): void => {
-        const item = decodeReadHistoryItem(content);
-        if (item !== undefined) {
-          localItems.push(item);
-        }
-      });
-      this.localItems = localItems;
-      this.onlineItems = [];
+      await this.history.clear();
+      await repository.clearAll();
+      if (!this.isCurrent(generation)) {
+        return;
+      }
       this.onlineCursor = undefined;
-      this.onlineEnded = !this.onlineEnabled;
-      this.onlineFailureMessage = undefined;
-      if (!this.isCurrent(generation)) {
-        return;
-      }
-      this.publishMerged(generation, localItems.length === 0 ? '暂无本地已读记录' : '本地已读记录已读取');
-      if (this.onlineEnabled && this.onlineHistory !== undefined && this.isCurrent(generation)) {
-        this.publishWith(this.state.items, this.state.phase, true, '正在加载在线历史', false, false);
-        await this.appendOnlinePage(generation, successMessage);
-      }
+      this.onlineEnded = true;
+      this.publish(ReadHistoryPhase.EMPTY, [], false, '已清除所有历史记录', false, false);
     } catch (_error) {
-      if (!this.isCurrent(generation)) {
-        return;
+      if (this.isCurrent(generation)) {
+        this.publish(this.state.phase, this.state.items, false, '清除失败，请重试', false,
+          !this.onlineEnded && this.onlineCursor !== undefined);
       }
-      this.publishWith(this.state.items, ReadHistoryPhase.ERROR, false, '已读记录读取失败，请重试', false, false);
     }
   }
 
@@ -393,8 +274,9 @@ export class ReadHistoryController {
     if (repository === undefined || this.onlineEnded) {
       return;
     }
+    const replacing = this.onlineCursor === undefined;
     try {
-      const page = await repository.loadPage(this.onlineCursor);
+      const page = await repository.loadPage(replacing ? undefined : this.onlineCursor);
       if (!this.isCurrent(generation)) {
         return;
       }
@@ -405,63 +287,209 @@ export class ReadHistoryController {
           incoming.push(item);
         }
       });
-      this.onlineItems = this.onlineItems.concat(incoming);
+      const merged = replacing ? incoming
+        : appendUniqueItems(this.state.items, incoming);
       this.onlineCursor = page.cursor.next;
       this.onlineEnded = page.cursor.isEnd || incoming.length === 0;
-      this.onlineFailureMessage = undefined;
-      this.publishMerged(generation, successMessage);
+      const message = merged.length === 0 ? '暂无浏览记录' : successMessage;
+      this.publish(this.phaseOf(merged), merged, false, message, false,
+        !this.onlineEnded && this.onlineCursor !== undefined);
     } catch (error) {
       if (!this.isCurrent(generation)) {
         return;
       }
       this.onlineEnded = true;
       if (error instanceof HttpFailure && error.kind === HttpFailureKind.AUTHENTICATION) {
-        this.requiresLogin = true;
-        this.onlineFailureMessage = '登录已失效，请重新登录后查看在线历史';
-      } else {
-        this.onlineFailureMessage = this.state.items.length === 0
-          ? '在线历史加载失败，请重试'
-          : '在线历史加载失败，已显示本地记录';
+        this.publish(ReadHistoryPhase.EMPTY, this.state.items, false, '登录已失效，请重新登录后查看历史记录',
+          false, false);
+        return;
       }
-      this.publishMerged(generation, this.onlineFailureMessage);
+      if (replacing) {
+        this.publish(ReadHistoryPhase.ERROR, [], false, '历史记录加载失败，请重试', false, false);
+        return;
+      }
+      this.publish(this.state.phase, this.state.items, false, '加载更多失败，请重试', false, false);
     }
   }
 
-  private publishMerged(generation: number, message: string): void {
-    if (!this.isCurrent(generation)) {
-      return;
-    }
-    const merged = mergeReadHistoryItems(this.localItems, this.onlineItems);
-    const finalMessage = merged.length === 0
-      ? (this.onlineFailureMessage ?? (this.onlineEnabled ? '暂无浏览记录' : '暂无本地已读记录'))
-      : message;
-    this.publishWith(merged, merged.length === 0 ? ReadHistoryPhase.EMPTY : ReadHistoryPhase.READY,
-      false, finalMessage, false,
-      this.onlineEnabled && !this.onlineEnded && this.onlineCursor !== undefined);
+  private phaseOf(items: Array<ReadHistoryItem>): ReadHistoryPhase {
+    return items.length === 0 ? ReadHistoryPhase.EMPTY : ReadHistoryPhase.READY;
   }
 
-  private publishWith(items: Array<ReadHistoryItem>, phase: ReadHistoryPhase, busy: boolean,
+  private publish(phase: ReadHistoryPhase, items: Array<ReadHistoryItem>, busy: boolean,
     message: string, loadingMore: boolean, canLoadMore: boolean): void {
-    this.publish({
+    this.state = {
       phase: phase,
-      items: items,
+      items: items.map((item: ReadHistoryItem): ReadHistoryItem => copyReadHistoryItem(item)),
       busy: busy,
       message: message,
-      requiresLogin: this.requiresLogin,
-      onlineEnabled: this.onlineEnabled,
+      requiresLogin: !this.onlineEnabled,
       loadingMore: loadingMore,
       canLoadMore: canLoadMore
-    });
+    };
+    this.observer(this.snapshot());
   }
 
   private isCurrent(generation: number): boolean {
     return this.active && this.generation === generation;
   }
+}
 
-  private publish(state: ReadHistoryViewState): void {
-    this.state = copyReadHistoryState(state);
+export class LocalHistoryController {
+  /** 本地历史（对齐上游 LegacyLocalHistoryScreen）：一次性读取本机已读记录，无分页。 */
+  private readonly history: ReadHistoryGateway;
+  private readonly observer: ReadHistoryObserver;
+  private active: boolean = false;
+  private generation: number = 0;
+  private state: ReadHistoryViewState;
+
+  constructor(history: ReadHistoryGateway,
+    observer: ReadHistoryObserver = (_state: ReadHistoryViewState): void => {}) {
+    this.history = history;
+    this.observer = observer;
+    this.state = {
+      phase: ReadHistoryPhase.LOADING,
+      items: [],
+      busy: false,
+      message: '正在读取本地历史记录',
+      requiresLogin: false,
+      loadingMore: false,
+      canLoadMore: false
+    };
+  }
+
+  activate(): void {
+    if (this.active) {
+      return;
+    }
+    this.active = true;
+    void this.reload();
+  }
+
+  deactivate(): void {
+    this.active = false;
+    this.generation += 1;
+  }
+
+  snapshot(): ReadHistoryViewState {
+    return copyReadHistoryState(this.state);
+  }
+
+  reload(): Promise<void> {
+    if (!this.active) {
+      return Promise.resolve();
+    }
+    const generation = ++this.generation;
+    this.publishWith(this.state.items, ReadHistoryPhase.LOADING, true, '正在读取本地历史记录');
+    return this.loadIntoState(generation, '本地历史记录已读取');
+  }
+
+  async delete(contentKey: string): Promise<void> {
+    return this.mutate((): Promise<boolean> => this.history.delete(contentKey),
+      '已删除该条本地记录', '删除失败，请重试');
+  }
+
+  async clear(): Promise<void> {
+    return this.mutate(async (): Promise<boolean> => {
+      await this.history.clear();
+      return true;
+    }, '已清空本地历史记录', '清空失败，请重试');
+  }
+
+  private async mutate(operation: () => Promise<boolean>, successMessage: string,
+    failureMessage: string): Promise<void> {
+    if (!this.active || this.state.busy) {
+      return;
+    }
+    const generation = ++this.generation;
+    this.publishWith(this.state.items, this.state.phase, true, '正在更新本地历史记录');
+    try {
+      await operation();
+      if (this.isCurrent(generation)) {
+        await this.loadIntoState(generation, successMessage);
+      }
+    } catch (_error) {
+      if (this.isCurrent(generation)) {
+        this.publishWith(this.state.items, ReadHistoryPhase.ERROR, false, failureMessage);
+      }
+    }
+  }
+
+  private async loadIntoState(generation: number, successMessage: string): Promise<void> {
+    try {
+      const stored = await this.history.queryRecent(MAX_READ_HISTORY_ITEMS);
+      const items: Array<ReadHistoryItem> = [];
+      stored.forEach((content: OpenedContent): void => {
+        const item = decodeReadHistoryItem(content);
+        if (item !== undefined) {
+          items.push(item);
+        }
+      });
+      items.sort((left: ReadHistoryItem, right: ReadHistoryItem): number => right.openedAt - left.openedAt);
+      if (!this.isCurrent(generation)) {
+        return;
+      }
+      const message = items.length === 0 ? '暂无本地历史记录' : successMessage;
+      this.publishWith(items, items.length === 0 ? ReadHistoryPhase.EMPTY : ReadHistoryPhase.READY,
+        false, message);
+    } catch (_error) {
+      if (!this.isCurrent(generation)) {
+        return;
+      }
+      this.publishWith(this.state.items, ReadHistoryPhase.ERROR, false, '本地历史记录读取失败，请重试');
+    }
+  }
+
+  private publishWith(items: Array<ReadHistoryItem>, phase: ReadHistoryPhase, busy: boolean,
+    message: string): void {
+    this.state = {
+      phase: phase,
+      items: items.map((item: ReadHistoryItem): ReadHistoryItem => copyReadHistoryItem(item)),
+      busy: busy,
+      message: message,
+      requiresLogin: false,
+      loadingMore: false,
+      canLoadMore: false
+    };
     this.observer(this.snapshot());
   }
+
+  private isCurrent(generation: number): boolean {
+    return this.active && this.generation === generation;
+  }
+}
+
+function appendUniqueItems(current: Array<ReadHistoryItem>, incoming: Array<ReadHistoryItem>)
+  : Array<ReadHistoryItem> {
+  const seen = new Set<string>();
+  current.forEach((item: ReadHistoryItem): void => {
+    seen.add(item.contentKey);
+  });
+  const merged = current.slice();
+  incoming.forEach((item: ReadHistoryItem): void => {
+    if (seen.has(item.contentKey)) {
+      return;
+    }
+    seen.add(item.contentKey);
+    merged.push(item);
+  });
+  return merged;
+}
+
+function readHistoryKindFromOnline(kind: OnlineHistoryKind): ReadHistoryContentKind | undefined {
+  if (kind === OnlineHistoryKind.QUESTION) {
+    return ReadHistoryContentKind.QUESTION;
+  }
+  if (kind === OnlineHistoryKind.ANSWER) {
+    return ReadHistoryContentKind.ANSWER;
+  }
+  if (kind === OnlineHistoryKind.ARTICLE) {
+    return ReadHistoryContentKind.ARTICLE;
+  }
+  if (kind === OnlineHistoryKind.PIN) {
+    return ReadHistoryContentKind.PIN;
+  }
+  return undefined;
 }
 
 function copyReadHistoryState(state: ReadHistoryViewState): ReadHistoryViewState {
@@ -471,7 +499,6 @@ function copyReadHistoryState(state: ReadHistoryViewState): ReadHistoryViewState
     busy: state.busy,
     message: state.message,
     requiresLogin: state.requiresLogin,
-    onlineEnabled: state.onlineEnabled,
     loadingMore: state.loadingMore,
     canLoadMore: state.canLoadMore
   };
@@ -485,8 +512,6 @@ function copyReadHistoryItem(item: ReadHistoryItem): ReadHistoryItem {
     openedAt: item.openedAt,
     title: item.title,
     summary: item.summary,
-    authorName: item.authorName,
-    deletable: item.deletable,
-    inOnline: item.inOnline
+    authorName: item.authorName
   };
 }

@@ -89,6 +89,7 @@ import { PeopleDetailPage, PinDetailPage } from './PeoplePinDetailPages';
 import { BlockingRulesPage } from './BlockingRulesPage';
 import { BlockedFeedHistoryPage } from './BlockedFeedHistoryPage';
 import { ReadHistoryPage } from './ReadHistoryPage';
+import { LocalHistoryPage } from './LocalHistoryPage';
 import { CollectionPage } from './CollectionPage';
 import { CollectionContentPage } from './CollectionContentPage';
 import { NotificationPage } from './NotificationPage';
@@ -247,6 +248,8 @@ struct Index {
           blockedFeedHistoryContent: (onBack: () => void): void => this.blockedFeedHistoryContent(onBack),
           readHistoryContent: (navigate: (destination: P1Destination) => void, onBack: () => void): void =>
             this.readHistoryContent(navigate, onBack),
+          localHistoryContent: (navigate: (destination: P1Destination) => void, onBack: () => void): void =>
+            this.localHistoryContent(navigate, onBack),
           loginContent: (onBack: () => void, onAuthenticated: () => void, onScanDesktopLogin: () => void): void =>
             this.loginContent(onBack, onAuthenticated, onScanDesktopLogin),
           technicalLabContent: (navigate: (destination: P1Destination) => void): void =>
@@ -527,27 +530,44 @@ struct Index {
   }
 
   @Builder
-  readHistoryContent(navigate: (destination: P1Destination) => void, onBack: () => void) {
+  readHistoryContent(navigate: (destination: P1Destination) => void, _onBack: () => void) {
     ReadHistoryPage({
       history: this.openedContentStore,
       onlineHistory: this.onlineHistoryRepository,
       session: this.session,
       onOpen: (target: ReadHistoryOpenTarget): void => {
-        if (target.kind === ReadHistoryContentKind.QUESTION) {
-          navigate({ name: P1DestinationName.QUESTION, id: target.id });
-        } else if (target.kind === ReadHistoryContentKind.ANSWER) {
-          navigate({ name: P1DestinationName.ANSWER, id: target.id });
-        } else if (target.kind === ReadHistoryContentKind.ARTICLE) {
-          navigate({ name: P1DestinationName.ARTICLE, id: target.id });
-        } else {
-          navigate({ name: P1DestinationName.PIN, id: target.id });
-        }
+        this.navigateReadHistoryTarget(navigate, target);
       },
       onGoLogin: (): void => {
         navigate({ name: P1DestinationName.LOGIN });
       },
-      onBack: onBack
+      onNavigateLocal: (): void => {
+        navigate({ name: P1DestinationName.LOCAL_HISTORY });
+      }
     });
+  }
+
+  @Builder
+  localHistoryContent(navigate: (destination: P1Destination) => void, _onBack: () => void) {
+    LocalHistoryPage({
+      history: this.openedContentStore,
+      onOpen: (target: ReadHistoryOpenTarget): void => {
+        this.navigateReadHistoryTarget(navigate, target);
+      }
+    });
+  }
+
+  private navigateReadHistoryTarget(navigate: (destination: P1Destination) => void,
+    target: ReadHistoryOpenTarget): void {
+    if (target.kind === ReadHistoryContentKind.QUESTION) {
+      navigate({ name: P1DestinationName.QUESTION, id: target.id });
+    } else if (target.kind === ReadHistoryContentKind.ANSWER) {
+      navigate({ name: P1DestinationName.ANSWER, id: target.id });
+    } else if (target.kind === ReadHistoryContentKind.ARTICLE) {
+      navigate({ name: P1DestinationName.ARTICLE, id: target.id });
+    } else {
+      navigate({ name: P1DestinationName.PIN, id: target.id });
+    }
   }
 
   @Builder
