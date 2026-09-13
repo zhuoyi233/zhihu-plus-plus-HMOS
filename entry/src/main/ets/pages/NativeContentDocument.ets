@@ -1,7 +1,8 @@
+import { fileIo, fileUri } from '@kit.CoreFileKit';
 import { image } from '@kit.ImageKit';
 import { http } from '@kit.NetworkKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
-import { abilityAccessCtrl, Want } from '@kit.AbilityKit';
+import { Want } from '@kit.AbilityKit';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import {
   createSystemShareService
@@ -67,6 +68,7 @@ export struct ContentImagePreview {
   @State private previewOffsetY: number = 0;
   @State private actionStatus: string = '';
   private saveInFlight: boolean = false;
+  private statusTimerId: number = -1;
   private pinchStartScale: number = 1;
   /** 源图宽高比与容器尺寸：用于计算放大后允许的平移范围。 */
   private imageRatio: number = 0;
@@ -74,6 +76,13 @@ export struct ContentImagePreview {
   private containerHeight: number = 0;
   private panStartX: number = 0;
   private panStartY: number = 0;
+
+  aboutToDisappear(): void {
+    if (this.statusTimerId >= 0) {
+      clearTimeout(this.statusTimerId);
+      this.statusTimerId = -1;
+    }
+  }
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
@@ -197,6 +206,22 @@ export struct ContentImagePreview {
     }
   }
 
+  /** 状态提示 2 秒自动消退；空串表示不展示。 */
+  private showStatus(message: string): void {
+    if (this.statusTimerId >= 0) {
+      clearTimeout(this.statusTimerId);
+      this.statusTimerId = -1;
+    }
+    this.actionStatus = message;
+    if (message.length === 0) {
+      return;
+    }
+    this.statusTimerId = setTimeout((): void => {
+      this.statusTimerId = -1;
+      this.actionStatus = '';
+    }, 2000);
+  }
+
   private async openInBrowser(): Promise<void> {
     const context = getAbilityContext();
     if (context === undefined || !isTrustedPreviewImageUrl(this.url)) {
@@ -209,36 +234,32 @@ export struct ContentImagePreview {
     try {
       await context.startAbility(want);
     } catch (_error) {
-      this.getUIContext().getPromptAction().showToast({ message: '暂时无法在浏览器中打开' });
-    }
+      this.getUIContext().getPromptAction().showToast({ message: '暂时无法在浏览器中打开' });    }
   }
 
+  /**
+   * 保存走系统安全弹窗（showAssetsCreationDialog，带图片预览与禁止/允许），无需
+   * WRITE_IMAGEVIDEO 权限：先下载到应用沙箱临时文件，用户允许后把字节写入返回的
+   * 媒体库 URI；用户拒绝返回空列表，视为取消。
+   */
   private async saveImage(): Promise<void> {
-    if (this.saveInFlight || !isTrustedPreviewImageUrl(this.url)) {
-      this.actionStatus = '图片来源不受支持';
+    if (this.saveInFlight) {
+      return;
+    }
+    if (!isTrustedPreviewImageUrl(this.url)) {
+      this.showStatus('图片来源不受支持');
       return;
     }
     const context = getAbilityContext();
     if (context === undefined) {
-      this.actionStatus = '当前页面无法访问相册';
+      this.showStatus('当前页面无法访问相册');
       return;
     }
     this.saveInFlight = true;
-    this.actionStatus = '正在保存…';
+    this.showStatus('正在下载图片…');
     let request: http.HttpRequest | undefined = undefined;
+    let tempPath: string = '';
     try {
-      await abilityAccessCtrl.createAtManager().requestPermissionsFromUser(
-        context,
-        ['ohos.permission.WRITE_IMAGEVIDEO']
-      );
-      const grantStatus = await abilityAccessCtrl.createAtManager().checkAccessToken(
-        context.applicationInfo.accessTokenId,
-        'ohos.permission.WRITE_IMAGEVIDEO'
-      );
-      if (grantStatus !== abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED) {
-        this.actionStatus = '未获得相册写入权限';
-        return;
-      }
       request = http.createHttp();
       const response = await request.request(this.url, {
         method: http.RequestMethod.GET,
@@ -251,30 +272,70 @@ export struct ContentImagePreview {
       });
       if (Number(response.responseCode) !== 200 || !(response.result instanceof ArrayBuffer) ||
         response.result.byteLength === 0 || response.result.byteLength > 8 * 1024 * 1024) {
-        this.actionStatus = '图片下载失败';
+        this.showStatus('图片下载失败');
         return;
       }
-      const helper = photoAccessHelper.getPhotoAccessHelper(context);
-      const changeRequest = photoAccessHelper.MediaAssetChangeRequest.createAssetRequest(
-        context,
-        photoAccessHelper.PhotoType.IMAGE,
-        previewImageExtension(this.url)
-      );
-      changeRequest.addResource(photoAccessHelper.ResourceType.IMAGE_RESOURCE, response.result);
-      await helper.applyChanges(changeRequest);
-      this.actionStatus = '已保存到相册';
+      const buffer: ArrayBuffer = response.result as ArrayBuffer;
+      const extension = previewImageExtension(this.url);
+      tempPath = `${context.cacheDir}/preview-save-${Date.now()}.${extension}`;
+      this.writeBufferToFile(tempPath, buffer);
+      this.showStatus('正在保存…');
+      const config: photoAccessHelper.PhotoCreationConfig = {
+        title: `zhihu_${Date.now()}`,
+        fileNameExtension: extension,
+        photoType: photoAccessHelper.PhotoType.IMAGE
+      };
+      const uris = await photoAccessHelper.getPhotoAccessHelper(context)
+        .showAssetsCreationDialog([fileUri.getUriFromPath(tempPath)], [config]);
+      if (uris.length === 0) {
+        this.showStatus('');
+        return;
+      }
+      this.writeBufferToUri(uris[0], buffer);
+      this.showStatus('已保存到相册');
     } catch {
-      this.actionStatus = '保存失败，请稍后重试';
+      this.showStatus('保存失败，请稍后重试');
     } finally {
       request?.destroy();
       this.saveInFlight = false;
+      this.removeTempFileBestEffort(tempPath);
+    }
+  }
+
+  private writeBufferToFile(path: string, buffer: ArrayBuffer): void {
+    const file = fileIo.openSync(path,
+      fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC);
+    try {
+      fileIo.writeSync(file.fd, buffer);
+    } finally {
+      fileIo.closeSync(file);
+    }
+  }
+
+  private writeBufferToUri(uri: string, buffer: ArrayBuffer): void {
+    const file = fileIo.openSync(uri, fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.TRUNC);
+    try {
+      fileIo.writeSync(file.fd, buffer);
+    } finally {
+      fileIo.closeSync(file);
+    }
+  }
+
+  private removeTempFileBestEffort(path: string): void {
+    if (path.length === 0) {
+      return;
+    }
+    try {
+      fileIo.unlinkSync(path);
+    } catch (_error) {
+      // 清理失败不影响保存结果
     }
   }
 
   private shareImage(): void {
     const context = getAbilityContext();
     if (context === undefined || !isTrustedPreviewImageUrl(this.url)) {
-      this.actionStatus = '图片来源不受支持';
+      this.showStatus('图片来源不受支持');
       return;
     }
     const shareService = createSystemShareService(context);
@@ -286,9 +347,9 @@ export struct ContentImagePreview {
       trustedImageUrl: this.url
     };
     shareService.share(payload).then((outcome: ShareOutcome): void => {
-      this.actionStatus = outcome === ShareOutcome.CANCELLED ? '' : '已打开分享面板';
+      this.showStatus(outcome === ShareOutcome.CANCELLED ? '' : '已打开分享面板');
     }).catch((): void => {
-      this.actionStatus = '暂时无法打开分享面板';
+      this.showStatus('暂时无法打开分享面板');
     });
   }
 }
