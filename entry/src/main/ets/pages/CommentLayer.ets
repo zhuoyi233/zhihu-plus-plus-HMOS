@@ -3,6 +3,7 @@ import {
   CommentItem,
   CommentRepository,
   CommentSortOrder,
+  emojiStore,
   LoginSessionGateway
 } from 'data';
 import {
@@ -13,6 +14,7 @@ import {
 } from './CommentState';
 import { CommentLikeButton } from './CommentLikeButton';
 import { CommentLikeState, CommentLikeStateStore } from './CommentLikeState';
+import { EmojiText } from './EmojiText';
 /**
  * 评论弹层组件：常驻详情页组合树内（以 visibility 切换显隐），
  * 避免关闭弹层时销毁内部状态——与上游 CommentScreenComponent
@@ -50,12 +52,19 @@ export struct CommentLayer {
   @State private actionMessage: string = '';
   @State private actionRequiresLogin: boolean = false;
   @State private likeStates: Record<string, CommentLikeState> = {};
+  @StorageProp('emojiCatalogVersion') @Watch('onEmojiCatalogChanged') emojiCatalogVersion: number = 0;
+  @State private emojiTick: number = 0;
+  @State private showEmojiPicker: boolean = false;
+  @State private pickerColumns: number = 7;
+  private caretPosition: number = -1;
+  private inputController: TextInputController = new TextInputController();
   private controller?: CommentController;
   private readonly likeStateStore: CommentLikeStateStore = new CommentLikeStateStore();
   private rootScroller: Scroller = new Scroller();
   private childScroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
+    this.ensureEmojiCatalog();
     const repository = this.repository;
     const session = this.session;
     if (repository === undefined || session === undefined) {
@@ -88,6 +97,19 @@ export struct CommentLayer {
     if (this.showComments && this.phase === CommentPhase.IDLE) {
       this.controller?.loadInitial();
     }
+  }
+
+  /** 表情表懒加载，加载完成后经 emojiCatalogVersion 广播刷新选择面板与行内渲染。 */
+  private ensureEmojiCatalog(): void {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    emojiStore.ensureLoaded(context);
+  }
+
+  onEmojiCatalogChanged(): void {
+    this.emojiTick = this.emojiCatalogVersion;
   }
 
   build() {
@@ -365,13 +387,14 @@ export struct CommentLayer {
       this.avatar(comment)
       Column({ space: 4 }) {
         this.authorRow(comment)
-        Text(stripCommentHtml(comment.contentHtml))
-          .id(`p3_comments_content_${comment.id}`)
-          .fontSize(16)
-          .lineHeight(25.6)
-          .fontColor($r('app.color.primary_text'))
-          .copyOption(CopyOptions.LocalDevice)
-          .width('100%')
+        EmojiText({
+          text: stripCommentHtml(comment.contentHtml),
+          fontSize: 16,
+          lineHeight: 25.6,
+          fontColor: $r('app.color.primary_text'),
+          copyOption: CopyOptions.LocalDevice,
+          componentId: `p3_comments_content_${comment.id}`
+        })
         if (commentImageUrl(comment.contentHtml).length > 0) {
           Image(commentImageUrl(comment.contentHtml))
             .id(`p3_comments_image_${comment.id}`)
@@ -591,6 +614,74 @@ export struct CommentLayer {
       this.controller?.openChildComments(root);
     }
   }
+  /** 对齐上游 GridCells.Adaptive(minSize = 48dp)：按面板实际宽度自适应列数，默认 7 列。 */
+  private emojiColumnsTemplate(): string {
+    const columns = this.pickerColumns > 0 ? this.pickerColumns : 7;
+    return '1fr '.repeat(columns).trim();
+  }
+
+  /** 作为 TextInput 自定义键盘呈现：占据软键盘位置并与其互斥（对齐上游评论区表情面板）。 */
+  @Builder
+  private emojiPickerPanel() {
+    Column() {
+      if (emojiStore.placeholders().length === 0) {
+        Text('暂无可用表情')
+          .id('p3_comments_emoji_picker')
+          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .textAlign(TextAlign.Center)
+          .width('100%')
+          .height('100%')
+      } else {
+        Grid() {
+          ForEach(emojiStore.placeholders(), (placeholder: string, index: number) => {
+            GridItem() {
+              Image(emojiStore.path(placeholder))
+                .width(36)
+                .height(36)
+                .objectFit(ImageFit.Contain)
+                .accessibilityText(placeholder)
+                .onClick((): void => this.insertEmoji(placeholder))
+            }
+            .height(48)
+            .id(`p3_comments_emoji_item_${index}`)
+          }, (placeholder: string): string => `${this.emojiTick}_${placeholder}`)
+        }
+          .id('p3_comments_emoji_picker')
+          .columnsTemplate(this.emojiColumnsTemplate())
+          .height('100%')
+          .width('100%')
+          .padding(8)
+          .scrollBar(BarState.Off)
+          .onAreaChange((_oldValue: Area, newValue: Area): void => {
+            const widthVp = typeof newValue.width === 'number'
+              ? newValue.width : Number(newValue.width);
+            const columns = Math.max(1, Math.floor((widthVp - 16) / 48));
+            if (columns !== this.pickerColumns) {
+              this.pickerColumns = columns;
+            }
+          })
+      }
+    }
+    .width('100%')
+    .height(240)
+    .backgroundColor($r('app.color.card_background'))
+  }
+
+  private insertEmoji(placeholder: string): void {
+    const current = this.currentDraft();
+    const index = this.caretPosition >= 0 && this.caretPosition <= current.length
+      ? this.caretPosition : current.length;
+    const next = current.slice(0, index) + placeholder + current.slice(index);
+    if (this.activeRoot !== undefined) {
+      this.onReplyDraftChange(next);
+    } else {
+      this.onRootDraftChange(next);
+    }
+    const caret = index + placeholder.length;
+    setTimeout((): void => this.inputController.caretPosition(caret), 0);
+  }
+
   @Builder
   private inputBar() {
     Column() {
@@ -639,15 +730,48 @@ export struct CommentLayer {
         .padding($r('app.float.p1_spacing_small'))
       }
       Row({ space: $r('app.float.p1_spacing_small') }) {
+        Button({ type: ButtonType.Normal }) {
+          SymbolGlyph(this.showEmojiPicker
+            ? $r('sys.symbol.keyboard') : $r('sys.symbol.face_smiling'))
+            .fontSize(22)
+            .fontColor([this.showEmojiPicker
+              ? $r('app.color.brand_primary') : $r('app.color.secondary_text')])
+        }
+          .id('p3_comments_emoji_button')
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .focusable(false)
+          .accessibilityText(this.showEmojiPicker ? '切换到键盘' : '选择表情')
+          .onClick((): void => {
+            if (this.showEmojiPicker) {
+              this.showEmojiPicker = false;
+              this.getUIContext().getFocusController().requestFocus('p3_comments_input');
+              return;
+            }
+            // 对齐上游：开面板时清焦点、收软键盘，面板与键盘互斥。
+            this.getUIContext().getFocusController().clearFocus();
+            this.inputController.stopEditing();
+            this.showEmojiPicker = true;
+          })
         TextInput({
           text: this.activeRoot !== undefined ? this.replyDraft : this.rootDraft,
           placeholder: this.replyTarget !== undefined
             ? `回复 ${this.replyTarget.author.name}...`
-            : (this.activeRoot !== undefined ? '写下你的回复...' : '写下你的评论...')
+            : (this.activeRoot !== undefined ? '写下你的回复...' : '写下你的评论...'),
+          controller: this.inputController
         })
           .id('p3_comments_input')
           .layoutWeight(1)
           .maxLength(1000)
+          .onTextSelectionChange((start: number, end: number): void => {
+            this.caretPosition = end;
+          })
+          .onFocus((): void => {
+            // 对齐上游 onFocusChanged：输入框聚焦即收起表情面板、让位软键盘。
+            this.showEmojiPicker = false;
+          })
           .onChange((value: string): void => {
             if (this.activeRoot !== undefined) {
               this.onReplyDraftChange(value);
@@ -679,6 +803,9 @@ export struct CommentLayer {
       }
       .width('100%')
       .padding($r('app.float.p1_spacing_small'))
+      if (this.showEmojiPicker) {
+        this.emojiPickerPanel()
+      }
     }
     .width('100%')
     .backgroundColor($r('app.color.card_background'))

@@ -1,5 +1,6 @@
 import { P1Destination, P1DestinationName } from 'core';
 import {
+  emojiStore,
   LoginSessionGateway,
   matchNotificationKind,
   NotificationCategory,
@@ -18,6 +19,7 @@ import {
   NOTIFICATION_CATEGORY_ORDER,
   NotificationViewState
 } from './NotificationState';
+import { EmojiText } from './EmojiText';
 
 function relativeTime(created: number): string {
   if (created <= 0) {
@@ -136,6 +138,11 @@ export struct NotificationPage {
   private controller?: NotificationController;
 
   aboutToAppear(): void {
+    const context = this.getUIContext().getHostContext();
+    if (context !== undefined) {
+      // 懒加载知乎小表情表；加载完成后 EmojiText 经 emojiCatalogVersion 广播自动重建。
+      emojiStore.ensureLoaded(context);
+    }
     const repository = this.repository;
     const session = this.session;
     if (repository === undefined || session === undefined) {
@@ -335,12 +342,12 @@ export struct NotificationPage {
         .width('100%')
 
       if (this.cardBody(item).length > 0) {
-        Text(this.cardBody(item))
-          .fontSize($r('app.float.p1_secondary_font_size'))
-          .fontColor($r('app.color.secondary_text'))
-          .width('100%')
-          .maxLines(3)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        EmojiText({
+          text: this.cardBody(item),
+          fontSize: $r('app.float.p1_secondary_font_size'),
+          fontColor: $r('app.color.secondary_text'),
+          maxLines: 3
+        })
       }
     }
     .id(`p3_notifications_item_${item.id}`)

@@ -71,6 +71,7 @@ import systemPickedImageFileStoreTest from './SystemPickedImageFileStore.test';
 import pinPublishPageStateTest from './PinPublishPageState.test';
 import answerEditSeedStoreTest from './AnswerEditSeedStore.test';
 import appUpdateParserTest from './AppUpdateParser.test';
+import emojiRulesTest from './EmojiRules.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -146,4 +147,5 @@ export default function testsuite(): void {
   pinPublishPageStateTest();
   answerEditSeedStoreTest();
   appUpdateParserTest();
+  emojiRulesTest();
 }
