@@ -43,7 +43,10 @@ pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall
   命令行操作：`build`/`run`/`signature`/`device`/`emulator`/`auth`/`log`/`ui`/`check`/`docs`
   等（`devecocli --help` 查看全量）；沙箱会话中同样按上一条提权。
 
-## 设备调试（模拟器 ZhihuPlus\_API26，127.0.0.1:5555）
+## 设备调试（默认模拟器 ZhihuPlus\_API23，127.0.0.1:5555）
+
+默认测试目标为模拟器 **ZhihuPlus\_API23**（API 23，最低兼容线，connectKey `127.0.0.1:5555`），
+除非用户当次明确指定其他设备/模拟器；多设备时先 `hdc list targets` 确认。
 
 ```powershell
 # hdc 路径因机器而异，建议加入 PATH 或改用环境变量；此处按 PATH 解析，不硬编码本机绝对路径。
@@ -62,6 +65,15 @@ $hdc = "hdc"
 
 - UI dump 的节点字段是 `id`（不是 `resourceId`）；软键盘会遮挡底部按钮，操作前先
   `uitest uiInput keyEvent Back` 收起键盘。
+
+- 本机 `python`/`python3` 是 Windows 商店占位符（执行即失败，exit 49），**不要尝试**；
+  解析 dumpLayout 等 JSON/文本处理一律用 `node -e`（hvigor 已装 node，Git Bash 直接可用）。
+
+- Git Bash 下 `hdc file recv` 的远程路径会被 MSYS 改写，加 `MSYS_NO_PATHCONV=1` 前缀；
+  接收目录用仓库内临时目录（如 `.tmp_shots/`，用完删除）。
+
+- 应用支持知乎链接直达：`aa start -a EntryAbility -b com.github.zhuoyi233.zhplus -U <zhihu url>`
+  （经 `resolveZhihuLink` 路由），可跳过手动导航直接进入问题/回答/文章页。
 
 - 登录：重装/清数据后登录态丢失，首页出现 `p2_home_error_login` → 登录页手动 Cookie 输入
   （`ZHIHU_COOKIE` 环境变量）→ `p2_login_cookie_submit` → 首页 `p2_home_error_retry`。
