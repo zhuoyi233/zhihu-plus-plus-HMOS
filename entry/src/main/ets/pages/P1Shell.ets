@@ -2016,7 +2016,13 @@ export struct P1Shell {
       // P3-7：同一目标（name+参数）已在返回栈任何位置时不再重复入栈，
       // 防止「返回时只是露出前一个重复页面」（CLAUDE.md 返回栈教训）。
       // 参数化页面不能使用按 name 匹配的 MOVE_TO_TOP_SINGLETON，必须按身份查重。
-      if (findP1DestinationStackIndex(paths, destination) >= 0) {
+      const existingIndex = findP1DestinationStackIndex(paths, destination);
+      if (existingIndex >= 0) {
+        // 已在栈中时弹到栈顶（复用原页面实例与滚动状态），不能静默忽略——
+        // 否则「答案页 → 问题页 → 点原答案」这类回访点击会无响应。
+        if (existingIndex < paths.length - 1) {
+          this.pathStack.popToIndex(existingIndex);
+        }
         return;
       }
     }
