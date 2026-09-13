@@ -384,6 +384,8 @@ export struct CommentLayer {
             .accessibilityText('查看评论图片')
             .onClick((): void => {
               AppStorage.setOrCreate('p2ImagePreviewUrl', commentImageUrl(comment.contentHtml));
+              // 预览叠层挂在页面根 Stack，位于 bindSheet 图层之下，必须先收起评论面板才能露出。
+              this.onDismiss();
             })
         }
         this.commentFooter(comment, showDelete)
