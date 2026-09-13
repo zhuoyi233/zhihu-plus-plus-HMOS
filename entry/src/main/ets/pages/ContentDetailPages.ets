@@ -1287,19 +1287,19 @@ struct ContentDetailPage {
     if (this.canEditExistingAnswer()) {
       Button('编辑')
         .id('p4_answer_edit_existing')
-        .height(44)
+        .height(36)
         .fontSize($r('app.float.p1_secondary_font_size'))
         .onClick((): void => this.openExistingAnswerEditor())
     }
 
     Button({ type: ButtonType.Normal, stateEffect: false }) {
       SymbolGlyph($r('sys.symbol.bookmark'))
-        .fontSize(22)
+        .fontSize(20)
         .fontColor([$r('app.color.secondary_text')])
     }
     .id(`p3_${this.kind}_detail_favorite_bar`)
-    .width(40)
-    .height(44)
+    .width(36)
+    .height(36)
     .backgroundColor(Color.Transparent)
     .onClick((): void => {
       if (this.collectionRepository !== undefined && this.session !== undefined) {
@@ -1310,19 +1310,19 @@ struct ContentDetailPage {
     })
 
     Button({ type: ButtonType.Normal, stateEffect: false }) {
-      Row({ space: 5 }) {
+      Row({ space: 4 }) {
         SymbolGlyph($r('sys.symbol.message'))
-          .fontSize(22)
+          .fontSize(20)
           .fontColor([$r('app.color.secondary_text')])
         Text(`${this.content?.value.commentCount ?? 0}`)
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.p1_secondary_font_size'))
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.secondary_text'))
       }
-      .padding({ left: 6, right: 6, top: 6, bottom: 6 })
+      .padding({ left: 6, right: 6, top: 8, bottom: 8 })
     }
     .id(`p3_${this.kind}_detail_comment_bar`)
-    .height(44)
+    .height(36)
     .backgroundColor(Color.Transparent)
     .onClick((): void => {
       if (this.commentRepository !== undefined && this.session !== undefined) {
@@ -1334,12 +1334,12 @@ struct ContentDetailPage {
 
     Button({ type: ButtonType.Normal, stateEffect: false }) {
       SymbolGlyph($r('sys.symbol.ellipsis_circle'))
-        .fontSize(22)
+        .fontSize(20)
         .fontColor([$r('app.color.secondary_text')])
     }
     .id(`p3_${this.kind}_detail_more`)
-    .width(40)
-    .height(44)
+    .width(36)
+    .height(36)
     .backgroundColor(Color.Transparent)
     .onClick((): void => {
       this.actionMenuShown = true;
@@ -1350,19 +1350,19 @@ struct ContentDetailPage {
   private questionRightActions() {
     // 对齐回答详情页右下角动作组：评论 + 更多（问题暂无投票/收藏端点，见 ContentDetailPages 注释）。
     Button({ type: ButtonType.Normal, stateEffect: false }) {
-      Row({ space: 5 }) {
+      Row({ space: 4 }) {
         SymbolGlyph($r('sys.symbol.message'))
-          .fontSize(22)
+          .fontSize(20)
           .fontColor([$r('app.color.secondary_text')])
         Text(`${this.content?.value.commentCount ?? 0}`)
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.p1_secondary_font_size'))
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.secondary_text'))
       }
-      .padding({ left: 6, right: 6, top: 6, bottom: 6 })
+      .padding({ left: 6, right: 6, top: 8, bottom: 8 })
     }
     .id('p3_question_detail_comment_bar')
-    .height(44)
+    .height(36)
     .backgroundColor(Color.Transparent)
     .accessibilityText('问题评论')
     .onClick((): void => {
@@ -1375,12 +1375,12 @@ struct ContentDetailPage {
 
     Button({ type: ButtonType.Normal, stateEffect: false }) {
       SymbolGlyph($r('sys.symbol.ellipsis_circle'))
-        .fontSize(22)
+        .fontSize(20)
         .fontColor([$r('app.color.secondary_text')])
     }
     .id('p3_question_detail_more')
-    .width(40)
-    .height(44)
+    .width(36)
+    .height(36)
     .backgroundColor(Color.Transparent)
     .accessibilityText('更多问题操作')
     .onClick((): void => {
@@ -1952,19 +1952,19 @@ struct ContentDetailPage {
   private voteUpAction() {
     Button({ type: ButtonType.Normal, stateEffect: false }) {
 
-      Row({ space: 6 }) {
+      Row({ space: 4 }) {
         SymbolGlyph(this.voteState === ContentVoteState.UP
             ? $r('sys.symbol.arrowtriangle_left_fill')
             : $r('sys.symbol.arrowtriangle_left'))
-          .fontSize(22)
+          .fontSize(20)
           .fontColor([$r('app.color.brand_primary')])
           .rotate({ x: 0, y: 0, z: 1, angle: 90 })
         Text(`${this.voteupCount}`)
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.p1_secondary_font_size'))
           .fontWeight(this.voteState === ContentVoteState.UP ? FontWeight.Bold : FontWeight.Medium)
           .fontColor($r('app.color.brand_primary'))
       }
-      .padding({ left: 10, right: 10, top: 10, bottom: 10 })
+      .padding({ left: 8, right: 8, top: 8, bottom: 8 })
     }
     .id(`p3_${this.kind}_vote_up`)
     .backgroundColor(Color.Transparent)
@@ -1979,16 +1979,16 @@ struct ContentDetailPage {
   private voteDownAction() {
     Button({ type: ButtonType.Normal, stateEffect: false }) {
 
-      Row({ space: 6 }) {
+      Row({ space: 4 }) {
         // 左三角旋转 -90°（逆时针）得到向下方向；选中实心、未选中描边。
         SymbolGlyph(this.voteState === ContentVoteState.DOWN
             ? $r('sys.symbol.arrowtriangle_left_fill')
             : $r('sys.symbol.arrowtriangle_left'))
-          .fontSize(22)
+          .fontSize(20)
           .fontColor([$r('app.color.brand_primary')])
           .rotate({ x: 0, y: 0, z: 1, angle: -90 })
       }
-      .padding({ left: 10, right: 10, top: 10, bottom: 10 })
+      .padding({ left: 8, right: 8, top: 8, bottom: 8 })
     }
     .id(`p3_${this.kind}_vote_down`)
     .backgroundColor(Color.Transparent)
@@ -2003,19 +2003,19 @@ struct ContentDetailPage {
   private followQuestionAction() {
     // 对齐回答详情页底部动作语言：透明背景 + 符号 + 次要色文字，玻璃胶囊由外层承载。
     Button({ type: ButtonType.Normal, stateEffect: false }) {
-      Row({ space: 5 }) {
+      Row({ space: 4 }) {
         SymbolGlyph(this.following ? $r('sys.symbol.checkmark') : $r('sys.symbol.plus'))
-          .fontSize(22)
+          .fontSize(20)
           .fontColor([this.following ? $r('app.color.brand_primary') : $r('app.color.secondary_text')])
         Text(this.following ? `已关注 ${this.followerCount}` : `关注问题 ${this.followerCount}`)
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.p1_secondary_font_size'))
           .fontWeight(FontWeight.Medium)
           .fontColor(this.following ? $r('app.color.brand_primary') : $r('app.color.secondary_text'))
       }
-      .padding({ left: 6, right: 6, top: 6, bottom: 6 })
+      .padding({ left: 6, right: 6, top: 8, bottom: 8 })
     }
       .id('p3_question_follow')
-      .height(44)
+      .height(36)
       .backgroundColor(Color.Transparent)
       .enabled(!this.interactionPending)
       .onClick((): void => {

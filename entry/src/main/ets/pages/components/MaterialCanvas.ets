@@ -50,8 +50,8 @@ export function materialCanvas(widthVp: Length, heightVp: Length) {
 export struct GlassCapsule {
   @BuilderParam content: () => void = this.emptyContent;
   @Prop useMaterial: boolean = true;
-  @State private canvasWidth: number = 320;
-  private readonly canvasHeight: number = 64;
+  @State private canvasWidth: number = 240;
+  private readonly canvasHeight: number = 36;
 
   @Builder
   private emptyContent(): void {
@@ -76,15 +76,15 @@ export struct GlassCapsule {
         })
       }
       .width(this.canvasWidth)
-      .borderRadius(24)
+      .borderRadius(18)
       .clip(true)
     } else {
       // 降级：组件模糊（不支持的设备上沉浸材质不可用）
       Row() {
         this.content()
       }
-      .padding({ left: 10, right: 10, top: 8, bottom: 8 })
-      .borderRadius(24)
+      .padding({ left: 6, right: 6, top: 4, bottom: 4 })
+      .borderRadius(18)
       .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
     }
   }
