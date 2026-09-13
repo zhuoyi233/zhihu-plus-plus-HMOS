@@ -24,7 +24,7 @@ export struct ZhihuHdsTabs {
     .barMode(BarMode.Fixed)
     .barOverlap(true)
     .animationDuration(250)
-    .scrollable(false)
+    .scrollable(true)
     .width('100%')
     .height('100%')
     .clip(false)
