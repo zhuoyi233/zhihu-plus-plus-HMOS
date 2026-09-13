@@ -1459,8 +1459,14 @@ struct ContentDetailPage {
   }
 
   // SegmentButton 的 options 是 @ObjectLink，须放观察状态（内联对象在真机上会丢点击回调）。
+  // 默认配色走 ohos_id_color_button_normal（浅色固定值，深色模式下不切换导致文字不可读），
+  // 显式指定与评论区排序芯片（CommentLayer.sortChip）一致的自适应色。
   @State private answersSortOptions: SegmentButtonOptions = SegmentButtonOptions.tab({
-    buttons: [{ text: '默认' }, { text: '最新' }]
+    buttons: [{ text: '默认' }, { text: '最新' }],
+    backgroundColor: $r('app.color.control_background'),
+    fontColor: $r('app.color.secondary_text'),
+    selectedBackgroundColor: $r('app.color.brand_primary_container'),
+    selectedFontColor: $r('app.color.brand_primary')
   });
 
   private questionAnswerCount(): number {
