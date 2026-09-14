@@ -31,6 +31,20 @@ const SEARCH_HISTORY_KEY = 'searchHistoryQueries';
 export const SEARCH_HISTORY_MAX_SIZE = 20;
 // 键与语义对齐上游 UpdateManager.PREF_LAST_UPDATE_CHECK（自动检查更新节流时间戳，毫秒）。
 const LAST_UPDATE_CHECK_KEY = 'lastUpdateCheck';
+// 键与语义对齐上游 AppearanceSettingsScreen 的排版偏好（"阅读"分组，存 Int 百分比）。
+const CONTENT_FONT_SIZE_KEY = 'contentFontSize';
+const CONTENT_LINE_HEIGHT_KEY = 'contentLineHeight';
+const CONTENT_BLOCK_SPACING_KEY = 'contentBlockSpacing';
+
+export const DEFAULT_CONTENT_FONT_SIZE = 100;
+export const DEFAULT_CONTENT_LINE_HEIGHT = 160;
+export const DEFAULT_CONTENT_BLOCK_SPACING = 100;
+/** 行高/段间距滑块边界与步进（对齐上游 Slider valueRange 与 steps）。 */
+export const CONTENT_LINE_HEIGHT_MIN = 100;
+export const CONTENT_LINE_HEIGHT_MAX = 300;
+export const CONTENT_BLOCK_SPACING_MIN = 0;
+export const CONTENT_BLOCK_SPACING_MAX = 300;
+export const CONTENT_TYPOGRAPHY_STEP = 10;
 
 function notificationDisplayKey(kind: NotificationKind): string {
   if (kind === NotificationKind.LIKE_COMMENT) {
@@ -129,6 +143,103 @@ export function allAnswerDoubleTapActions(): AnswerDoubleTapAction[] {
     AnswerDoubleTapAction.OPEN_COMMENTS,
     AnswerDoubleTapAction.TOGGLE_IMMERSIVE
   ];
+}
+
+/** 正文排版偏好（三个 Int 百分比，语义与键名对齐上游 AppearanceSettingsScreen）。 */
+export interface ReaderTypography {
+  /** 字号百分比，档位见 contentFontSizeLevels()，默认 100。 */
+  fontSize: number;
+  /** 行高百分比，100..300 step 10，默认 160。 */
+  lineHeight: number;
+  /** 段间距百分比，0..300 step 10，默认 100。 */
+  blockSpacing: number;
+}
+
+/**
+ * 字号档位：`50..120 step 5` + `130..200 step 10`（无 125），共 23 档，
+ * 对齐上游 `contentFontSizeLevels`。
+ */
+const CONTENT_FONT_SIZE_LEVELS: Array<number> = buildContentFontSizeLevels();
+
+function buildContentFontSizeLevels(): Array<number> {
+  const levels: Array<number> = [];
+  let value = 50;
+  while (value <= 120) {
+    levels.push(value);
+    value += 5;
+  }
+  value = 130;
+  while (value <= 200) {
+    levels.push(value);
+    value += 10;
+  }
+  return levels;
+}
+
+export function contentFontSizeLevels(): Array<number> {
+  return CONTENT_FONT_SIZE_LEVELS.slice();
+}
+
+export function defaultReaderTypography(): ReaderTypography {
+  return {
+    fontSize: DEFAULT_CONTENT_FONT_SIZE,
+    lineHeight: DEFAULT_CONTENT_LINE_HEIGHT,
+    blockSpacing: DEFAULT_CONTENT_BLOCK_SPACING
+  };
+}
+
+/** 吸附到最近档位；距离相同时取较小档（对齐上游 `minBy { abs(it - value) }` 的首个最小项）。 */
+function nearestContentFontSizeLevel(value: number): number {
+  const lastIndex = CONTENT_FONT_SIZE_LEVELS.length - 1;
+  const bounded = Math.min(CONTENT_FONT_SIZE_LEVELS[lastIndex],
+    Math.max(CONTENT_FONT_SIZE_LEVELS[0], value));
+  let best = CONTENT_FONT_SIZE_LEVELS[0];
+  let bestDistance = Math.abs(bounded - best);
+  for (let index = 1; index <= lastIndex; index += 1) {
+    const distance = Math.abs(bounded - CONTENT_FONT_SIZE_LEVELS[index]);
+    if (distance < bestDistance) {
+      best = CONTENT_FONT_SIZE_LEVELS[index];
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+function snapToStep(value: number, min: number, max: number, step: number): number {
+  return Math.min(max, Math.max(min, Math.round(value / step) * step));
+}
+
+/** 非数字 → 100；否则 clamp 到档位区间后吸附最近档（对齐上游"读取即吸附并回写"）。 */
+export function decodeContentFontSize(value: preferences.ValueType): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return DEFAULT_CONTENT_FONT_SIZE;
+  }
+  return nearestContentFontSizeLevel(value);
+}
+
+/** 非数字 → 160；否则按 10 一档吸附并 clamp 到 100..300。 */
+export function decodeContentLineHeight(value: preferences.ValueType): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return DEFAULT_CONTENT_LINE_HEIGHT;
+  }
+  return snapToStep(value, CONTENT_LINE_HEIGHT_MIN, CONTENT_LINE_HEIGHT_MAX, CONTENT_TYPOGRAPHY_STEP);
+}
+
+/** 非数字 → 100；否则按 10 一档吸附并 clamp 到 0..300。 */
+export function decodeContentBlockSpacing(value: preferences.ValueType): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return DEFAULT_CONTENT_BLOCK_SPACING;
+  }
+  return snapToStep(value, CONTENT_BLOCK_SPACING_MIN, CONTENT_BLOCK_SPACING_MAX, CONTENT_TYPOGRAPHY_STEP);
+}
+
+/** 三值分别按各自语义吸附/回退；落盘与 AppStorage 广播前统一走这里。 */
+export function normalizeReaderTypography(value: ReaderTypography): ReaderTypography {
+  return {
+    fontSize: decodeContentFontSize(value.fontSize),
+    lineHeight: decodeContentLineHeight(value.lineHeight),
+    blockSpacing: decodeContentBlockSpacing(value.blockSpacing)
+  };
 }
 
 export function appPreferencesFailureMessage(operation: string, error: Object | null | undefined): string {
@@ -365,6 +476,52 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
         throw new Error(appPreferencesFailureMessage('Answer double tap action save', error));
       }
       throw new Error(appPreferencesFailureMessage('Answer double tap action save', undefined));
+    }
+  }
+
+  /** 一次读三个排版偏好，减少 getPreferences 往返；损坏/缺失值按各自默认值回退。 */
+  async loadReaderTypography(): Promise<ReaderTypography> {
+    await this.saveQueue;
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      const fontSize = await store.get(CONTENT_FONT_SIZE_KEY, DEFAULT_CONTENT_FONT_SIZE);
+      const lineHeight = await store.get(CONTENT_LINE_HEIGHT_KEY, DEFAULT_CONTENT_LINE_HEIGHT);
+      const blockSpacing = await store.get(CONTENT_BLOCK_SPACING_KEY, DEFAULT_CONTENT_BLOCK_SPACING);
+      return normalizeReaderTypography({
+        fontSize: decodeContentFontSize(fontSize),
+        lineHeight: decodeContentLineHeight(lineHeight),
+        blockSpacing: decodeContentBlockSpacing(blockSpacing)
+      });
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('Reader typography load', error));
+      }
+      throw new Error(appPreferencesFailureMessage('Reader typography load', undefined));
+    }
+  }
+
+  saveReaderTypography(value: ReaderTypography): Promise<void> {
+    const normalized = normalizeReaderTypography(value);
+    const operation = this.saveQueue.then(
+      (): Promise<void> => this.writeReaderTypography(normalized),
+      (): Promise<void> => this.writeReaderTypography(normalized)
+    );
+    this.saveQueue = operation.then((): void => {}, (): void => {});
+    return operation;
+  }
+
+  private async writeReaderTypography(value: ReaderTypography): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      await store.put(CONTENT_FONT_SIZE_KEY, value.fontSize);
+      await store.put(CONTENT_LINE_HEIGHT_KEY, value.lineHeight);
+      await store.put(CONTENT_BLOCK_SPACING_KEY, value.blockSpacing);
+      await store.flush();
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('Reader typography save', error));
+      }
+      throw new Error(appPreferencesFailureMessage('Reader typography save', undefined));
     }
   }
 
