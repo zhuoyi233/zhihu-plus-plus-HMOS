@@ -33,6 +33,10 @@ export interface ZhihuRequestHeaders {
   'x-zse-96'?: string;
   'x-xsrftoken'?: string;
   'Content-Type'?: string;
+  /** 以下为移动端协议（api.zhihu.com）专用头，见 ZhihuMobileHttpClient。 */
+  'x-api-version'?: string;
+  'x-app-version'?: string;
+  'x-app-za'?: string;
 }
 
 export interface ZhihuHttpRequest {
@@ -218,7 +222,7 @@ export function prepareZhihuHttpRequest(
   };
 }
 
-class NetworkKitHttpTransport implements ZhihuHttpTransport {
+export class NetworkKitHttpTransport implements ZhihuHttpTransport {
   private readonly requestHandle: http.HttpRequest = http.createHttp();
 
   async request(request: PreparedZhihuHttpRequest): Promise<ZhihuHttpResponse> {
@@ -259,7 +263,7 @@ class NetworkKitHttpTransport implements ZhihuHttpTransport {
   }
 }
 
-class NetworkKitHttpTransportFactory implements ZhihuHttpTransportFactory {
+export class NetworkKitHttpTransportFactory implements ZhihuHttpTransportFactory {
   create(): ZhihuHttpTransport {
     return new NetworkKitHttpTransport();
   }

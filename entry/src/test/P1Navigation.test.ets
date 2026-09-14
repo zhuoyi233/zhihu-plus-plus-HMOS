@@ -52,6 +52,8 @@ export default function p1NavigationTest(): void {
         P1DestinationName.COLLECTION,
         P1DestinationName.COLLECTIONS,
         P1DestinationName.NOTIFICATION,
+        P1DestinationName.NOTIFICATION_ENTRY,
+        P1DestinationName.PRIVATE_MESSAGE,
         P1DestinationName.LOGIN,
         P1DestinationName.SETTINGS,
         P1DestinationName.BLOCKING_RULES,

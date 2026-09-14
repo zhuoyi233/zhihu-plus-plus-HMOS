@@ -3,6 +3,7 @@ import { SearchTitleBar } from './SearchTitleBar';
 import { HistoryTitleBar } from './HistoryTitleBar';
 import { AnswerTitleBar } from './AnswerTitleBar';
 import { ArticleTitleBar } from './ArticleTitleBar';
+import { NotificationTitleBar } from './NotificationTitleBar';
 import {
   allAnswerDoubleTapActions,
   AnswerDoubleTapAction,
@@ -31,7 +32,9 @@ import {
   findP1DestinationStackIndex,
   isInfrastructureDestination,
   LatestOperationGuard,
+  NotificationEntryDestination,
   P1Destination,
+  PrivateMessageDestination,
   P1DestinationName,
   shouldReloadAfterAuthentication,
   startupDestinationChannel,
@@ -95,6 +98,10 @@ export struct P1Shell {
     onBack: () => void) => void = this.emptyCollectionContent;
   @BuilderParam notificationContent: (navigate: (destination: P1Destination) => void, onBack: () => void) => void =
     this.emptyHome;
+  @BuilderParam notificationEntryContent: (entryName: string, title: string, navigate: (destination: P1Destination) => void) => void =
+    this.emptyNotificationEntry;
+  @BuilderParam privateMessageContent: (peerId: string, peerName: string, avatarUrl: string, navigate: (destination: P1Destination) => void) => void =
+    this.emptyPrivateMessage;
   @BuilderParam notificationSettingsContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
   @BuilderParam blockingRulesContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam blockedFeedHistoryContent: (onBack: () => void) => void = this.emptyPage;
@@ -184,6 +191,16 @@ export struct P1Shell {
 
   @Builder
   emptyHome(_navigate: (destination: P1Destination) => void) {
+    Blank();
+  }
+
+  @Builder
+  emptyNotificationEntry(_entryName: string, _title: string, _navigate: (destination: P1Destination) => void) {
+    Blank();
+  }
+
+  @Builder
+  emptyPrivateMessage(_peerId: string, _peerName: string, _avatarUrl: string, _navigate: (destination: P1Destination) => void) {
     Blank();
   }
 
@@ -607,7 +624,43 @@ export struct P1Shell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '通知' }, divider: { showType: DividerShowType.OFF } } })
+      // 消息中心标题栏对齐上游：标题「消息」+ 右上角已读/设置动作（同搜索页 stackBuilder 模式）。
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+        content: {
+          stackBuilder: (): void => this.notificationTitleBar(),
+          backIcon: { action: (): void => { this.pathStack.pop(); } },
+          divider: { showType: DividerShowType.OFF }
+        }
+      })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.NOTIFICATION_ENTRY) {
+      HdsNavDestination() {
+        this.notificationEntryContent(
+          (destination as NotificationEntryDestination).entryName,
+          (destination as NotificationEntryDestination).title,
+          (destination: P1Destination): void => this.navigate(destination)
+        );
+      }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+        content: { title: { mainTitle: (destination as NotificationEntryDestination).title },
+          divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.PRIVATE_MESSAGE) {
+      HdsNavDestination() {
+        this.privateMessageContent(
+          (destination as PrivateMessageDestination).peerId,
+          (destination as PrivateMessageDestination).peerName ?? '',
+          (destination as PrivateMessageDestination).avatarUrl ?? '',
+          (destination: P1Destination): void => this.navigate(destination)
+        );
+      }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+        content: { title: { mainTitle:
+          ((destination as PrivateMessageDestination).peerName ?? '').length > 0
+            ? ((destination as PrivateMessageDestination).peerName as string) : '私信' },
+          divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.NOTIFICATION_SETTINGS) {
@@ -839,6 +892,12 @@ export struct P1Shell {
   @Builder
   private readHistoryTitleBar() {
     HistoryTitleBar()
+  }
+
+  /** 消息中心标题栏：标题「消息」+ 右上角已读/设置（对齐上游 CenterAlignedTopAppBar actions）。 */
+  @Builder
+  private notificationTitleBar() {
+    NotificationTitleBar({ navigate: (destination: P1Destination): void => this.navigate(destination) })
   }
 
   /** 回答页标题栏：滚动折叠时在返回键右侧显示问题单行 + 答主摘要（对齐上游折叠顶栏）。 */
@@ -2108,6 +2167,10 @@ export struct P1Shell {
         return `内容：${destination.contentId}`;
       case P1DestinationName.NOTIFICATION:
         return '查看知乎账号的通知消息';
+      case P1DestinationName.NOTIFICATION_ENTRY:
+        return '查看知乎通知分类消息';
+      case P1DestinationName.PRIVATE_MESSAGE:
+        return '查看知乎私信会话';
       case P1DestinationName.QUESTION:
       case P1DestinationName.ANSWER:
       case P1DestinationName.ARTICLE:

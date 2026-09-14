@@ -2,139 +2,76 @@ import { P1Destination, P1DestinationName } from 'core';
 import {
   emojiStore,
   LoginSessionGateway,
-  matchNotificationKind,
-  NotificationCategory,
-  NotificationItem,
+  MobileNotificationCategory,
+  MOBILE_NOTIFICATION_CATEGORIES,
+  mobileNotificationCategoryInfo,
+  MobileNotificationCategoryUnreadCounts,
+  MobileNotificationColumnHead,
+  MobileNotificationRepository,
+  MobileNotificationTimelineItem,
+  mobileNotificationAvatarUrl,
   NotificationPreferences,
   NotificationSettingsGateway,
-  NotificationRepository,
-  notificationCategoryInfo,
-  notificationDisplayInApp,
-  NotificationTargetKind,
-  NotificationUnreadCounts
+  mobileNotificationDisplayTitle
 } from 'data';
-import {
-  NotificationController,
-  NotificationPhase,
-  NOTIFICATION_CATEGORY_ORDER,
-  NotificationViewState
-} from './NotificationState';
-import { EmojiText } from './EmojiText';
+import { NotificationController, NotificationPhase, NotificationViewState } from './NotificationState';
+import { NOTIFICATION_HUB_BUSY_KEY, NOTIFICATION_HUB_MARK_READ_TICK_KEY,
+  NOTIFICATION_HUB_UNREAD_TOTAL_KEY } from './NotificationTitleBar';
+import { timelineItemDestination } from './NotificationLinkResolver';
 
-function relativeTime(created: number): string {
-  if (created <= 0) {
-    return '';
-  }
-  const deltaSeconds = Math.floor((Date.now() - created * 1000) / 1000);
-  if (deltaSeconds < 60) {
-    return '刚刚';
-  }
-  const minutes = Math.floor(deltaSeconds / 60);
-  if (minutes < 60) {
-    return `${minutes} 分钟前`;
-  }
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) {
-    return `${hours} 小时前`;
-  }
-  const days = Math.floor(hours / 24);
-  if (days < 7) {
-    return `${days} 天前`;
-  }
-  try {
-    return new Date(created * 1000).toISOString().replace('T', ' ').substring(0, 10);
-  } catch (_error) {
-    return '';
-  }
-}
-
-function stripHtml(source: string): string {
-  if (source.length === 0) {
-    return '';
-  }
-  return source.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
-}
-
-function displayTitle(item: NotificationItem): string {
-  const verb = item.verb.trim();
-  if (verb.length > 0) {
-    return verb;
-  }
-  if (item.target !== undefined && item.target.title.trim().length > 0) {
-    return item.target.title;
-  }
-  const actorNames = item.actors.map((actor): string => actor.name).filter((name: string): boolean => name.length > 0);
-  if (actorNames.length > 0) {
-    return `${actorNames.join('、')} 与你互动`;
-  }
-  return '新通知';
-}
-
-function shouldShowByPreferences(item: NotificationItem, preferences: NotificationPreferences | undefined): boolean {
-  if (preferences === undefined) {
-    return true;
-  }
-  const verb = item.verb.trim();
-  if (verb.length === 0) {
-    return true;
-  }
-  const kind = matchNotificationKind(verb);
-  if (kind === undefined) {
-    return true;
-  }
-  return notificationDisplayInApp(preferences, kind);
-}
-
-export function notificationOpenTarget(item: NotificationItem): P1Destination | undefined {
-  const target = item.target;
-  if (target === undefined || target.id.trim().length === 0) {
-    return undefined;
-  }
-  if (target.kind === NotificationTargetKind.QUESTION) {
-    return { name: P1DestinationName.QUESTION, id: target.id };
-  }
-  if (target.kind === NotificationTargetKind.ANSWER) {
-    return { name: P1DestinationName.ANSWER, id: target.id };
-  }
-  if (target.kind === NotificationTargetKind.ARTICLE) {
-    return { name: P1DestinationName.ARTICLE, id: target.id };
-  }
-  if (target.kind === NotificationTargetKind.PIN) {
-    return { name: P1DestinationName.PIN, id: target.id };
-  }
-  if (target.kind === NotificationTargetKind.PEOPLE) {
-    const id = target.id;
-    const safeIdentifier = /^[A-Za-z0-9_-]{1,200}$/.test(id) ? id : undefined;
-    if (safeIdentifier === undefined) {
-      return undefined;
+/** 会话行右侧日期（对齐上游 `notificationListDate`：MM-dd）。 */
+function conversationDate(item: MobileNotificationTimelineItem): string {
+  if (item.created > 0) {
+    try {
+      const date = new Date(item.created * 1000);
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const day = date.getDate().toString().padStart(2, '0');
+      return `${month}-${day}`;
+    } catch (_error) {
+      return '';
     }
-    return { name: P1DestinationName.PEOPLE, id: safeIdentifier };
   }
-  return undefined;
+  return item.createdStr;
 }
 
+function categorySymbol(category: MobileNotificationCategory): Resource {
+  if (category === MobileNotificationCategory.LIKE) {
+    return $r('sys.symbol.heart');
+  }
+  if (category === MobileNotificationCategory.FAVORITE) {
+    return $r('sys.symbol.bookmark');
+  }
+  if (category === MobileNotificationCategory.FOLLOW) {
+    return $r('sys.symbol.person_badge_plus');
+  }
+  return $r('sys.symbol.ellipsis_bubble');
+}
+
+function formatUnreadBadge(count: number): string {
+  return count > 99 ? '99+' : count.toString();
+}
+
+/** 消息中心页（对齐上游 NotificationScreen：四分类宫格 + 邀请回答行 + 会话列表）。 */
 @Component
 export struct NotificationPage {
-  repository: NotificationRepository | undefined = undefined;
+  repository: MobileNotificationRepository | undefined = undefined;
   settings: NotificationSettingsGateway | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {};
   onBack: () => void = (): void => {};
   @State private phase: NotificationPhase = NotificationPhase.IDLE;
-  @State private selectedCategory: NotificationCategory = NotificationCategory.DEFAULT;
-  @State private items: Array<NotificationItem> = [];
+  @State private items: Array<MobileNotificationTimelineItem> = [];
   @State private loadingMore: boolean = false;
   @State private canLoadMore: boolean = false;
   @State private requiresLogin: boolean = false;
   @State private busy: boolean = false;
   @State private unreadTotal: number = 0;
-  @State private categoryUnread: NotificationUnreadCounts = {
-    defaultCount: 0,
-    followCount: 0,
-    voteThankCount: 0
-  };
+  @State private categoryUnread: MobileNotificationCategoryUnreadCounts =
+    { comment: 0, like: 0, favorite: 0, follow: 0 };
+  @State private invitation?: MobileNotificationColumnHead = undefined;
   @State private errorMessage: string = '';
   @State private preferences?: NotificationPreferences = undefined;
+  @StorageProp(NOTIFICATION_HUB_MARK_READ_TICK_KEY) @Watch('onMarkReadTick') markReadTick: number = 0;
   private controller?: NotificationController;
 
   aboutToAppear(): void {
@@ -147,7 +84,7 @@ export struct NotificationPage {
     const session = this.session;
     if (repository === undefined || session === undefined) {
       this.phase = NotificationPhase.ERROR;
-      this.errorMessage = '通知数据源未配置';
+      this.errorMessage = '消息数据源未配置';
       return;
     }
     this.controller = new NotificationController(repository, session,
@@ -162,87 +99,77 @@ export struct NotificationPage {
     this.controller = undefined;
   }
 
+  /** 标题栏「已读」按钮经 AppStorage 广播触发（跨组件通道）。 */
+  onMarkReadTick(): void {
+    if (this.markReadTick > 0) {
+      this.controller?.markAllRead();
+    }
+  }
+
   build() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
-        if (this.unreadTotal > 0) {
-          Button({ type: ButtonType.Normal, stateEffect: true }) {
-            SymbolGlyph($r('sys.symbol.checkmark'))
-              .fontSize(20)
-              .fontColor([$r('app.color.primary_text')])
-          }
-            .id('p3_notifications_mark_all_read')
-            .width(40)
-            .height(40)
-            .padding(0)
-            .backgroundColor(Color.Transparent)
-            .accessibilityText('全部标记为已读')
-            .enabled(!this.busy)
-            .onClick(() => this.controller?.markAllRead())
-        }
-        Button({ type: ButtonType.Normal, stateEffect: true }) {
-          SymbolGlyph($r('sys.symbol.gearshape'))
-            .fontSize(20)
-            .fontColor([$r('app.color.primary_text')])
-        }
-          .id('p3_notifications_settings_entry')
-          .width(40)
-          .height(40)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .accessibilityText('打开通知设置')
-          .onClick((): void => {
-            this.navigate({ name: P1DestinationName.NOTIFICATION_SETTINGS });
-          })
-      }
-      .width('100%')
-
-      this.categoryBar()
-
+    Column() {
       if (this.phase === NotificationPhase.IDLE || this.phase === NotificationPhase.LOADING) {
-        this.statusPanel('正在加载通知…', false, 'p3_notifications_loading')
+        this.statusPanel('正在加载消息…', false, 'p3_notifications_loading')
       } else if (this.phase === NotificationPhase.ERROR) {
         this.statusPanel(this.errorMessage, true, 'p3_notifications_error')
-      } else if (this.phase === NotificationPhase.EMPTY) {
-        this.statusPanel('暂无通知', false, 'p3_notifications_empty')
       } else {
-        if (this.errorMessage.length > 0) {
-          Row({ space: $r('app.float.p1_spacing_small') }) {
-            Text(this.errorMessage)
-              .fontSize($r('app.float.p1_secondary_font_size'))
-              .fontColor($r('app.color.secondary_text'))
-              .layoutWeight(1)
-            if (this.requiresLogin) {
-              Button('去登录')
-                .id('p3_notifications_login')
-                .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
-            } else {
-              Button('重试')
-                .id('p3_notifications_retry_more')
-                .onClick(() => this.controller?.retry())
+        List({ space: 0 }) {
+          ListItem() {
+            this.categoryRow()
+          }
+
+          if (this.invitation !== undefined) {
+            ListItem() {
+              Divider()
+                .color($r('app.color.surface_background'))
+                .strokeWidth(1)
+            }
+
+            ListItem() {
+              this.invitationRow(this.invitation)
             }
           }
-          .width('100%')
-          .padding($r('app.float.p1_spacing_small'))
-          .borderRadius($r('app.float.p1_card_radius'))
-          .backgroundColor($r('app.color.surface_background'))
-        }
 
-        List({ space: 10 }) {
-          ForEach(this.visibleItems(), (item: NotificationItem) => {
+          ListItem() {
+            Divider()
+              .color($r('app.color.surface_background'))
+              .strokeWidth(8)
+          }
+
+          ForEach(this.items, (item: MobileNotificationTimelineItem) => {
             ListItem() {
-              this.notificationCard(item)
+              this.conversationRow(item)
             }
-          }, (item: NotificationItem): string => `${item.category}:${item.id}`)
+          }, (item: MobileNotificationTimelineItem): string =>
+            `p3_notifications_item_${item.uniqueId.length > 0 ? item.uniqueId : item.id}`)
 
-          if (this.loadingMore || this.canLoadMore) {
+          if (this.loadingMore) {
             ListItem() {
-              Button(this.loadingMore ? '正在加载更多…' : '加载更多')
-                .id('p3_notifications_load_more')
-                .width('100%')
+              Row() {
+                LoadingProgress()
+                  .width(20)
+                  .height(20)
+                  .color($r('app.color.brand_primary'))
+                Text('正在加载更多…')
+                  .fontSize($r('app.float.p1_secondary_font_size'))
+                  .fontColor($r('app.color.secondary_text'))
+                  .margin({ left: 8 })
+              }
+              .id('p3_notifications_load_more')
+              .justifyContent(FlexAlign.Center)
+              .width('100%')
+              .padding(12)
+            }
+          }
+
+          if (this.errorMessage.length > 0 && this.phase === NotificationPhase.READY) {
+            ListItem() {
+              Text(this.errorMessage)
                 .fontSize($r('app.float.p1_secondary_font_size'))
-                .enabled(!this.loadingMore && !this.busy)
-                .onClick(() => this.controller?.loadMore())
+                .fontColor($r('app.color.secondary_text'))
+                .width('100%')
+                .padding(12)
+                .textAlign(TextAlign.Center)
             }
           }
         }
@@ -252,116 +179,203 @@ export struct NotificationPage {
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
         .onReachEnd(() => this.controller?.loadMore())
+
+        if (this.phase === NotificationPhase.EMPTY) {
+          Column() {
+            Text('暂无消息')
+              .fontSize($r('app.float.p1_body_font_size'))
+              .fontColor($r('app.color.secondary_text'))
+          }
+          .id('p3_notifications_empty')
+          .width('100%')
+          .padding(24)
+        }
       }
     }
     .id('p3_notifications_page')
-    .alignItems(HorizontalAlign.Start)
     .width('100%')
     .height('100%')
-    .padding({
-      left: $r('app.float.p1_page_padding'),
-      right: $r('app.float.p1_page_padding'),
-      top: 94,
-      bottom: $r('app.float.p1_page_padding')
-    })
+    .padding({ top: 94 })
     .backgroundColor($r('app.color.page_background'))
   }
 
+  /** 四分类宫格（图标 36 + 未读角标 + 标题，均匀分布，圆角 12 点击区）。 */
   @Builder
-  private categoryBar() {
-    Scroll() {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
-        ForEach(NOTIFICATION_CATEGORY_ORDER, (category: NotificationCategory) => {
-          Button({ type: ButtonType.Normal, stateEffect: true }) {
-            Row({ space: 4 }) {
-              Text(notificationCategoryInfo(category).detailTitle)
-                .fontSize($r('app.float.p1_body_font_size'))
-                .fontColor(this.selectedCategory === category ?
-                  $r('app.color.brand_primary') : $r('app.color.primary_text'))
-                .fontWeight(this.selectedCategory === category ? FontWeight.Medium : FontWeight.Normal)
-              if (this.categoryBadge(category).length > 0) {
-                Text(this.categoryBadge(category))
-                  .fontSize($r('app.float.p1_caption_font_size'))
-                  .fontColor($r('app.color.error_text'))
-              }
+  private categoryRow() {
+    Row() {
+      ForEach(MOBILE_NOTIFICATION_CATEGORIES, (category: MobileNotificationCategory) => {
+        Column({ space: 8 }) {
+          Stack({ alignContent: Alignment.TopEnd }) {
+            SymbolGlyph(categorySymbol(category))
+              .fontSize(36)
+              .fontColor([$r('app.color.primary_text')])
+            if (this.unreadBadgeOf(category) > 0) {
+              Text(formatUnreadBadge(this.unreadBadgeOf(category)))
+                .fontSize(11)
+                .fontColor(Color.White)
+                .minFontSize(8)
+                .maxFontSize(11)
+                .padding({ left: 5, right: 5, top: 1, bottom: 1 })
+                .borderRadius(9)
+                .backgroundColor($r('app.color.error_text'))
+                .margin({ left: 2, bottom: 18 })
             }
           }
-          .id(`p3_notifications_category_${category}`)
-          .height(44)
-          .padding({ left: $r('app.float.p1_spacing_medium'), right: $r('app.float.p1_spacing_medium') })
-          .backgroundColor(Color.Transparent)
-          .border({
-            width: { bottom: this.selectedCategory === category ? 2 : 0 },
-            color: $r('app.color.brand_primary')
-          })
-          .onClick((): void => {
-            this.controller?.selectCategory(category);
-          })
-        }, (category: NotificationCategory): string => category)
-      }
-      .padding({ left: $r('app.float.p1_spacing_small'), right: $r('app.float.p1_spacing_small') })
+
+          Text(mobileNotificationCategoryInfo(category).detailTitle)
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.primary_text'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .id(`p3_notifications_category_${mobileNotificationCategoryInfo(category).entryName}`)
+        .alignItems(HorizontalAlign.Center)
+        .layoutWeight(1)
+        .padding({ top: 4, bottom: 4 })
+        .borderRadius(12)
+        .onClick((): void => {
+          this.navigate({
+            name: P1DestinationName.NOTIFICATION_ENTRY,
+            entryName: mobileNotificationCategoryInfo(category).entryName,
+            title: mobileNotificationCategoryInfo(category).detailTitle
+          });
+        })
+      }, (category: MobileNotificationCategory): string => category)
     }
     .id('p3_notifications_category_bar')
-    .scrollable(ScrollDirection.Horizontal)
-    .scrollBar(BarState.Off)
     .width('100%')
-    .height(44)
+    .padding({ left: 8, right: 8, top: 14, bottom: 14 })
   }
 
+  /** 邀请回答行（52 圆形主色图标 + 标题 + 摘要 + 未读角标）。 */
   @Builder
-  private notificationCard(item: NotificationItem) {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
-        Row()
-          .width(8)
-          .height(8)
-          .borderRadius(4)
-          .backgroundColor(item.isRead ? $r('app.color.page_background') : $r('app.color.brand_primary'))
-        Text(notificationCategoryInfo(item.category).detailTitle)
-          .id(`p3_notifications_item_category_${item.id}`)
-          .fontSize($r('app.float.p1_caption_font_size'))
-          .fontColor($r('app.color.brand_primary'))
-        Text(relativeTime(item.createTime))
-          .fontSize($r('app.float.p1_caption_font_size'))
-          .fontColor($r('app.color.secondary_text'))
-        Blank()
-          .layoutWeight(1)
-        if (item.mergeCount > 1) {
-          Text(`${item.mergeCount} 条`)
-            .fontSize($r('app.float.p1_caption_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-        }
+  private invitationRow(invitation: MobileNotificationColumnHead) {
+    Row() {
+      Stack() {
+        Circle()
+          .width(52)
+          .height(52)
+          .fill($r('app.color.brand_primary'))
+        SymbolGlyph($r('sys.symbol.person_crop_circle_fill_1'))
+          .fontSize(28)
+          .fontColor([Color.White])
       }
-      .width('100%')
 
-      Text(this.cardTitle(item))
-        .id(`p3_notifications_item_title_${item.id}`)
-        .fontSize($r('app.float.p1_body_font_size'))
-        .fontWeight(item.isRead ? FontWeight.Normal : FontWeight.Medium)
-        .fontColor($r('app.color.primary_text'))
-        .width('100%')
+      Column({ space: 3 }) {
+        Text(invitation.title.trim().length > 0 ? invitation.title : '邀请回答')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.primary_text'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Text(`${invitation.textPrefix}${invitation.text}`)
+          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+      .margin({ left: 14 })
 
-      if (this.cardBody(item).length > 0) {
-        EmojiText({
-          text: this.cardBody(item),
-          fontSize: $r('app.float.p1_secondary_font_size'),
-          fontColor: $r('app.color.secondary_text'),
-          maxLines: 3
-        })
+      if (invitation.unreadCount > 0) {
+        Text(formatUnreadBadge(invitation.unreadCount))
+          .fontSize(11)
+          .fontColor(Color.White)
+          .padding({ left: 5, right: 5, top: 1, bottom: 1 })
+          .borderRadius(9)
+          .backgroundColor($r('app.color.error_text'))
       }
     }
-    .id(`p3_notifications_item_${item.id}`)
-    .alignItems(HorizontalAlign.Start)
+    .id('p3_notifications_invitation')
     .width('100%')
-    .padding($r('app.float.p1_card_padding'))
-    .borderRadius($r('app.float.p1_card_radius'))
-    .backgroundColor(item.isRead ? $r('app.color.card_background') : $r('app.color.surface_background'))
+    .alignItems(VerticalAlign.Center)
+    .padding({ left: 16, right: 16, top: 14, bottom: 14 })
     .onClick((): void => {
-      this.controller?.markItemRead(item.id);
-      const destination = notificationOpenTarget(item);
-      if (destination !== undefined) {
-        this.navigate(destination);
+      this.navigate({
+        name: P1DestinationName.NOTIFICATION_ENTRY,
+        entryName: 'invite',
+        title: '邀请回答'
+      });
+    })
+  }
+
+  /** 会话行（52 头像 + 标题/日期 + 内容单行 + 未读角标）。 */
+  @Builder
+  private conversationRow(item: MobileNotificationTimelineItem) {
+    Row() {
+      if (mobileNotificationAvatarUrl(item).length > 0) {
+        Image(mobileNotificationAvatarUrl(item))
+          .width(52)
+          .height(52)
+          .borderRadius(26)
+          .backgroundColor($r('app.color.surface_background'))
+          .objectFit(ImageFit.Cover)
+      } else {
+        Stack() {
+          Circle()
+            .width(52)
+            .height(52)
+            .fill($r('app.color.brand_primary_container'))
+          SymbolGlyph($r('sys.symbol.bell'))
+            .fontSize(22)
+            .fontColor([$r('app.color.brand_primary')])
+        }
       }
+
+      Column({ space: 3 }) {
+        Row() {
+          Text(mobileNotificationDisplayTitle(item))
+            .fontSize($r('app.float.p1_body_font_size'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.primary_text'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+
+          if (conversationDate(item).length > 0) {
+            Text(conversationDate(item))
+              .fontSize($r('app.float.p1_caption_font_size'))
+              .fontColor($r('app.color.secondary_text'))
+              .margin({ left: 8 })
+          }
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+        Text(item.content?.text ?? '')
+          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+      }
+      .layoutWeight(1)
+      .alignItems(HorizontalAlign.Start)
+      .margin({ left: 14 })
+
+      if (item.unreadCount > 0) {
+        Text(formatUnreadBadge(item.unreadCount))
+          .fontSize(11)
+          .fontColor(Color.White)
+          .padding({ left: 5, right: 5, top: 1, bottom: 1 })
+          .borderRadius(9)
+          .backgroundColor($r('app.color.error_text'))
+          .margin({ left: 8 })
+      }
+    }
+    .id(`p3_notifications_message_${item.uniqueId.length > 0 ? item.uniqueId : item.id}`)
+    .width('100%')
+    .alignItems(VerticalAlign.Center)
+    .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+    .onClick((): void => {
+      const destination = timelineItemDestination(item);
+      if (destination === undefined) {
+        this.getUIContext().getPromptAction().showToast({ message: '暂不支持打开此消息' });
+        return;
+      }
+      this.navigate(destination);
     })
   }
 
@@ -398,7 +412,20 @@ export struct NotificationPage {
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
     .width('100%')
-    .layoutWeight(1)
+    .height('100%')
+  }
+
+  private unreadBadgeOf(category: MobileNotificationCategory): number {
+    if (category === MobileNotificationCategory.LIKE) {
+      return this.categoryUnread.like;
+    }
+    if (category === MobileNotificationCategory.FAVORITE) {
+      return this.categoryUnread.favorite;
+    }
+    if (category === MobileNotificationCategory.FOLLOW) {
+      return this.categoryUnread.follow;
+    }
+    return this.categoryUnread.comment;
   }
 
   private loadPreferences(): void {
@@ -413,51 +440,8 @@ export struct NotificationPage {
     });
   }
 
-  private visibleItems(): Array<NotificationItem> {
-    if (this.preferences === undefined) {
-      return this.items;
-    }
-    return this.items.filter((item: NotificationItem): boolean =>
-      shouldShowByPreferences(item, this.preferences));
-  }
-
-  private categoryBadge(category: NotificationCategory): string {
-    let count = 0;
-    if (category === NotificationCategory.DEFAULT) {
-      count = this.categoryUnread.defaultCount;
-    } else if (category === NotificationCategory.FOLLOW) {
-      count = this.categoryUnread.followCount;
-    } else {
-      count = this.categoryUnread.voteThankCount;
-    }
-    return count > 0 ? (count > 99 ? '99+' : count.toString()) : '';
-  }
-
-  private cardTitle(item: NotificationItem): string {
-    return displayTitle(item);
-  }
-
-  private cardBody(item: NotificationItem): string {
-    const parts: Array<string> = [];
-    if (item.contentText.trim().length > 0) {
-      parts.push(stripHtml(item.contentText));
-    }
-    if (item.extendText.trim().length > 0) {
-      parts.push(stripHtml(item.extendText));
-    }
-    if (item.target !== undefined && item.target.title.trim().length > 0 &&
-      item.verb.trim().length > 0) {
-      const targetTitle = stripHtml(item.target.title);
-      if (targetTitle.length > 0 && targetTitle !== stripHtml(item.contentText)) {
-        parts.push(`「${targetTitle}」`);
-      }
-    }
-    return parts.join(' ');
-  }
-
   private applyState(state: NotificationViewState): void {
     this.phase = state.phase;
-    this.selectedCategory = state.selectedCategory;
     this.items = state.items;
     this.loadingMore = state.loadingMore;
     this.canLoadMore = state.canLoadMore;
@@ -465,6 +449,9 @@ export struct NotificationPage {
     this.busy = state.busy;
     this.unreadTotal = state.unreadTotal;
     this.categoryUnread = state.categoryUnread;
+    this.invitation = state.invitation;
     this.errorMessage = state.errorMessage ?? '';
+    AppStorage.setOrCreate(NOTIFICATION_HUB_UNREAD_TOTAL_KEY, this.unreadTotal);
+    AppStorage.setOrCreate(NOTIFICATION_HUB_BUSY_KEY, this.busy);
   }
 }

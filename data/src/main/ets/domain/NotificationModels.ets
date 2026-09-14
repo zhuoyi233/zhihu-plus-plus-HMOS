@@ -1,36 +1,4 @@
-import { PageCursor } from './DomainModels';
-
-/**
- * 通知分类（web v2：与上游 `markAllAsRead` 的三个 readall 端点一一对应）。
- * 上游移动端 v3 有四个分类（comment/like/favlist_me/follow），web v2 只有三个，
- * 鸿蒙端按 web v2 实现，故为三个。
- */
-export enum NotificationCategory {
-  DEFAULT = 'default',
-  FOLLOW = 'follow',
-  VOTE_THANK = 'vote_thank'
-}
-
-export const NOTIFICATION_CATEGORIES: Array<NotificationCategory> = [
-  NotificationCategory.DEFAULT,
-  NotificationCategory.FOLLOW,
-  NotificationCategory.VOTE_THANK
-];
-
-export interface NotificationCategoryInfo {
-  readonly entryName: string;
-  readonly detailTitle: string;
-}
-
-export function notificationCategoryInfo(category: NotificationCategory): NotificationCategoryInfo {
-  if (category === NotificationCategory.FOLLOW) {
-    return { entryName: 'follow', detailTitle: '关注订阅' };
-  }
-  if (category === NotificationCategory.VOTE_THANK) {
-    return { entryName: 'vote_thank', detailTitle: '赞同感谢' };
-  }
-  return { entryName: 'default', detailTitle: '消息' };
-}
+import { MobileNotificationTimelineItem } from './MobileNotificationModels';
 
 /**
  * 应用内显示开关对应的通知类型（对齐上游 NotificationTypes.kt）。
@@ -69,7 +37,7 @@ export function notificationKindInfo(kind: NotificationKind): NotificationKindIn
 }
 
 /**
- * 按 content.verb 匹配通知类型。语义与上游 `matchNotificationType` 一致
+ * 按通知动词匹配通知类型。语义与上游 `matchNotificationType` 一致
  * （全串匹配），用于应用内显示开关的过滤。
  */
 export function matchNotificationKind(verb: string): NotificationKind | undefined {
@@ -86,62 +54,6 @@ export function matchNotificationKind(verb: string): NotificationKind | undefine
     return NotificationKind.INVITE_ANSWER;
   }
   return undefined;
-}
-
-export interface NotificationActor {
-  readonly name: string;
-  readonly type: string;
-  readonly link: string;
-  readonly urlToken?: string;
-}
-
-export enum NotificationTargetKind {
-  QUESTION = 'question',
-  ANSWER = 'answer',
-  ARTICLE = 'article',
-  PEOPLE = 'people',
-  COMMENT = 'comment',
-  PIN = 'pin'
-}
-
-export interface NotificationTarget {
-  readonly kind: NotificationTargetKind;
-  readonly id: string;
-  readonly title: string;
-  readonly url: string;
-}
-
-export interface NotificationItem {
-  readonly id: string;
-  readonly category: NotificationCategory;
-  readonly isRead: boolean;
-  readonly createTime: number;
-  readonly mergeCount: number;
-  readonly verb: string;
-  readonly actors: Array<NotificationActor>;
-  readonly contentText: string;
-  readonly contentLink: string;
-  readonly extendText: string;
-  readonly target?: NotificationTarget;
-}
-
-export function notificationItemIdentity(item: NotificationItem): string {
-  return `${item.category}:${item.id}`;
-}
-
-export interface NotificationPage {
-  readonly items: Array<NotificationItem>;
-  readonly cursor: PageCursor;
-}
-
-export interface NotificationUnreadCounts {
-  readonly defaultCount: number;
-  readonly followCount: number;
-  readonly voteThankCount: number;
-}
-
-export function notificationUnreadTotal(counts: NotificationUnreadCounts): number {
-  return counts.defaultCount + counts.followCount + counts.voteThankCount;
 }
 
 export interface NotificationPreferences {
@@ -212,4 +124,31 @@ export function withNotificationDisplayInApp(
 export interface NotificationSettingsGateway {
   loadNotificationPreferences(): Promise<NotificationPreferences>;
   saveNotificationPreferences(value: NotificationPreferences): Promise<void>;
+}
+
+/**
+ * 时间线条目是否按显示开关放行（对齐上游 `shouldShowNotification`：
+ * 动词取 content.title/subTitle/text 中首个非空串）。
+ */
+export function shouldShowMobileNotification(item: MobileNotificationTimelineItem,
+  preferences: NotificationPreferences): boolean {
+  const content = item.content;
+  if (content === undefined) {
+    return true;
+  }
+  let verb = content.title.trim();
+  if (verb.length === 0) {
+    verb = content.subTitle.trim();
+  }
+  if (verb.length === 0) {
+    verb = content.text.trim();
+  }
+  if (verb.length === 0) {
+    return true;
+  }
+  const kind = matchNotificationKind(verb);
+  if (kind === undefined) {
+    return true;
+  }
+  return notificationDisplayInApp(preferences, kind);
 }

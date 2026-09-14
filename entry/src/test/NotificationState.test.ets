@@ -3,23 +3,23 @@ import {
   HttpFailure,
   HttpFailureKind,
   LoginSessionGateway,
-  NotificationCategory,
-  NotificationItem,
-  NotificationPage,
+  MobileNotificationAuthor,
+  MobileNotificationMessagePage,
+  MobileNotificationRepository,
+  MobileNotificationTimelineItem,
+  MobileNotificationTimelinePage,
   NotificationPreferences,
-  NotificationRepository,
-  NotificationSettingsGateway,
-  NotificationUnreadCounts,
+  defaultNotificationPreferences,
   SessionCookie,
   SessionLoginOperation,
   SessionState,
-  SessionStatus
+  SessionStatus,
+  ZhihuPrivateMessage,
+  ZhihuPrivateMessagePage
 } from 'data';
-import {
-  mergeNotifications,
-  NotificationController,
-  NotificationPhase
-} from '../main/ets/pages/NotificationState';
+import { NotificationController, NotificationPhase } from '../main/ets/pages/NotificationState';
+import { NotificationTimelineController, NotificationTimelinePhase } from '../main/ets/pages/NotificationTimelineState';
+import { PrivateMessageController, PrivateMessagePhase } from '../main/ets/pages/PrivateMessageState';
 
 class UnusedLoginOperation implements SessionLoginOperation {
   readonly result: Promise<SessionState>;
@@ -33,7 +33,7 @@ class UnusedLoginOperation implements SessionLoginOperation {
 }
 
 class FixedSessionGateway implements LoginSessionGateway {
-  private state: SessionState;
+  private readonly state: SessionState;
 
   constructor(status: SessionStatus) {
     this.state = {
@@ -51,346 +51,327 @@ class FixedSessionGateway implements LoginSessionGateway {
   }
 
   getState(): SessionState {
-    return {
-      status: this.state.status,
-      message: this.state.message,
-      hasRetainedCredentials: this.state.hasRetainedCredentials,
-      profile: this.state.profile === undefined ? undefined : {
-        id: this.state.profile.id,
-        name: this.state.profile.name,
-        urlToken: this.state.profile.urlToken,
-        userType: this.state.profile.userType,
-        avatarUrl: this.state.profile.avatarUrl
-      }
-    };
+    return this.state;
   }
 
   retryRetainedSession(): Promise<SessionState> {
-    return Promise.resolve(this.getState());
+    return Promise.resolve(this.state);
   }
 
   beginLoginWithCookieHeader(_rawCookie: string): SessionLoginOperation {
-    return new UnusedLoginOperation(this.getState());
+    return new UnusedLoginOperation(this.state);
   }
 
   beginLoginWithCookies(_cookies: Array<SessionCookie>): SessionLoginOperation {
-    return new UnusedLoginOperation(this.getState());
+    return new UnusedLoginOperation(this.state);
   }
 
   logout(): Promise<SessionState> {
-    return Promise.resolve(this.getState());
+    return Promise.resolve(this.state);
   }
 }
 
-interface NotificationListRequest {
-  category: NotificationCategory;
-  cursor?: string;
-}
+class FakeMobileNotificationRepository implements MobileNotificationRepository {
+  messagePages: Array<MobileNotificationMessagePage> = [];
+  timelinePages: Array<MobileNotificationTimelinePage> = [];
+  privateMessagePages: Array<ZhihuPrivateMessagePage> = [];
+  peer?: MobileNotificationAuthor = undefined;
+  readAllEntries: Array<string> = [];
+  sentMessages: Array<string> = [];
+  markReadFailure?: HttpFailure = undefined;
 
-class ControlledNotificationRepository implements NotificationRepository {
-  readonly listRequests: Array<NotificationListRequest> = [];
-  readAllCalls: number = 0;
-  failList: boolean = false;
-  failUnread: boolean = false;
-  failReadAll: boolean = false;
-  unreadCountsRequested: number = 0;
-  cancelCount: number = 0;
-  private pageByCursor: Map<string, NotificationPage> = new Map();
-  private pageByCategory: Map<NotificationCategory, NotificationPage> = new Map();
-  private defaultPage?: NotificationPage;
-
-  setPage(page: NotificationPage): void {
-    this.defaultPage = page;
+  async getMessagePage(_cursor?: string): Promise<MobileNotificationMessagePage> {
+    if (this.messagePages.length === 0) {
+      throw new HttpFailure(HttpFailureKind.SERVER);
+    }
+    return this.messagePages.shift() as MobileNotificationMessagePage;
   }
 
-  setPageForCursor(cursor: string, page: NotificationPage): void {
-    this.pageByCursor.set(cursor, page);
+  async getTimelinePage(_entryName: string, _cursor?: string): Promise<MobileNotificationTimelinePage> {
+    if (this.timelinePages.length === 0) {
+      throw new HttpFailure(HttpFailureKind.SERVER);
+    }
+    return this.timelinePages.shift() as MobileNotificationTimelinePage;
   }
 
-  setPageForCategory(category: NotificationCategory, page: NotificationPage): void {
-    this.pageByCategory.set(category, page);
+  async markEntryAsRead(entryName: string): Promise<void> {
+    this.readAllEntries.push(entryName);
+    if (this.markReadFailure !== undefined) {
+      throw this.markReadFailure;
+    }
   }
 
-  getNotificationsPage(category: NotificationCategory, cursor?: string): Promise<NotificationPage> {
-    this.listRequests.push({ category: category, cursor: cursor });
-    if (this.failList) {
-      return Promise.reject(new HttpFailure(HttpFailureKind.NETWORK));
+  async getPrivateMessagePage(_peerId: string, _cursor?: string): Promise<ZhihuPrivateMessagePage> {
+    if (this.privateMessagePages.length === 0) {
+      throw new HttpFailure(HttpFailureKind.SERVER);
     }
-    if (cursor !== undefined && this.pageByCursor.has(cursor)) {
-      return Promise.resolve(this.pageByCursor.get(cursor) ?? emptyPage());
-    }
-    if (this.pageByCategory.has(category)) {
-      return Promise.resolve(this.pageByCategory.get(category) ?? emptyPage());
-    }
-    return Promise.resolve(this.defaultPage ?? emptyPage());
+    return this.privateMessagePages.shift() as ZhihuPrivateMessagePage;
   }
 
-  getUnreadCounts(): Promise<NotificationUnreadCounts> {
-    this.unreadCountsRequested += 1;
-    if (this.failUnread) {
-      return Promise.reject(new HttpFailure(HttpFailureKind.NETWORK));
+  async getPrivateMessagePeer(_peerId: string): Promise<MobileNotificationAuthor> {
+    if (this.peer === undefined) {
+      throw new HttpFailure(HttpFailureKind.SERVER);
     }
-    const counts: NotificationUnreadCounts = { defaultCount: 1, followCount: 2, voteThankCount: 3 };
-    return Promise.resolve(counts);
+    return this.peer;
   }
 
-  markAllAsRead(): Promise<void> {
-    this.readAllCalls += 1;
-    if (this.failReadAll) {
-      return Promise.reject(new HttpFailure(HttpFailureKind.NETWORK));
-    }
-    return Promise.resolve();
+  async sendPrivateMessage(peerId: string, content: string): Promise<ZhihuPrivateMessage> {
+    this.sentMessages.push(`${peerId}:${content}`);
+    return {
+      id: `sent-${this.sentMessages.length}`,
+      type: 'message',
+      contentType: 0,
+      content: content,
+      createdTime: 1760002000,
+      pluginExcerpt: '',
+      sender: undefined,
+      receiver: undefined
+    };
   }
 
   cancel(): void {
-    this.cancelCount += 1;
   }
 }
 
-class RecordingSettingsGateway implements NotificationSettingsGateway {
-  readonly saved: Array<NotificationPreferences> = [];
-  failLoad: boolean = false;
-  failSave: boolean = false;
-  private preferences: NotificationPreferences;
-
-  constructor(preferences: NotificationPreferences) {
-    this.preferences = preferences;
-  }
-
-  loadNotificationPreferences(): Promise<NotificationPreferences> {
-    if (this.failLoad) {
-      return Promise.reject(new HttpFailure(HttpFailureKind.NETWORK));
-    }
-    return Promise.resolve(this.preferences);
-  }
-
-  saveNotificationPreferences(value: NotificationPreferences): Promise<void> {
-    if (this.failSave) {
-      return Promise.reject(new HttpFailure(HttpFailureKind.NETWORK));
-    }
-    this.preferences = value;
-    this.saved.push(value);
-    return Promise.resolve();
-  }
-}
-
-function notification(id: string, category: NotificationCategory = NotificationCategory.DEFAULT,
-  isRead: boolean = false): NotificationItem {
+function preferencesWith(likeAnswerDisplay: boolean): NotificationPreferences {
+  const defaults = defaultNotificationPreferences();
   return {
-    id: id,
-    category: category,
-    isRead: isRead,
-    createTime: 1760000000,
-    mergeCount: 1,
-    verb: ' 邀请你回答问题',
-    actors: [],
-    contentText: '问题内容',
-    contentLink: '',
-    extendText: ''
-  };
-}
-
-function emptyPage(): NotificationPage {
-  return {
-    items: [],
-    cursor: { isEnd: true, isStart: true, page: 0, total: 0 }
-  };
-}
-
-function defaultPreferences(): NotificationPreferences {
-  return {
-    likeAnswerDisplay: true,
-    likeCommentDisplay: true,
-    replyCommentDisplay: true,
-    inviteAnswerDisplay: false,
-    autoMarkAsRead: false,
-    unreadBadge: true
+    likeAnswerDisplay: likeAnswerDisplay,
+    likeCommentDisplay: defaults.likeCommentDisplay,
+    replyCommentDisplay: defaults.replyCommentDisplay,
+    inviteAnswerDisplay: defaults.inviteAnswerDisplay,
+    autoMarkAsRead: defaults.autoMarkAsRead,
+    unreadBadge: defaults.unreadBadge
   };
 }
 
 export default function notificationStateTest(): void {
   describe('notificationStateTest', () => {
-    it('requiresLoginAndOffersLoginWhenGuest', 0, async () => {
-      const repository = new ControlledNotificationRepository();
-      const controller = new NotificationController(repository, new FixedSessionGateway(SessionStatus.GUEST));
+    it('hubRequiresLoginWithoutAuthenticatedSession', 0, async () => {
+      const repository = new FakeMobileNotificationRepository();
+      const controller = new NotificationController(repository,
+        new FixedSessionGateway(SessionStatus.GUEST));
       controller.activate();
       await controller.loadInitial();
-      expect(controller.snapshot().phase).assertEqual(NotificationPhase.ERROR);
-      expect(controller.snapshot().requiresLogin).assertTrue();
-      expect(repository.listRequests.length).assertEqual(0);
+      const state = controller.snapshot();
+      expect(state.phase).assertEqual(NotificationPhase.ERROR);
+      expect(state.requiresLogin).assertTrue();
     });
 
-    it('loadsFirstPageWithUnreadCountsAndDeduplicates', 0, async () => {
-      const repository = new ControlledNotificationRepository();
-      repository.setPage({
-        items: [notification('1'), notification('1'), notification('2')],
-        cursor: {
-          isEnd: false,
-          isStart: true,
-          next: 'https://www.zhihu.com/api/v4/notifications/v2/default?limit=20&offset=20',
-          page: 0,
-          total: 0
-        }
-      });
+    it('hubAppliesOverviewCountsAndFiltersEmptyItems', 0, async () => {
+      const repository = new FakeMobileNotificationRepository();
+      repository.messagePages.push(makeMessagePage());
       const controller = new NotificationController(repository,
         new FixedSessionGateway(SessionStatus.AUTHENTICATED));
       controller.activate();
       await controller.loadInitial();
-      expect(repository.listRequests[0].cursor).assertUndefined();
-      expect(controller.snapshot().phase).assertEqual(NotificationPhase.READY);
-      expect(controller.snapshot().items.length).assertEqual(2);
-      expect(controller.snapshot().canLoadMore).assertTrue();
-      expect(repository.unreadCountsRequested).assertEqual(1);
-      expect(controller.snapshot().unreadTotal).assertEqual(6);
+      const state = controller.snapshot();
+      expect(state.phase).assertEqual(NotificationPhase.READY);
+      expect(state.items.length).assertEqual(1);
+      expect(state.items[0].uniqueId).assertEqual('c1');
+      expect(state.categoryUnread.comment).assertEqual(1);
+      expect(state.categoryUnread.like).assertEqual(3);
+      expect(state.unreadTotal).assertEqual(4);
+      expect(state.invitation?.title).assertEqual('邀请回答');
     });
 
-    it('loadsMoreWithCursorAndMergesWithoutDuplicates', 0, async () => {
-      const repository = new ControlledNotificationRepository();
-      const cursor = 'https://www.zhihu.com/api/v4/notifications/v2/default?limit=20&offset=20';
-      repository.setPage({
-        items: [notification('1'), notification('2')],
-        cursor: { isEnd: false, isStart: true, next: cursor, page: 0, total: 0 }
-      });
+    it('hubMarkAllReadPostsFourCategoriesAndRollsBackOnFailure', 0, async () => {
+      const repository = new FakeMobileNotificationRepository();
+      repository.messagePages.push(makeMessagePage());
       const controller = new NotificationController(repository,
         new FixedSessionGateway(SessionStatus.AUTHENTICATED));
       controller.activate();
       await controller.loadInitial();
-      repository.setPageForCursor(cursor, {
-        items: [notification('2'), notification('3')],
-        cursor: { isEnd: true, isStart: false, page: 0, total: 0 }
-      });
-      await controller.loadMore();
-      expect(repository.listRequests[1].cursor).assertEqual(cursor);
-      expect(controller.snapshot().items.length).assertEqual(3);
-      expect(controller.snapshot().canLoadMore).assertFalse();
-    });
 
-    it('mapsNetworkFailureToErrorPhaseAndRetries', 0, async () => {
-      const repository = new ControlledNotificationRepository();
-      repository.failList = true;
-      const controller = new NotificationController(repository,
-        new FixedSessionGateway(SessionStatus.AUTHENTICATED));
-      controller.activate();
-      await controller.loadInitial();
-      expect(controller.snapshot().phase).assertEqual(NotificationPhase.ERROR);
-      expect(controller.snapshot().requiresLogin).assertFalse();
-      repository.failList = false;
-      repository.setPage({ items: [notification('1')], cursor: { isEnd: true, isStart: true, page: 0, total: 0 } });
-      await controller.retry();
-      expect(controller.snapshot().phase).assertEqual(NotificationPhase.READY);
-    });
+      repository.markReadFailure = new HttpFailure(HttpFailureKind.AUTHENTICATION, 403);
+      const failed = await controller.markAllRead();
+      expect(failed).assertFalse();
+      expect(repository.readAllEntries.length).assertEqual(1);
+      expect(controller.snapshot().unreadTotal).assertEqual(4);
+      expect((controller.snapshot().errorMessage ?? '').length).assertLarger(0);
 
-    it('switchesCategoryAndLoadsLazily', 0, async () => {
-      const repository = new ControlledNotificationRepository();
-      repository.setPage({
-        items: [notification('1', NotificationCategory.DEFAULT)],
-        cursor: { isEnd: true, isStart: true, page: 0, total: 0 }
-      });
-      repository.setPageForCategory(NotificationCategory.FOLLOW, emptyPage());
-      const controller = new NotificationController(repository,
-        new FixedSessionGateway(SessionStatus.AUTHENTICATED));
-      controller.activate();
-      await controller.loadInitial();
-      await controller.selectCategory(NotificationCategory.FOLLOW);
-      expect(controller.snapshot().selectedCategory).assertEqual(NotificationCategory.FOLLOW);
-      expect(controller.snapshot().items.length).assertEqual(0);
-      expect(controller.snapshot().phase).assertEqual(NotificationPhase.EMPTY);
-      await controller.selectCategory(NotificationCategory.DEFAULT);
-      expect(controller.snapshot().items.length).assertEqual(1);
-      expect(repository.listRequests.length).assertEqual(2);
-    });
-
-    it('marksSingleItemReadLocally', 0, async () => {
-      const repository = new ControlledNotificationRepository();
-      repository.setPage({
-        items: [notification('1'), notification('2')],
-        cursor: { isEnd: true, isStart: true, page: 0, total: 0 }
-      });
-      const controller = new NotificationController(repository,
-        new FixedSessionGateway(SessionStatus.AUTHENTICATED));
-      controller.activate();
-      await controller.loadInitial();
-      controller.markItemRead('1');
-      const items = controller.snapshot().items;
-      expect(items[0].isRead).assertTrue();
-      expect(items[1].isRead).assertFalse();
-    });
-
-    it('marksAllReadOptimisticallyAndKeepsOnSuccess', 0, async () => {
-      const repository = new ControlledNotificationRepository();
-      repository.setPage({
-        items: [notification('1'), notification('2', NotificationCategory.DEFAULT, true)],
-        cursor: { isEnd: true, isStart: true, page: 0, total: 0 }
-      });
-      const controller = new NotificationController(repository,
-        new FixedSessionGateway(SessionStatus.AUTHENTICATED));
-      controller.activate();
-      await controller.loadInitial();
-      const marked = await controller.markAllRead();
-      expect(marked).assertTrue();
-      const items = controller.snapshot().items;
-      expect(items.every((item: NotificationItem): boolean => item.isRead)).assertTrue();
+      repository.markReadFailure = undefined;
+      const succeeded = await controller.markAllRead();
+      expect(succeeded).assertTrue();
+      expect(repository.readAllEntries.length).assertEqual(5);
       expect(controller.snapshot().unreadTotal).assertEqual(0);
+      expect(controller.snapshot().categoryUnread.comment).assertEqual(0);
+      expect(controller.snapshot().categoryUnread.like).assertEqual(0);
     });
 
-    it('rollsBackUnreadStateWhenMarkAllReadFails', 0, async () => {
-      const repository = new ControlledNotificationRepository();
-      repository.setPage({
-        items: [notification('1'), notification('2')],
-        cursor: { isEnd: true, isStart: true, page: 0, total: 0 }
+    it('timelineFiltersByPreferencesAndAutoMarksRead', 0, async () => {
+      const repository = new FakeMobileNotificationRepository();
+      repository.timelinePages.push(makeTimelinePage());
+      const controller = new NotificationTimelineController('like', repository,
+        new FixedSessionGateway(SessionStatus.AUTHENTICATED));
+      controller.setPreferences(preferencesWith(false));
+      controller.activate();
+      await controller.loadInitial();
+      const state = controller.snapshot();
+      expect(state.phase).assertEqual(NotificationTimelinePhase.READY);
+      expect(state.items.length).assertEqual(1);
+      expect(state.items[0].uniqueId).assertEqual('t2');
+      expect(repository.readAllEntries.length).assertEqual(0);
+
+      const autoController = new NotificationTimelineController('like', repository,
+        new FixedSessionGateway(SessionStatus.AUTHENTICATED));
+      const defaults = defaultNotificationPreferences();
+      const autoPreferences: NotificationPreferences = {
+        likeAnswerDisplay: defaults.likeAnswerDisplay,
+        likeCommentDisplay: defaults.likeCommentDisplay,
+        replyCommentDisplay: defaults.replyCommentDisplay,
+        inviteAnswerDisplay: defaults.inviteAnswerDisplay,
+        autoMarkAsRead: true,
+        unreadBadge: defaults.unreadBadge
+      };
+      autoController.setPreferences(autoPreferences);
+      autoController.activate();
+      repository.timelinePages.push(makeTimelinePage());
+      await autoController.loadInitial();
+      expect(repository.readAllEntries).assertContain('like');
+    });
+
+    it('privateMessagePrependsOlderPagesOnLoadMore', 0, async () => {
+      const repository = new FakeMobileNotificationRepository();
+      repository.privateMessagePages.push({
+        items: [makeMessage('m2', '较新', 1760002000), makeMessage('m1', '较旧', 1760001000)],
+        cursor: { isEnd: false, isStart: false, next: 'cursor-1', previous: undefined, page: 0, total: 0 }
       });
-      const controller = new NotificationController(repository,
+      repository.privateMessagePages.push({
+        items: [makeMessage('m0', '最旧', 1760000000)],
+        cursor: { isEnd: true, isStart: false, next: undefined, previous: undefined, page: 0, total: 0 }
+      });
+      const controller = new PrivateMessageController('peer-id', repository,
         new FixedSessionGateway(SessionStatus.AUTHENTICATED));
       controller.activate();
       await controller.loadInitial();
-      repository.failReadAll = true;
-      const marked = await controller.markAllRead();
-      expect(marked).assertFalse();
-      const items = controller.snapshot().items;
-      expect(items[0].isRead).assertFalse();
-      expect(items[1].isRead).assertFalse();
-      expect(controller.snapshot().unreadTotal).assertEqual(6);
+      await controller.loadMore();
+      const state = controller.snapshot();
+      expect(state.items.length).assertEqual(3);
+      expect(state.items[0].id).assertEqual('m0');
+      expect(state.items[1].id).assertEqual('m1');
+      expect(state.items[2].id).assertEqual('m2');
+      expect(state.canLoadMore).assertFalse();
     });
 
-    it('rejectsMarkAllReadWhenGuestWithoutNetworkCall', 0, async () => {
-      const repository = new ControlledNotificationRepository();
-      const controller = new NotificationController(repository, new FixedSessionGateway(SessionStatus.GUEST));
-      controller.activate();
-      const marked = await controller.markAllRead();
-      expect(marked).assertFalse();
-      expect(controller.snapshot().requiresLogin).assertTrue();
-      expect(repository.readAllCalls).assertEqual(0);
-    });
-
-    it('readsAndWritesNotificationPreferencesThroughGateway', 0, async () => {
-      const settings = new RecordingSettingsGateway(defaultPreferences());
-      const preferences = await settings.loadNotificationPreferences();
-      expect(preferences.inviteAnswerDisplay).assertFalse();
-      expect(preferences.likeAnswerDisplay).assertTrue();
-      const updated: NotificationPreferences = {
-        likeAnswerDisplay: preferences.likeAnswerDisplay,
-        likeCommentDisplay: preferences.likeCommentDisplay,
-        replyCommentDisplay: preferences.replyCommentDisplay,
-        inviteAnswerDisplay: true,
-        autoMarkAsRead: true,
-        unreadBadge: preferences.unreadBadge
+    it('privateMessageLoadsChronologicallyAndSendsReceipt', 0, async () => {
+      const repository = new FakeMobileNotificationRepository();
+      repository.privateMessagePages.push(makePrivateMessagePage());
+      repository.peer = {
+        id: 'peer-id',
+        name: '关注者',
+        urlToken: 'peer-token',
+        headline: '',
+        avatarUrl: 'https://picx.zhimg.com/p.jpg'
       };
-      await settings.saveNotificationPreferences(updated);
-      expect(settings.saved.length).assertEqual(1);
-      expect(settings.saved[0].inviteAnswerDisplay).assertTrue();
-      const reloaded = await settings.loadNotificationPreferences();
-      expect(reloaded.autoMarkAsRead).assertTrue();
-    });
+      const controller = new PrivateMessageController('peer-id', repository,
+        new FixedSessionGateway(SessionStatus.AUTHENTICATED));
+      controller.activate();
+      await controller.loadInitial();
+      const state = controller.snapshot();
+      expect(state.phase).assertEqual(PrivateMessagePhase.READY);
+      expect(state.items.length).assertEqual(2);
+      expect(state.items[0].id).assertEqual('m1');
+      expect(state.items[1].id).assertEqual('m2');
+      expect(state.peer?.name).assertEqual('关注者');
 
-    it('mergesNotificationsDeduplicatedByIdentity', 0, () => {
-      const merged = mergeNotifications(
-        [notification('1'), notification('2', NotificationCategory.FOLLOW)],
-        [notification('2', NotificationCategory.FOLLOW), notification('3')]
-      );
-      expect(merged.length).assertEqual(3);
-      expect(merged[0].id).assertEqual('1');
-      expect(merged[1].id).assertEqual('2');
-      expect(merged[2].id).assertEqual('3');
+      const sent = await controller.send('你好');
+      expect(sent).assertTrue();
+      const after = controller.snapshot();
+      expect(after.items.length).assertEqual(3);
+      expect(after.items[2].content).assertEqual('你好');
+      expect(after.sending).assertFalse();
+      expect(repository.sentMessages.length).assertEqual(1);
     });
   });
+}
+
+function makeTimelinePage(): MobileNotificationTimelinePage {
+  return {
+    items: [
+      makeItem('t1', 'notification', '喜欢了你的回答', false),
+      makeItem('t2', 'notification', '关注了你的提问', false)
+    ],
+    cursor: { isEnd: true, isStart: false, next: undefined, previous: undefined, page: 0, total: 0 }
+  };
+}
+
+function makeMessagePage(): MobileNotificationMessagePage {
+  return {
+    overview: {
+      head: [
+        { detailTitle: '评论转发@', unreadCount: 1 },
+        { detailTitle: '赞同喜欢', unreadCount: 3 }
+      ],
+      columnHead: [
+        {
+          id: 'col1',
+          title: '邀请回答',
+          textPrefix: '',
+          text: '有人邀请你回答',
+          targetLink: 'https://www.zhihu.com/notifications/v3/timeline/entry/invite?title=邀请回答',
+          unreadCount: 2,
+          created: 1760000000
+        }
+      ]
+    },
+    items: [makeItem('c1', 'message', '', false), makeItem('c2', 'empty', '', true)],
+    cursor: { isEnd: true, isStart: false, next: undefined, previous: undefined, page: 0, total: 0 }
+  };
+}
+
+function makePrivateMessagePage(): ZhihuPrivateMessagePage {
+  return {
+    items: [
+      makeMessage('m2', '第二条', 1760001000),
+      makeMessage('m1', '第一条', 1760000000)
+    ],
+    cursor: { isEnd: true, isStart: false, next: undefined, previous: undefined, page: 0, total: 0 }
+  };
+}
+
+function makeItem(uniqueId: string, type: string, subTitle: string, isRead: boolean):
+  MobileNotificationTimelineItem {
+  const item: MobileNotificationTimelineItem = {
+    id: uniqueId,
+    uniqueId: uniqueId,
+    type: type,
+    cardType: 'chat',
+    detailTitle: '消息',
+    isRead: isRead,
+    unreadCount: isRead ? 0 : 1,
+    created: 1760000000,
+    createdStr: '',
+    head: undefined,
+    content: {
+      title: '',
+      subTitle: subTitle,
+      text: '正文',
+      subText: '',
+      abstractText: '',
+      targetLink: '',
+      subTargetLink: '',
+      subIcon: '',
+      isDeleted: false
+    },
+    targetSource: undefined,
+    target: undefined,
+    emptyInfo: type === 'empty' ? { text: '没有更多了', number: 0 } : undefined,
+    additionalInfo: []
+  };
+  return item;
+}
+
+function makeMessage(id: string, content: string, createdTime: number): ZhihuPrivateMessage {
+  const message: ZhihuPrivateMessage = {
+    id: id,
+    type: 'message',
+    contentType: 0,
+    content: content,
+    createdTime: createdTime,
+    pluginExcerpt: '',
+    sender: { id: 'peer-id', name: '关注者', urlToken: 'peer-token', headline: '', avatarUrl: '' },
+    receiver: undefined
+  };
+  return message;
 }

@@ -26,13 +26,13 @@ import {
   DefaultRecentFollowingUsersRepository,
   DefaultSearchRepository,
   DefaultOnlineHistoryRepository,
-  DefaultNotificationRepository,
+  DefaultMobileNotificationRepository,
   DefaultVoteRepository,
   FeedRepository,
   FollowRepository,
   getAppDatabase,
   getAppSessionOwner,
-  NotificationRepository,
+  MobileNotificationRepository,
   NotificationSettingsGateway,
   OpenedContentStore,
   OnlineHistoryRepository,
@@ -51,7 +51,8 @@ import {
   PinPublishRepository,
   QuestionAnswerFeedRepository,
   VoteRepository,
-  ZhihuHttpClient
+  ZhihuHttpClient,
+  ZhihuMobileHttpClient
 } from 'data';
 import { BackgroundTaskProbePage } from './BackgroundTaskProbe';
 import { DatabaseProbePage } from './DatabaseProbe';
@@ -93,6 +94,8 @@ import { LocalHistoryPage } from './LocalHistoryPage';
 import { CollectionPage } from './CollectionPage';
 import { CollectionContentPage } from './CollectionContentPage';
 import { NotificationPage } from './NotificationPage';
+import { NotificationTimelinePage } from './NotificationTimelinePage';
+import { PrivateMessagePage } from './PrivateMessagePage';
 import { NotificationSettingsPage } from './NotificationSettingsPage';
 import { ReadHistoryContentKind, ReadHistoryOpenTarget } from './ReadHistoryState';
 import { ProductionImageAttachmentUploaderFactory } from '../platform/SystemImageUploadPlatform';
@@ -128,7 +131,7 @@ struct Index {
   @State private followRepository?: FollowRepository = undefined;
   @State private collectionRepository?: CollectionRepository = undefined;
   @State private commentRepository?: CommentRepository = undefined;
-  @State private notificationRepository?: NotificationRepository = undefined;
+  @State private notificationRepository?: MobileNotificationRepository = undefined;
   @State private notificationSettings?: NotificationSettingsGateway = undefined;
   private answerPublishFactory: AnswerPublishPageControllerFactory | undefined = undefined;
   private answerImageUploaderFactory: AnswerPublishImageUploaderFactory | undefined = undefined;
@@ -182,7 +185,8 @@ struct Index {
       this.followRepository = new DefaultFollowRepository(new ZhihuHttpClient(session));
       this.collectionRepository = new DefaultCollectionRepository(new ZhihuHttpClient(session));
       this.commentRepository = new DefaultCommentRepository(new ZhihuHttpClient(session));
-      this.notificationRepository = new DefaultNotificationRepository(new ZhihuHttpClient(session));
+      this.notificationRepository = new DefaultMobileNotificationRepository(
+        new ZhihuMobileHttpClient(session));
       this.notificationSettings = new AppPreferencesStore(context);
       this.answerPublishFactory = new LocalDraftAnswerPublishControllerFactory(session, draftRepository,
         (editSeed: ExistingAnswerForEditing | undefined): AnswerPublishRepository =>
@@ -242,6 +246,10 @@ struct Index {
             onBack: () => void): void => this.collectionContentContent(id, navigate, onBack),
           notificationContent: (navigate: (destination: P1Destination) => void, onBack: () => void): void =>
             this.notificationContent(navigate, onBack),
+          notificationEntryContent: (entryName: string, title: string, navigate: (destination: P1Destination) => void): void =>
+            this.notificationEntryContent(entryName, title, navigate),
+          privateMessageContent: (peerId: string, peerName: string, avatarUrl: string, navigate: (destination: P1Destination) => void): void =>
+            this.privateMessageContent(peerId, peerName, avatarUrl, navigate),
           notificationSettingsContent: (navigate: (destination: P1Destination) => void): void =>
             this.notificationSettingsContent(navigate),
           blockingRulesContent: (onBack: () => void): void => this.blockingRulesContent(onBack),
@@ -516,6 +524,28 @@ struct Index {
   notificationSettingsContent(_navigate: (destination: P1Destination) => void) {
     NotificationSettingsPage({
       settings: this.notificationSettings
+    });
+  }
+  @Builder
+  notificationEntryContent(entryName: string, title: string, navigate: (destination: P1Destination) => void) {
+    NotificationTimelinePage({
+      entryName: entryName,
+      repository: this.notificationRepository,
+      settings: this.notificationSettings,
+      session: this.session,
+      navigate: navigate
+    });
+  }
+
+  @Builder
+  privateMessageContent(peerId: string, peerName: string, avatarUrl: string, navigate: (destination: P1Destination) => void) {
+    PrivateMessagePage({
+      peerId: peerId,
+      peerName: peerName,
+      avatarUrl: avatarUrl,
+      repository: this.notificationRepository,
+      session: this.session,
+      navigate: navigate
     });
   }
 

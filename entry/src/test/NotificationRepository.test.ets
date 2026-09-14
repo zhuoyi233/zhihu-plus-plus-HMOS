@@ -1,42 +1,56 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
-  buildNotificationListUrl,
-  buildNotificationReadAllUrls,
-  buildNotificationUnreadUrl,
-  decodeNotificationPage,
-  decodeUnreadCounts,
-  DefaultNotificationRepository,
-  isNotificationCursorUrl,
-  NotificationCategory,
-  NotificationRepositoryFailure,
-  NotificationRepositoryFailureKind,
+  buildMobileMessageListUrl,
+  buildMobileReadAllUrl,
+  buildMobileTimelineListUrl,
+  buildPrivateMessageListUrl,
+  decodeMobileMessagePage,
+  decodeMobileTimelinePage,
+  decodePrivateMessagePage,
+  decodePrivateMessagePeer,
+  decodePrivateMessageReceipt,
+  DefaultMobileNotificationRepository,
+  encryptZhihuMessageBody,
+  isMobileMessageCursorUrl,
+  isMobileTimelineCursorUrl,
+  isPrivateMessageCursorUrl,
+  isValidMobileNotificationEntryName,
+  isValidPrivateMessagePeerId,
+  MobileNotificationCategory,
+  mobileNotificationCategoryInfo,
+  mobileNotificationDisplayTitle,
+  MobileNotificationRepositoryFailure,
+  MobileNotificationRepositoryFailureKind,
   PreparedZhihuHttpRequest,
   SessionCookie,
   SessionCookieProvider,
-  ZhihuHttpClient,
+  shouldShowMobileNotification,
+  defaultNotificationPreferences,
+  ZhihuMobileHttpClient,
   ZhihuHttpMethod,
   ZhihuHttpResponse,
   ZhihuHttpTransport,
   ZhihuHttpTransportFactory
 } from 'data';
 
-class NotificationSessionProvider implements SessionCookieProvider {
+class MobileSessionProvider implements SessionCookieProvider {
   getCookies(): Array<SessionCookie> {
     return [
-      { name: 'z_c0', value: 'notification-session' },
-      { name: 'd_c0', value: 'notification-device' }
+      { name: 'z_c0', value: 'mobile-session' },
+      { name: 'd_c0', value: 'mobile-device' }
     ];
   }
 }
 
-class NotificationTransport implements ZhihuHttpTransport {
+class RecordingTransport implements ZhihuHttpTransport {
   readonly requests: Array<PreparedZhihuHttpRequest>;
-  private readonly response: ZhihuHttpResponse;
 
-  constructor(response: ZhihuHttpResponse, requests: Array<PreparedZhihuHttpRequest>) {
-    this.response = response;
+  constructor(requests: Array<PreparedZhihuHttpRequest>, response: ZhihuHttpResponse) {
     this.requests = requests;
+    this.response = response;
   }
+
+  private readonly response: ZhihuHttpResponse;
 
   request(request: PreparedZhihuHttpRequest): Promise<ZhihuHttpResponse> {
     this.requests.push(request);
@@ -47,23 +61,23 @@ class NotificationTransport implements ZhihuHttpTransport {
   }
 }
 
-class NotificationTransportFactory implements ZhihuHttpTransportFactory {
+class RecordingTransportFactory implements ZhihuHttpTransportFactory {
+  readonly requests: Array<PreparedZhihuHttpRequest> = [];
   private readonly responses: Array<ZhihuHttpResponse>;
   private index: number = 0;
-  readonly requests: Array<PreparedZhihuHttpRequest> = [];
 
   constructor(responses: Array<ZhihuHttpResponse>) {
     this.responses = responses;
   }
 
   create(): ZhihuHttpTransport {
-    const response = this.responses[this.index];
+    const response = this.responses[Math.min(this.index, this.responses.length - 1)];
     this.index += 1;
-    return new NotificationTransport(response, this.requests);
+    return new RecordingTransport(this.requests, response);
   }
 }
 
-class PendingNotificationTransport implements ZhihuHttpTransport {
+class PendingMobileTransport implements ZhihuHttpTransport {
   destroyed: boolean = false;
 
   request(_request: PreparedZhihuHttpRequest): Promise<ZhihuHttpResponse> {
@@ -76,200 +90,167 @@ class PendingNotificationTransport implements ZhihuHttpTransport {
   }
 }
 
-class PendingNotificationTransportFactory implements ZhihuHttpTransportFactory {
-  readonly transport: PendingNotificationTransport = new PendingNotificationTransport();
+class PendingMobileTransportFactory implements ZhihuHttpTransportFactory {
+  readonly transport: PendingMobileTransport = new PendingMobileTransport();
 
   create(): ZhihuHttpTransport {
     return this.transport;
   }
 }
 
-export default function notificationRepositoryTest(): void {
-  describe('notificationRepositoryTest', () => {
-    it('buildsCanonicalNotificationUrlsAndRejectsInvalidInput', 0, () => {
-      expect(buildNotificationListUrl(NotificationCategory.DEFAULT)).assertEqual(
-        'https://www.zhihu.com/api/v4/notifications/v2/default?limit=20'
-      );
-      expect(buildNotificationListUrl(NotificationCategory.FOLLOW)).assertEqual(
-        'https://www.zhihu.com/api/v4/notifications/v2/follow?limit=20'
-      );
-      expect(buildNotificationListUrl(NotificationCategory.VOTE_THANK)).assertEqual(
-        'https://www.zhihu.com/api/v4/notifications/v2/vote_thank?limit=20'
-      );
-      expect(buildNotificationUnreadUrl()).assertEqual(
-        'https://www.zhihu.com/api/v4/me?include=default_notifications_count%2C' +
-        'follow_notifications_count%2Cvote_thank_notifications_count'
-      );
-      expect(buildNotificationReadAllUrls()).assertDeepEquals([
-        'https://www.zhihu.com/api/v4/notifications/v2/default/actions/readall',
-        'https://www.zhihu.com/api/v4/notifications/v2/follow/actions/readall',
-        'https://www.zhihu.com/api/v4/notifications/v2/vote_thank/actions/readall'
-      ]);
+export default function mobileNotificationRepositoryTest(): void {
+  describe('mobileNotificationRepositoryTest', () => {
+    it('buildsCanonicalMobileNotificationUrls', 0, () => {
+      expect(buildMobileMessageListUrl()).assertEqual(
+        'https://api.zhihu.com/notifications/v3/message/v3?limit=20');
+      expect(buildMobileTimelineListUrl('comment')).assertEqual(
+        'https://api.zhihu.com/notifications/v3/timeline/entry/comment?limit=20');
+      expect(buildMobileTimelineListUrl('invite')).assertEqual(
+        'https://api.zhihu.com/notifications/v3/timeline/entry/invite?invite_with_time_slice=1&limit=20');
+      expect(buildMobileReadAllUrl('favlist_me')).assertEqual(
+        'https://api.zhihu.com/notifications/v3/timeline/entry/favlist_me/actions/readall');
+      expect(buildPrivateMessageListUrl('peer-id')).assertEqual(
+        'https://api.zhihu.com/messages?limit=20&sender_id=peer-id');
+      expect(isValidMobileNotificationEntryName('comment')).assertTrue();
+      expect(isValidMobileNotificationEntryName('INVITE')).assertFalse();
+      expect(isValidMobileNotificationEntryName('')).assertFalse();
+      expect(isValidPrivateMessagePeerId('peer_1-x')).assertTrue();
+      expect(isValidPrivateMessagePeerId('../evil')).assertFalse();
     });
 
-    it('validatesNotificationCursorsAgainstTheirCategoryPrefix', 0, () => {
-      const validDefault = 'https://www.zhihu.com/api/v4/notifications/v2/default?limit=20&offset=20';
-      expect(isNotificationCursorUrl(NotificationCategory.DEFAULT, validDefault)).assertTrue();
-      expect(isNotificationCursorUrl(NotificationCategory.FOLLOW, validDefault)).assertFalse();
-      expect(isNotificationCursorUrl(NotificationCategory.VOTE_THANK, validDefault)).assertFalse();
-      expect(isNotificationCursorUrl(NotificationCategory.DEFAULT,
-        'https://www.zhihu.com/api/v4/notifications/v2/follow?limit=20')).assertFalse();
-      expect(isNotificationCursorUrl(NotificationCategory.DEFAULT,
-        'https://www.zhihu.com/evil')).assertFalse();
-      expect(isNotificationCursorUrl(NotificationCategory.DEFAULT,
-        'https://www.zhihu.com/api/v4/notifications/v2/default?limit=20#frag')).assertFalse();
-      expect(isNotificationCursorUrl(NotificationCategory.DEFAULT, 'not-a-url')).assertFalse();
-      expect(isNotificationCursorUrl(NotificationCategory.DEFAULT, '')).assertFalse();
+    it('validatesMobileCursorsAgainstTrustedPrefixes', 0, () => {
+      const messageCursor =
+        'https://api.zhihu.com/notifications/v3/message/v3?limit=20&after=abc';
+      expect(isMobileMessageCursorUrl(messageCursor)).assertTrue();
+      expect(isMobileMessageCursorUrl('https://api.zhihu.com/evil?x=1')).assertFalse();
+      expect(isMobileMessageCursorUrl('not-a-url')).assertFalse();
+      expect(isMobileMessageCursorUrl('')).assertFalse();
 
-      const longCursor = 'https://www.zhihu.com/api/v4/notifications/v2/default?x=' + 'a'.repeat(5000);
-      expect(isNotificationCursorUrl(NotificationCategory.DEFAULT, longCursor)).assertFalse();
+      const timelineCursor =
+        'https://api.zhihu.com/notifications/v3/timeline/entry/comment?limit=20&after=abc';
+      expect(isMobileTimelineCursorUrl('comment', timelineCursor)).assertTrue();
+      expect(isMobileTimelineCursorUrl('like', timelineCursor)).assertFalse();
+      expect(isMobileTimelineCursorUrl('comment',
+        'https://api.zhihu.com/notifications/v3/timeline/entry/comment?x=1#frag')).assertFalse();
+
+      const privateCursor = 'https://api.zhihu.com/messages?limit=20&sender_id=peer-id&after=1';
+      expect(isPrivateMessageCursorUrl('peer-id', privateCursor)).assertTrue();
+      expect(isPrivateMessageCursorUrl('other-peer', privateCursor)).assertFalse();
+      expect(isPrivateMessageCursorUrl('peer-id',
+        'https://api.zhihu.com/messages/user/peer-id?sender_id=peer-id')).assertFalse();
+
+      const longCursor = messageCursor + 'x=' + 'a'.repeat(5000);
+      expect(isMobileMessageCursorUrl(longCursor)).assertFalse();
     });
 
-    it('acceptsAndNormalizesUpstreamHttpCursor', 0, () => {
-      const httpCursor = 'http://www.zhihu.com/api/v4/notifications/v2/default?limit=20&offset=20';
-      expect(isNotificationCursorUrl(NotificationCategory.DEFAULT, httpCursor)).assertTrue();
-      const followHttp = 'http://www.zhihu.com/api/v4/notifications/v2/follow?limit=20&offset=0';
-      expect(isNotificationCursorUrl(NotificationCategory.FOLLOW, followHttp)).assertTrue();
-      expect(isNotificationCursorUrl(NotificationCategory.DEFAULT, followHttp)).assertFalse();
-      const normalized = buildNotificationListUrl(NotificationCategory.DEFAULT, httpCursor);
-      expect(normalized).assertEqual('https://www.zhihu.com/api/v4/notifications/v2/default?limit=20&offset=20');
+    it('normalizesUpstreamHttpCursorToHttps', 0, () => {
+      const httpCursor = 'http://api.zhihu.com/notifications/v3/timeline/entry/comment?limit=20&after=abc';
+      expect(isMobileTimelineCursorUrl('comment', httpCursor)).assertFalse();
+      expect(buildMobileTimelineListUrl('comment', httpCursor)).assertEqual(
+        'https://api.zhihu.com/notifications/v3/timeline/entry/comment?limit=20&after=abc');
     });
 
-    it('loadsNotificationPageWithSessionAndZseAndDeduplicates', 0, async () => {
-      const factory = new NotificationTransportFactory([{ statusCode: 200, body: NOTIFICATION_PAGE_JSON }]);
-      const repository = new DefaultNotificationRepository(
-        new ZhihuHttpClient(new NotificationSessionProvider(), factory)
-      );
-      const page = await repository.getNotificationsPage(NotificationCategory.DEFAULT);
+    it('loadsMessagePageWithMobileHeaders', 0, async () => {
+      const factory = new RecordingTransportFactory([{ statusCode: 200, body: MESSAGE_OVERVIEW_JSON }]);
+      const repository = new DefaultMobileNotificationRepository(
+        new ZhihuMobileHttpClient(new MobileSessionProvider(), factory));
+      const page = await repository.getMessagePage();
 
       expect(factory.requests.length).assertEqual(1);
       const request = factory.requests[0];
-      expect(request.url).assertEqual('https://www.zhihu.com/api/v4/notifications/v2/default?limit=20');
+      expect(request.url).assertEqual('https://api.zhihu.com/notifications/v3/message/v3?limit=20');
       expect(request.method).assertEqual(ZhihuHttpMethod.GET);
-      expect(request.maxRedirects).assertEqual(0);
-      expect(request.headers.Cookie?.includes('notification-session')).assertTrue();
-      expect(JSON.stringify(request.headers).includes('"x-zse-96":"2.0_')).assertTrue();
+      expect(request.headers.Cookie?.includes('mobile-session')).assertTrue();
+      expect(JSON.stringify(request.headers).includes('com.zhihu.android/')).assertTrue();
+      expect(JSON.stringify(request.headers).includes('"x-api-version":"3.1.8"')).assertTrue();
+      expect(JSON.stringify(request.headers).includes('x-zse-96')).assertFalse();
 
-      expect(page.items.length).assertEqual(2);
-      expect(page.items[0].id).assertEqual('n1');
-      expect(page.items[0].category).assertEqual(NotificationCategory.DEFAULT);
+      expect(page.overview.head.length).assertEqual(2);
+      expect(page.overview.columnHead.length).assertEqual(1);
+      expect(page.items.length).assertEqual(3);
+      expect(page.items[0].uniqueId).assertEqual('c1');
       expect(page.items[0].isRead).assertFalse();
-      expect(page.items[0].mergeCount).assertEqual(3);
-      expect(page.items[0].verb).assertEqual(' 邀请你回答问题');
-      expect(page.items[0].target?.kind).assertEqual('question');
-      expect(page.items[0].target?.id).assertEqual('123');
-      expect(page.cursor.next).assertEqual(
-        'https://www.zhihu.com/api/v4/notifications/v2/default?limit=20&offset=20'
-      );
+      expect(page.items[0].unreadCount).assertEqual(2);
+      expect(page.items[0].content?.title).assertEqual('张三');
       expect(page.cursor.isEnd).assertFalse();
     });
 
-    it('deduplicatesIdenticalNotificationsAcrossPages', 0, async () => {
-      const factory = new NotificationTransportFactory([
-        { statusCode: 200, body: NOTIFICATION_PAGE_JSON },
-        { statusCode: 200, body: NOTIFICATION_PAGE_SECOND_JSON }
-      ]);
-      const repository = new DefaultNotificationRepository(
-        new ZhihuHttpClient(new NotificationSessionProvider(), factory)
-      );
-      const first = await repository.getNotificationsPage(NotificationCategory.DEFAULT);
-      expect(first.items.length).assertEqual(2);
-      const second = await repository.getNotificationsPage(
-        NotificationCategory.DEFAULT,
-        'https://www.zhihu.com/api/v4/notifications/v2/default?limit=20&offset=20'
-      );
-      expect(second.items.length).assertEqual(1);
-      expect(second.items[0].id).assertEqual('n3');
-    });
+    it('loadsTimelinePageAndSkipsBrokenItems', 0, async () => {
+      const factory = new RecordingTransportFactory([{ statusCode: 200, body: TIMELINE_PAGE_JSON }]);
+      const repository = new DefaultMobileNotificationRepository(
+        new ZhihuMobileHttpClient(new MobileSessionProvider(), factory));
+      const page = await repository.getTimelinePage('like');
 
-    it('truncatesCursorLoopIntoTerminalState', 0, async () => {
-      const factory = new NotificationTransportFactory([
-        { statusCode: 200, body: NOTIFICATION_PAGE_LOOP_JSON },
-        { statusCode: 200, body: NOTIFICATION_PAGE_LOOP_JSON }
-      ]);
-      const repository = new DefaultNotificationRepository(
-        new ZhihuHttpClient(new NotificationSessionProvider(), factory)
-      );
-      const first = await repository.getNotificationsPage(NotificationCategory.DEFAULT);
-      expect(first.cursor.isEnd).assertFalse();
-      const second = await repository.getNotificationsPage(
-        NotificationCategory.DEFAULT,
-        'https://www.zhihu.com/api/v4/notifications/v2/default?limit=20&offset=20'
-      );
-      expect(second.cursor.isEnd).assertTrue();
-    });
-
-    it('rejectsRepeatedCursorWithFailure', 0, async () => {
-      const factory = new NotificationTransportFactory([
-        { statusCode: 200, body: NOTIFICATION_PAGE_LOOP_JSON },
-        { statusCode: 200, body: NOTIFICATION_PAGE_LOOP_JSON }
-      ]);
-      const repository = new DefaultNotificationRepository(
-        new ZhihuHttpClient(new NotificationSessionProvider(), factory)
-      );
-      await repository.getNotificationsPage(NotificationCategory.DEFAULT);
-      const cursor = 'https://www.zhihu.com/api/v4/notifications/v2/default?limit=20&offset=20';
-      await repository.getNotificationsPage(NotificationCategory.DEFAULT, cursor);
-      let failure: NotificationRepositoryFailure | undefined = undefined;
-      try {
-        await repository.getNotificationsPage(NotificationCategory.DEFAULT, cursor);
-      } catch (error) {
-        if (error instanceof NotificationRepositoryFailure) {
-          failure = error;
-        }
-      }
-      expect(failure?.kind).assertEqual(NotificationRepositoryFailureKind.REPEATED_CURSOR);
-      expect(factory.requests.length).assertEqual(2);
-    });
-
-    it('decodesUnreadCountsFromSnakeCasePayload', 0, () => {
-      const counts = decodeUnreadCounts(UNREAD_COUNTS_JSON);
-      expect(counts.defaultCount).assertEqual(1);
-      expect(counts.followCount).assertEqual(2);
-      expect(counts.voteThankCount).assertEqual(3);
-    });
-
-    it('decodesNotificationPageAndSkipsInvalidItems', 0, () => {
-      const page = decodeNotificationPage(NOTIFICATION_PAGE_MIXED_JSON, NotificationCategory.FOLLOW);
       expect(page.items.length).assertEqual(2);
-      expect(page.items[0].id).assertEqual('ok1');
-      expect(page.items[0].category).assertEqual(NotificationCategory.FOLLOW);
-      expect(page.items[1].verb).assertEqual('喜欢了你的回答');
+      expect(page.items[0].uniqueId).assertEqual('t1');
+      expect(page.items[0].head?.author?.name).assertEqual('李四');
+      expect(page.items[1].target?.title).assertEqual('如何学习 ArkTS');
+      expect(page.cursor.next).assertEqual(undefined);
+      expect(page.cursor.isEnd).assertTrue();
     });
 
-    it('marksAllCategoriesReadWithThreeSignedPosts', 0, async () => {
-      const factory = new NotificationTransportFactory([
-        { statusCode: 200, body: '{}' },
-        { statusCode: 200, body: '{}' },
-        { statusCode: 200, body: '{}' }
-      ]);
-      const repository = new DefaultNotificationRepository(
-        new ZhihuHttpClient(new NotificationSessionProvider(), factory)
-      );
-      await repository.markAllAsRead();
+    it('marksEntryAsReadWithMobilePost', 0, async () => {
+      const factory = new RecordingTransportFactory([{ statusCode: 204, body: '' }]);
+      const repository = new DefaultMobileNotificationRepository(
+        new ZhihuMobileHttpClient(new MobileSessionProvider(), factory));
+      await repository.markEntryAsRead('comment');
 
-      expect(factory.requests.length).assertEqual(3);
-      const urls = factory.requests.map((request: PreparedZhihuHttpRequest): string => request.url);
-      expect(urls).assertDeepEquals([
-        'https://www.zhihu.com/api/v4/notifications/v2/default/actions/readall',
-        'https://www.zhihu.com/api/v4/notifications/v2/follow/actions/readall',
-        'https://www.zhihu.com/api/v4/notifications/v2/vote_thank/actions/readall'
-      ]);
-      factory.requests.forEach((request: PreparedZhihuHttpRequest): void => {
-        expect(request.method).assertEqual(ZhihuHttpMethod.POST);
-        expect(JSON.stringify(request.headers).includes('"x-zse-96":"2.0_')).assertTrue();
-        expect(request.headers.Cookie?.includes('notification-session')).assertTrue();
-      });
+      expect(factory.requests.length).assertEqual(1);
+      expect(factory.requests[0].url).assertEqual(
+        'https://api.zhihu.com/notifications/v3/timeline/entry/comment/actions/readall');
+      expect(factory.requests[0].method).assertEqual(ZhihuHttpMethod.POST);
     });
 
-    it('cancelsPendingRequestAndDestroysTransport', 0, async () => {
-      const factory = new PendingNotificationTransportFactory();
-      const repository = new DefaultNotificationRepository(
-        new ZhihuHttpClient(new NotificationSessionProvider(), factory)
-      );
-      const pending = repository.getNotificationsPage(NotificationCategory.DEFAULT);
+    it('sendsPrivateMessageWithEncryptedFormAndProtocolHeader', 0, async () => {
+      const receiptBody =
+        '{"id":"sent-1","type":"message","content_type":0,"content":"测试 & 消息",' +
+        '"created_time":1785743000,"sender":{"id":"me","name":"我"},' +
+        '"receiver":{"id":"peer-id","name":"关注者"}}';
+      const factory = new RecordingTransportFactory([{ statusCode: 200, body: receiptBody }]);
+      const repository = new DefaultMobileNotificationRepository(
+        new ZhihuMobileHttpClient(new MobileSessionProvider(), factory));
+      const receipt = await repository.sendPrivateMessage('peer-id', '测试 & 消息');
+
+      expect(factory.requests.length).assertEqual(1);
+      const request = factory.requests[0];
+      expect(request.url).assertEqual('https://api.zhihu.com/messages');
+      expect(request.method).assertEqual(ZhihuHttpMethod.POST);
+      expect(JSON.stringify(request.headers).includes('"x-zse-93":"101_1_1.0"')).assertTrue();
+      expect(JSON.stringify(request.headers).includes('"Content-Type":"application/x-www-form-urlencoded"')).assertTrue();      const expectedForm = 'receiver_id=peer-id' +
+        `&content=${encodeURIComponent('测试 & 消息')}` +
+        '&content_type=0&source_type=message_list';
+      expect(request.body).assertEqual(encryptZhihuMessageBody(expectedForm));
+      expect(receipt.id).assertEqual('sent-1');
+      expect(receipt.sender?.name).assertEqual('我');
+    });
+
+    it('loadsPrivateMessagePageAndPeer', 0, async () => {
+      const factory = new RecordingTransportFactory([
+        { statusCode: 200, body: PRIVATE_MESSAGE_PAGE_JSON },
+        { statusCode: 200, body: '{"id":"peer-id","name":"关注者","url_token":"peer-token",' +
+          '"avatar_url":"https://picx.zhimg.com/a.jpg"}' }
+      ]);
+      const repository = new DefaultMobileNotificationRepository(
+        new ZhihuMobileHttpClient(new MobileSessionProvider(), factory));
+      const page = await repository.getPrivateMessagePage('peer-id');
+      const peer = await repository.getPrivateMessagePeer('peer-id');
+
+      expect(factory.requests[0].url).assertEqual(
+        'https://api.zhihu.com/messages?limit=20&sender_id=peer-id');
+      expect(factory.requests[1].url).assertEqual('https://api.zhihu.com/messages/user/peer-id');
+      expect(page.items.length).assertEqual(2);
+      expect(page.items[0].id).assertEqual('m2');
+      expect(page.items[1].id).assertEqual('m1');
+      expect(peer.name).assertEqual('关注者');
+    });
+
+    it('cancelsPendingMobileRequestAndDestroysTransport', 0, async () => {
+      const factory = new PendingMobileTransportFactory();
+      const repository = new DefaultMobileNotificationRepository(
+        new ZhihuMobileHttpClient(new MobileSessionProvider(), factory));
+      const pending = repository.getMessagePage();
       repository.cancel();
-      let cancelled: boolean = false;
+      let cancelled = false;
       try {
         await pending;
       } catch (_error) {
@@ -278,67 +259,95 @@ export default function notificationRepositoryTest(): void {
       expect(cancelled).assertTrue();
       expect(factory.transport.destroyed).assertTrue();
     });
+
+    it('decodesDisplayHelpersForTimelineItems', 0, () => {
+      const page = decodeMobileTimelinePage(TIMELINE_PAGE_JSON);
+      const first = page.items[0];
+      expect(mobileNotificationDisplayTitle(first)).assertEqual('李四');
+      const item = decodeMobileMessagePage(MESSAGE_OVERVIEW_JSON).items[0];
+      expect(mobileNotificationDisplayTitle(item)).assertEqual('张三');
+      const preferences = defaultNotificationPreferences();
+      expect(shouldShowMobileNotification(item, preferences)).assertTrue();
+      expect(MobileNotificationCategory.COMMENT).assertEqual('comment');
+      expect(mobileNotificationCategoryInfo(MobileNotificationCategory.FAVORITE).detailTitle)
+        .assertEqual('收藏了我');
+    });
+
+    it('rejectsInvalidEntryAndPeerIdentifiers', 0, () => {
+      let failure: MobileNotificationRepositoryFailure | undefined = undefined;
+      try {
+        buildMobileTimelineListUrl('BAD ENTRY');
+      } catch (error) {
+        if (error instanceof MobileNotificationRepositoryFailure) {
+          failure = error;
+        }
+      }
+      expect(failure?.kind).assertEqual(MobileNotificationRepositoryFailureKind.INVALID_ENTRY);
+      failure = undefined;
+      try {
+        buildPrivateMessageListUrl('not valid');
+      } catch (error) {
+        if (error instanceof MobileNotificationRepositoryFailure) {
+          failure = error;
+        }
+      }
+      expect(failure?.kind).assertEqual(MobileNotificationRepositoryFailureKind.INVALID_PEER);
+    });
+
+    it('decodesPrivateMessagePeerAndReceiptStrictly', 0, () => {
+      const peer = decodePrivateMessagePeer(
+        '{"id":"p1","name":"甲","url_token":"token-a","avatar_url":"https://picx.zhimg.com/x.jpg"}');
+      expect(peer.name).assertEqual('甲');
+      const receipt = decodePrivateMessageReceipt('{"id":"r1","content":"hi","created_time":1}');
+      expect(receipt.content).assertEqual('hi');
+      let failed = false;
+      try {
+        decodePrivateMessagePage('not-json');
+      } catch (_error) {
+        failed = true;
+      }
+      expect(failed).assertTrue();
+    });
   });
 }
 
-const NOTIFICATION_PAGE_JSON =
-  '{"data":[' +
-  '{"id":"n1","type":"notification","is_read":false,"create_time":1760000000,"merge_count":3,' +
-  '"content":{"verb":" 邀请你回答问题","actors":[{"name":"邀请者","type":"member",' +
-  '"link":"https://www.zhihu.com/people/inviter","url_token":"inviter"}],' +
-  '"target":{"text":"如何选择开发工具？","link":"https://www.zhihu.com/question/123"},' +
-  '"extend":{"text":"","icon":"https://pic.example/icon.png"}},' +
-  '"target":{"type":"question","url":"https://www.zhihu.com/question/123","title":"如何选择开发工具？",' +
-  '"id":"123","created":1760000000}},' +
-  '{"id":"n2","type":"notification","is_read":true,"create_time":1750000000,"merge_count":1,' +
-  '"content":{"verb":"赞同了你的文章","actors":{"name":"读者","type":"member",' +
-  '"link":"https://www.zhihu.com/people/reader","url_token":"reader"},' +
-  '"target":{"text":"文章标题","link":"https://zhuanlan.zhihu.com/p/456"},' +
-  '"extend":{"text":"","icon":"https://pic.example/icon.png"}},' +
-  '"target":{"type":"article","url":"https://zhuanlan.zhihu.com/p/456","title":"文章标题",' +
-  '"id":"456","excerpt":"文章摘要"}}' +
-  '],"paging":{"is_end":false,' +
-  '"next":"https://www.zhihu.com/api/v4/notifications/v2/default?limit=20&offset=20","previous":""}}';
+const MESSAGE_OVERVIEW_JSON =
+  '{"head":[' +
+  '{"detail_title":"评论转发@","unread_count":1},' +
+  '{"detail_title":"赞同喜欢","unread_count":3}],' +
+  '"column_head":[{"id":"col1","title":"邀请回答","text_prefix":"text_prefix","text":" 有人邀请你回答",' +
+  '"target_link":"https://www.zhihu.com/notifications/v3/timeline/entry/invite?title=邀请回答",' +
+  '"unread_count":2,"created":1760000000}],' +
+  '"data":[' +
+  '{"id":"c1","unique_id":"c1","type":"message","card_type":"chat","detail_title":"消息",' +
+  '"is_read":false,"unread_count":2,"created":1760000000,"created_str":"2025-10-09",' +
+  '"head":{"avatar_url":"https://picx.zhimg.com/a.jpg","target_link":"https://www.zhihu.com/inbox/c1?title=张三"},' +
+  '"content":{"title":"张三","text":"你好呀","target_link":"https://www.zhihu.com/inbox/c1?title=张三"}},' +
+  '{"id":"c2","unique_id":"c2","type":"empty","empty_info":{"text":"没有更多了","number":0}},' +
+  '{"id":"c3","unique_id":"c3","type":"message","card_type":"chat","detail_title":"消息",' +
+  '"is_read":true,"unread_count":0,"created":1750000000,' +
+  '"content":{"title":"李四","text":"早点休息"}}],' +
+  '"paging":{"is_end":false,"next":"https://api.zhihu.com/notifications/v3/message/v3?limit=20&after=abc"}}';
 
-const NOTIFICATION_PAGE_SECOND_JSON =
+const TIMELINE_PAGE_JSON =
   '{"data":[' +
-  '{"id":"n1","type":"notification","is_read":true,"create_time":1760000000,"merge_count":3,' +
-  '"content":{"verb":" 邀请你回答问题","actors":[],"target":{"text":"x","link":"https://www.zhihu.com/question/123"},' +
-  '"extend":{"text":""}},' +
-  '"target":{"type":"question","url":"https://www.zhihu.com/question/123","title":"如何选择开发工具？",' +
-  '"id":"123"}},' +
-  '{"id":"n3","type":"notification","is_read":false,"create_time":1740000000,"merge_count":1,' +
-  '"content":{"verb":"关注了你的回答","actors":[],"target":{"text":"y","link":"https://www.zhihu.com/answer/789"},' +
-  '"extend":{"text":""}},' +
-  '"target":{"type":"answer","url":"https://www.zhihu.com/answer/789","title":"回答标题",' +
-  '"id":"789"}}' +
-  '],"paging":{"is_end":true,"next":null,"previous":""}}';
+      '{"id":"t1","unique_id":"t1","type":"notification","detail_title":"赞同喜欢",' +
+      '"is_read":false,"unread_count":1,"created":1760000000,' +
+      '"head":{"author":{"id":"1001","name":"李四","url_token":"lisi","avatar_url":"https://pic1.zhimg.com/b.jpg"},' +
+      '"labels":[{"text":"答主"}]},' +
+      '"content":{"title":"李四","sub_title":"赞同了你的回答","text":"<a href=\\"https://www.zhihu.com/question/1/answer/2\\">查看</a>",' +
+      '"target_link":"https://www.zhihu.com/question/1/answer/2"}},' +
+      '{"id":"","unique_id":"","type":"notification","is_read":true},' +
+  '{"id":"t2","unique_id":"t2","type":"notification","detail_title":"赞同喜欢",' +
+  '"is_read":true,"created":1750000000,' +
+  '"target":{"id":"1","type":"question","title":"如何学习 ArkTS","url":"https://www.zhihu.com/question/1"},' +
+  '"target_source":{"text":"问题：如何学习 ArkTS","sub_text":"3 个回答"}}],' +
+  '"paging":{"is_end":true,"next":null}}';
 
-const NOTIFICATION_PAGE_LOOP_JSON =
+const PRIVATE_MESSAGE_PAGE_JSON =
   '{"data":[' +
-  '{"id":"loop1","type":"notification","is_read":false,"create_time":1760000000,"merge_count":1,' +
-  '"content":{"verb":"评论了你的回答","actors":[],"target":{"text":"x","link":"https://www.zhihu.com/answer/1"},' +
-  '"extend":{"text":""}},' +
-  '"target":{"type":"answer","url":"https://www.zhihu.com/answer/1","title":"回答",' +
-  '"id":"1"}}' +
-  '],"paging":{"is_end":false,' +
-  '"next":"https://www.zhihu.com/api/v4/notifications/v2/default?limit=20&offset=20","previous":""}}';
-
-const NOTIFICATION_PAGE_MIXED_JSON =
-  '{"data":[' +
-  '{"id":"ok1","type":"notification","is_read":true,"create_time":1760000000,"merge_count":1,' +
-  '"content":{"verb":"关注了你的提问","actors":[],"target":{"text":"x","link":"https://www.zhihu.com/question/1"},' +
-  '"extend":{"text":""}},' +
-  '"target":{"type":"question","url":"https://www.zhihu.com/question/1","title":"问题",' +
-  '"id":"1"}},' +
-  '{"id":"","type":"notification","is_read":false,"create_time":1760000000,"merge_count":1,' +
-  '"content":{"verb":"bad","actors":[],"target":{"text":"x","link":"x"},"extend":{"text":""}}},' +
-  '{"id":"ok2","type":"notification","is_read":false,"create_time":1750000000,"merge_count":2,' +
-  '"content":{"verb":"喜欢了你的回答","actors":[],"target":{"text":"y","link":"https://www.zhihu.com/answer/2"},' +
-  '"extend":{"text":""}},' +
-  '"target":{"type":"answer","url":"https://www.zhihu.com/answer/2","title":"回答",' +
-  '"id":"2"}}' +
-  '],"paging":{"is_end":true,"next":null,"previous":""}}';
-
-const UNREAD_COUNTS_JSON =
-  '{"default_notifications_count":1,"follow_notifications_count":2,"vote_thank_notifications_count":3}';
+  '{"id":"m2","type":"message","content_type":0,"content":"第二条","created_time":1760001000,' +
+  '"sender":{"id":"peer-id","name":"关注者","url_token":"peer-token","avatar_url":"https://picx.zhimg.com/p.jpg"}},' +
+  '{"id":"m1","type":"message","content_type":0,"content":"第一条","created_time":1760000000,' +
+  '"sender":{"id":"peer-id","name":"关注者"}}],' +
+  '"paging":{"is_end":true,"next":null}}';
