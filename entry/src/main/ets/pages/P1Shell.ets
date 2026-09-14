@@ -376,7 +376,7 @@ export struct P1Shell {
       HdsNavDestination() {
         this.technicalLabContent((destination: P1Destination): void => this.navigate(destination));
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '技术实验室' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '开发者选项' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.LOGIN) {
@@ -1380,7 +1380,7 @@ export struct P1Shell {
                 this.openSourceLicensesSheetShown = true;
               } });
             Divider().color($r('app.color.divider_color'))
-            AppNavigationRow({ title: '技术实验室', description: '仅用于本机诊断与验证', testId: 'p1_open_technical_lab', grouped: true,
+            AppNavigationRow({ title: '开发者选项', description: 'Cookie、网络与调试工具', testId: 'p1_open_developer_options', grouped: true,
               onRowClick: (): void => this.navigate({ name: P1DestinationName.TECHNICAL_LAB }) });
           }
           .width('100%')
@@ -1395,7 +1395,8 @@ export struct P1Shell {
         left: $r('app.float.p1_page_padding'),
         right: $r('app.float.p1_page_padding'),
         top: 94,
-        bottom: $r('app.float.p1_page_padding')
+        // HdsTabs 的悬浮底栏会覆盖滚动区末端；为最后一个设置项预留可点击空间。
+        bottom: 96
       })
       .id('p1_settings_scroll')
       .width('100%')
@@ -1688,8 +1689,8 @@ export struct P1Shell {
             this.openSourceLicensesSheetShown = true;
           } });
       }
-      if (this.settingsSearchMatches('技术实验室', '仅用于本机诊断与验证')) {
-        AppNavigationRow({ title: '技术实验室', description: '仅用于本机诊断与验证', testId: 'p1_open_technical_lab',
+      if (this.settingsSearchMatches('开发者选项', 'Cookie 网络 调试工具 技术实验室')) {
+        AppNavigationRow({ title: '开发者选项', description: 'Cookie、网络与调试工具', testId: 'p1_open_developer_options',
           onRowClick: (): void => this.navigate({ name: P1DestinationName.TECHNICAL_LAB }) });
       }
       if (!this.hasSettingsSearchResults()) {
@@ -2048,7 +2049,7 @@ export struct P1Shell {
       this.settingsSearchMatches('GitHub', '查看项目主页') ||
       this.settingsSearchMatches('项目协议', 'GNU AGPL v3.0') ||
       this.settingsSearchMatches('开源许可', '3 个本地 HAR 模块 GNU AGPL v3.0') ||
-      this.settingsSearchMatches('技术实验室', '仅用于本机诊断与验证');
+      this.settingsSearchMatches('开发者选项', 'Cookie 网络 调试工具 技术实验室');
   }
 
   private openExternalUrl(url: string, fallbackPrefix: string): void {

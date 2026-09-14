@@ -1,6 +1,5 @@
 import { ApplicationStateChangeCallback, common, Want } from '@kit.AbilityKit';
 import {
-  COOKIE_HEADER_MAX_LENGTH,
   getAppSessionOwner,
   SessionCookie,
   ZhihuQrLoginClient
@@ -41,7 +40,6 @@ export struct LoginPage {
   };
   onScanDesktopLogin: () => void = (): void => {
   };
-  @State private cookieInput: string = '';
   @State private viewState: LoginViewState = {
     phase: LoginPhase.GUEST,
     message: '当前为游客模式',
@@ -118,7 +116,6 @@ export struct LoginPage {
     this.controller?.deactivate();
     this.controller = undefined;
     this.abilityContext = undefined;
-    this.cookieInput = '';
     this.showWebLogin = false;
     this.riskCookies = [];
   }
@@ -247,38 +244,6 @@ export struct LoginPage {
             .borderRadius($r('app.float.p1_card_radius'))
             .backgroundColor($r('app.color.surface_background'))
           }
-
-          Column({ space: $r('app.float.p1_spacing_medium') }) {
-            Text('手动 Cookie 登录（高级）')
-              .fontSize($r('app.float.p1_heading_font_size'))
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.primary_text'))
-            Text('Cookie 仅用于本机身份验证并加密保存，提交后输入框会立即清空。')
-              .fontSize($r('app.float.p1_secondary_font_size'))
-              .fontColor($r('app.color.secondary_text'))
-            TextInput({ text: this.cookieInput, placeholder: '粘贴 z_c0=…; d_c0=…' })
-              .id('p2_login_cookie_input')
-              .type(InputType.Password)
-              .maxLength(COOKIE_HEADER_MAX_LENGTH)
-              .enabled(this.viewState.manualLoginEnabled)
-              .onChange((value: string): void => {
-                this.cookieInput = value;
-              })
-            Button('验证并登录')
-              .id('p2_login_cookie_submit')
-              .width('100%')
-              .enabled(this.viewState.manualLoginEnabled && this.cookieInput.trim().length > 0)
-              .onClick((): void => {
-                const submittedCookie = this.cookieInput;
-                this.cookieInput = '';
-                this.controller?.loginWithCookieHeader(submittedCookie);
-              })
-          }
-          .alignItems(HorizontalAlign.Start)
-          .width('100%')
-          .padding($r('app.float.p1_card_padding'))
-          .borderRadius($r('app.float.p1_card_radius'))
-          .backgroundColor($r('app.color.surface_background'))
 
           if (this.viewState.logoutEnabled) {
             Button('退出登录')

@@ -75,8 +75,9 @@ $hdc = "hdc"
 - 应用支持知乎链接直达：`aa start -a EntryAbility -b com.github.zhuoyi233.zhplus -U <zhihu url>`
   （经 `resolveZhihuLink` 路由），可跳过手动导航直接进入问题/回答/文章页。
 
-- 登录：重装/清数据后登录态丢失，首页出现 `p2_home_error_login` → 登录页手动 Cookie 输入
-  （`ZHIHU_COOKIE` 环境变量）→ `p2_login_cookie_submit` → 首页 `p2_home_error_retry`。
+- 登录：重装/清数据后登录态丢失，首页出现 `p2_home_error_login` → 设置页“开发者选项”手动 Cookie 输入
+  （`ZHIHU_COOKIE` 环境变量）→ `developer_cookie_submit` → 首页 `p2_home_error_retry`。普通登录页只保留
+  手机号、扫码、网页三种面向用户的登录方式。
 
 ## 提交规范
 
@@ -161,4 +162,3 @@ $hdc = "hdc"
 - 阶段文档在 `docs/p0`–`docs/p5`；清理/迁移分析在 `docs/cleanup/`。
 
 - 行为对齐安卓 Lite：登录三模式（手机号/扫码/网页）、信息流屏蔽、风控 ArkWeb 验证等。
-
