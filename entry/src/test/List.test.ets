@@ -74,6 +74,7 @@ import answerEditSeedStoreTest from './AnswerEditSeedStore.test';
 import appUpdateParserTest from './AppUpdateParser.test';
 import emojiRulesTest from './EmojiRules.test';
 import readerTypographyTest from './ReaderTypography.test';
+import readerScrollGeometryTest from './ReaderScrollGeometry.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -152,4 +153,5 @@ export default function testsuite(): void {
   appUpdateParserTest();
   emojiRulesTest();
   readerTypographyTest();
+  readerScrollGeometryTest();
 }

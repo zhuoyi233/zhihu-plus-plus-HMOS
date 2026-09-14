@@ -1,8 +1,18 @@
 /**
- * 正文右缘可拖动阅读进度条，行为对齐上游 `VerticalReadingProgressBar.kt`：
- * 拇指高度 = 视口² / 内容高（下限 24vp），拇指位移 = (视口 − 拇指高) × 进度，
- * 轨道区 12vp 宽内 2vp 轨道 + 4vp 拇指，滚动/拖动停止 1200ms 后淡出
- * （出现 120ms / 消失 260ms 动画）。
+ * 正文右缘可拖动阅读进度条，几何对齐上游 `VerticalReadingProgressBar.kt` +
+ * `ArticleScreen.kt` 的接入方式：
+ *
+ * - **轨道高度** = 进度条盒可用高 − 上下留白（上游 `BoxWithConstraints` 的 `maxHeight`，
+ *   因 `padding` 写在 `fillMaxHeight()` 之前）；**拇指高度** = 轨道高 × (轨道高 ÷
+ *   (轨道高 + 可滚动量))，下限 24vp；**拇指位移** = (轨道高 − 拇指高) × 进度。
+ *   三者共用同一个"轨道高度"，故 100% 时拇指底边正好落在轨道底边，不会越出轨道。
+ *   换算集中在 `ReaderScrollGeometry.ets`（纯函数，有单测）。
+ * - **留白**对齐上游调用点 `progressBarTopPadding = statusBars + 64.dp`、
+ *   `progressBarBottomPadding = systemBars + 96.dp`：本页正文顶边即顶栏底边
+ *   （顶栏高度已是 `statusBars + 64` 的等价量），故上留白取 0；
+ *   下留白取 96vp + 导航条避让区（`bottomRectHeight`）。
+ * - 轨道区 12vp 宽内 2vp 轨道 + 4vp 拇指，滚动/拖动停止 1200ms 后淡出
+ *   （出现 120ms / 消失 260ms 动画）。
  *
  * 与上游的差异：
  * - ArkUI 的 `Scroller` 没有读取最大滚动距离的 API（SDK 核查结论见
@@ -18,20 +28,27 @@
  * 拖动：整个 12vp 轨道区挂 `PanGesture`，累加位移换算进度后直接 `scrollTo` 回写正文滚动；
  * ArkUI 无 Compose 的 `startDragImmediately`，PanGesture 的 5vp 起手距离等价于"按下即算"。
  */
+import {
+  MIN_SCROLLABLE_VP,
+  readingProgress,
+  scrollbarThumbHeightVp,
+  scrollbarThumbOffsetVp,
+  scrollbarThumbTravelVp,
+  scrollbarTrackHeightVp
+} from '../ReaderScrollGeometry';
+
 const FADE_OUT_DELAY_MS = 1200;
 /** 出现/消失动画时长（对齐上游 tween 120ms / 260ms）。 */
 const APPEAR_DURATION_MS = 120;
 const DISAPPEAR_DURATION_MS = 260;
-/** 拇指高度下限（对齐上游 minThumbHeight = 24.dp）。 */
-const MIN_THUMB_HEIGHT_VP = 24;
 /** 轨道命中区宽度（上游 12.dp）、轨道条宽与拇指宽（上游 2.dp / 4.dp）。 */
 export const READING_PROGRESS_BAR_HIT_WIDTH_VP = 12;
-/** 轨道右侧留白（vp）：宿主按此宽度把进度条置于正文右缘。 */
+/** 轨道右侧留白（vp）：宿主按此宽度把进度条置于正文右缘（上游 `end = 2.dp`）。 */
 export const READING_PROGRESS_BAR_RIGHT_INSET_VP = 2;
+/** 底部留白基线（vp，对齐上游 `systemBars + 96.dp` 的常数项）。 */
+export const READING_PROGRESS_BAR_BOTTOM_INSET_VP = 96;
 const TRACK_BAR_WIDTH_VP = 2;
 const THUMB_WIDTH_VP = 4;
-/** 低于该可滚动量视为无滚动，避免亚像素抖动把进度条闪出来。 */
-const MIN_SCROLLABLE_VP = 1;
 
 function clampUnit(value: number): number {
   return Math.min(1, Math.max(0, value));
@@ -41,15 +58,21 @@ function clampUnit(value: number): number {
 export struct ReadingProgressBar {
   /** 与正文 List 共享的滚动控制器：拖动时直接回写滚动位置。 */
   scroller: Scroller = new Scroller();
-  /** 正文视口高度（vp）：宿主 List 的 onAreaChange 回填。 */
+  /** 正文视口高度（vp）：宿主 List 的 onAreaChange 回填，与进度条盒可用高一致。 */
   @Prop @Watch('onBarInputChanged') viewportHeightVp: number = 0;
   /** 正文内容总高（vp）：宿主估算值 + 触底校准值。 */
   @Prop @Watch('onBarInputChanged') contentHeightVp: number = 0;
   /** 正文当前滚动偏移（vp）：宿主 onDidScroll 每帧回填。 */
   @Prop @Watch('onBarInputChanged') scrollYVp: number = 0;
-  /** 轨道上下留白：避开页顶栏与底部悬浮操作栏，由宿主按页面布局给定。 */
-  @Prop topInsetVp: number = 4;
-  @Prop bottomInsetVp: number = 96;
+  /**
+   * 轨道上留白（vp）：上游为 `statusBars + 64.dp`，而本页正文顶边本身就在顶栏底边
+   * （顶栏高度已是该等价量），故取 0，使轨道上端与上游"紧贴顶栏下沿"一致。
+   */
+  @Prop topInsetVp: number = 0;
+  /** 轨道下留白（vp）：上游 `systemBars 底部避让 + 96.dp`，导航条部分另由避让区叠加。 */
+  @Prop bottomInsetVp: number = READING_PROGRESS_BAR_BOTTOM_INSET_VP;
+  /** 导航条/系统栏底部避让区（vp）：EntryAbility 经 AppStorage 广播，沉浸态归零。 */
+  @StorageProp('bottomRectHeight') private systemBarsBottomVp: number = 0;
   /**
    * 拖动开始/结束通知宿主：拖动期间正文改由 `scrollTo` 驱动，宿主需屏蔽贴边过滑
    * （回答页贴底时向上拖滚动条会被误判为"下一答"过滑）。
@@ -82,8 +105,11 @@ export struct ReadingProgressBar {
   build() {
     Stack({ alignContent: Alignment.Top }) {
       Column()
+        .id('p2_reading_progress_track')
         .width(TRACK_BAR_WIDTH_VP)
-        .height('100%')
+        // 显式长度而非 height('100%')：保证轨道长度就等于几何计算所用的轨道高，
+        // 不依赖容器百分比是否扣掉 padding。
+        .height(this.trackHeightVp())
         .borderRadius(TRACK_BAR_WIDTH_VP / 2)
         .backgroundColor($r('app.color.divider_color'))
         .opacity(0.45)
@@ -99,7 +125,7 @@ export struct ReadingProgressBar {
     .id('p2_reading_progress_bar')
     .width(READING_PROGRESS_BAR_HIT_WIDTH_VP)
     .height('100%')
-    .padding({ top: this.topInsetVp, bottom: this.bottomInsetVp })
+    .padding({ top: this.topInsetVp, bottom: this.bottomInset() })
     .opacity(this.alpha)
     // 命中开关与透明度分离：`alpha` 归零时节点仍在树上（不遮挡、不响应），
     // 避免"隐藏期间把手势吃掉"，也不会因节点反复进出渲染树而丢掉命中能力。
@@ -152,35 +178,42 @@ export struct ReadingProgressBar {
     this.scheduleFadeOut();
   }
 
+  /** 下留白 = 上游 `systemBars + 96.dp`：导航条避让区 + 96vp。 */
+  private bottomInset(): number {
+    return this.bottomInsetVp + Math.max(0, this.systemBarsBottomVp);
+  }
+
+  /**
+   * 轨道高度（vp）= 进度条盒可用高 − 上下留白。进度条盒与正文列表同高，故可用高即
+   * `viewportHeightVp`；这就是上游 `BoxWithConstraints` 的 `maxHeight`。
+   */
+  private trackHeightVp(): number {
+    return scrollbarTrackHeightVp(this.viewportHeightVp, this.topInsetVp, this.bottomInset());
+  }
+
   private maxScrollVp(): number {
     return Math.max(0, this.contentHeightVp - this.viewportHeightVp);
   }
 
   private scrollable(): boolean {
-    return this.viewportHeightVp > 0 && this.maxScrollVp() > MIN_SCROLLABLE_VP;
+    return this.trackHeightVp() > 0 && this.maxScrollVp() > MIN_SCROLLABLE_VP;
   }
 
-  /** 拇指高度 = 视口高 × (视口高 / 内容总高)，下限 24vp、上限一整个视口。 */
+  /**
+   * 拇指高度 = 轨道高 × (轨道高 ÷ (轨道高 + 可滚动量))，下限 24vp、上限轨道高。
+   * 注意用的是**轨道高**而非正文视口高（上游同）：否则拇指行程会比轨道长。
+   */
   private thumbHeightVp(): number {
-    const viewport = this.viewportHeightVp;
-    if (viewport <= 0) {
-      return 0;
-    }
-    const content = Math.max(viewport, this.contentHeightVp);
-    return Math.min(viewport, Math.max(MIN_THUMB_HEIGHT_VP, viewport * (viewport / content)));
+    return scrollbarThumbHeightVp(this.trackHeightVp(), this.maxScrollVp());
   }
 
-  /** 拇指可移动行程：视口高 − 拇指高（上游 calculateScrollbarThumbOffsetPx 的 trackRange）。 */
+  /** 拇指可移动行程：轨道高 − 拇指高（上游 `calculateScrollbarThumbOffsetPx` 的 trackRange）。 */
   private thumbTravelVp(): number {
-    return Math.max(0, this.viewportHeightVp - this.thumbHeightVp());
+    return scrollbarThumbTravelVp(this.trackHeightVp(), this.thumbHeightVp());
   }
 
   private scrollProgress(): number {
-    const max = this.maxScrollVp();
-    if (max <= 0) {
-      return 0;
-    }
-    return clampUnit(this.scrollYVp / max);
+    return readingProgress(this.scrollYVp, this.maxScrollVp());
   }
 
   private displayProgress(): number {
@@ -188,7 +221,7 @@ export struct ReadingProgressBar {
   }
 
   private thumbOffsetVp(): number {
-    return this.thumbTravelVp() * this.displayProgress();
+    return scrollbarThumbOffsetVp(this.displayProgress(), this.trackHeightVp(), this.thumbHeightVp());
   }
 
   private showBar(): void {

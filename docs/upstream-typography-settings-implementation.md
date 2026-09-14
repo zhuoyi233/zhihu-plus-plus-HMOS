@@ -1,10 +1,10 @@
 # 排版自定义(字号/行高/段间距/可拖动滚动条)迁移实现文档
 
-> 状态:**已实现**(编译 + 590 用例全过 + API 23 模拟器实测,见 §8)。
+> 状态:**已实现**(编译 + 597 用例全过 + API 23 模拟器实测,见 §8)。
 > 上游参考:`refs/remotes/upstream/master`
 > (可用 `git worktree add --detach .worktrees/_ref refs/remotes/upstream/master` 挂出,下文路径均相对该根)。
 >
-> 落地时对设计稿的四处修正(细节见对应小节):
+> 落地时对设计稿的五处修正(细节见对应小节):
 > 1. 字号档位数是 **23 档**而非 24(`50..120 step 5` 共 15 + `130..200 step 10` 共 8),
 >    滑块用 ArkUI 的 `step` 而非 Compose 的 `steps`(§2.1、§5.3);
 > 2. 设计稿的"内容总高 = max(已见滚动量 + 视口)"会使进度**恒为 100%**(滚动量本身就是最大值),
@@ -13,7 +13,11 @@
 >    百分比→像素映射(可单测,供宿主与行内公式子组件共用)(§5.3、§7);
 > 4. 滚动条的"整页覆盖层 + `hitTestBehavior(None)`"与"alpha=0 时 `if`/`Visibility.None`
 >    不渲染"两条在真机上分别会**吃掉正文滚动**与**永久丢命中**,改为"12vp 右对齐子节点
->    + 节点常驻 + `hitTestBehavior` 开关",实测拖动链路可用(§5.4、§6 决策 6)。
+>    + 节点常驻 + `hitTestBehavior` 开关",实测拖动链路可用(§5.4、§6 决策 6);
+> 5. 上游 `viewportHeightPx` 取的是 `BoxWithConstraints` 的 `maxHeight`,即**减去上下留白后的
+>    盒子高(轨道高)**,不是正文列表视口高;首次移植误用了列表视口高,导致拇指高度与拇指行程
+>    用了两个口径,行程比轨道长出 `上留白 + 下留白`,滑到底时拇指冲出轨道贴到物理屏底。
+>    现按上游口径修正并抽出 `ReaderScrollGeometry.ets` 加单测固定(§2.3、§5.4、§6 决策 7)。
 
 ## 1. 目标
 
@@ -65,13 +69,27 @@ Android SharedPreferences(文件 `com.github.zly2006.zhihu_preferences`):
 (211 行,纯 Compose 自包含),接入于 `ArticleScreen.kt` L1169-1179(右缘悬浮,
 top = 状态栏+64dp、bottom = 导航条+96dp、end=2dp)。核心逻辑:
 
-- **拇指高度** = `视口高 × (视口高 / 内容总高)`,下限 24dp:
+- **上下留白来自调用点**,组件本身只 `fillMaxHeight()`:
   ```kotlin
-  contentHeight = viewportHeight + maxScroll
+  val progressBarTopPadding = WindowInsets.statusBars.calculateTopPadding() + 64.dp
+  val progressBarBottomPadding = WindowInsets.systemBars.calculateBottomPadding() + 96.dp
+  VerticalReadingProgressBar(modifier = Modifier.align(Alignment.CenterEnd)
+      .padding(top = progressBarTopPadding, bottom = progressBarBottomPadding, end = 2.dp))
+  ```
+  即**轨道上端紧贴顶栏下沿(状态栏 + 64dp,正是 M3 TopAppBar 的高度),下端比屏幕底边高
+  导航条 + 96dp**,并不延伸到最底部。
+- **`viewportHeightPx` 是减掉留白后的盒子高(轨道高),不是正文列表视口高**:
+  组件内取的是 `BoxWithConstraints` 的 `maxHeight`,而 `padding` 在
+  `fillMaxHeight()` 之前,故 `maxHeight = 可用高 − 上留白 − 下留白`。首次移植按
+  "正文视口高"理解,导致拇指高度与拇指行程口径不一致(见 §5.4 第 9 条)。
+- **拇指高度** = `轨道高 × (轨道高 / (轨道高 + 可滚动量))`,下限 24dp:
+  ```kotlin
+  contentHeight = viewportHeight + maxScroll   // viewportHeight 即轨道高
   thumbHeight = viewportHeight * (viewportHeight / contentHeight)
       .coerceIn(minThumbHeightPx, viewportHeightPx)
   ```
-- **拇指偏移** = `(视口高 − 拇指高) × progress`,`progress = scrollY / maxScroll`。
+- **拇指偏移** = `(轨道高 − 拇指高) × progress`,`progress = scrollY / maxScroll`;
+  100% 时拇指底边**正好落在轨道底边**,不会越出轨道。
 - **拖动回写滚动**:`draggable` 累加 delta → 换算新 offset →
   `scope.launch { scrollState.scrollTo((newProgress * maxScroll).toInt()) }`,
   `startDragImmediately = true` 保证按下即开始拖动。
@@ -251,8 +269,11 @@ export struct ReadingProgressBar {
 
 - build 的 Stack(`alignContent: Alignment.TopEnd`)末尾加 `ReadingProgressBar({...})`,
   `.width(12)` + `.margin({ right: 2 })` 实现右缘悬浮(正文 List 是 100%×100%,不受
-  alignContent 影响);轨道上下留白取固定 `topInsetVp = 4` / `bottomInsetVp = 96`
-  (避开底部悬浮操作栏,底栏实际占位与 `contentEndOffset(100)` 同量级)。
+  alignContent 影响)。
+- **上下留白对齐上游调用点**:上留白 `topInsetVp = 0`(本页正文顶边与 HDS 顶栏下沿重合,
+  即上游 `statusBars + 64.dp` 的等价锚点,故轨道上端同样紧贴顶栏下沿);
+  下留白 = `96vp + bottomRectHeight`(`bottomRectHeight` 是 EntryAbility 广播的导航条
+  避让区,对应上游 `systemBars` 底,沉浸态归零)。
 - **不用整页覆盖层**(设计稿原写的 `Row().width('100%')` + `hitTestBehavior(None)`):
   实测整页层即使标 `None` / `Transparent` 也会进入命中链,中央拖动正文列表滚不动;
   改成"宽 12vp 的右对齐子节点"后,Stack 内重叠区域默认只命中最上层节点,
@@ -280,15 +301,17 @@ export struct ReadingProgressBar {
 (`documentItems()`)由页面侧 @Builder 生成,测不到单项高度,该页估算偏小、拇指偏快,
 需触底一次校准;回答/文章页(本功能的主要落点)滚动若干屏后估算即接近真实。
 
-组件内部(逐条对应上游 VerticalReadingProgressBar):
+组件内部(逐条对应上游 VerticalReadingProgressBar;几何换算集中在
+`entry/src/main/ets/pages/ReaderScrollGeometry.ets`,有单测):
 
-1. `maxScrollVp = contentHeightVp − viewportHeightVp`;`<= 1`(无滚动)时不渲染。
-2. `thumbHeight = viewport² / contentHeight`,`Math.max(24, …)` 再 clamp ≤ 视口。
+1. `轨道高 trackH = viewportHeightVp − topInset − bottomInset`(上游 `maxHeight`);
+   `maxScrollVp = contentHeightVp − viewportHeightVp`;`maxScrollVp <= 1`(无滚动)时不渲染。
+2. `thumbHeight = trackH × (trackH / (trackH + maxScrollVp))`,`Math.max(24, …)` 再 clamp ≤ trackH。
 3. `progress = scrollYVp / maxScrollVp`(宿主每帧从 `scroller.currentOffset()` 读);
-   `thumbY = (viewport − thumbHeight) × progress`。
+   `thumbY = (trackH − thumbHeight) × progress`,故 100% 时拇指底边正好落在轨道底边。
 4. **拖动**:整个 12vp 宽轨道区挂 `PanGesture`:
    `onActionStart` 记起点 progress 并置 `dragging = true`;
-   `onActionUpdate` 里 `deltaY / (viewport − thumbHeight)` 累加 progress(clamp 0..1)→
+   `onActionUpdate` 里 `deltaY / (trackH − thumbHeight)` 累加 progress(clamp 0..1)→
    写入本地 `dragProgress`(拖动期间渲染以它为准,不依赖宿主的 `scrollYVp` 回推时机)→
    `this.scroller.scrollTo({ xOffset: 0, yOffset: progress × maxScrollVp, animation: false })`;
    `onActionEnd`/`onActionCancel` 置 `dragging = false` 并启动淡出计时。
@@ -314,6 +337,16 @@ export struct ReadingProgressBar {
    故由 `onSeekStateChange` 通知宿主在拖动期间清掉贴边状态(见上)。
 8. **拖动可用的前提是进度条当时已可见**(与上游一致):隐藏态下右缘这 12vp 不参与命中,
    触摸直接落到正文列表;要先滚动让进度条浮出,再按住轨道区拖动。
+9. **拇指高度与拇指行程必须共用"轨道高"这一个口径(首版踩坑)**:
+   上游 `viewportHeightPx` 是 `BoxWithConstraints` 的 `maxHeight`(padding 之后),即轨道高;
+   首版移植把它当成正文列表视口高,于是拇指高度按列表视口算、行程却按列表视口减拇指高算,
+   而轨道只有 `列表视口 − 上留白 − 下留白`,行程比轨道长出整整 `上留白 + 下留白`(100vp 量级)。
+   实测症状:滑到正文底部时拇指底边贴着**物理屏底**(模拟器 `[1221,2445][1235,2760]`,
+   `2760` 即屏底),而轨道底边本应在 `2424`;中途拇指也会提前到达轨道末端。
+   修正:轨道长度改为**显式高度**(不再依赖 `height('100%')` 是否扣 padding),
+   拇指高度/行程/位移全部由 `scrollbarTrackHeightVp` 派生的轨道高计算,
+   并加 `ReaderScrollGeometry.test.ets` 用"任意进度下 `offset + thumb ≤ trackH`"
+   与"100% 时拇指底边 == 轨道底边"两条断言锁住回归。
 
 ### 5.5 范围外(明确不做 / 二期候选)
 
@@ -344,6 +377,17 @@ export struct ReadingProgressBar {
    - 节点不能以 `if` / `Visibility.None` 摘出渲染树:摘除后再显示仍收不到右缘触摸,
      拖动彻底失效(实例与 `@Prop @Watch` 都正常,只有命中丢了);改为节点常驻 +
      `hitTestBehavior` 开关,隐藏态 `HitTestMode.None` 把右缘手势完整交回正文。
+7. **进度条长度/拇指行程一律以"轨道高"为唯一口径,并把几何抽成带单测的纯函数**
+   (收到"滑动条延伸到最底部、与上游不一致"的反馈后修正,细节见 §5.4 第 9 条):
+   - 上游 `viewportHeightPx` = `BoxWithConstraints.maxHeight` = 盒子可用高 − 上下留白 = 轨道高。
+     拇指高度取 `trackH² / (trackH + maxScroll)`,行程取 `trackH − thumbH`,两者同源;
+     首版把拇指高度按列表视口算、行程按列表视口减拇指高算,行程比轨道多出 `上留白 + 下留白`,
+     滑到底拇指贴到物理屏底。
+   - 轨道长度改为**显式高度**(`height(this.trackHeightVp())`),不再依赖 `height('100%')`
+     是否扣掉容器 padding,长度与几何计算严格同值。
+   - 换算迁到 `entry/src/main/ets/pages/ReaderScrollGeometry.ets`(纯函数)并加
+     `ReaderScrollGeometry.test.ets`:断言"任意进度下 `offset + thumb ≤ trackH`"与
+     "100% 时拇指底边 == 轨道底边",以及"误用列表视口会偏大",用单测锁死回归。
 
 ## 7. 改动文件清单
 
@@ -352,10 +396,12 @@ export struct ReadingProgressBar {
 | `data/src/main/ets/preferences/AppPreferencesStore.ets` | 3 个 key + 默认值/边界常量 + levels/decode/normalize 纯函数 + `loadReaderTypography`/`saveReaderTypography` |
 | `data/Index.ets` | **无需改动**(已是 `export *`,新导出自动生效) |
 | `entry/src/main/ets/pages/ReaderTypography.ets` | **新增**百分比→像素映射纯函数(宿主与行内公式子组件共用,可单测) |
+| `entry/src/main/ets/pages/ReaderScrollGeometry.ets` | **新增**进度条几何纯函数(轨道高/拇指高/行程/位移/进度,口径对齐上游,可单测) |
 | `entry/src/main/ets/pages/NativeContentDocument.ets` | `@StorageProp` 三值 + `@Watch`、字号/行高/段间距动态化、块高实测与内容总高估算、挂 ReadingProgressBar |
-| `entry/src/main/ets/pages/components/ReadingProgressBar.ets` | **新增**可拖动滚动条组件 |
+| `entry/src/main/ets/pages/components/ReadingProgressBar.ets` | **新增**可拖动滚动条组件(几何走 ReaderScrollGeometry,轨道显式长度) |
 | `entry/src/main/ets/pages/P1Shell.ets` | 设置页"阅读"卡片(3 个 Slider)+ `restoreReaderTypography`/`applyReaderTypography`/`broadcastReaderTypography` |
 | `entry/src/test/ReaderTypography.test.ets` | **新增**9 个用例:档位表、损坏值回退、档位吸附与等距取小、clamp、normalize、默认档映射、缩放 |
+| `entry/src/test/ReaderScrollGeometry.test.ets` | **新增**7 个用例:留白扣减、拇指高口径、下限与收口、非法入参、任意进度不越出轨道、实机数值回归、进度 clamp |
 | `entry/src/test/List.test.ets` | 注册新用例文件 |
 
 ## 8. 验证计划
@@ -393,3 +439,19 @@ export struct ReadingProgressBar {
   - 按住右缘轨道区慢拖(`drag 1240 1000 → 1240 2200`,velocity 300):`onTouch` 收到
     Down/Move/Up 序列,拇指被拖到 `[1221,957]`,正文同步跳到文章深处(`scrollTo` 回写生效);
   - 隐藏态下在右缘起点拖动,手势完整落到正文列表(正文正常滚动,未出现死区)。
+
+**修正后复测(长文文章页,同一台 API 23 模拟器)**:
+
+- 单测 `597/597` 全过(新增 7 个几何用例),`assembleHap` 通过并重装;
+- 轨道长度(新增 `p2_reading_progress_track` 节点可直接量):`[1225,329][1232,2326]`,
+  即 570.6vp = 盒子高 694.6vp − 下留白 124vp(96vp + 导航条避让区 28vp);
+  轨道底边 2326px 距物理屏底 2760px 有 **434px = 124vp**,不再延伸到最底部;
+- 0% 态:拇指 `[1221,329][1235,516]`,上端与轨道上端齐平(`329`);
+- **100% 态(连续快滑到底):拇指 `[1221,2089][1235,2325]`,底边 2325 与轨道底边 2326
+  重合**——即修复前"拇指贴到物理屏底 2760"的问题已消失;
+  修复前同一位置实测为 `[1221,2445][1235,2760]`;
+- 拖动定位(单条 shell 内串联"3 次快滑 + `drag 1240 600 → 1240 2200`,velocity 400"):
+  拇指落到 `[1221,1927][1235,2163]`,行程 1598px ÷ 可用行程 1761px = 90.7%,
+  与"起手进度 ~3% + 1600px/1761px"完全吻合,说明行程度量已统一为轨道高;
+- 几何换算的四组关系(轨道扣留白、拇指高口径、任意进度不越出轨道、100% 贴合轨道底)
+  已由 `ReaderScrollGeometry.test.ets` 固定,避免再次出现"两个视口口径"。

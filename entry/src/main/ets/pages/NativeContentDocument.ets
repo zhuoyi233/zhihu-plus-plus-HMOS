@@ -828,6 +828,8 @@ export struct NativeContentDocument {
         })
 
       // 右缘可拖动阅读进度条：问题/回答/文章三页共用（上游 ArticleScreen 接入方式一致）。
+      // 上下留白与几何换算在组件内按上游 `ArticleScreen`（statusBars + 64 / systemBars + 96）
+      // 与 `VerticalReadingProgressBar`（拇指高度与行程都按"轨道高"）对齐，宿主无需传参。
       // 直接作为 Stack 的右对齐子节点、宽仅 12vp：Stack 内重叠区域的触摸测试默认只命中
       // 最上层节点，进度条可见时右缘这 12vp 归它（拖动定位），其余区域照常命中正文列表；
       // 隐藏时进度条自身把 `hitTestBehavior` 切到 `HitTestMode.None`，右缘手势完整交回正文。
