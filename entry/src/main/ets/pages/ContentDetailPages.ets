@@ -80,7 +80,8 @@ struct ContentDetailPage {
   @State private refreshingAnswers: boolean = false;
   @State private navigatorBusy: boolean = false;
   @State private navigatorRevision: number = 0;
-  /** 回答页过滑切换：主内容 overscroll 偏移（<0 上移露底部"下一答"预览卡，>0 下移露顶部"上一答"预览卡）。 */
+  /** 回答页过滑切换：主内容 overscroll 偏移（<0 上移露底部"下一答"预览卡，>0 下移露顶部"上一答"预览卡）。
+   * 预览卡固定在整页顶/底缘（对齐上游 AnswerVerticalOverscroll 根 Box 布局），不随内容平移。 */
   @State private answerOverscrollOffset: number = 0;
   /** 正文是否贴在列表底边（NativeContentDocument 回推）。 */
   @State private contentAtBottom: boolean = false;
@@ -186,6 +187,8 @@ struct ContentDetailPage {
   @StorageProp('detailImmersiveExitTick') @Watch('onImmersiveExitSignal') private immersiveExitTick: number = 0;
   /** 状态栏高度（vp，EntryAbility 广播）：沉浸式隐藏顶栏后正文的顶部留空。 */
   @StorageProp('statusBarHeight') private statusBarHeightVp: number = 0;
+  /** 底部导航条（安全区）高度（vp）：整页级"下一答"预览卡的底部留白基准（对齐上游 systemBars 底边距）。 */
+  @StorageProp('bottomRectHeight') private bottomRectHeightVp: number = 0;
   /** 设备支持沉浸材质：玻璃胶囊走 HDS 画布，否则回落组件模糊。 */
   private immersiveMaterialSupported: boolean = false;
   private controller?: ContentDetailController;
@@ -366,8 +369,38 @@ struct ContentDetailPage {
       .padding({ top: this.immersiveReading ? Math.max(this.statusBarHeightVp, 0) : 94 })
       .backgroundColor($r('app.color.page_background'))
 
+      // 整页级过滑预览卡（对齐上游 AnswerVerticalOverscroll：卡片置于根 Box 顶/底缘，
+      // 不在内容区 Stack 内——否则会被顶栏 94vp 占位裁剪，无法覆盖整个页面）。
+      // 仅展示层（hitTestMode None），切换判定仍在 loadedContent 的并行手势。
+      if (this.kind === ContentDetailKind.ANSWER && this.content !== undefined &&
+        this.phase === ContentDetailPhase.READY) {
+        // 顶部"上一个回答"预览卡：固定整页顶端，状态栏下方（对齐上游 systemBars 顶边距）。
+        if (this.answerOverscrollOffset > 0 && this.answerNavigator !== undefined &&
+          this.navigatorHasPrevious()) {
+          Stack({ alignContent: Alignment.Top }) {
+            this.answerPreviewCard(true)
+          }
+          .width('100%')
+          .height('100%')
+          .hitTestBehavior(HitTestMode.None)
+        }
+        // 底部"下一个回答"预览卡：固定整页底端，导航条上方 8vp（对齐上游 systemBars 底边距 + 8dp）。
+        if (this.answerOverscrollOffset < 0 && this.answerNavigator !== undefined &&
+          this.navigatorHasNext()) {
+          Stack({ alignContent: Alignment.Bottom }) {
+            this.answerPreviewCard(false)
+          }
+          .width('100%')
+          .height('100%')
+          .hitTestBehavior(HitTestMode.None)
+        }
+      }
+
       // 底部操作栏：全屏悬浮层单实例承载（正文从下方穿透直至物理底边）。
       // 切勿在布局流内再渲染第二份——两份会完全重叠绘制（06a2ab90 修复的错乱根源）。
+      // 回答页过滑时随主内容一起平移（上游 bottomBar 在 MainContent 内随内容滑走），露出整页底部预览卡；
+      // 并按上游 ArticleBottomBarState 的折叠透明度公式（alpha = 1 − offset/height）随过滑量渐隐，
+      // 否则上滑中途操作栏（z 序在预览卡之上）会盖住半透明的预览卡。
       if (!this.immersiveReading && this.content !== undefined &&
         this.phase === ContentDetailPhase.READY) {
         Stack({ alignContent: Alignment.Bottom }) {
@@ -375,7 +408,11 @@ struct ContentDetailPage {
         }
         .width('100%')
         .height('100%')
-        .hitTestBehavior(HitTestMode.Transparent)
+        .opacity(this.kind === ContentDetailKind.ANSWER
+          ? Math.max(0, 1 - this.answerOverscrollProgress()) : 1)
+        .hitTestBehavior(this.kind === ContentDetailKind.ANSWER && this.answerOverscrollProgress() >= 1
+          ? HitTestMode.None : HitTestMode.Transparent)
+        .translate({ y: this.answerOverscrollOffset })
       }
 
       // 悬浮"下一个回答"按钮（对齐上游 SkipNext FAB）：右下角、底部操作栏上方，可拖动避让正文；
@@ -550,24 +587,7 @@ struct ContentDetailPage {
   @Builder
   private loadedContent(content: LoadedContentDetail) {
     Stack({ alignContent: Alignment.Bottom }) {
-      // 底层：顶部"上一个回答"预览卡（对齐上游 AnswerVerticalOverscroll 顶部卡，
-      // 标签行在上、作者行在下）；主内容随 overscroll 下移露出；只在有上一答时渲染。
-      if (this.kind === ContentDetailKind.ANSWER && this.answerOverscrollOffset > 0 &&
-        this.answerNavigator !== undefined && this.navigatorHasPrevious()) {
-        Stack({ alignContent: Alignment.Top }) {
-          this.answerPreviewCard(true)
-        }
-        .width('100%')
-        .height('100%')
-        .hitTestBehavior(HitTestMode.None)
-      }
-
-      // 底层：底部"下一个回答"预览卡（对齐上游 AnswerVerticalOverscroll 底部卡，
-      // 作者行在上、标签行在下）；主内容随 overscroll 上移露出；只在有下一答时渲染。
-      if (this.kind === ContentDetailKind.ANSWER && this.answerOverscrollOffset < 0 &&
-        this.answerNavigator !== undefined && this.navigatorHasNext()) {
-        this.answerPreviewCard(false)
-      }
+      // 过滑预览卡已提升至根 Stack 整页级叠层（见 build()），此处仅承载随 overscroll 平移的主内容。
 
       // 上层：主内容，跟随 overscroll 偏移平移。
       Column() {
@@ -645,9 +665,10 @@ struct ContentDetailPage {
     .margin({
       left: $r('app.float.p1_page_padding'),
       right: $r('app.float.p1_page_padding'),
-      // 上一答卡贴顶部（页顶栏下方留 8vp）；下一答卡预留在底部悬浮操作栏（约 44vp 高 + 12vp 底距）上方。
-      top: previous ? 8 : 0,
-      bottom: previous ? 0 : 72
+      // 上一答卡固定整页顶端、状态栏下方（对齐上游 systemBars 顶边距）；
+      // 下一答卡固定整页底端、导航条上方 8vp（对齐上游 systemBars 底边距 + 8dp）。
+      top: previous ? Math.max(this.statusBarHeightVp, 0) : 0,
+      bottom: previous ? 0 : 8 + Math.max(this.bottomRectHeightVp, 0)
     })
     .backgroundColor(this.answerOverscrollTriggered()
       ? $r('app.color.brand_primary_container') : $r('app.color.surface_background'))
@@ -1641,8 +1662,14 @@ struct ContentDetailPage {
     } else {
       return;
     }
-    this.answerOverscrollOffset = dampedOverscrollOffset(this.overscrollRawDrag,
-      ANSWER_OVERSCROLL_MAX_OFFSET, ANSWER_OVERSCROLL_DAMPING_FACTOR);
+    this.applyOverscrollOffset(dampedOverscrollOffset(this.overscrollRawDrag,
+      ANSWER_OVERSCROLL_MAX_OFFSET, ANSWER_OVERSCROLL_DAMPING_FACTOR));
+  }
+
+  /** 统一写入 overscroll 偏移，并同步广播"过滑进行中"信号（标题栏淡出让位预览卡）。 */
+  private applyOverscrollOffset(value: number): void {
+    this.answerOverscrollOffset = value;
+    AppStorage.setOrCreate('answerOverscrollActive', value !== 0);
   }
 
   /** 松手：达到阈值切换回答（顶部过滑切上一答、底部过滑切下一答，无回弹）；否则弹簧回位。 */
@@ -1661,7 +1688,7 @@ struct ContentDetailPage {
       return;
     }
     this.getUIContext().animateTo({ curve: curves.springMotion(0.32, 0.78) }, (): void => {
-      this.answerOverscrollOffset = 0;
+      this.applyOverscrollOffset(0);
     });
   }
 
@@ -1671,10 +1698,10 @@ struct ContentDetailPage {
     this.overscrollRawDrag = 0;
     if (animated) {
       this.getUIContext().animateTo({ curve: curves.springMotion(0.32, 0.78) }, (): void => {
-        this.answerOverscrollOffset = 0;
+        this.applyOverscrollOffset(0);
       });
     } else {
-      this.answerOverscrollOffset = 0;
+      this.applyOverscrollOffset(0);
     }
   }
 

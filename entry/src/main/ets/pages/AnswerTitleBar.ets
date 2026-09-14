@@ -37,6 +37,8 @@ export struct AnswerTitleBar {
   onBack: () => void = (): void => {
   };
   @StorageProp('answerTitleStates') private states: AnswerTitleState[] = [];
+  /** 回答页过滑切换进行中：整栏淡出让位给整页级预览卡（上游中顶栏随 MainContent 平移滑走）。 */
+  @StorageProp('answerOverscrollActive') private overscrollActive: boolean = false;
 
   private state(): AnswerTitleState | undefined {
     return this.states.find((item: AnswerTitleState): boolean => item.id === this.answerId);
@@ -155,6 +157,8 @@ export struct AnswerTitleBar {
       right: $r('app.float.p1_page_padding')
     })
     .alignItems(VerticalAlign.Center)
-    .hitTestBehavior(HitTestMode.Transparent)
+    .opacity(this.overscrollActive ? 0 : 1)
+    // 隐藏时同时关闭命中，避免透明返回键仍可点。
+    .hitTestBehavior(this.overscrollActive ? HitTestMode.None : HitTestMode.Transparent)
   }
 }
