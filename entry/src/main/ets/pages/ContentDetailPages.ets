@@ -90,7 +90,7 @@ struct ContentDetailPage {
   private overscrollRawDrag: number = 0;
   /** 上一次 pan 手势 offsetY（换算单帧 delta）。 */
   private overscrollPanPrevY: number = 0;
-  /** 悬浮"下一个回答"按钮拖动偏移（相对右下角默认位，负值向左/向上），松手后保留。 */
+  /** 悬浮"下一个回答"按钮拖动偏移（相对右下角默认位，负值向左/向上、正值向下），松手后水平吸附到较近一侧页边。 */
   @State private answerFabOffsetX: number = 0;
   @State private answerFabOffsetY: number = 0;
   /** 上一次按钮拖动 pan 手势 offset（换算单帧 delta）。 */
@@ -102,6 +102,8 @@ struct ContentDetailPage {
   private answerFabWidthVp: number = 0;
   private answerFabOverlayWidthVp: number = 0;
   private answerFabOverlayHeightVp: number = 0;
+  /** 底部操作栏实测高度（vp）：悬浮按钮下拖下限 = 默认底距 - 栏高 - 间隔。 */
+  private bottomActionBarHeightVp: number = 0;
   @StorageProp('loginFeedReloadTick') @Watch('onLoginChanged') private loginTick: number = 0;
   /** 全屏图片查看器：正文/评论图点击后经 AppStorage 广播，在页面根 Stack 叠层渲染
    *（正文列表惰性树与模态覆盖层树内均无法可靠驱动状态更新，见 NativeContentDocument 注释）。 */
@@ -741,9 +743,10 @@ struct ContentDetailPage {
     .backgroundColor($r('app.color.brand_primary'))
     .shadow({ radius: 12, color: '#33000000', offsetY: 4 })
     .margin({
-      right: $r('app.float.p1_page_padding'),
-      // 底部操作栏高约 44vp + 12vp 底距，再加少量间隔。
-      bottom: 76
+      // 对齐上游 DraggableRefreshButton 默认位：右缘贴屏幕边、按钮顶边在屏幕底边上方 250vp
+      //（BottomEnd 锚定下 bottom = 250 - 按钮高 44）。
+      right: 0,
+      bottom: 206
     })
     .offset({ x: this.answerFabOffsetX, y: this.answerFabOffsetY })
     .onAreaChange((_oldArea: Area, newArea: Area): void => {
@@ -768,11 +771,13 @@ struct ContentDetailPage {
           this.answerFabPanPrevX = 0;
           this.answerFabPanPrevY = 0;
           this.answerFabDragging = false;
+          this.snapAnswerFabToEdge();
         })
         .onActionCancel((): void => {
           this.answerFabPanPrevX = 0;
           this.answerFabPanPrevY = 0;
           this.answerFabDragging = false;
+          this.snapAnswerFabToEdge();
         })
     )
     .onClick((): void => {
@@ -781,7 +786,7 @@ struct ContentDetailPage {
   }
 
   /** 悬浮"下一个回答"按钮拖动：累计偏移并钳制在页面可视域内
-   * （左/上不越过页边距与页头区，右/下不越过默认位——再低会压住底部操作栏）。 */
+   * （左/上不越过页边距与页头区，右不越过默认位，下不越过底部操作栏上沿——再低会压住赞同栏）。 */
   private onAnswerFabPanUpdate(event: GestureEvent): void {
     const deltaX = event.offsetX - this.answerFabPanPrevX;
     const deltaY = event.offsetY - this.answerFabPanPrevY;
@@ -793,11 +798,36 @@ struct ContentDetailPage {
     // 与 p1_page_padding（12vp）保持一致；悬浮层尺寸未就绪（=0）时钳制退化为仅禁越右侧/下侧。
     const pagePadding = 12;
     const fabHeight = 44;
-    const minX = this.answerFabWidthVp + pagePadding * 2 - this.answerFabOverlayWidthVp;
+    // 默认位底距（对齐上游初始位，见 answerNextFloatingButton 注释）；默认位右缘贴屏（右边距 0）。
+    const defaultBottom = 206;
+    const minX = this.answerFabWidthVp + pagePadding - this.answerFabOverlayWidthVp;
     // 页头（返回 + 标题）区高约 94vp，按钮顶边不得低于其下沿。
-    const minY = 94 + pagePadding + fabHeight + 76 - this.answerFabOverlayHeightVp;
+    const minY = 94 + pagePadding + fabHeight + defaultBottom - this.answerFabOverlayHeightVp;
+    // 下可拖到贴住底部操作栏上沿（栏高实测，兜底 48 = 36vp 胶囊 + 12vp 底距），再留 4vp 间隔。
+    const barHeight = this.bottomActionBarHeightVp > 0 ? this.bottomActionBarHeightVp : 48;
+    const maxDownY = Math.max(0, defaultBottom - barHeight - 4);
     this.answerFabOffsetX = Math.min(0, Math.max(minX, this.answerFabOffsetX + deltaX));
-    this.answerFabOffsetY = Math.min(0, Math.max(minY, this.answerFabOffsetY + deltaY));
+    this.answerFabOffsetY = Math.min(maxDownY, Math.max(minY, this.answerFabOffsetY + deltaY));
+  }
+
+  /** 松手吸附：水平贴向较近一侧页边（对齐上游 DraggableRefreshButton 松手贴边），带 300ms 动画。 */
+  private snapAnswerFabToEdge(): void {
+    if (this.answerFabOverlayWidthVp <= 0 || this.answerFabWidthVp <= 0) {
+      return;
+    }
+    const pagePadding = 12;
+    // 吸左目标：按钮左缘贴 pagePadding（默认位右缘贴屏，见 answerNextFloatingButton 注释）。
+    const leftLimit = this.answerFabWidthVp + pagePadding - this.answerFabOverlayWidthVp;
+    // 按钮中心横坐标 = 默认位（右缘贴屏）左边缘 + 偏移 + 半宽；过中线则吸左侧，否则回默认位。
+    const center = this.answerFabOverlayWidthVp - this.answerFabWidthVp
+      + this.answerFabOffsetX + this.answerFabWidthVp / 2;
+    const target = center < this.answerFabOverlayWidthVp / 2 ? leftLimit : 0;
+    if (Math.abs(target - this.answerFabOffsetX) < 1) {
+      return;
+    }
+    this.getUIContext().animateTo({ duration: 300, curve: Curve.EaseOut }, (): void => {
+      this.answerFabOffsetX = target;
+    });
   }
 
   @Builder
@@ -1280,6 +1310,12 @@ struct ContentDetailPage {
     .width('100%')
     .zIndex(2)
     .hitTestBehavior(HitTestMode.Default)
+    .onAreaChange((_oldArea: Area, newArea: Area): void => {
+      const height = Number(newArea.height);
+      if (height > 0 && Math.abs(height - this.bottomActionBarHeightVp) > 1) {
+        this.bottomActionBarHeightVp = height;
+      }
+    })
   }
 
   @Builder
