@@ -14,7 +14,18 @@ import {
   AppUpdateCheckStatus,
   AppUpdateClient,
   AppUpdateRelease,
+  CONTENT_BLOCK_SPACING_MAX,
+  CONTENT_BLOCK_SPACING_MIN,
+  CONTENT_LINE_HEIGHT_MAX,
+  CONTENT_LINE_HEIGHT_MIN,
+  CONTENT_TYPOGRAPHY_STEP,
+  contentFontSizeLevels,
+  decodeContentBlockSpacing,
+  decodeContentFontSize,
+  decodeContentLineHeight,
   LoginSessionGateway,
+  normalizeReaderTypography,
+  ReaderTypography,
   SessionState,
   SessionStatus,
   shouldAutoCheckForUpdate
@@ -128,6 +139,10 @@ export struct P1Shell {
   /** 回答页双击正文动作（对齐上游 answerDoubleTapAction）：AppStorage 广播与详情页双向同步。 */
   @StorageProp('answerDoubleTapAction') private answerDoubleTapAction: AnswerDoubleTapAction =
     AnswerDoubleTapAction.ASK;
+  /** 正文排版偏好（对齐上游"阅读"分组 contentFontSize/contentLineHeight/contentBlockSpacing）。 */
+  @StorageProp('contentFontSize') private contentFontSize: number = 100;
+  @StorageProp('contentLineHeight') private contentLineHeight: number = 160;
+  @StorageProp('contentBlockSpacing') private contentBlockSpacing: number = 100;
   /** 回答/文章详情页沉浸式阅读中（页面广播）：隐藏 NavDestination 顶栏（对齐上游 topBar={}）。 */
   @StorageProp('detailImmersiveActive') private detailImmersiveActive: boolean = false;
   /** 全屏图片查看器打开中（详情页广播）：同样隐藏顶栏，使查看器真全屏。 */
@@ -163,12 +178,15 @@ export struct P1Shell {
   private readonly themeOperationGuard: LatestOperationGuard = new LatestOperationGuard();
   private themeMounted: boolean = false;
   private themeSaveQueue: Promise<void> = Promise.resolve();
+  /** 排版偏好专用 store 实例：滑块拖动会高频写盘，需单实例 saveQueue 串行化。 */
+  private typographyStore: AppPreferencesStore | undefined = undefined;
 
   aboutToAppear(): void {
     this.themeMounted = true;
     this.sessionSnapshot = this.session?.getState();
     this.restoreThemeMode();
     void this.restoreAnswerDoubleTapAction();
+    void this.restoreReaderTypography();
     this.refreshInstalledVersionLabel();
     this.unsubscribeStartupDestination?.();
     const listener: StartupDestinationListener = (destination: P1Destination): void => {
@@ -1235,6 +1253,94 @@ export struct P1Shell {
           .borderRadius($r('app.float.p1_card_radius'))
           .backgroundColor($r('app.color.surface_background'))
 
+          Text('阅读')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
+          Column({ space: $r('app.float.p1_spacing_small') }) {
+            // 字号：档位数组（50..120 step5 + 130..200 step10）索引即滑块值，
+            // 与上游 contentFontSizeLevels.indexOf 的滑块口径一致。
+            Column({ space: $r('app.float.p1_spacing_small') }) {
+              Text('字号')
+                .fontSize($r('app.float.p1_body_font_size'))
+                .fontColor($r('app.color.primary_text'))
+              Text(`调整内容文字大小 (${this.contentFontSize}%)`)
+                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+              Slider({
+                value: this.fontSizeLevelIndex(),
+                min: 0,
+                max: this.fontSizeLevels().length - 1,
+                step: 1,
+                style: SliderStyle.OutSet
+              })
+                .id('p3_settings_content_font_size')
+                .width('100%')
+                .showSteps(true)
+                .onChange((value: number, _mode: SliderChangeMode): void => {
+                  const levels = this.fontSizeLevels();
+                  const index = Math.min(levels.length - 1, Math.max(0, Math.round(value)));
+                  this.applyReaderTypography(levels[index], this.contentLineHeight, this.contentBlockSpacing);
+                })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .width('100%')
+            .padding($r('app.float.p1_card_padding'))
+            Divider().color($r('app.color.divider_color'))
+            Column({ space: $r('app.float.p1_spacing_small') }) {
+              Text('行高')
+                .fontSize($r('app.float.p1_body_font_size'))
+                .fontColor($r('app.color.primary_text'))
+              Text(`调整内容行间距 (${this.contentLineHeight}%)`)
+                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+              Slider({
+                value: this.contentLineHeight,
+                min: CONTENT_LINE_HEIGHT_MIN,
+                max: CONTENT_LINE_HEIGHT_MAX,
+                step: CONTENT_TYPOGRAPHY_STEP,
+                style: SliderStyle.OutSet
+              })
+                .id('p3_settings_content_line_height')
+                .width('100%')
+                .onChange((value: number, _mode: SliderChangeMode): void => {
+                  this.applyReaderTypography(this.contentFontSize,
+                    decodeContentLineHeight(value), this.contentBlockSpacing);
+                })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .width('100%')
+            .padding($r('app.float.p1_card_padding'))
+            Divider().color($r('app.color.divider_color'))
+            Column({ space: $r('app.float.p1_spacing_small') }) {
+              Text('段间距')
+                .fontSize($r('app.float.p1_body_font_size'))
+                .fontColor($r('app.color.primary_text'))
+              Text(`调整正文段落和块级内容间距 (${this.contentBlockSpacing}%)`)
+                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+              Slider({
+                value: this.contentBlockSpacing,
+                min: CONTENT_BLOCK_SPACING_MIN,
+                max: CONTENT_BLOCK_SPACING_MAX,
+                step: CONTENT_TYPOGRAPHY_STEP,
+                style: SliderStyle.OutSet
+              })
+                .id('p3_settings_content_block_spacing')
+                .width('100%')
+                .onChange((value: number, _mode: SliderChangeMode): void => {
+                  this.applyReaderTypography(this.contentFontSize, this.contentLineHeight,
+                    decodeContentBlockSpacing(value));
+                })
+            }
+            .alignItems(HorizontalAlign.Start)
+            .width('100%')
+            .padding($r('app.float.p1_card_padding'))
+          }
+          .width('100%')
+          .borderRadius($r('app.float.p1_card_radius'))
+          .backgroundColor($r('app.color.surface_background'))
+
           Text('关于与诊断')
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
@@ -2217,6 +2323,57 @@ export struct P1Shell {
     }
     this.getUIContext().getPromptAction()
       .showToast({ message: `已设置为：${answerDoubleTapActionLabel(action)}` });
+  }
+
+  private fontSizeLevels(): number[] {
+    return contentFontSizeLevels();
+  }
+
+  /** 字号滑块值 = 当前字号在档位数组中的下标（持久化值读取时已 coerce 到档位）。 */
+  private fontSizeLevelIndex(): number {
+    const index = contentFontSizeLevels().indexOf(decodeContentFontSize(this.contentFontSize));
+    return index >= 0 ? index : 0;
+  }
+
+  /** 读取排版偏好并广播；失败保持默认 100/160/100（与改造前视觉一致）。 */
+  private async restoreReaderTypography(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const typography = await new AppPreferencesStore(context).loadReaderTypography();
+      this.broadcastReaderTypography(typography);
+    } catch (_error) {
+      // 读取失败保持默认值。
+    }
+  }
+
+  /** 写入排版偏好：先广播 AppStorage（详情页若开着即实时联动），再落盘。 */
+  private applyReaderTypography(fontSize: number, lineHeight: number, blockSpacing: number): void {
+    const normalized = normalizeReaderTypography({
+      fontSize: fontSize,
+      lineHeight: lineHeight,
+      blockSpacing: blockSpacing
+    });
+    this.broadcastReaderTypography(normalized);
+    const context = getAbilityContext();
+    if (context === undefined) {
+      return;
+    }
+    if (this.typographyStore === undefined) {
+      this.typographyStore = new AppPreferencesStore(context);
+    }
+    // 对齐上游：滑块拖动过程中即时写盘（单实例 saveQueue 串行化，可承受高频写入）；
+    // 写入失败时选择已生效，重启后可能恢复此前设置。
+    void this.typographyStore.saveReaderTypography(normalized).catch((_error: Object): void => {
+    });
+  }
+
+  private broadcastReaderTypography(value: ReaderTypography): void {
+    AppStorage.setOrCreate('contentFontSize', value.fontSize);
+    AppStorage.setOrCreate('contentLineHeight', value.lineHeight);
+    AppStorage.setOrCreate('contentBlockSpacing', value.blockSpacing);
   }
 
   private async restoreThemeMode(): Promise<void> {
