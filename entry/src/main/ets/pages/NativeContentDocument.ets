@@ -25,9 +25,31 @@ import {
   ReaderInlineKind,
   ReaderInlineRun
 } from 'reader';
+import {
+  READING_PROGRESS_BAR_HIT_WIDTH_VP,
+  READING_PROGRESS_BAR_RIGHT_INSET_VP,
+  ReadingProgressBar
+} from './components/ReadingProgressBar';
+import {
+  readerBlockSpacing,
+  readerBodyFontSize,
+  readerBodyLineHeight,
+  readerHeadingFontSize
+} from './ReaderTypography';
 
 function inlineFormulaWidth(tex: string): number {
   return Math.min(220, Math.max(20, tex.length * 9));
+}
+
+/**
+ * 块高缺失时的估算兜底（vp）：未渲染块按实测平均块高估，无实测值时用该值。
+ * 见 NativeContentDocument 的"内容总高估算"注释。
+ */
+const DEFAULT_BLOCK_HEIGHT_VP = 48;
+
+/** 暂无实测块时，未测块按"默认块高 + 一个块间距"计入估算。 */
+function defaultEstimatedBlockHeightVp(blockSpacingPercent: number): number {
+  return DEFAULT_BLOCK_HEIGHT_VP + readerBlockSpacing(blockSpacingPercent);
 }
 
 /** 对齐上游 telephoto 默认 ZoomSpec(maxZoomFactor = 2f)。 */
@@ -363,6 +385,9 @@ struct ContentInlineFormula {
     sourceUrl: '',
     inlineRuns: []
   };
+  /** 排版偏好与宿主同源（AppStorage 广播），行内公式所在段落随字号/行高联动。 */
+  @StorageProp('contentFontSize') private fontSizePercent: number = 100;
+  @StorageProp('contentLineHeight') private lineHeightPercent: number = 160;
   @State private loadedRunIds: Array<string> = [];
   private pixelMaps: Map<string, image.PixelMap> = new Map();
   private active: boolean = false;
@@ -413,8 +438,8 @@ struct ContentInlineFormula {
         }
       }, (run: ReaderInlineRun): string => run.id)
     }
-    .fontSize($r('app.float.p1_body_font_size'))
-    .lineHeight(30)
+    .fontSize(readerBodyFontSize(this.fontSizePercent))
+    .lineHeight(readerBodyLineHeight(this.fontSizePercent, this.lineHeightPercent))
     .fontColor($r('app.color.primary_text'))
     .width('100%')
   }
@@ -585,6 +610,27 @@ export struct NativeContentDocument {
   private lastYOffset: number = 0;
   private readonly dataSource: ReaderBlockDataSource = new ReaderBlockDataSource();
   private readonly scroller: Scroller = new Scroller();
+  /**
+   * 正文排版偏好（AppStorage 广播，键名与持久化键同名，对齐上游 contentFontSize 等）：
+   * 设置页滑块实时写入，详情页开着即联动。
+   */
+  @StorageProp('contentFontSize') @Watch('onTypographyChanged') private fontSizePercent: number = 100;
+  @StorageProp('contentLineHeight') @Watch('onTypographyChanged') private lineHeightPercent: number = 160;
+  @StorageProp('contentBlockSpacing') @Watch('onTypographyChanged') private blockSpacingPercent: number = 100;
+  /** 正文视口高度（vp）：List 的 onAreaChange 回填，供阅读进度条换算拇指高度。 */
+  @State private viewportHeightVp: number = 0;
+  /** 正文内容总高（vp）：本页 SDK 无最大滚动距离 API，按实测块高估算、触底时校准。 */
+  @State private contentHeightVp: number = 0;
+  /** 当前滚动偏移（vp）：onDidScroll 回填，驱动阅读进度条拇指位置。 */
+  @State private scrollYVp: number = 0;
+  /** 实测块高（vp，块 id → 高度）：已渲染块实测后用 onAreaChange 回填，用于估算内容总高。 */
+  private readonly blockHeights: Map<string, number> = new Map();
+  private measuredBlockHeightSumVp: number = 0;
+  private measuredBlockCount: number = 0;
+  /** 实测的非正文块固定槽位高（vp，槽位名 → 高度）：页头/正文页脚/页脚等。 */
+  private readonly chromeHeights: Map<string, number> = new Map();
+  /** 触底校准得到的精确内容总高（vp）：0 表示尚未校准；内容增高后自动失效。 */
+  private exactContentHeightVp: number = 0;
 
   @Builder
   private emptyFooter(): void {
@@ -599,7 +645,7 @@ export struct NativeContentDocument {
   private collapsibleBodyViewport() {
     Stack({ alignContent: Alignment.Bottom }) {
       Scroll() {
-        Column({ space: 12 }) {
+        Column({ space: this.blockSpacing() }) {
           ForEach(this.blocks, (item: ReaderBlock) => {
             this.readerBlock(item)
           }, (item: ReaderBlock): string => item.id)
@@ -687,9 +733,13 @@ export struct NativeContentDocument {
   }
 
   build() {
-    Stack({ alignContent: Alignment.Center }) {
-      List({ space: 12, scroller: this.scroller }) {
+    // TopEnd：正文 List 为 100%×100% 不受影响，进度条靠右缘对齐。
+    Stack({ alignContent: Alignment.TopEnd }) {
+      List({ space: this.blockSpacing(), scroller: this.scroller }) {
           ListItem() { this.documentHeader() }
+            .onAreaChange((_oldArea: Area, newArea: Area): void => {
+              this.reportChromeHeight('header', newArea);
+            })
           if (this.empty) {
             ListItem() {
               Text(this.emptyMessage).id('p2_content_document_empty')
@@ -706,14 +756,23 @@ export struct NativeContentDocument {
               ListItem() {
                 this.readerBlock(item)
               }
+              .onAreaChange((_oldArea: Area, newArea: Area): void => {
+                this.reportBlockHeight(item.id, newArea);
+              })
             }, (item: ReaderBlock): string => item.id)
           }
           ListItem() { this.documentBodyFooter() }
+            .onAreaChange((_oldArea: Area, newArea: Area): void => {
+              this.reportChromeHeight('bodyFooter', newArea);
+            })
           this.documentItems()
           ListItem() {
             this.documentFooter()
           }
           .width('100%')
+          .onAreaChange((_oldArea: Area, newArea: Area): void => {
+            this.reportChromeHeight('footer', newArea);
+          })
         }
         .id('p2_content_document_list')
         .width('100%')
@@ -728,9 +787,22 @@ export struct NativeContentDocument {
         .contentEndOffset(100)
         .cachedCount(6)
         .edgeEffect(this.disableEdgeSpring ? EdgeEffect.None : EdgeEffect.Spring)
+        .onAreaChange((_oldArea: Area, newArea: Area): void => {
+          const height = Number(newArea.height);
+          if (height > 0 && Math.abs(height - this.viewportHeightVp) > 0.5) {
+            this.viewportHeightVp = height;
+            this.refreshContentHeightEstimate();
+          }
+        })
         // 触底回调：问题详情页据此加载回答信息流下一页。
         .onReachEnd((): void => {
           this.updateBottomEdge(true);
+          // 触底即拿到真实内容总高：本页 SDK 无读取最大滚动距离的 API，
+          // 只能在此把估算值校准为精确值（此后拇指比例完全正确）。
+          const yOffset = this.scroller.currentOffset().yOffset;
+          this.scrollYVp = yOffset;
+          this.exactContentHeightVp = yOffset + this.viewportHeightVp;
+          this.refreshContentHeightEstimate();
           const callback = this.onListReachEnd;
           if (callback !== undefined) {
             callback();
@@ -747,15 +819,147 @@ export struct NativeContentDocument {
           }
           this.updateTopEdge(yOffset <= 2);
           this.lastYOffset = yOffset;
+          this.scrollYVp = yOffset;
+          this.refreshContentHeightEstimate();
           const callback = this.onScrollOffset;
           if (callback !== undefined) {
             callback(yOffset);
           }
         })
 
+      // 右缘可拖动阅读进度条：问题/回答/文章三页共用（上游 ArticleScreen 接入方式一致）。
+      // 直接作为 Stack 的右对齐子节点、宽仅 12vp：Stack 内重叠区域的触摸测试默认只命中
+      // 最上层节点，进度条可见时右缘这 12vp 归它（拖动定位），其余区域照常命中正文列表；
+      // 隐藏时进度条自身把 `hitTestBehavior` 切到 `HitTestMode.None`，右缘手势完整交回正文。
+      // 不用整页覆盖层：加宽后即使 `HitTestMode.Transparent` 也会进入命中链，
+      // 实测会干扰正文列表自身的滚动（详见 ReadingProgressBar 顶部注释）。
+      ReadingProgressBar({
+        scroller: this.scroller,
+        viewportHeightVp: this.viewportHeightVp,
+        contentHeightVp: this.contentHeightVp,
+        scrollYVp: this.scrollYVp,
+        onSeekStateChange: (dragging: boolean): void => {
+          if (dragging) {
+            // 拖动期间正文由 scrollTo 驱动：屏蔽贴边过滑，否则贴底向上拖滚动条
+            // 会被回答页误判为"下一答"过滑。
+            this.updateBottomEdge(false);
+            this.updateTopEdge(false);
+          }
+        }
+      })
+        .width(READING_PROGRESS_BAR_HIT_WIDTH_VP)
+        .height('100%')
+        .margin({ right: READING_PROGRESS_BAR_RIGHT_INSET_VP })
     }
     .width('100%')
     .height('100%')
+  }
+
+  /** 正文字号（fp，`Text.fontSize` 传 number 即 fp）：16 × 字号%，默认 16 == 改造前 16fp。 */
+  private bodyFontSize(): number {
+    return readerBodyFontSize(this.fontSizePercent);
+  }
+
+  /** 正文行高（fp）：行高 160% ↔ 改造前的 30，见 ReaderTypography 的归一说明。 */
+  private bodyLineHeight(): number {
+    return readerBodyLineHeight(this.fontSizePercent, this.lineHeightPercent);
+  }
+
+  /** 段间距/块间距（vp，`List({ space })` 传 number 即 vp）：12 × 段间距%，默认 12 == 改造前。 */
+  private blockSpacing(): number {
+    return readerBlockSpacing(this.blockSpacingPercent);
+  }
+
+  /** 标题字号（fp）：20 × 字号%，默认 20 == 改造前 p1_heading_font_size。 */
+  private headingFontSize(): number {
+    return readerHeadingFontSize(this.fontSizePercent);
+  }
+
+  /**
+   * 字号/行高/段间距变化：已实测块高随排版失效，清空重算；列表块自身靠 @StorageProp
+   * 依赖刷新（行内公式子组件同源，无需外部传参）。
+   */
+  private onTypographyChanged(): void {
+    this.blockHeights.clear();
+    this.measuredBlockHeightSumVp = 0;
+    this.measuredBlockCount = 0;
+    this.exactContentHeightVp = 0;
+    this.refreshContentHeightEstimate();
+  }
+
+  /** 正文块渲染后回报实测高度（vp），用于估算未渲染块的高度。 */
+  private reportBlockHeight(id: string, area: Area): void {
+    if (id.length === 0) {
+      return;
+    }
+    const height = Number(area.height);
+    if (!(height > 0)) {
+      return;
+    }
+    const previous = this.blockHeights.get(id);
+    if (previous !== undefined && Math.abs(previous - height) < 0.5) {
+      return;
+    }
+    this.blockHeights.set(id, height);
+    if (previous === undefined) {
+      this.measuredBlockCount += 1;
+      // 每个块自带一段 List space（末块多算的一段在误差范围内）。
+      this.measuredBlockHeightSumVp += height + this.blockSpacing();
+    } else {
+      this.measuredBlockHeightSumVp += height - previous;
+    }
+    this.refreshContentHeightEstimate();
+  }
+
+  /** 正文块之外的固定槽位（页头/正文页脚/页脚）实测高度（vp）。 */
+  private reportChromeHeight(key: string, area: Area): void {
+    const height = Number(area.height);
+    if (!(height > 0)) {
+      return;
+    }
+    const previous = this.chromeHeights.get(key);
+    if (previous !== undefined && Math.abs(previous - height) < 0.5) {
+      return;
+    }
+    this.chromeHeights.set(key, height);
+    this.refreshContentHeightEstimate();
+  }
+
+  private chromeHeightVp(): number {
+    let sum = 0;
+    this.chromeHeights.forEach((height: number): void => {
+      sum += height;
+    });
+    return sum;
+  }
+
+  /**
+   * 内容总高估算：已测块高 + 未测块数 × 实测均块高 + 页头页脚；
+   * 并以"已滚过的范围"为硬下界（估算偏小时拇指会越出轨道）。
+   * 触底校准值为精确值时优先采用，直到内容增高（回答流分页）使其失效。
+   */
+  private refreshContentHeightEstimate(): void {
+    const scrollExtent = this.scrollYVp + this.viewportHeightVp;
+    if (this.exactContentHeightVp > 0 && scrollExtent <= this.exactContentHeightVp + 1) {
+      this.updateContentHeight(this.exactContentHeightVp);
+      return;
+    }
+    this.exactContentHeightVp = 0;
+    const total = this.blocks.length;
+    const average = this.measuredBlockCount > 0
+      ? this.measuredBlockHeightSumVp / this.measuredBlockCount
+      : defaultEstimatedBlockHeightVp(this.blockSpacingPercent);
+    const estimated = this.measuredBlockHeightSumVp
+      + Math.max(0, total - this.measuredBlockCount) * average
+      + this.chromeHeightVp();
+    this.updateContentHeight(Math.max(estimated, scrollExtent));
+  }
+
+  private updateContentHeight(value: number): void {
+    const next = Math.round(value);
+    if (Math.abs(next - this.contentHeightVp) >= 1) {
+      this.contentHeightVp = next;
+    }
   }
 
   /** 触底/离底状态变化时通知页面侧（下滑切换回答依赖此信号）。 */
@@ -783,7 +987,7 @@ export struct NativeContentDocument {
   private readerBlock(item: ReaderBlock) {
     if (item.kind === ReaderBlockKind.HEADING) {
       Text(item.text)
-        .fontSize($r('app.float.p1_heading_font_size'))
+        .fontSize(this.headingFontSize())
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.primary_text'))
         .width('100%')
@@ -805,8 +1009,8 @@ export struct NativeContentDocument {
       ContentInlineFormula({ item: item })
     } else {
       Text(item.kind === ReaderBlockKind.LIST_ITEM ? `• ${item.text}` : item.text)
-        .fontSize($r('app.float.p1_body_font_size'))
-        .lineHeight(30)
+        .fontSize(this.bodyFontSize())
+        .lineHeight(this.bodyLineHeight())
         .fontColor($r('app.color.primary_text'))
         .width('100%')
     }
