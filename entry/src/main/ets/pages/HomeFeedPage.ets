@@ -457,8 +457,13 @@ export struct HomeFeedPage {
     .padding($r('app.float.p1_card_padding'))
     .borderRadius(this.feedCardStyle === 'card' ? $r('app.float.p1_card_radius') : 0)
     .backgroundColor(this.feedCardStyle === 'card' ? $r('app.color.surface_background') : Color.Transparent)
-    .border({ width: { bottom: this.feedCardStyle === 'divider' ? 1 : 0 },
-      color: $r('app.color.divider_color') })
+    // border 的 radius 优先级高于 borderRadius 属性（未指定时按 0 处理），
+    // 卡片模式必须把圆角同步写进 border，否则背景圆角被重置成直角。
+    .border({
+      width: { bottom: this.feedCardStyle === 'divider' ? 1 : 0 },
+      color: $r('app.color.divider_color'),
+      radius: this.feedCardStyle === 'card' ? $r('app.float.p1_card_radius') : 0
+    })
     .accessibilityText(`打开${feedKindLabel(item.target.kind)}：${item.target.title}`)
     .onClick(() => this.navigate(homeFeedDestination(item)))
   }
