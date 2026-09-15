@@ -5,7 +5,7 @@ import { publishQuestionTitle } from './QuestionTitleBar';
 import { publishAnswerTitle } from './AnswerTitleBar';
 import { publishArticleTitle } from './ArticleTitleBar';
 import { FeedContentSummary } from './components/FeedContentSummary';
-import { AppPageStatusKind, AppPageStatusPanel, FeedPullDownIndicatorOptions, feedPullDownIndicator } from './AppPageChrome';
+import { AppPageStatusKind, AppPageStatusPanel, FLOATING_TITLE_BAR_OFFSET, FeedPullDownIndicatorOptions, feedPullDownIndicator } from './AppPageChrome';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { ComponentContent, SegmentButton, SegmentButtonOptions, curves } from '@kit.ArkUI';
 import {
@@ -378,8 +378,9 @@ struct ContentDetailPage {
       .id(`p2_${this.kind}_detail_page`)
       .width('100%')
       .height('100%')
-      // 94vp 为顶栏叠加预留；沉浸式隐藏顶栏后仅保留状态栏高度（对齐上游 topBar={}）。
-      .padding({ top: this.immersiveReading ? Math.max(this.statusBarHeightVp, 0) : 94 })
+      // 让位统一约定：内容容器 padding top = FLOATING_TITLE_BAR_OFFSET；沉浸式隐藏
+      // 顶栏后仅保留状态栏高度（对齐上游 topBar={}）
+      .padding({ top: this.immersiveReading ? Math.max(this.statusBarHeightVp, 0) : FLOATING_TITLE_BAR_OFFSET })
       .backgroundColor($r('app.color.page_background'))
 
       // 整页级过滑预览卡（对齐上游 AnswerVerticalOverscroll：卡片置于根 Box 顶/底缘，

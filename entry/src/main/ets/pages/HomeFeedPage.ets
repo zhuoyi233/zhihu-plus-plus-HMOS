@@ -23,6 +23,7 @@ import { ComponentContent } from '@kit.ArkUI';
 import {
   AppPageStatusKind,
   AppPageStatusPanel,
+  FLOATING_TITLE_BAR_OFFSET,
   FeedPullDownIndicatorOptions,
   feedPullDownIndicator
 } from './AppPageChrome';
@@ -219,7 +220,6 @@ export struct HomeFeedPage {
             .id('p2_home_feed_list')
             .width('100%')
             .scrollBar(BarState.Off)
-            .padding({ top: 94 })
             .height('100%')
             .edgeEffect(EdgeEffect.Spring)
             .onReachEnd(() => this.controller?.loadMore())
@@ -247,9 +247,13 @@ export struct HomeFeedPage {
       .alignItems(HorizontalAlign.Start)
       .width('100%')
       .height('100%')
+      // 让位统一约定：内容容器 padding top = FLOATING_TITLE_BAR_OFFSET，Refresh 指示
+      // 区域从悬浮标题栏下沿开始（对齐上游 FeedPullToRefresh 的 indicator padding）；
+      // 列表不设顶 padding，滚动内容仍可穿越玻璃标题栏（List 默认不裁剪）
       .padding({
         left: $r('app.float.p1_page_padding'),
         right: $r('app.float.p1_page_padding'),
+        top: FLOATING_TITLE_BAR_OFFSET,
         bottom: $r('app.float.p1_page_padding')
       })
 

@@ -1,6 +1,6 @@
 import { ComponentContent } from '@kit.ArkUI';
 import { LoginSessionGateway, OnlineHistoryRepository, ReadHistoryGateway, SessionStatus } from 'data';
-import { FeedPullDownIndicatorOptions, feedPullDownIndicator } from './AppPageChrome';
+import { FLOATING_TITLE_BAR_OFFSET, FeedPullDownIndicatorOptions, feedPullDownIndicator } from './AppPageChrome';
 import {
   ReadHistoryController,
   ReadHistoryItem,
@@ -182,8 +182,10 @@ export struct ReadHistoryPage {
       }
       .width('100%')
       .height('100%')
+      // 让位统一约定：内容容器 padding top = FLOATING_TITLE_BAR_OFFSET，刷新指示区域
+      // 从悬浮标题栏下沿开始（对齐上游 FeedPullToRefresh 的 indicator padding）
       .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
-        top: 94, bottom: $r('app.float.p1_page_padding') })
+        top: FLOATING_TITLE_BAR_OFFSET, bottom: $r('app.float.p1_page_padding') })
       .backgroundColor($r('app.color.page_background'))
 
       Column()

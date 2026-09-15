@@ -10,6 +10,17 @@ export enum AppPageStatusKind {
   ERROR = 'error'
 }
 
+/**
+ * 悬浮标题栏让位高度（状态栏 + 标题栏占位）。
+ *
+ * 统一约定：所有带下拉刷新/滚动区域的页面，由页面内容容器统一
+ * `.padding({ top: FLOATING_TITLE_BAR_OFFSET })` 下移到悬浮标题栏下方，
+ * 使 Refresh 指示区域从标题栏下沿开始（对齐上游 FeedPullToRefresh 的
+ * indicator padding）。不要把让位写进列表自身的 padding——那会让刷新
+ * 指示区域仍从页面顶端开始，圆圈越过顶栏盖住状态栏。
+ */
+export const FLOATING_TITLE_BAR_OFFSET: number = 94;
+
 @Component
 export struct AppPageHeader {
   title: string = '';
@@ -145,7 +156,14 @@ export struct AppNavigationRow {
 export class FeedPullDownIndicatorOptions {
 }
 
-/** 下拉刷新区域的蓝色加载圆圈：与上拉加载更多同款同尺寸，容器高度保证圆圈落在悬浮标题栏下方。 */
+/**
+ * 下拉刷新区域的蓝色加载圆圈：与上拉加载更多同款同尺寸。
+ * 容器高度自适应 Refresh 指示区域（下拉间隙），justifyContent End 让圆圈贴着
+ * 间隙底部、跟随下拉距离移动（等价上游 Material3 指示器随拖拽平移的行为）。
+ * 注意：不要给容器设固定高度——固定高度会让内容锚定位置失控（圆圈曾因此
+ * 钉在状态栏一栏，见 2026-09-15 修复）；指示区域的整体下移由各页面把
+ * Refresh 组件 margin 到悬浮标题栏下方完成。
+ */
 @Builder
 export function feedPullDownIndicator(_options: FeedPullDownIndicatorOptions) {
   Column() {
@@ -155,7 +173,7 @@ export function feedPullDownIndicator(_options: FeedPullDownIndicatorOptions) {
       .color($r('app.color.brand_primary'))
   }
   .width('100%')
-  .height(148)
+  .constraintSize({ minHeight: 48 })
   .justifyContent(FlexAlign.End)
   .padding({ bottom: 12 })
 }
