@@ -139,16 +139,79 @@ export default function contentDetailRepositoryTest(): void {
         '"voteup_count":21,"comment_count":3,"created_time":1700000000,"updated_time":1700000001,' +
         '"endorsements":[{"elements":[{"type":"TEXT","content":"专业领域","fontColor":{"group":"GBK03A","alpha":1}},' +
         '{"type":"IMAGE","imageKey":"zhicon_icon_24_chat_bubble_hash_fill"}]},' +
+        '{"elements":[{"type":"TEXT","content":"谢邀 @测试者"},' +
+        '{"type":"IMAGE","imageKey":"zhicon_icon_16_arrow_right"}]},' +
         '{"elements":[{"type":"TEXT","content":"不可信","fontColor":{"group":"BAD_TOKEN","alpha":1}}]}],' +
         '"ip_info":"广东"}',
         '9007199254740993'
       );
-      expect(answer.endorsements?.length).assertEqual(2);
+      expect(answer.endorsements?.length).assertEqual(3);
       expect(answer.endorsements?.[0].text).assertEqual('专业领域');
       expect(answer.endorsements?.[0].textColorGroup).assertEqual('GBK03A');
-      expect(answer.endorsements?.[1].text).assertEqual('不可信');
-      expect(answer.endorsements?.[1].textColorGroup).assertUndefined();
+      expect(answer.endorsements?.[0].leadingIconKey).assertEqual('zhicon_icon_24_chat_bubble_hash_fill');
+      expect(answer.endorsements?.[1].text).assertEqual('谢邀 @测试者');
+      expect(answer.endorsements?.[1].trailingIconKey).assertEqual('zhicon_icon_16_arrow_right');
+      expect(answer.endorsements?.[2].text).assertEqual('不可信');
+      expect(answer.endorsements?.[2].textColorGroup).assertUndefined();
       expect(answer.ipInfo).assertEqual('广东');
+    });
+
+    it('decodesAuthorBadgeV2AndSkipsUnpassedOrIconless', 0, () => {
+      const answer: Answer = decodeAnswerDetail(
+        '{"id":"9007199254740993","question":{"id":"456"},"content":"正文","excerpt":"摘要",' +
+        '"voteup_count":21,"comment_count":3,"created_time":1700000000,"updated_time":1700000001,' +
+        '"author":{"id":"author-a","name":"回答者","headline":"签名",' +
+        '"badgeV2":{"icon":"","mergedBadges":[' +
+        '{"title":"待审核徽章","description":"未通过","badgeStatus":"pending","icon":"https://pic.zhimg.com/pending.png"},' +
+        '{"title":"认证","description":"已认证","badgeStatus":"passed","icon":"https://pic.zhimg.com/cert.png"},' +
+        '{"title":"中文工程师","description":"中文工程师","badgeStatus":"passed","icon":"https://pic.zhimg.com/badge.png"}' +
+        ']}}}',
+        '9007199254740993'
+      );
+      expect(answer.author?.badge?.title).assertEqual('中文工程师');
+      expect(answer.author?.badge?.iconUrl).assertEqual('https://pic.zhimg.com/badge.png');
+
+      // 顶层 icon 非空时覆盖子徽章图标；仅剩「认证」徽章时也可展示。
+      const article: Article = decodeArticleDetail(
+        '{"id":789,"title":"文章","content":"正文","excerpt":"摘要","voteup_count":1,"comment_count":0,' +
+        '"created":1,"updated":2,' +
+        '"author":{"id":"author-z","name":"作者","headline":"签名",' +
+        '"badgeV2":{"icon":"https://pic.zhimg.com/top.png","detailBadges":[' +
+        '{"title":"认证","description":"已认证","badgeStatus":"passed","icon":"https://pic.zhimg.com/cert.png"}' +
+        ']}}}',
+        '789'
+      );
+      expect(article.author?.badge?.title).assertEqual('认证');
+      expect(article.author?.badge?.iconUrl).assertEqual('https://pic.zhimg.com/top.png');
+
+      // 无 badgeV2 或全部徽章缺图标时不产生徽章对象。
+      const plain = decodeAnswerDetail(ANSWER_JSON, '9007199254740993');
+      expect(plain.author?.badge).assertUndefined();
+      const iconless: Article = decodeArticleDetail(
+        '{"id":789,"title":"文章","content":"正文","excerpt":"摘要","voteup_count":1,"comment_count":0,' +
+        '"created":1,"updated":2,' +
+        '"author":{"id":"author-z","name":"作者","headline":"签名",' +
+        '"badgeV2":{"icon":"","mergedBadges":[{"title":"无图标徽章","description":"无图标"}]}}}',
+        '789'
+      );
+      expect(iconless.author?.badge).assertUndefined();
+    });
+
+    it('decodesArticleTopics', 0, () => {
+      const article: Article = decodeArticleDetail(
+        '{"id":789,"title":"文章","content":"正文","excerpt":"摘要","voteup_count":1,"comment_count":0,' +
+        '"created":1,"updated":2,' +
+        '"author":{"id":"author-z","name":"作者","headline":"签名"},' +
+        '"topics":[{"id":901,"name":"湿疹"},{"id":902,"name":"健康常识"}]}',
+        '789'
+      );
+      expect(article.topics?.length).assertEqual(2);
+      expect(article.topics?.[0].id).assertEqual('901');
+      expect(article.topics?.[0].name).assertEqual('湿疹');
+      expect(article.topics?.[1].name).assertEqual('健康常识');
+
+      const missing = decodeArticleDetail(ARTICLE_JSON, '789');
+      expect(missing.topics?.length ?? 0).assertEqual(0);
     });
 
     it('keepsRequestedLongIdWhenJsonNumberCannotBeRepresentedExactly', 0, () => {

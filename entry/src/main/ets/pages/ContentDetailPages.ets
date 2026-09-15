@@ -17,6 +17,7 @@ import {
   answerDoubleTapActionLabel,
   AnswerEndorsementDisplay,
   AppPreferencesStore,
+  AuthorBadge,
   BlockedFeedHistoryGateway,
   BlockingRuleGateway,
   ChannelContentItem,
@@ -944,6 +945,12 @@ struct ContentDetailPage {
             .width('100%')
         }
 
+        // 文章话题胶囊流（对齐上游 ArticleScreen topics FlowRow：仅文章页在信息头展示，
+        // 问题页话题在回答列表尾部 questionBodyFooter 中展示）。
+        if (content.kind === ContentDetailKind.ARTICLE && (content.value.topics?.length ?? 0) > 0) {
+          this.articleTopicsFlow(content.value.topics ?? [])
+        }
+
         if (contentEndorsements(content).length > 0) {
           this.endorsementFlow(contentEndorsements(content))
         }
@@ -1087,13 +1094,25 @@ struct ContentDetailPage {
           .clip(true)
 
         Column({ space: 2 }) {
-          Text(contentAuthorName(content))
-            .id(`p3_${content.kind}_detail_header_author`)
-            .fontSize($r('app.float.p1_body_font_size'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.primary_text'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          Row({ space: 4 }) {
+            Text(contentAuthorName(content))
+              .id(`p3_${content.kind}_detail_header_author`)
+              .fontSize($r('app.float.p1_body_font_size'))
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.primary_text'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+            // 作者认证徽章（对齐上游 AuthorBadge：名称旁 18vp 图标）。
+            if (contentAuthorBadge(content) !== undefined) {
+              Image(contentAuthorBadge(content)?.iconUrl ?? '')
+                .id(`p3_${content.kind}_detail_header_author_badge`)
+                .width(18)
+                .height(18)
+                .objectFit(ImageFit.Contain)
+                .draggable(false)
+            }
+          }
+          .alignItems(VerticalAlign.Center)
           if (contentAuthorHeadline(content).length > 0) {
             Text(contentAuthorHeadline(content))
               .fontSize($r('app.float.p1_caption_font_size'))
@@ -1137,6 +1156,7 @@ struct ContentDetailPage {
           questionTitle: contentContextTitle(content),
           authorName: contentAuthorName(content),
           authorAvatarUrl: contentAuthorAvatarUrl(content),
+          authorBadgeIconUrl: contentAuthorBadge(content)?.iconUrl ?? '',
           scrolled: scrolled
         });
       });
@@ -1173,6 +1193,7 @@ struct ContentDetailPage {
           title: contentContextTitle(content),
           authorName: contentAuthorName(content),
           authorAvatarUrl: contentAuthorAvatarUrl(content),
+          authorBadgeIconUrl: contentAuthorBadge(content)?.iconUrl ?? '',
           scrolled: scrolled
         });
       });
@@ -2055,18 +2076,57 @@ struct ContentDetailPage {
     });
   }
 
+  /** 文章话题胶囊流（对齐上游 "# 名称" FilterChip；点击经搜索页进入话题，与问题页话题一致）。 */
+  @Builder
+  private articleTopicsFlow(topics: Array<QuestionTopicSummary>) {
+    Flex({ wrap: FlexWrap.Wrap }) {
+      ForEach(topics, (topic: QuestionTopicSummary): void => {
+        Button(`# ${topic.name}`, { type: ButtonType.Normal, stateEffect: true })
+          .id(`p3_article_topic_${topic.id}`)
+          .height(30)
+          .fontSize($r('app.float.p1_caption_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .backgroundColor($r('app.color.surface_background'))
+          .borderRadius(15)
+          .border({ width: 1, color: $r('app.color.secondary_text'), radius: 15 })
+          .margin({ right: 8, bottom: 8 })
+          .onClick((): void => this.navigate({ name: P1DestinationName.SEARCH, query: topic.name }))
+      }, (topic: QuestionTopicSummary): string => topic.id)
+    }
+    .id('p3_article_detail_topics')
+    .width('100%')
+  }
+
   @Builder
   private endorsementFlow(endorsements: Array<AnswerEndorsementDisplay>) {
     // P3-9-D1：认可徽章流（对齐上游 FlowRow 胶囊）；用 Flex 换行近似流式布局。
     Flex({ wrap: FlexWrap.Wrap, direction: FlexDirection.Row }) {
       ForEach(endorsements, (endorsement: AnswerEndorsementDisplay) => {
         Row({ space: 4 }) {
+          // 前导 # 图标（上游 zhicon_icon_24_chat_bubble_hash_fill → Tag 图标）。
+          if ((endorsement.leadingIconKey ?? '').indexOf('hash') >= 0) {
+            Text('#')
+              .fontSize($r('app.float.p1_caption_font_size'))
+              .fontWeight(FontWeight.Bold)
+              .fontColor(endorsementTextColor(endorsement))
+          }
           Text(endorsement.text)
             .fontSize($r('app.float.p1_caption_font_size'))
             .fontWeight(FontWeight.Medium)
             .fontColor(endorsementTextColor(endorsement))
             .maxLines(1)
+          // 尾随箭头（上游 arrow_right / arrow_down 图片键）。
+          if ((endorsement.trailingIconKey ?? '').indexOf('arrow_down') >= 0) {
+            SymbolGlyph($r('sys.symbol.chevron_down'))
+              .fontSize(14)
+              .fontColor([endorsementTextColor(endorsement)])
+          } else if ((endorsement.trailingIconKey ?? '').indexOf('arrow_right') >= 0) {
+            SymbolGlyph($r('sys.symbol.chevron_right'))
+              .fontSize(14)
+              .fontColor([endorsementTextColor(endorsement)])
+          }
         }
+        .alignItems(VerticalAlign.Center)
         .padding({
           left: 10,
           right: 10,
@@ -2194,6 +2254,7 @@ struct ContentDetailPage {
           questionTitle: contentContextTitle(state.content),
           authorName: contentAuthorName(state.content),
           authorAvatarUrl: contentAuthorAvatarUrl(state.content),
+          authorBadgeIconUrl: contentAuthorBadge(state.content)?.iconUrl ?? '',
           scrolled: this.answerQuestionScrolled
         });
       }
@@ -2203,6 +2264,7 @@ struct ContentDetailPage {
           title: contentContextTitle(state.content),
           authorName: contentAuthorName(state.content),
           authorAvatarUrl: contentAuthorAvatarUrl(state.content),
+          authorBadgeIconUrl: contentAuthorBadge(state.content)?.iconUrl ?? '',
           scrolled: this.articleTitleScrolled
         });
       }
@@ -2471,6 +2533,19 @@ export function contentAuthorAvatarUrl(content: LoadedContentDetail): string {
     return '';
   }
   return url;
+}
+
+/** 作者认证徽章：仅有可信图标 URL 时返回，否则不渲染（对齐上游 AuthorBadge 空图标跳过）。 */
+export function contentAuthorBadge(content: LoadedContentDetail): AuthorBadge | undefined {
+  const badge = content.value.author?.badge;
+  if (badge === undefined || badge.iconUrl.trim().length === 0) {
+    return undefined;
+  }
+  const url = badge.iconUrl.startsWith('http://') ? `https://${badge.iconUrl.substring(7)}` : badge.iconUrl;
+  if (!/^https:\/\/[A-Za-z0-9.-]+/.test(url)) {
+    return undefined;
+  }
+  return { title: badge.title, description: badge.description, iconUrl: url };
 }
 
 /** 详情时间戳（unix 秒）转本地 yyyy-MM-dd HH:mm；对齐上游 formatArticleDateTime，非法值返回空串。 */

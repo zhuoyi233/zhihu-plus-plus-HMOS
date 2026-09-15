@@ -9,6 +9,8 @@ export interface ArticleTitleState {
   title: string;
   authorName: string;
   authorAvatarUrl: string;
+  /** 作者认证徽章图标 URL；未认证为空串。 */
+  authorBadgeIconUrl: string;
   scrolled: boolean;
 }
 
@@ -16,7 +18,8 @@ export function publishArticleTitle(state: ArticleTitleState): void {
   const states = AppStorage.get<ArticleTitleState[]>('articleTitleStates') ?? [];
   const previous = states.find((item: ArticleTitleState): boolean => item.id === state.id);
   if (previous?.title === state.title && previous.authorName === state.authorName &&
-    previous.authorAvatarUrl === state.authorAvatarUrl && previous.scrolled === state.scrolled) {
+    previous.authorAvatarUrl === state.authorAvatarUrl &&
+    previous.authorBadgeIconUrl === state.authorBadgeIconUrl && previous.scrolled === state.scrolled) {
     return;
   }
   AppStorage.setOrCreate('articleTitleStates',
@@ -128,13 +131,28 @@ export struct ArticleTitleBar {
               .width(18)
               .height(18)
               .clip(true)
-            Text(this.state()?.authorName ?? '')
-              .id('article_top_author')
-              .fontSize($r('app.float.p1_caption_font_size'))
-              .fontColor($r('app.color.secondary_text'))
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .layoutWeight(1)
+            // 名称 + 徽章同组：名称 flexShrink 收缩省略，徽章紧跟名字右侧（对齐上游）。
+            Row({ space: 4 }) {
+              Text(this.state()?.authorName ?? '')
+                .id('article_top_author')
+                .fontSize($r('app.float.p1_caption_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .flexShrink(1)
+              // 作者认证徽章（对齐上游 compact AuthorBadge：折叠顶栏名称后 14vp 图标）。
+              if ((this.state()?.authorBadgeIconUrl ?? '').length > 0) {
+                Image(this.state()?.authorBadgeIconUrl ?? '')
+                  .id('article_top_author_badge')
+                  .width(14)
+                  .height(14)
+                  .objectFit(ImageFit.Contain)
+                  .draggable(false)
+                  .flexShrink(0)
+              }
+            }
+            .alignItems(VerticalAlign.Center)
+            .layoutWeight(1)
           }
           .width('100%')
         }

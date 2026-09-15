@@ -13,6 +13,7 @@ import {
   ContentDetailPhase,
   contentDetailIdentity,
   LoadedAnswerDetail,
+  LoadedArticleDetail,
   LoadedQuestionDetail
 } from '../main/ets/pages/ContentDetailState';
 import {
@@ -285,6 +286,41 @@ export default function contentDetailStateTest(): void {
       const state = controller.snapshot();
       const loaded = state.content as LoadedAnswerDetail;
       expect(loaded.value.ipInfo).assertEqual('贵州');
+    });
+
+    it('keepsAuthorBadgeAndArticleTopicsInSnapshotClone', 0, async () => {
+      // 回归扩展：作者认证徽章（author.badge）与文章话题（article.topics）同样要经克隆存活。
+      const repository = new ControlledContentRepository();
+      const controller = new ContentDetailController(repository);
+      controller.activate();
+      const answer = answerFixture();
+      answer.author = {
+        id: 'author-a',
+        name: '回答者',
+        headline: '回答签名',
+        followerCount: 1,
+        isFollowing: false,
+        isOrganization: false,
+        badge: { title: '中文工程师', description: '中文工程师', iconUrl: 'https://pic.zhimg.com/badge.png' }
+      };
+      repository.answer = answer;
+      await controller.load(ContentDetailKind.ANSWER, '2');
+      const answerSnapshot = controller.snapshot();
+      const loadedAnswer = answerSnapshot.content as LoadedAnswerDetail;
+      expect(loadedAnswer.value.author?.badge?.title).assertEqual('中文工程师');
+      expect(loadedAnswer.value.author?.badge?.iconUrl).assertEqual('https://pic.zhimg.com/badge.png');
+
+      const article = articleFixture();
+      article.topics = [{ id: '901', name: '湿疹' }, { id: '902', name: '健康常识' }];
+      repository.article = article;
+      await controller.load(ContentDetailKind.ARTICLE, '3');
+      const articleSnapshot = controller.snapshot();
+      const loadedArticle = articleSnapshot.content as LoadedArticleDetail;
+      expect(loadedArticle.kind).assertEqual(ContentDetailKind.ARTICLE);
+      const topics = loadedArticle.value.topics ?? [];
+      expect(topics.length).assertEqual(2);
+      expect(topics[0].name).assertEqual('湿疹');
+      expect(topics[1].name).assertEqual('健康常识');
     });
   });
 }
