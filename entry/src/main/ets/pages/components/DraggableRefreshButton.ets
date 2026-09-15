@@ -2,7 +2,7 @@ import { AppPreferencesStore, FabPosition } from 'data';
 import { getAbilityContext } from '../../entryability/AbilityContextHolder';
 import { performConfirmHaptic } from '../../platform/HapticFeedback';
 
-const REFRESH_FAB_SIZE: number = 56;
+const REFRESH_FAB_SIZE: number = 48;
 const REFRESH_FAB_BOTTOM_BASELINE: number = 250;
 
 /**
@@ -130,12 +130,12 @@ export struct DraggableRefreshButton {
         Button({ type: ButtonType.Circle, stateEffect: true }) {
           if (this.loading) {
             LoadingProgress()
-              .width(30)
-              .height(30)
+              .width(26)
+              .height(26)
               .color($r('app.color.on_brand'))
           } else {
             SymbolGlyph($r('sys.symbol.arrow_clockwise'))
-              .fontSize(24)
+              .fontSize(20)
               .fontColor([$r('app.color.on_brand')])
           }
         }

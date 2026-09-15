@@ -145,20 +145,20 @@ export struct CollectionPage {
         Button({ type: ButtonType.Normal, stateEffect: true }) {
           if (this.busy) {
             LoadingProgress()
-              .width(24)
-              .height(24)
+              .width(20)
+              .height(20)
               .color(Color.White)
           } else {
             SymbolGlyph($r('sys.symbol.plus'))
-              .fontSize(24)
+              .fontSize(20)
               .fontColor([Color.White])
           }
         }
           .id('p3_collections_create_button')
-          .width(56)
-          .height(56)
+          .width(48)
+          .height(48)
           .padding(0)
-          .borderRadius(28)
+          .borderRadius(24)
           .backgroundColor($r('app.color.brand_primary'))
           .margin({
             right: $r('app.float.p1_page_padding'),
