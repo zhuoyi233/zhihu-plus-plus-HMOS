@@ -592,6 +592,9 @@ export struct NativeContentDocument {
   onBottomEdgeChange?: (atBottom: boolean) => void;
   /** 回答详情页切换：正文是否贴在列表顶边（顶部过滑切上一答依赖此信号）。 */
   onTopEdgeChange?: (atTop: boolean) => void;
+  /** 电纸书翻页在正文边界继续翻页时，由回答页切换相邻回答。 */
+  onPageTurnPastStart?: () => void;
+  onPageTurnPastEnd?: () => void;
   /** 回答详情页关闭 Spring 边缘效果：自定义 overscroll 需要独占边界拖动量。 */
   disableEdgeSpring: boolean = false;
   /** 问题页正文折叠预览：正文超阈值（纯文本≥100 字或含图）时收起为 180vp 视口。 */
@@ -617,6 +620,12 @@ export struct NativeContentDocument {
   @StorageProp('contentFontSize') @Watch('onTypographyChanged') private fontSizePercent: number = 100;
   @StorageProp('contentLineHeight') @Watch('onTypographyChanged') private lineHeightPercent: number = 160;
   @StorageProp('contentBlockSpacing') @Watch('onTypographyChanged') private blockSpacingPercent: number = 100;
+  @StorageProp('showPageTurnFab') private showPageTurnFab: boolean = false;
+  @StorageProp('volumeKeyPageTurn') private volumeKeyPageTurn: boolean = false;
+  @StorageProp('pageTurnPercent') private pageTurnPercent: number = 90;
+  @StorageProp('showPageTurnGuide') private showPageTurnGuide: boolean = false;
+  @StorageProp('showContentEndMarker') private showContentEndMarker: boolean = false;
+  @State private pageTurnGuideVisible: boolean = false;
   /** 正文视口高度（vp）：List 的 onAreaChange 回填，供阅读进度条换算拇指高度。 */
   @State private viewportHeightVp: number = 0;
   /** 正文内容总高（vp）：本页 SDK 无最大滚动距离 API，按实测块高估算、触底时校准。 */
@@ -766,6 +775,17 @@ export struct NativeContentDocument {
               this.reportChromeHeight('bodyFooter', newArea);
             })
           this.documentItems()
+          if (this.showContentEndMarker && !this.empty) {
+            ListItem() {
+              Text('— 内容结束 —')
+                .id('p3_content_end_marker')
+                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+                .width('100%')
+                .textAlign(TextAlign.Center)
+                .padding({ top: 24, bottom: 12 })
+            }
+          }
           ListItem() {
             this.documentFooter()
           }
@@ -852,14 +872,75 @@ export struct NativeContentDocument {
         .width(READING_PROGRESS_BAR_HIT_WIDTH_VP)
         .height('100%')
         .margin({ right: READING_PROGRESS_BAR_RIGHT_INSET_VP })
+
+      if (this.pageTurnGuideVisible && this.showPageTurnGuide) {
+        Divider()
+          .id('p3_page_turn_guide')
+          .color($r('app.color.brand_primary'))
+          .strokeWidth(1)
+          .opacity(0.55)
+          .width('100%')
+          .align(Alignment.Center)
+          .hitTestBehavior(HitTestMode.None)
+      }
+
+      if (this.showPageTurnFab) {
+        Column({ space: 8 }) {
+          Button({ type: ButtonType.Circle, stateEffect: true }) {
+            SymbolGlyph($r('sys.symbol.chevron_up')).fontSize(20)
+          }
+          .id('p3_page_turn_previous')
+          .width(44).height(44)
+          .backgroundColor($r('app.color.surface_background'))
+          .onClick((): void => this.turnPage(-1))
+          Button({ type: ButtonType.Circle, stateEffect: true }) {
+            SymbolGlyph($r('sys.symbol.chevron_down')).fontSize(20)
+          }
+          .id('p3_page_turn_next')
+          .width(44).height(44)
+          .backgroundColor($r('app.color.surface_background'))
+          .onClick((): void => this.turnPage(1))
+        }
+        .align(Alignment.End)
+        .margin({ right: 20 })
+      }
     }
     .width('100%')
     .height('100%')
+    .focusable(this.volumeKeyPageTurn)
+    .defaultFocus(this.volumeKeyPageTurn)
+    .onKeyPreIme((event: KeyEvent): boolean => {
+      if (!this.volumeKeyPageTurn || (event.keyCode !== 16 && event.keyCode !== 17)) {
+        return false;
+      }
+      if (event.type === KeyType.Down) {
+        this.turnPage(event.keyCode === 16 ? -1 : 1);
+      }
+      return true;
+    })
   }
 
   /** 正文字号（fp，`Text.fontSize` 传 number 即 fp）：16 × 字号%，默认 16 == 改造前 16fp。 */
   private bodyFontSize(): number {
     return readerBodyFontSize(this.fontSizePercent);
+  }
+
+  private turnPage(direction: number): void {
+    const maxOffset = Math.max(0, this.contentHeightVp - this.viewportHeightVp);
+    if (direction < 0 && this.scrollYVp <= 2) {
+      const callback = this.onPageTurnPastStart;
+      if (callback !== undefined) callback();
+      return;
+    }
+    if (direction > 0 && this.scrollYVp >= maxOffset - 2) {
+      const callback = this.onPageTurnPastEnd;
+      if (callback !== undefined) callback();
+      return;
+    }
+    const distance = this.viewportHeightVp * this.pageTurnPercent / 100;
+    const target = Math.max(0, Math.min(maxOffset, this.scrollYVp + direction * distance));
+    this.scroller.scrollTo({ xOffset: 0, yOffset: target, animation: true });
+    this.pageTurnGuideVisible = this.showPageTurnGuide;
   }
 
   /** 正文行高（fp）：行高 160% ↔ 改造前的 30，见 ReaderTypography 的归一说明。 */

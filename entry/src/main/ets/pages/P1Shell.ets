@@ -5,26 +5,17 @@ import { AnswerTitleBar } from './AnswerTitleBar';
 import { ArticleTitleBar } from './ArticleTitleBar';
 import { NotificationTitleBar } from './NotificationTitleBar';
 import {
-  allAnswerDoubleTapActions,
+  AppearancePreferences,
   AnswerDoubleTapAction,
-  answerDoubleTapActionLabel,
   AppPreferencesStore,
   AppThemeMode,
+  ExperiencePreferences,
+  normalizeBottomBarItems,
   AppUpdateCheckResult,
   AppUpdateCheckStatus,
   AppUpdateClient,
   AppUpdateRelease,
-  CONTENT_BLOCK_SPACING_MAX,
-  CONTENT_BLOCK_SPACING_MIN,
-  CONTENT_LINE_HEIGHT_MAX,
-  CONTENT_LINE_HEIGHT_MIN,
-  CONTENT_TYPOGRAPHY_STEP,
-  contentFontSizeLevels,
-  decodeContentBlockSpacing,
-  decodeContentFontSize,
-  decodeContentLineHeight,
   LoginSessionGateway,
-  normalizeReaderTypography,
   ReaderTypography,
   SessionState,
   SessionStatus,
@@ -53,13 +44,13 @@ import {
 } from 'core';
 import { AppNavigationRow } from './AppPageChrome';
 import {
-  isP1TopLevelTabIndex,
   P1TopLevelTab,
   p1TopLevelTabForDestination
 } from './P1TopLevelTabs';
 import { DividerShowType, hdsMaterial, HdsNavDestination, HdsNavigation, HdsNavigationAttribute, HdsNavigationTitleMode, HdsTabsController } from '@kit.UIDesignKit';
 import { getImmersiveTitleBarStyle } from '../common/style/NavStyles';
 import { ZhihuHdsTabs } from './components/ZhihuHdsTabs';
+import { AppearanceSettingsPage } from './AppearanceSettingsPage';
 import { materialCanvas } from './components/MaterialCanvas';
 import { ChannelFeedInteractionBridge } from './ChannelFeedState';
 import { dailyDateCursor, dailyPickerDate, formatDailyDate } from './DailyFeedDates';
@@ -139,12 +130,9 @@ export struct P1Shell {
   /** 回答页双击正文动作（对齐上游 answerDoubleTapAction）：AppStorage 广播与详情页双向同步。 */
   @StorageProp('answerDoubleTapAction') private answerDoubleTapAction: AnswerDoubleTapAction =
     AnswerDoubleTapAction.ASK;
-  /** 正文排版偏好（对齐上游"阅读"分组 contentFontSize/contentLineHeight/contentBlockSpacing）。 */
-  @StorageProp('contentFontSize') private contentFontSize: number = 100;
-  @StorageProp('contentLineHeight') private contentLineHeight: number = 160;
-  @StorageProp('contentBlockSpacing') private contentBlockSpacing: number = 100;
   /** 回答/文章详情页沉浸式阅读中（页面广播）：隐藏 NavDestination 顶栏（对齐上游 topBar={}）。 */
   @StorageProp('detailImmersiveActive') private detailImmersiveActive: boolean = false;
+  @StorageProp('detailTitleHiddenByScroll') private detailTitleHiddenByScroll: boolean = false;
   /** 全屏图片查看器打开中（详情页广播）：同样隐藏顶栏，使查看器真全屏。 */
   @StorageProp('p2ImagePreviewUrl') private imagePreviewUrl: string = '';
   @State private installedVersionLabel: string = '正在读取已安装版本…';
@@ -172,6 +160,12 @@ export struct P1Shell {
   @Provide('channelFeedInteractionBridge') private channelFeedInteractionBridge: ChannelFeedInteractionBridge =
     new ChannelFeedInteractionBridge();
   @State @Watch('onTopLevelTabIndexChanged') private topLevelTabIndex: number = P1TopLevelTab.HOME;
+  @State private bottomBarOrder: number[] = [P1TopLevelTab.HOME, P1TopLevelTab.FOLLOWING,
+    P1TopLevelTab.HOT, P1TopLevelTab.DAILY, P1TopLevelTab.ACCOUNT];
+  @StorageProp('bottomBarItems') @Watch('onBottomBarItemsChanged') private bottomBarItems: string =
+    'Home,Following,Hot,Daily,Settings';
+  @StorageProp('tapToRefresh') private tapToRefresh: boolean = true;
+  private startDestinationApplied: boolean = false;
   private readonly tabsController: HdsTabsController = new HdsTabsController();
   @Provide('p1PathStack') pathStack: NavPathStack = new NavPathStack();
   private unsubscribeStartupDestination: (() => void) | undefined = undefined;
@@ -179,7 +173,6 @@ export struct P1Shell {
   private themeMounted: boolean = false;
   private themeSaveQueue: Promise<void> = Promise.resolve();
   /** 排版偏好专用 store 实例：滑块拖动会高频写盘，需单实例 saveQueue 串行化。 */
-  private typographyStore: AppPreferencesStore | undefined = undefined;
 
   aboutToAppear(): void {
     this.themeMounted = true;
@@ -187,6 +180,8 @@ export struct P1Shell {
     this.restoreThemeMode();
     void this.restoreAnswerDoubleTapAction();
     void this.restoreReaderTypography();
+    void this.restoreAppearancePreferences();
+    void this.restoreExperiencePreferences();
     this.refreshInstalledVersionLabel();
     this.unsubscribeStartupDestination?.();
     const listener: StartupDestinationListener = (destination: P1Destination): void => {
@@ -323,7 +318,19 @@ export struct P1Shell {
       HdsNavDestination() {
         this.settingsPage();
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '显示与阅读' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '我的' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.APPEARANCE_SETTINGS) {
+      HdsNavDestination() {
+        AppearanceSettingsPage({
+          themeMode: this.themeMode,
+          onThemeModeChange: (mode: AppThemeMode): void => {
+            void this.selectThemeMode(mode);
+          }
+        });
+      }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '外观与阅读体验' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.BLOCKING_RULES) {
@@ -463,7 +470,7 @@ export struct P1Shell {
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.questionTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
       // 问题页正文图片同样可打开全屏查看器：隐藏顶栏，返回键优先关查看器。
-      .hideTitleBar(this.detailImmersiveActive || this.imagePreviewUrl.length > 0)
+      .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll || this.imagePreviewUrl.length > 0)
       .onBackPressed((): boolean => {
         if (this.imagePreviewUrl.length > 0) {
           AppStorage.setOrCreate('p2ImagePreviewUrl', '');
@@ -486,7 +493,7 @@ export struct P1Shell {
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.answerTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
       // 沉浸式/图片查看器中隐藏顶栏（对齐上游 topBar={}）；返回键优先关查看器、再退沉浸式。
-      .hideTitleBar(this.detailImmersiveActive || this.imagePreviewUrl.length > 0)
+      .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll || this.imagePreviewUrl.length > 0)
       .onBackPressed((): boolean => {
         if (this.imagePreviewUrl.length > 0) {
           AppStorage.setOrCreate('p2ImagePreviewUrl', '');
@@ -514,7 +521,7 @@ export struct P1Shell {
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.articleTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
       // 与回答页一致：沉浸式/图片查看器中隐藏顶栏，返回键优先关查看器。
-      .hideTitleBar(this.detailImmersiveActive || this.imagePreviewUrl.length > 0)
+      .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll || this.imagePreviewUrl.length > 0)
       .onBackPressed((): boolean => {
         if (this.imagePreviewUrl.length > 0) {
           AppStorage.setOrCreate('p2ImagePreviewUrl', '');
@@ -785,46 +792,32 @@ export struct P1Shell {
         controller: this.tabsController,
         onTabDoubleTap: (index: number): void => {
           // 双击页签刷新对应 feed（“我的”除外）；跨页面信号经 AppStorage 广播。
-          if (index < P1TopLevelTab.HOME || index > P1TopLevelTab.DAILY) {
+          const tab = this.tabAtDisplayIndex(index);
+          if (tab < P1TopLevelTab.HOME || tab > P1TopLevelTab.DAILY) {
             return;
           }
           const nextTick = (AppStorage.get<number>('tabRefreshTick') ?? 0) + 1;
           AppStorage.setOrCreate('tabRefreshTick', nextTick);
-          AppStorage.setOrCreate('tabRefreshTabIndex', index);
+          AppStorage.setOrCreate('tabRefreshTabIndex', tab);
+        },
+        onCurrentTabTap: (index: number): void => {
+          const tab = this.tabAtDisplayIndex(index);
+          if (!this.tapToRefresh || tab < P1TopLevelTab.HOME || tab > P1TopLevelTab.DAILY) {
+            return;
+          }
+          AppStorage.setOrCreate('tabScrollTopTabIndex', tab);
+          AppStorage.setOrCreate('tabScrollTopTick', (AppStorage.get<number>('tabScrollTopTick') ?? 0) + 1);
         }
       }) {
-        TabContent() {
-          this.homeContent(this.homeReloadToken, (destination: P1Destination): void => this.navigate(destination));
+        this.topLevelTabSlot(0)
+        this.topLevelTabSlot(1)
+        this.topLevelTabSlot(2)
+        if (this.bottomBarOrder.length > 3) {
+          this.topLevelTabSlot(3)
         }
-        .id('p1_top_level_home_content')
-        .tabBar(this.topLevelTabBarStyle(P1TopLevelTab.HOME))
-
-        TabContent() {
-          this.followingContent(this.followingReloadToken,
-            (destination: P1Destination): void => this.navigate(destination),
-            this.followingTitleSelectedIndex);
+        if (this.bottomBarOrder.length > 4) {
+          this.topLevelTabSlot(4)
         }
-        .id('p1_top_level_following_content')
-        .tabBar(this.topLevelTabBarStyle(P1TopLevelTab.FOLLOWING))
-
-        TabContent() {
-          this.hotContent(this.hotReloadToken, (destination: P1Destination): void => this.navigate(destination));
-        }
-        .id('p1_top_level_hot_content')
-        .tabBar(this.topLevelTabBarStyle(P1TopLevelTab.HOT))
-
-        TabContent() {
-          this.dailyContent(this.dailyReloadToken, this.dailyDateCursor,
-            (destination: P1Destination): void => this.navigate(destination));
-        }
-        .id('p1_top_level_daily_content')
-        .tabBar(this.topLevelTabBarStyle(P1TopLevelTab.DAILY))
-
-        TabContent() {
-          this.settingsPage();
-        }
-        .id('p1_top_level_account_content')
-        .tabBar(this.topLevelTabBarStyle(P1TopLevelTab.ACCOUNT))
       }
     }
     .titleBar({
@@ -845,6 +838,52 @@ export struct P1Shell {
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
   }
 
+  @Builder
+  private topLevelTabSlot(index: number) {
+    TabContent() {
+      this.topLevelTabPage(this.tabAtDisplayIndex(index))
+    }
+    .id(`p1_top_level_${this.tabKey(this.tabAtDisplayIndex(index))}_content`)
+    .tabBar(this.topLevelTabBarStyle(this.tabAtDisplayIndex(index)))
+  }
+
+  @Builder
+  private topLevelTabPage(tab: P1TopLevelTab) {
+    if (tab === P1TopLevelTab.HOME) {
+      this.homeContent(this.homeReloadToken, (destination: P1Destination): void => this.navigate(destination))
+    } else if (tab === P1TopLevelTab.FOLLOWING) {
+      this.followingContent(this.followingReloadToken,
+        (destination: P1Destination): void => this.navigate(destination), this.followingTitleSelectedIndex)
+    } else if (tab === P1TopLevelTab.HOT) {
+      this.hotContent(this.hotReloadToken, (destination: P1Destination): void => this.navigate(destination))
+    } else if (tab === P1TopLevelTab.DAILY) {
+      this.dailyContent(this.dailyReloadToken, this.dailyDateCursor,
+        (destination: P1Destination): void => this.navigate(destination))
+    } else if (tab === P1TopLevelTab.HISTORY) {
+      this.readHistoryContent((destination: P1Destination): void => this.navigate(destination), (): void => {})
+    } else if (tab === P1TopLevelTab.COLLECTIONS) {
+      this.topLevelCollectionsPage()
+    } else {
+      this.settingsPage()
+    }
+  }
+
+  @Builder
+  private topLevelCollectionsPage() {
+    if (this.currentAccountIdentifier().length > 0) {
+      this.collectionsContent(this.currentAccountIdentifier(),
+        (destination: P1Destination): void => this.navigate(destination), (): void => {})
+    } else {
+      Column({ space: $r('app.float.p1_spacing_medium') }) {
+        Text('登录后查看收藏夹')
+          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontColor($r('app.color.primary_text'))
+        Button('去登录').onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
+      }
+      .width('100%').height('100%').justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
+    }
+  }
+
   private topLevelTabBarStyle(tab: P1TopLevelTab): BottomTabBarStyle {
     // 图标语义直白优先：house/person_2/flame/doc_text/person（经系统符号表核实）。
     let icon: Resource = $r('sys.symbol.house');
@@ -854,6 +893,10 @@ export struct P1Shell {
       icon = $r('sys.symbol.flame');
     } else if (tab === P1TopLevelTab.DAILY) {
       icon = $r('sys.symbol.doc_text');
+    } else if (tab === P1TopLevelTab.HISTORY) {
+      icon = $r('sys.symbol.clock');
+    } else if (tab === P1TopLevelTab.COLLECTIONS) {
+      icon = $r('sys.symbol.bookmark');
     } else if (tab === P1TopLevelTab.ACCOUNT) {
       icon = $r('sys.symbol.person');
     }
@@ -881,9 +924,37 @@ export struct P1Shell {
         return '热榜';
       case P1TopLevelTab.DAILY:
         return '日报';
+      case P1TopLevelTab.HISTORY:
+        return '历史';
+      case P1TopLevelTab.COLLECTIONS:
+        return '收藏夹';
       case P1TopLevelTab.ACCOUNT:
         return '我的';
     }
+  }
+
+  private tabAtDisplayIndex(index: number): P1TopLevelTab {
+    const value = this.bottomBarOrder[index];
+    return value === undefined ? P1TopLevelTab.HOME : value as P1TopLevelTab;
+  }
+
+  private activeTopLevelTab(): P1TopLevelTab {
+    return this.tabAtDisplayIndex(this.topLevelTabIndex);
+  }
+
+  private tabKey(tab: P1TopLevelTab): string {
+    if (tab === P1TopLevelTab.FOLLOWING) return 'following';
+    if (tab === P1TopLevelTab.HOT) return 'hot';
+    if (tab === P1TopLevelTab.DAILY) return 'daily';
+    if (tab === P1TopLevelTab.HISTORY) return 'history';
+    if (tab === P1TopLevelTab.COLLECTIONS) return 'collections';
+    if (tab === P1TopLevelTab.ACCOUNT) return 'account';
+    return 'home';
+  }
+
+  private currentAccountIdentifier(): string {
+    const profile = this.session?.getState().profile;
+    return profile?.urlToken ?? profile?.id ?? '';
   }
 
   private supportsImmersiveMaterial(): boolean {
@@ -977,7 +1048,7 @@ export struct P1Shell {
   @Builder
   private rootTitleBarContent() {
     Stack({ alignContent: Alignment.Center }) {
-    if (this.topLevelTabIndex === P1TopLevelTab.HOME) {
+    if (this.activeTopLevelTab() === P1TopLevelTab.HOME) {
       Row({ space: $r('app.float.p1_spacing_small') }) {
         Button({ type: ButtonType.Normal, stateEffect: true }) {
           Row({ space: $r('app.float.p1_spacing_small') }) {
@@ -1019,7 +1090,7 @@ export struct P1Shell {
       .width('100%')
       .padding({ left: 12, right: 12 })
       .hitTestBehavior(HitTestMode.Transparent)
-    } else if (this.topLevelTabIndex === P1TopLevelTab.FOLLOWING) {
+    } else if (this.activeTopLevelTab() === P1TopLevelTab.FOLLOWING) {
       Column() {
         Row() {
           this.followingTitleTabItem('推荐', 0)
@@ -1032,7 +1103,7 @@ export struct P1Shell {
       .height('100%')
       .justifyContent(FlexAlign.Center)
       .hitTestBehavior(HitTestMode.Transparent)
-    } else if (this.topLevelTabIndex === P1TopLevelTab.HOT) {
+    } else if (this.activeTopLevelTab() === P1TopLevelTab.HOT) {
       Row() {
         Button({ type: ButtonType.Circle, stateEffect: true }) {
           SymbolGlyph($r('sys.symbol.arrow_clockwise'))
@@ -1055,7 +1126,7 @@ export struct P1Shell {
       .justifyContent(FlexAlign.End)
       .padding({ right: 12 })
       .hitTestBehavior(HitTestMode.Transparent)
-    } else if (this.topLevelTabIndex === P1TopLevelTab.DAILY) {
+    } else if (this.activeTopLevelTab() === P1TopLevelTab.DAILY) {
       Row() {
         Column({ space: 2 }) {
           Text('知乎日报')
@@ -1197,145 +1268,20 @@ export struct P1Shell {
           .borderRadius($r('app.float.p1_card_radius'))
           .backgroundColor($r('app.color.surface_background'))
 
-          Text('通知与外观')
+          Text('设置')
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
           Column({ space: $r('app.float.p1_spacing_small') }) {
+            AppNavigationRow({ title: '外观与阅读体验', description: '主题、阅读排版与信息流显示',
+              testId: 'p3_open_appearance_settings', grouped: true,
+              onRowClick: (): void => this.navigate({ name: P1DestinationName.APPEARANCE_SETTINGS }) });
+            Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '通知', description: '查看互动和系统消息', testId: 'p3_open_notifications', grouped: true,
               onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION }) });
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '通知设置', description: '设置提醒和推送偏好', testId: 'p3_open_notification_settings', grouped: true,
               onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION_SETTINGS }) });
-            Divider().color($r('app.color.divider_color'))
-            Column({ space: $r('app.float.p1_spacing_small') }) {
-              Text('主题模式')
-                .fontSize($r('app.float.p1_body_font_size'))
-                .fontColor($r('app.color.primary_text'))
-              Text('跟随系统会响应系统深浅色。')
-                .fontSize($r('app.float.p1_secondary_font_size'))
-                .fontColor($r('app.color.secondary_text'))
-              Row({ space: $r('app.float.p1_spacing_small') }) {
-                this.themeButton('跟随系统', AppThemeMode.SYSTEM, 'p1_theme_system');
-                this.themeButton('浅色', AppThemeMode.LIGHT, 'p1_theme_light');
-                this.themeButton('深色', AppThemeMode.DARK, 'p1_theme_dark');
-              }
-              .width('100%')
-            }
-            .alignItems(HorizontalAlign.Start)
-            .width('100%')
-            .padding($r('app.float.p1_card_padding'))
-            Divider().color($r('app.color.divider_color'))
-            Column({ space: $r('app.float.p1_spacing_small') }) {
-              Text('双击回答动作')
-                .fontSize($r('app.float.p1_body_font_size'))
-                .fontColor($r('app.color.primary_text'))
-              Text('双击回答正文时执行的动作。默认弹窗询问。')
-                .fontSize($r('app.float.p1_secondary_font_size'))
-                .fontColor($r('app.color.secondary_text'))
-              Select(this.answerDoubleTapSelectOptions())
-                .id('p3_settings_answer_double_tap_select')
-                .selected(this.answerDoubleTapAction)
-                .value(answerDoubleTapActionLabel(this.answerDoubleTapAction))
-                .fontColor($r('app.color.primary_text'))
-                .onSelect((index: number): void => {
-                  const actions = allAnswerDoubleTapActions();
-                  if (index >= 0 && index < actions.length) {
-                    void this.selectAnswerDoubleTapAction(actions[index]);
-                  }
-                })
-            }
-            .alignItems(HorizontalAlign.Start)
-            .width('100%')
-            .padding($r('app.float.p1_card_padding'))
-          }
-          .width('100%')
-          .borderRadius($r('app.float.p1_card_radius'))
-          .backgroundColor($r('app.color.surface_background'))
-
-          Text('阅读')
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .width('100%')
-          Column({ space: $r('app.float.p1_spacing_small') }) {
-            // 字号：档位数组（50..120 step5 + 130..200 step10）索引即滑块值，
-            // 与上游 contentFontSizeLevels.indexOf 的滑块口径一致。
-            Column({ space: $r('app.float.p1_spacing_small') }) {
-              Text('字号')
-                .fontSize($r('app.float.p1_body_font_size'))
-                .fontColor($r('app.color.primary_text'))
-              Text(`调整内容文字大小 (${this.contentFontSize}%)`)
-                .fontSize($r('app.float.p1_secondary_font_size'))
-                .fontColor($r('app.color.secondary_text'))
-              Slider({
-                value: this.fontSizeLevelIndex(),
-                min: 0,
-                max: this.fontSizeLevels().length - 1,
-                step: 1,
-                style: SliderStyle.OutSet
-              })
-                .id('p3_settings_content_font_size')
-                .width('100%')
-                .showSteps(true)
-                .onChange((value: number, _mode: SliderChangeMode): void => {
-                  const levels = this.fontSizeLevels();
-                  const index = Math.min(levels.length - 1, Math.max(0, Math.round(value)));
-                  this.applyReaderTypography(levels[index], this.contentLineHeight, this.contentBlockSpacing);
-                })
-            }
-            .alignItems(HorizontalAlign.Start)
-            .width('100%')
-            .padding($r('app.float.p1_card_padding'))
-            Divider().color($r('app.color.divider_color'))
-            Column({ space: $r('app.float.p1_spacing_small') }) {
-              Text('行高')
-                .fontSize($r('app.float.p1_body_font_size'))
-                .fontColor($r('app.color.primary_text'))
-              Text(`调整内容行间距 (${this.contentLineHeight}%)`)
-                .fontSize($r('app.float.p1_secondary_font_size'))
-                .fontColor($r('app.color.secondary_text'))
-              Slider({
-                value: this.contentLineHeight,
-                min: CONTENT_LINE_HEIGHT_MIN,
-                max: CONTENT_LINE_HEIGHT_MAX,
-                step: CONTENT_TYPOGRAPHY_STEP,
-                style: SliderStyle.OutSet
-              })
-                .id('p3_settings_content_line_height')
-                .width('100%')
-                .onChange((value: number, _mode: SliderChangeMode): void => {
-                  this.applyReaderTypography(this.contentFontSize,
-                    decodeContentLineHeight(value), this.contentBlockSpacing);
-                })
-            }
-            .alignItems(HorizontalAlign.Start)
-            .width('100%')
-            .padding($r('app.float.p1_card_padding'))
-            Divider().color($r('app.color.divider_color'))
-            Column({ space: $r('app.float.p1_spacing_small') }) {
-              Text('段间距')
-                .fontSize($r('app.float.p1_body_font_size'))
-                .fontColor($r('app.color.primary_text'))
-              Text(`调整正文段落和块级内容间距 (${this.contentBlockSpacing}%)`)
-                .fontSize($r('app.float.p1_secondary_font_size'))
-                .fontColor($r('app.color.secondary_text'))
-              Slider({
-                value: this.contentBlockSpacing,
-                min: CONTENT_BLOCK_SPACING_MIN,
-                max: CONTENT_BLOCK_SPACING_MAX,
-                step: CONTENT_TYPOGRAPHY_STEP,
-                style: SliderStyle.OutSet
-              })
-                .id('p3_settings_content_block_spacing')
-                .width('100%')
-                .onChange((value: number, _mode: SliderChangeMode): void => {
-                  this.applyReaderTypography(this.contentFontSize, this.contentLineHeight,
-                    decodeContentBlockSpacing(value));
-                })
-            }
-            .alignItems(HorizontalAlign.Start)
-            .width('100%')
-            .padding($r('app.float.p1_card_padding'))
           }
           .width('100%')
           .borderRadius($r('app.float.p1_card_radius'))
@@ -1592,19 +1538,6 @@ export struct P1Shell {
   }
 
   @Builder
-  themeButton(label: string, mode: AppThemeMode, testId: string) {
-    Button(label)
-      .id(testId)
-      .layoutWeight(1)
-      .fontSize($r('app.float.p1_secondary_font_size'))
-      .fontColor(this.themeMode === mode ? $r('app.color.on_brand') : $r('app.color.primary_text'))
-      .backgroundColor(this.themeMode === mode ? $r('app.color.brand_primary') : $r('app.color.control_background'))
-      .onClick(() => {
-        this.selectThemeMode(mode);
-      })
-  }
-
-  @Builder
   private settingsSearchResults() {
     Column({ space: $r('app.float.p1_spacing_small') }) {
       Text('搜索结果')
@@ -1644,27 +1577,10 @@ export struct P1Shell {
         AppNavigationRow({ title: '通知设置', description: '设置提醒和推送偏好', testId: 'p3_open_notification_settings',
           onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION_SETTINGS }) });
       }
-      if (this.settingsSearchMatches('主题模式', '跟随系统 浅色 深色')) {
-        Column({ space: $r('app.float.p1_spacing_small') }) {
-          Text('主题模式')
-            .fontSize($r('app.float.p1_body_font_size'))
-            .fontColor($r('app.color.primary_text'))
-          Text('跟随系统、浅色或深色')
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-          Row({ space: $r('app.float.p1_spacing_small') }) {
-            this.themeButton('跟随系统', AppThemeMode.SYSTEM, 'p1_theme_system');
-            this.themeButton('浅色', AppThemeMode.LIGHT, 'p1_theme_light');
-            this.themeButton('深色', AppThemeMode.DARK, 'p1_theme_dark');
-          }
-          .width('100%')
-        }
-        .id('p3_settings_search_theme_mode')
-        .alignItems(HorizontalAlign.Start)
-        .width('100%')
-        .padding($r('app.float.p1_card_padding'))
-        .borderRadius($r('app.float.p1_card_radius'))
-        .backgroundColor($r('app.color.surface_background'))
+      if (this.settingsSearchMatches('外观与阅读体验', '主题 阅读排版 信息流 字号 行高 段间距')) {
+        AppNavigationRow({ title: '外观与阅读体验', description: '主题、阅读排版与信息流显示',
+          testId: 'p3_search_open_appearance_settings',
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.APPEARANCE_SETTINGS }) });
       }
       if (this.settingsSearchMatches('应用与版本', this.installedVersionLabel)) {
         AppNavigationRow({ title: '应用与版本', description: this.installedVersionLabel,
@@ -2044,7 +1960,7 @@ export struct P1Shell {
       this.settingsSearchMatches('屏蔽记录', '查看最近隐藏的内容') ||
       this.settingsSearchMatches('通知', '查看互动和系统消息') ||
       this.settingsSearchMatches('通知设置', '设置提醒和推送偏好') ||
-      this.settingsSearchMatches('主题模式', '跟随系统 浅色 深色') ||
+      this.settingsSearchMatches('外观与阅读体验', '主题 阅读排版 信息流 字号 行高 段间距') ||
       this.settingsSearchMatches('应用与版本', this.installedVersionLabel) ||
       this.settingsSearchMatches('GitHub', '查看项目主页') ||
       this.settingsSearchMatches('项目协议', 'GNU AGPL v3.0') ||
@@ -2170,12 +2086,23 @@ export struct P1Shell {
     this.tabsController.changeIndex(this.topLevelTabIndex);
   }
 
+  private onBottomBarItemsChanged(): void {
+    const activeTab = this.activeTopLevelTab();
+    const nextBottomBarOrder = this.decodeBottomBarOrder(this.bottomBarItems);
+    this.bottomBarOrder = nextBottomBarOrder;
+    const activeDisplayIndex = nextBottomBarOrder.indexOf(activeTab);
+    this.topLevelTabIndex = activeDisplayIndex >= 0 ? activeDisplayIndex : 0;
+  }
+
   private navigate(destination: P1Destination): void {
     const topLevelTab = p1TopLevelTabForDestination(destination);
     if (topLevelTab !== undefined) {
-      this.pathStack.clear();
-      this.topLevelTabIndex = topLevelTab;
-      return;
+      const displayIndex = this.bottomBarOrder.indexOf(topLevelTab);
+      if (displayIndex >= 0) {
+        this.pathStack.clear();
+        this.topLevelTabIndex = displayIndex;
+        return;
+      }
     }
     const paths: Array<NavPathInfo> | undefined = this.pathStack.getPathStack();
     if (paths !== undefined && paths.length > 0) {
@@ -2292,12 +2219,6 @@ export struct P1Shell {
     }
   }
 
-  private answerDoubleTapSelectOptions(): SelectOption[] {
-    return allAnswerDoubleTapActions().map((action: AnswerDoubleTapAction): SelectOption => {
-      return { value: answerDoubleTapActionLabel(action) } as SelectOption;
-    });
-  }
-
   private async restoreAnswerDoubleTapAction(): Promise<void> {
     const context = this.getUIContext().getHostContext();
     if (context === undefined) {
@@ -2309,31 +2230,6 @@ export struct P1Shell {
     } catch (_error) {
       // 读取失败保持默认 Ask。
     }
-  }
-
-  private async selectAnswerDoubleTapAction(action: AnswerDoubleTapAction): Promise<void> {
-    const context = getAbilityContext();
-    if (context === undefined) {
-      return;
-    }
-    AppStorage.setOrCreate('answerDoubleTapAction', action);
-    try {
-      await new AppPreferencesStore(context).saveAnswerDoubleTapAction(action);
-    } catch (_error) {
-      // 保存失败时选择已生效，重启后可能恢复此前设置。
-    }
-    this.getUIContext().getPromptAction()
-      .showToast({ message: `已设置为：${answerDoubleTapActionLabel(action)}` });
-  }
-
-  private fontSizeLevels(): number[] {
-    return contentFontSizeLevels();
-  }
-
-  /** 字号滑块值 = 当前字号在档位数组中的下标（持久化值读取时已 coerce 到档位）。 */
-  private fontSizeLevelIndex(): number {
-    const index = contentFontSizeLevels().indexOf(decodeContentFontSize(this.contentFontSize));
-    return index >= 0 ? index : 0;
   }
 
   /** 读取排版偏好并广播；失败保持默认 100/160/100（与改造前视觉一致）。 */
@@ -2350,31 +2246,104 @@ export struct P1Shell {
     }
   }
 
-  /** 写入排版偏好：先广播 AppStorage（详情页若开着即实时联动），再落盘。 */
-  private applyReaderTypography(fontSize: number, lineHeight: number, blockSpacing: number): void {
-    const normalized = normalizeReaderTypography({
-      fontSize: fontSize,
-      lineHeight: lineHeight,
-      blockSpacing: blockSpacing
-    });
-    this.broadcastReaderTypography(normalized);
-    const context = getAbilityContext();
-    if (context === undefined) {
-      return;
-    }
-    if (this.typographyStore === undefined) {
-      this.typographyStore = new AppPreferencesStore(context);
-    }
-    // 对齐上游：滑块拖动过程中即时写盘（单实例 saveQueue 串行化，可承受高频写入）；
-    // 写入失败时选择已生效，重启后可能恢复此前设置。
-    void this.typographyStore.saveReaderTypography(normalized).catch((_error: Object): void => {
-    });
-  }
-
   private broadcastReaderTypography(value: ReaderTypography): void {
     AppStorage.setOrCreate('contentFontSize', value.fontSize);
     AppStorage.setOrCreate('contentLineHeight', value.lineHeight);
     AppStorage.setOrCreate('contentBlockSpacing', value.blockSpacing);
+  }
+
+  private async restoreAppearancePreferences(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const value: AppearancePreferences = await new AppPreferencesStore(context).loadAppearancePreferences();
+      AppStorage.setOrCreate('fabOpacity', value.fabOpacity);
+      AppStorage.setOrCreate('showFeedThumbnail', value.showFeedThumbnail);
+      AppStorage.setOrCreate('showRefreshFab', value.showRefreshFab);
+      AppStorage.setOrCreate('feedCardStyle', value.feedCardStyle);
+    } catch (_error) {
+      // 读取失败时沿用与上游一致的默认值。
+    }
+  }
+
+  private async restoreExperiencePreferences(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const value: ExperiencePreferences = await new AppPreferencesStore(context).loadExperiencePreferences();
+      this.broadcastExperiencePreferences(value);
+      if (!this.startDestinationApplied) {
+        this.startDestinationApplied = true;
+        const tab = this.topLevelTabFromPreference(value.startDestination);
+        const displayIndex = this.bottomBarOrder.indexOf(tab);
+        this.topLevelTabIndex = displayIndex >= 0 ? displayIndex : 0;
+        this.tabsController.changeIndex(this.topLevelTabIndex);
+      }
+    } catch (_error) {
+      // 读取失败时沿用上游默认值。
+    }
+  }
+
+  private topLevelTabFromPreference(value: string): P1TopLevelTab {
+    if (value === 'Following') return P1TopLevelTab.FOLLOWING;
+    if (value === 'Hot') return P1TopLevelTab.HOT;
+    if (value === 'Daily') return P1TopLevelTab.DAILY;
+    if (value === 'ReadHistory') return P1TopLevelTab.HISTORY;
+    if (value === 'Collections') return P1TopLevelTab.COLLECTIONS;
+    if (value === 'Settings') return P1TopLevelTab.ACCOUNT;
+    return P1TopLevelTab.HOME;
+  }
+
+  private broadcastExperiencePreferences(value: ExperiencePreferences): void {
+    const activeTab = this.activeTopLevelTab();
+    const nextBottomBarOrder = this.decodeBottomBarOrder(value.bottomBarItems);
+    this.bottomBarOrder = nextBottomBarOrder;
+    const activeDisplayIndex = nextBottomBarOrder.indexOf(activeTab);
+    if (activeDisplayIndex >= 0) {
+      this.topLevelTabIndex = activeDisplayIndex;
+    } else if (this.topLevelTabIndex >= nextBottomBarOrder.length) {
+      this.topLevelTabIndex = 0;
+    }
+    AppStorage.setOrCreate('titleAutoHide', value.titleAutoHide);
+    AppStorage.setOrCreate('autoHideArticleBottomBar', value.autoHideArticleBottomBar);
+    AppStorage.setOrCreate('buttonSkipAnswer', value.buttonSkipAnswer);
+    AppStorage.setOrCreate('autoHideSkipAnswerButton', value.autoHideSkipAnswerButton);
+    AppStorage.setOrCreate('pinAnswerDate', value.pinAnswerDate);
+    AppStorage.setOrCreate('answerSwitchMode', value.answerSwitchMode);
+    AppStorage.setOrCreate('answerSwitchSensitivity', value.answerSwitchSensitivity);
+    AppStorage.setOrCreate('startDestination', value.startDestination);
+    AppStorage.setOrCreate('bottomBarItems', value.bottomBarItems);
+    AppStorage.setOrCreate('tapToRefresh', value.tapToRefresh);
+    AppStorage.setOrCreate('autoHideBottomBar', value.autoHideBottomBar);
+    AppStorage.setOrCreate('volumeKeyPageTurn', value.volumeKeyPageTurn);
+    AppStorage.setOrCreate('pageTurnSwitchAnswer', value.pageTurnSwitchAnswer);
+    AppStorage.setOrCreate('showPageTurnFab', value.showPageTurnFab);
+    AppStorage.setOrCreate('pageTurnPercent', value.pageTurnPercent);
+    AppStorage.setOrCreate('showPageTurnGuide', value.showPageTurnGuide);
+    AppStorage.setOrCreate('showContentEndMarker', value.showContentEndMarker);
+    AppStorage.setOrCreate('shareActionMode', value.shareActionMode);
+    AppStorage.setOrCreate('showSearchHotSearch', value.showSearchHotSearch);
+    AppStorage.setOrCreate('showSearchHistory', value.showSearchHistory);
+  }
+
+  private decodeBottomBarOrder(raw: string): number[] {
+    const values: string[] = raw.split(',');
+    const result: number[] = [];
+    for (let index = 0; index < values.length; index += 1) {
+      const tab = this.topLevelTabFromPreference(values[index]);
+      if (!result.includes(tab)) {
+        result.push(tab);
+      }
+    }
+    if (result.length < 3 || result.length > 5 || !result.includes(P1TopLevelTab.ACCOUNT)) {
+      return [P1TopLevelTab.HOME, P1TopLevelTab.FOLLOWING, P1TopLevelTab.HOT,
+        P1TopLevelTab.DAILY, P1TopLevelTab.ACCOUNT];
+    }
+    return result;
   }
 
   private async restoreThemeMode(): Promise<void> {

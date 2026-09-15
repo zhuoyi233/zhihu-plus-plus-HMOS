@@ -134,6 +134,7 @@ export interface FeedTargetSummary {
   url: string;
   voteupCount: number;
   commentCount: number;
+  thumbnailUrl?: string;
   answerCount?: number;
   visitCount?: number;
   followerCount?: number;

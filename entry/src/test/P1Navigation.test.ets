@@ -56,6 +56,7 @@ export default function p1NavigationTest(): void {
         P1DestinationName.PRIVATE_MESSAGE,
         P1DestinationName.LOGIN,
         P1DestinationName.SETTINGS,
+        P1DestinationName.APPEARANCE_SETTINGS,
         P1DestinationName.BLOCKING_RULES,
         P1DestinationName.BLOCKED_FEED_HISTORY,
         P1DestinationName.READ_HISTORY,
@@ -109,6 +110,10 @@ export default function p1NavigationTest(): void {
         .assertEqual(P1TopLevelTab.FOLLOWING);
       expect(p1TopLevelTabForDestination({ name: P1DestinationName.HOT })).assertEqual(P1TopLevelTab.HOT);
       expect(p1TopLevelTabForDestination({ name: P1DestinationName.DAILY })).assertEqual(P1TopLevelTab.DAILY);
+      expect(p1TopLevelTabForDestination({ name: P1DestinationName.READ_HISTORY }))
+        .assertEqual(P1TopLevelTab.HISTORY);
+      expect(p1TopLevelTabForDestination({ name: P1DestinationName.COLLECTIONS, id: 'me' }))
+        .assertEqual(P1TopLevelTab.COLLECTIONS);
       expect(p1TopLevelTabForDestination({ name: P1DestinationName.SETTINGS }))
         .assertEqual(P1TopLevelTab.ACCOUNT);
       expect(p1TopLevelTabForDestination({ name: P1DestinationName.LOGIN })).assertUndefined();
@@ -116,7 +121,8 @@ export default function p1NavigationTest(): void {
       expect(isP1TopLevelTabIndex(P1TopLevelTab.HOME)).assertTrue();
       expect(isP1TopLevelTabIndex(P1TopLevelTab.ACCOUNT)).assertTrue();
       expect(isP1TopLevelTabIndex(-1)).assertFalse();
-      expect(isP1TopLevelTabIndex(5)).assertFalse();
+      expect(isP1TopLevelTabIndex(P1TopLevelTab.COLLECTIONS)).assertTrue();
+      expect(isP1TopLevelTabIndex(7)).assertFalse();
       expect(isP1TopLevelTabIndex(1.5)).assertFalse();
     });
 
@@ -145,6 +151,9 @@ export default function p1NavigationTest(): void {
       };
       const loginParam: TestDestinationParam = {
         name: P1DestinationName.LOGIN
+      };
+      const appearanceParam: TestDestinationParam = {
+        name: P1DestinationName.APPEARANCE_SETTINGS
       };
       const desktopLoginScanParam: TestDestinationParam = {
         name: P1DestinationName.QR_DESKTOP_LOGIN_SCAN
@@ -186,6 +195,7 @@ export default function p1NavigationTest(): void {
       const answer = decodeP1Destination(P1DestinationName.ANSWER, answerParam);
       const probe = decodeP1Destination(P1DestinationName.READER_PROBE, probeParam);
       const login = decodeP1Destination(P1DestinationName.LOGIN, loginParam);
+      const appearance = decodeP1Destination(P1DestinationName.APPEARANCE_SETTINGS, appearanceParam);
       const desktopLoginScan = decodeP1Destination(P1DestinationName.QR_DESKTOP_LOGIN_SCAN, desktopLoginScanParam);
       const writeAnswer = decodeP1Destination(P1DestinationName.WRITE_ANSWER, writeAnswerParam);
       const writePin = decodeP1Destination(P1DestinationName.WRITE_PIN, writePinParam);
@@ -220,6 +230,7 @@ export default function p1NavigationTest(): void {
       expect(decodeP1Destination(P1DestinationName.DOMAIN_FIXTURE_PROBE, fixtureParam)?.name)
         .assertEqual(P1DestinationName.DOMAIN_FIXTURE_PROBE);
       expect(login?.name).assertEqual(P1DestinationName.LOGIN);
+      expect(appearance?.name).assertEqual(P1DestinationName.APPEARANCE_SETTINGS);
       expect(desktopLoginScan?.name).assertEqual(P1DestinationName.QR_DESKTOP_LOGIN_SCAN);
       if (writeAnswer?.name === P1DestinationName.WRITE_ANSWER) {
         expect(writeAnswer.questionId).assertEqual('123');

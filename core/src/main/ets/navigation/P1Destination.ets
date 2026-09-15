@@ -22,6 +22,7 @@ export enum P1DestinationName {
   PRIVATE_MESSAGE = 'PrivateMessage',
   LOGIN = 'Login',
   SETTINGS = 'Settings',
+  APPEARANCE_SETTINGS = 'AppearanceSettings',
   BLOCKING_RULES = 'BlockingRules',
   BLOCKED_FEED_HISTORY = 'BlockedFeedHistory',
   READ_HISTORY = 'ReadHistory',
@@ -46,7 +47,8 @@ export interface StatelessDestination {
 }
 
 export interface InfrastructureDestination {
-  readonly name: P1DestinationName.LOGIN | P1DestinationName.SETTINGS | P1DestinationName.BLOCKING_RULES |
+  readonly name: P1DestinationName.LOGIN | P1DestinationName.SETTINGS | P1DestinationName.APPEARANCE_SETTINGS |
+    P1DestinationName.BLOCKING_RULES |
     P1DestinationName.BLOCKED_FEED_HISTORY | P1DestinationName.READ_HISTORY | P1DestinationName.LOCAL_HISTORY |
     P1DestinationName.TECHNICAL_LAB |
     P1DestinationName.NOTIFICATION_SETTINGS | P1DestinationName.NOTIFICATION_ENTRY |
@@ -158,6 +160,7 @@ export function isP1DestinationName(name: string): boolean {
     case P1DestinationName.PRIVATE_MESSAGE:
     case P1DestinationName.LOGIN:
     case P1DestinationName.SETTINGS:
+    case P1DestinationName.APPEARANCE_SETTINGS:
     case P1DestinationName.BLOCKING_RULES:
     case P1DestinationName.BLOCKED_FEED_HISTORY:
     case P1DestinationName.READ_HISTORY:
@@ -218,6 +221,8 @@ export function decodeP1Destination(name: string, param: Object): P1Destination 
       return decodePrivateMessage(wire);
     case P1DestinationName.NOTIFICATION_SETTINGS:
       return hasNoParameters(wire) ? { name: P1DestinationName.NOTIFICATION_SETTINGS } : undefined;
+    case P1DestinationName.APPEARANCE_SETTINGS:
+      return hasNoParameters(wire) ? { name: P1DestinationName.APPEARANCE_SETTINGS } : undefined;
     case P1DestinationName.LOGIN:
       return hasNoParameters(wire) ? { name: P1DestinationName.LOGIN } : undefined;
     case P1DestinationName.SETTINGS:
@@ -302,6 +307,7 @@ export function isInfrastructureDestination(destination: P1Destination): boolean
   switch (destination.name) {
     case P1DestinationName.LOGIN:
     case P1DestinationName.SETTINGS:
+    case P1DestinationName.APPEARANCE_SETTINGS:
     case P1DestinationName.BLOCKING_RULES:
     case P1DestinationName.BLOCKED_FEED_HISTORY:
     case P1DestinationName.READ_HISTORY:

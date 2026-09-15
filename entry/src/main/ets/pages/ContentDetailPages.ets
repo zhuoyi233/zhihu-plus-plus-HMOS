@@ -159,6 +159,17 @@ struct ContentDetailPage {
    * （详情页 Ask 面板与设置页改动互见），默认询问并记住。 */
   @StorageProp('answerDoubleTapAction') private answerDoubleTapAction: AnswerDoubleTapAction =
     AnswerDoubleTapAction.ASK;
+  @StorageProp('titleAutoHide') private titleAutoHide: boolean = false;
+  @StorageProp('autoHideArticleBottomBar') private autoHideArticleBottomBar: boolean = false;
+  @StorageProp('buttonSkipAnswer') private buttonSkipAnswer: boolean = true;
+  @StorageProp('autoHideSkipAnswerButton') private autoHideSkipAnswerButton: boolean = true;
+  @StorageProp('pinAnswerDate') private pinAnswerDate: boolean = false;
+  @StorageProp('answerSwitchMode') private answerSwitchMode: string = 'vertical';
+  @StorageProp('answerSwitchSensitivity') private answerSwitchSensitivity: number = 1;
+  @StorageProp('shareActionMode') private shareActionMode: string = 'ask';
+  @StorageProp('pageTurnSwitchAnswer') private pageTurnSwitchAnswer: boolean = true;
+  @State private chromeHiddenByScroll: boolean = false;
+  private lastContentScrollOffset: number = 0;
   /** 双击动作询问面板（Ask 动作）可见性。 */
   @State private doubleTapAskSheetShown: boolean = false;
   @State private showComments: boolean = false;
@@ -292,6 +303,7 @@ struct ContentDetailPage {
     this.commentReplyDraft = '';
     this.immersiveReading = false;
     AppStorage.setOrCreate('detailImmersiveActive', false);
+    AppStorage.setOrCreate('detailTitleHiddenByScroll', false);
     AppStorage.setOrCreate('p2ImagePreviewUrl', '');
     // 对齐上游 LeaveImmersiveModeCleanup：页面销毁时确保状态栏恢复。
     setStatusBarHidden(false);
@@ -401,7 +413,8 @@ struct ContentDetailPage {
       // 回答页过滑时随主内容一起平移（上游 bottomBar 在 MainContent 内随内容滑走），露出整页底部预览卡；
       // 并按上游 ArticleBottomBarState 的折叠透明度公式（alpha = 1 − offset/height）随过滑量渐隐，
       // 否则上滑中途操作栏（z 序在预览卡之上）会盖住半透明的预览卡。
-      if (!this.immersiveReading && this.content !== undefined &&
+      if (!this.immersiveReading && (!this.autoHideArticleBottomBar || !this.chromeHiddenByScroll) &&
+        this.content !== undefined &&
         this.phase === ContentDetailPhase.READY) {
         Stack({ alignContent: Alignment.Bottom }) {
           this.bottomActionBar()
@@ -417,7 +430,8 @@ struct ContentDetailPage {
 
       // 悬浮"下一个回答"按钮（对齐上游 SkipNext FAB）：右下角、底部操作栏上方，可拖动避让正文；
       // 底部"下一答"预览卡展开时隐藏，避免盖住预览卡。
-      if (this.kind === ContentDetailKind.ANSWER && !this.immersiveReading &&
+      if (this.kind === ContentDetailKind.ANSWER && this.buttonSkipAnswer && !this.immersiveReading &&
+        (!this.autoHideSkipAnswerButton || !this.chromeHiddenByScroll) &&
         this.content !== undefined && this.phase === ContentDetailPhase.READY &&
         this.answerOverscrollOffset >= 0 && this.navigatorHasNext()) {
         Stack({ alignContent: Alignment.BottomEnd }) {
@@ -598,7 +612,9 @@ struct ContentDetailPage {
           emptyMessage: contentEmptyMessage(content),
           disableEdgeSpring: this.kind === ContentDetailKind.ANSWER,
           documentHeader: (): void => { this.contentHeader(content) },
+          documentFooter: (): void => { this.contentDateFooter(content) },
           onScrollOffset: (offset: number): void => {
+            this.updateChromeHiddenByScroll(offset);
             if (this.kind === ContentDetailKind.ANSWER) {
               this.updateAnswerTitleScrolled(content, offset);
             } else {
@@ -610,6 +626,12 @@ struct ContentDetailPage {
           },
           onTopEdgeChange: (atTop: boolean): void => {
             this.contentAtTop = atTop;
+          },
+          onPageTurnPastStart: (): void => {
+            if (this.pageTurnSwitchAnswer && this.kind === ContentDetailKind.ANSWER) void this.moveAnswer(-1);
+          },
+          onPageTurnPastEnd: (): void => {
+            if (this.pageTurnSwitchAnswer && this.kind === ContentDetailKind.ANSWER) void this.moveAnswer(1);
           }
         })
           .layoutWeight(1)
@@ -624,9 +646,10 @@ struct ContentDetailPage {
     // 并行手势：与正文 List 滚动同时识别，贴边后的继续滑动量由本容器转为 overscroll
     // （List 的 edgeEffect 已在回答页关闭，不会自身回弹）。
     .parallelGesture(
-      PanGesture({ fingers: 1, direction: PanDirection.Vertical })
+      PanGesture({ fingers: 1, direction: this.answerSwitchMode === 'horizontal'
+        ? PanDirection.Horizontal : PanDirection.Vertical })
         .onActionStart((event: GestureEvent): void => {
-          this.overscrollPanPrevY = event.offsetY;
+          this.overscrollPanPrevY = this.answerSwitchMode === 'horizontal' ? event.offsetX : event.offsetY;
         })
         .onActionUpdate((event: GestureEvent): void => {
           this.onAnswerOverscrollPanUpdate(event);
@@ -888,14 +911,16 @@ struct ContentDetailPage {
         }
 
         // 回答/文章页发布/编辑时间（对齐上游 DateTexts：编辑时间与发布不同才显示）。
-        if (contentCreatedAtText(content).length > 0) {
+        if ((this.pinAnswerDate || content.kind === ContentDetailKind.QUESTION) &&
+          contentCreatedAtText(content).length > 0) {
           Text(contentCreatedAtText(content))
             .id(`p2_${content.kind}_detail_created_at`)
             .fontSize($r('app.float.p1_caption_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
         }
-        if (contentUpdatedAtText(content).length > 0) {
+        if ((this.pinAnswerDate || content.kind === ContentDetailKind.QUESTION) &&
+          contentUpdatedAtText(content).length > 0) {
           Text(contentUpdatedAtText(content))
             .id(`p2_${content.kind}_detail_updated_at`)
             .fontSize($r('app.float.p1_caption_font_size'))
@@ -960,6 +985,31 @@ struct ContentDetailPage {
         bottom: $r('app.float.p1_spacing_medium')
       })
       .backgroundColor($r('app.color.surface_background'))
+    }
+  }
+
+  @Builder
+  private contentDateFooter(content: LoadedContentDetail) {
+    if (!this.pinAnswerDate && (content.kind === ContentDetailKind.ANSWER ||
+      content.kind === ContentDetailKind.ARTICLE)) {
+      Column({ space: $r('app.float.p1_spacing_xsmall') }) {
+        if (contentCreatedAtText(content).length > 0) {
+          Text(contentCreatedAtText(content))
+            .id(`p2_${content.kind}_detail_created_at`)
+            .fontSize($r('app.float.p1_caption_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
+        }
+        if (contentUpdatedAtText(content).length > 0) {
+          Text(contentUpdatedAtText(content))
+            .id(`p2_${content.kind}_detail_updated_at`)
+            .fontSize($r('app.float.p1_caption_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
+        }
+      }
+      .width('100%')
+      .padding({ top: $r('app.float.p1_spacing_medium') })
     }
   }
 
@@ -1091,6 +1141,19 @@ struct ContentDetailPage {
         });
       });
     }
+  }
+
+  private updateChromeHiddenByScroll(offset: number): void {
+    const delta = offset - this.lastContentScrollOffset;
+    this.lastContentScrollOffset = offset;
+    if (offset <= 2) {
+      this.chromeHiddenByScroll = false;
+    } else if (delta > 4) {
+      this.chromeHiddenByScroll = true;
+    } else if (delta < -4) {
+      this.chromeHiddenByScroll = false;
+    }
+    AppStorage.setOrCreate('detailTitleHiddenByScroll', this.titleAutoHide && this.chromeHiddenByScroll);
   }
 
   /** 文章页顶栏折叠联动：信息头入列随正文滚动，滚过文章主标题（高度经 onAreaChange 实测，
@@ -1638,9 +1701,10 @@ struct ContentDetailPage {
   /** 贴边后的继续滑动量按 tanh 阻尼转为 overscroll 偏移：贴顶下拉为正（上一答卡），
    * 贴底上滑为负（下一答卡）；反向回拉等量削减。 */
   private onAnswerOverscrollPanUpdate(event: GestureEvent): void {
-    if (this.kind !== ContentDetailKind.ANSWER || this.answerFabDragging) { return; }
-    const delta = event.offsetY - this.overscrollPanPrevY;
-    this.overscrollPanPrevY = event.offsetY;
+    if (this.kind !== ContentDetailKind.ANSWER || this.answerFabDragging || this.answerSwitchMode === 'off') { return; }
+    const primaryOffset = this.answerSwitchMode === 'horizontal' ? event.offsetX : event.offsetY;
+    const delta = primaryOffset - this.overscrollPanPrevY;
+    this.overscrollPanPrevY = primaryOffset;
     if (delta < 0) {
       // 手指上移：贴底加深"下一答"过滑，或回拉已展开的"上一答"过滑。
       if (this.contentAtBottom && this.navigatorHasNext() && !this.navigatorBusy) {
@@ -1706,11 +1770,14 @@ struct ContentDetailPage {
   }
 
   private answerOverscrollTriggered(): boolean {
-    return Math.abs(this.answerOverscrollOffset) >= ANSWER_OVERSCROLL_TRIGGER_THRESHOLD;
+    return Math.abs(this.answerOverscrollOffset) >= ANSWER_OVERSCROLL_TRIGGER_THRESHOLD /
+      Math.min(3, Math.max(0.5, this.answerSwitchSensitivity));
   }
 
   private answerOverscrollProgress(): number {
-    return Math.min(1, Math.abs(this.answerOverscrollOffset) / ANSWER_OVERSCROLL_TRIGGER_THRESHOLD);
+    const threshold = ANSWER_OVERSCROLL_TRIGGER_THRESHOLD /
+      Math.min(3, Math.max(0.5, this.answerSwitchSensitivity));
+    return Math.min(1, Math.abs(this.answerOverscrollOffset) / threshold);
   }
 
   /** 过滑方向对应的预览数据：previous=true 取上一答，否则取下一答。 */
@@ -1793,7 +1860,11 @@ struct ContentDetailPage {
         .borderRadius($r('app.float.p1_card_radius'))
         .onClick((): void => {
           this.actionMenuShown = false;
-          this.shareContentLink();
+          if (this.shareActionMode === 'copy') {
+            this.copyContentLink();
+          } else {
+            this.shareContentLink();
+          }
         })
 
       Button('复制链接', { type: ButtonType.Normal, stateEffect: true })

@@ -4,10 +4,15 @@ import { DividerMode, hdsMaterial, HdsTabs, HdsTabsController } from '@kit.UIDes
 export struct ZhihuHdsTabs {
   @Link currentIndex: number;
   @StorageProp('bottomRectHeight') bottomRectHeight: number = 0;
+  @StorageProp('autoHideBottomBar') private autoHideBottomBar: boolean = false;
+  @StorageProp('bottomBarHiddenByScroll') private bottomBarHiddenByScroll: boolean = false;
   controller: HdsTabsController = new HdsTabsController();
   @BuilderParam content: () => void;
   /** 双击页签回调（350ms 内同页签连点两次），供宿主实现双击刷新。 */
   onTabDoubleTap: (index: number) => void = (_index: number): void => {
+  };
+  /** 单击当前页签时回到顶部/刷新。 */
+  onCurrentTabTap: (index: number) => void = (_index: number): void => {
   };
   private lastTapIndex: number = -1;
   private lastTapTime: number = 0;
@@ -22,6 +27,7 @@ export struct ZhihuHdsTabs {
     }
     .id('p1_hds_tabs')
     .barMode(BarMode.Fixed)
+    .barHeight(this.autoHideBottomBar && this.bottomBarHiddenByScroll ? 0 : 64)
     .barOverlap(true)
     .animationDuration(250)
     .scrollable(true)
@@ -31,6 +37,7 @@ export struct ZhihuHdsTabs {
     .divider({ mode: DividerMode.NONE })
     .onChange((index: number): void => {
       if (index >= 0 && index <= 4) {
+        AppStorage.setOrCreate('bottomBarHiddenByScroll', false);
         this.currentIndex = index;
       }
     })
@@ -41,6 +48,9 @@ export struct ZhihuHdsTabs {
         this.lastTapTime = 0;
         this.onTabDoubleTap(index);
         return;
+      }
+      if (index === this.currentIndex) {
+        this.onCurrentTabTap(index);
       }
       this.lastTapIndex = index;
       this.lastTapTime = now;

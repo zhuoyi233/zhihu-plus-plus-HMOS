@@ -6,7 +6,9 @@ export enum P1TopLevelTab {
   FOLLOWING = 1,
   HOT = 2,
   DAILY = 3,
-  ACCOUNT = 4
+  HISTORY = 4,
+  COLLECTIONS = 5,
+  ACCOUNT = 6
 }
 
 export function p1TopLevelTabForDestination(destination: P1Destination): P1TopLevelTab | undefined {
@@ -19,6 +21,10 @@ export function p1TopLevelTabForDestination(destination: P1Destination): P1TopLe
       return P1TopLevelTab.HOT;
     case P1DestinationName.DAILY:
       return P1TopLevelTab.DAILY;
+    case P1DestinationName.READ_HISTORY:
+      return P1TopLevelTab.HISTORY;
+    case P1DestinationName.COLLECTIONS:
+      return P1TopLevelTab.COLLECTIONS;
     case P1DestinationName.SETTINGS:
       return P1TopLevelTab.ACCOUNT;
     default:
@@ -36,6 +42,10 @@ export function p1TopLevelTabLabel(tab: P1TopLevelTab): string {
       return '热榜';
     case P1TopLevelTab.DAILY:
       return '日报';
+    case P1TopLevelTab.HISTORY:
+      return '历史';
+    case P1TopLevelTab.COLLECTIONS:
+      return '收藏夹';
     case P1TopLevelTab.ACCOUNT:
       return '我的';
   }

@@ -27,6 +27,7 @@ import {
   feedPullDownIndicator
 } from './AppPageChrome';
 import { HomeFeedController, HomeFeedPhase, HomeFeedViewState } from './HomeFeedState';
+import { DraggableRefreshButton } from './components/DraggableRefreshButton';
 
 const PROJECT_RELEASES_URI: string = 'https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/latest';
 
@@ -42,6 +43,12 @@ export struct HomeFeedPage {
   // 双击底栏“首页”页签刷新：复用下拉刷新链路
   @StorageProp('tabRefreshTick') @Watch('onTabRefreshRequested') tabRefreshTick: number = 0;
   @StorageProp('tabRefreshTabIndex') tabRefreshTabIndex: number = -1;
+  @StorageProp('tabScrollTopTick') @Watch('onTabScrollTopRequested') private tabScrollTopTick: number = 0;
+  @StorageProp('tabScrollTopTabIndex') private tabScrollTopTabIndex: number = -1;
+  @StorageProp('showFeedThumbnail') private showFeedThumbnail: boolean = true;
+  @StorageProp('showRefreshFab') private showRefreshFab: boolean = true;
+  @StorageProp('feedCardStyle') private feedCardStyle: string = 'divider';
+  @StorageProp('fabOpacity') private fabOpacity: number = 100;
   // 首页更新卡片（对齐上游 HomeScreen 顶部 AnnouncementCard）：P1Shell 启动检查到新版本后经
   // AppStorage 广播（HdsTabs 树下跨页面信号唯一可靠通道）。“以后”仅本次会话内忽略，对齐上游。
   @StorageProp('homeUpdateAnnouncementVersion') private pendingUpdateVersion: string = '';
@@ -66,6 +73,8 @@ export struct HomeFeedPage {
   private controller: HomeFeedController | undefined = undefined;
   private blockingAction?: BlockingActionController;
   private pendingBlockItem?: FeedItem = undefined;
+  private readonly listScroller: ListScroller = new ListScroller();
+  private firstVisibleIndex: number = 0;
 
   aboutToAppear(): void {
     this.refreshContent = new ComponentContent(this.getUIContext(), wrapBuilder(feedPullDownIndicator),
@@ -125,6 +134,18 @@ export struct HomeFeedPage {
     }
   }
 
+  private onTabScrollTopRequested(): void {
+    if (this.tabScrollTopTabIndex !== 0) {
+      return;
+    }
+    if (this.firstVisibleIndex > 0) {
+      this.firstVisibleIndex = 0;
+      this.listScroller.scrollToIndex(0, true, ScrollAlign.START);
+    } else {
+      this.controller?.refresh();
+    }
+  }
+
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       Column({ space: $r('app.float.p1_spacing_medium') }) {
@@ -158,7 +179,7 @@ export struct HomeFeedPage {
             offset: 80,
             friction: 100
           }) {
-            List() {
+            List({ scroller: this.listScroller }) {
               if (isUpdateAnnouncementVisible(this.pendingUpdateVersion, this.dismissedUpdateVersion)) {
                 ListItem() {
                   this.updateAnnouncementCard()
@@ -170,7 +191,7 @@ export struct HomeFeedPage {
                 ListItem() {
                   this.feedCard(item);
                 }
-                .margin({ bottom: $r('app.float.p1_spacing_medium') })
+                .margin({ bottom: this.feedCardStyle === 'card' ? $r('app.float.p1_spacing_medium') : 0 })
               }, (item: FeedItem): string => feedItemIdentity(item))
 
               if (this.loadingMore) {
@@ -186,6 +207,15 @@ export struct HomeFeedPage {
                 .padding({ top: 12, bottom: 12 })
               }
             }
+            .onScrollIndex((start: number): void => {
+              const previous = this.firstVisibleIndex;
+              this.firstVisibleIndex = start;
+              if (start > previous) {
+                AppStorage.setOrCreate('bottomBarHiddenByScroll', true);
+              } else if (start < previous || start === 0) {
+                AppStorage.setOrCreate('bottomBarHiddenByScroll', false);
+              }
+            })
             .id('p2_home_feed_list')
             .width('100%')
             .scrollBar(BarState.Off)
@@ -222,6 +252,18 @@ export struct HomeFeedPage {
         right: $r('app.float.p1_page_padding'),
         bottom: $r('app.float.p1_page_padding')
       })
+
+      if (this.showRefreshFab && this.phase === HomeFeedPhase.READY) {
+        DraggableRefreshButton({
+          elementId: 'p3_home_refresh_fab',
+          accessibilityLabel: '刷新首页',
+          fabOpacity: this.fabOpacity,
+          loading: this.refreshing,
+          onRefresh: (): void => {
+            void this.controller?.refresh();
+          }
+        })
+      }
     }
     .id('p2_home_top_start_container')
     .width('100%')
@@ -369,6 +411,15 @@ export struct HomeFeedPage {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
 
+        if (this.showFeedThumbnail && (item.target.thumbnailUrl ?? '').length > 0) {
+          Image(item.target.thumbnailUrl)
+            .width('100%')
+            .height(128)
+            .borderRadius($r('app.float.p1_spacing_small'))
+            .objectFit(ImageFit.Cover)
+            .alt('内容缩略图')
+        }
+
         if (item.target.excerpt.trim().length > 0) {
           Text(item.target.excerpt)
             .fontSize($r('app.float.p1_body_font_size'))
@@ -404,8 +455,10 @@ export struct HomeFeedPage {
     .id(`p2_home_feed_card_${item.target.kind}_${item.target.id}`)
     .width('100%')
     .padding($r('app.float.p1_card_padding'))
-    .borderRadius($r('app.float.p1_card_radius'))
-    .backgroundColor($r('app.color.surface_background'))
+    .borderRadius(this.feedCardStyle === 'card' ? $r('app.float.p1_card_radius') : 0)
+    .backgroundColor(this.feedCardStyle === 'card' ? $r('app.color.surface_background') : Color.Transparent)
+    .border({ width: { bottom: this.feedCardStyle === 'divider' ? 1 : 0 },
+      color: $r('app.color.divider_color') })
     .accessibilityText(`打开${feedKindLabel(item.target.kind)}：${item.target.title}`)
     .onClick(() => this.navigate(homeFeedDestination(item)))
   }

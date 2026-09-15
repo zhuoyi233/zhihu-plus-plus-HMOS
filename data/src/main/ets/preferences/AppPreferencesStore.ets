@@ -35,6 +35,10 @@ const LAST_UPDATE_CHECK_KEY = 'lastUpdateCheck';
 const CONTENT_FONT_SIZE_KEY = 'contentFontSize';
 const CONTENT_LINE_HEIGHT_KEY = 'contentLineHeight';
 const CONTENT_BLOCK_SPACING_KEY = 'contentBlockSpacing';
+const FAB_OPACITY_KEY = 'fabOpacity';
+const SHOW_FEED_THUMBNAIL_KEY = 'showFeedThumbnail';
+const SHOW_REFRESH_FAB_KEY = 'showRefreshFab';
+const FEED_CARD_STYLE_KEY = 'feedCardStyle';
 
 export const DEFAULT_CONTENT_FONT_SIZE = 100;
 export const DEFAULT_CONTENT_LINE_HEIGHT = 160;
@@ -45,6 +49,167 @@ export const CONTENT_LINE_HEIGHT_MAX = 300;
 export const CONTENT_BLOCK_SPACING_MIN = 0;
 export const CONTENT_BLOCK_SPACING_MAX = 300;
 export const CONTENT_TYPOGRAPHY_STEP = 10;
+export const DEFAULT_FAB_OPACITY = 100;
+
+export enum FeedCardStyle {
+  CARD = 'card',
+  DIVIDER = 'divider'
+}
+
+export interface AppearancePreferences {
+  fabOpacity: number;
+  showFeedThumbnail: boolean;
+  showRefreshFab: boolean;
+  feedCardStyle: FeedCardStyle;
+}
+
+/** 可拖动悬浮按钮的位置，坐标以按钮左上角相对页面可视域的 vp 值保存。 */
+export interface FabPosition {
+  x: number;
+  y: number;
+}
+
+export enum AnswerSwitchMode {
+  OFF = 'off',
+  VERTICAL = 'vertical',
+  HORIZONTAL = 'horizontal'
+}
+
+export enum ShareActionMode {
+  ASK = 'ask',
+  COPY = 'copy',
+  SHARE = 'share'
+}
+
+/** 上游外观页中不属于主题/排版/信息流的跨平台设置。 */
+export interface ExperiencePreferences {
+  titleAutoHide: boolean;
+  autoHideArticleBottomBar: boolean;
+  buttonSkipAnswer: boolean;
+  autoHideSkipAnswerButton: boolean;
+  pinAnswerDate: boolean;
+  answerSwitchMode: AnswerSwitchMode;
+  answerSwitchSensitivity: number;
+  startDestination: string;
+  bottomBarItems: string;
+  tapToRefresh: boolean;
+  autoHideBottomBar: boolean;
+  volumeKeyPageTurn: boolean;
+  pageTurnSwitchAnswer: boolean;
+  showPageTurnFab: boolean;
+  pageTurnPercent: number;
+  showPageTurnGuide: boolean;
+  showContentEndMarker: boolean;
+  shareActionMode: ShareActionMode;
+  showSearchHotSearch: boolean;
+  showSearchHistory: boolean;
+}
+
+export function defaultExperiencePreferences(): ExperiencePreferences {
+  return {
+    titleAutoHide: false,
+    autoHideArticleBottomBar: false,
+    buttonSkipAnswer: true,
+    autoHideSkipAnswerButton: true,
+    pinAnswerDate: false,
+    answerSwitchMode: AnswerSwitchMode.VERTICAL,
+    answerSwitchSensitivity: 1,
+    startDestination: 'Home',
+    bottomBarItems: 'Home,Following,Hot,Daily,Settings',
+    tapToRefresh: true,
+    autoHideBottomBar: false,
+    volumeKeyPageTurn: false,
+    pageTurnSwitchAnswer: true,
+    showPageTurnFab: false,
+    pageTurnPercent: 90,
+    showPageTurnGuide: false,
+    showContentEndMarker: false,
+    shareActionMode: ShareActionMode.ASK,
+    showSearchHotSearch: true,
+    showSearchHistory: true
+  };
+}
+
+export function normalizeExperiencePreferences(value: ExperiencePreferences): ExperiencePreferences {
+  const defaults = defaultExperiencePreferences();
+  const answerSwitchMode = value.answerSwitchMode === AnswerSwitchMode.OFF ||
+    value.answerSwitchMode === AnswerSwitchMode.HORIZONTAL ? value.answerSwitchMode : AnswerSwitchMode.VERTICAL;
+  const shareActionMode = value.shareActionMode === ShareActionMode.COPY || value.shareActionMode === ShareActionMode.SHARE
+    ? value.shareActionMode : ShareActionMode.ASK;
+  const allowedDestinations = ['Home', 'Following', 'Hot', 'Daily', 'ReadHistory', 'Collections', 'Settings'];
+  const normalizedBottomBarItems = normalizeBottomBarItems(value.bottomBarItems);
+  return {
+    titleAutoHide: value.titleAutoHide,
+    autoHideArticleBottomBar: value.autoHideArticleBottomBar,
+    buttonSkipAnswer: value.buttonSkipAnswer,
+    autoHideSkipAnswerButton: value.autoHideSkipAnswerButton,
+    pinAnswerDate: value.pinAnswerDate,
+    answerSwitchMode: answerSwitchMode,
+    answerSwitchSensitivity: Math.min(3, Math.max(0.5, Math.round(value.answerSwitchSensitivity * 10) / 10)),
+    startDestination: allowedDestinations.includes(value.startDestination) &&
+      normalizedBottomBarItems.split(',').includes(value.startDestination) ? value.startDestination : normalizedBottomBarItems.split(',')[0],
+    bottomBarItems: normalizedBottomBarItems,
+    tapToRefresh: value.tapToRefresh,
+    autoHideBottomBar: value.autoHideBottomBar,
+    volumeKeyPageTurn: value.volumeKeyPageTurn,
+    pageTurnSwitchAnswer: value.pageTurnSwitchAnswer,
+    showPageTurnFab: value.showPageTurnFab,
+    pageTurnPercent: Math.min(100, Math.max(50, Math.round(value.pageTurnPercent / 5) * 5)),
+    showPageTurnGuide: value.showPageTurnGuide,
+    showContentEndMarker: value.showContentEndMarker,
+    shareActionMode: shareActionMode,
+    showSearchHotSearch: value.showSearchHotSearch,
+    showSearchHistory: value.showSearchHistory
+  };
+}
+
+export function normalizeBottomBarItems(value: string): string {
+  const allowed = ['Home', 'Following', 'Hot', 'Daily', 'ReadHistory', 'Collections', 'Settings'];
+  const result: string[] = [];
+  value.split(',').forEach((key: string): void => {
+    if (allowed.includes(key) && !result.includes(key) && result.length < 5) {
+      result.push(key);
+    }
+  });
+  if (!result.includes('Settings')) {
+    if (result.length >= 5) result.pop();
+    result.push('Settings');
+  }
+  const fill = ['Home', 'Following', 'Daily', 'Hot', 'ReadHistory', 'Collections'];
+  fill.forEach((key: string): void => {
+    if (result.length < 3 && !result.includes(key)) result.splice(Math.max(0, result.length - 1), 0, key);
+  });
+  return result.join(',');
+}
+
+export function defaultAppearancePreferences(): AppearancePreferences {
+  return {
+    fabOpacity: DEFAULT_FAB_OPACITY,
+    showFeedThumbnail: true,
+    showRefreshFab: true,
+    feedCardStyle: FeedCardStyle.DIVIDER
+  };
+}
+
+export function decodeFabOpacity(value: preferences.ValueType): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return DEFAULT_FAB_OPACITY;
+  }
+  return Math.min(100, Math.max(10, Math.round(value / 5) * 5));
+}
+
+export function decodeFeedCardStyle(value: preferences.ValueType): FeedCardStyle {
+  return value === FeedCardStyle.CARD ? FeedCardStyle.CARD : FeedCardStyle.DIVIDER;
+}
+
+export function normalizeAppearancePreferences(value: AppearancePreferences): AppearancePreferences {
+  return {
+    fabOpacity: decodeFabOpacity(value.fabOpacity),
+    showFeedThumbnail: value.showFeedThumbnail,
+    showRefreshFab: value.showRefreshFab,
+    feedCardStyle: decodeFeedCardStyle(value.feedCardStyle)
+  };
+}
 
 function notificationDisplayKey(kind: NotificationKind): string {
   if (kind === NotificationKind.LIKE_COMMENT) {
@@ -522,6 +687,188 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
         throw new Error(appPreferencesFailureMessage('Reader typography save', error));
       }
       throw new Error(appPreferencesFailureMessage('Reader typography save', undefined));
+    }
+  }
+
+  async loadAppearancePreferences(): Promise<AppearancePreferences> {
+    await this.saveQueue;
+    try {
+      const defaults = defaultAppearancePreferences();
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      const fabOpacity = await store.get(FAB_OPACITY_KEY, defaults.fabOpacity);
+      const showFeedThumbnail = await store.get(SHOW_FEED_THUMBNAIL_KEY, defaults.showFeedThumbnail);
+      const showRefreshFab = await store.get(SHOW_REFRESH_FAB_KEY, defaults.showRefreshFab);
+      const feedCardStyle = await store.get(FEED_CARD_STYLE_KEY, defaults.feedCardStyle);
+      return normalizeAppearancePreferences({
+        fabOpacity: decodeFabOpacity(fabOpacity),
+        showFeedThumbnail: typeof showFeedThumbnail === 'boolean' ? showFeedThumbnail : defaults.showFeedThumbnail,
+        showRefreshFab: typeof showRefreshFab === 'boolean' ? showRefreshFab : defaults.showRefreshFab,
+        feedCardStyle: decodeFeedCardStyle(feedCardStyle)
+      });
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('Appearance preferences load', error));
+      }
+      throw new Error(appPreferencesFailureMessage('Appearance preferences load', undefined));
+    }
+  }
+
+  saveAppearancePreferences(value: AppearancePreferences): Promise<void> {
+    const normalized = normalizeAppearancePreferences(value);
+    const operation = this.saveQueue.then(
+      (): Promise<void> => this.writeAppearancePreferences(normalized),
+      (): Promise<void> => this.writeAppearancePreferences(normalized)
+    );
+    this.saveQueue = operation.then((): void => {}, (): void => {});
+    return operation;
+  }
+
+  /** 读取与上游 DraggableRefreshButton 相同的 `<name>-x/y` 位置键。 */
+  async loadFabPosition(preferenceName: string): Promise<FabPosition | undefined> {
+    await this.saveQueue;
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      const x = await store.get(`${preferenceName}-x`, Number.NaN);
+      const y = await store.get(`${preferenceName}-y`, Number.NaN);
+      if (typeof x !== 'number' || !Number.isFinite(x) || typeof y !== 'number' || !Number.isFinite(y)) {
+        return undefined;
+      }
+      const position: FabPosition = { x: x, y: y };
+      return position;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('FAB position load', error));
+      }
+      throw new Error(appPreferencesFailureMessage('FAB position load', undefined));
+    }
+  }
+
+  saveFabPosition(preferenceName: string, value: FabPosition): Promise<void> {
+    const position: FabPosition = { x: value.x, y: value.y };
+    const operation = this.saveQueue.then(
+      (): Promise<void> => this.writeFabPosition(preferenceName, position),
+      (): Promise<void> => this.writeFabPosition(preferenceName, position)
+    );
+    this.saveQueue = operation.then((): void => {}, (): void => {});
+    return operation;
+  }
+
+  private async writeFabPosition(preferenceName: string, value: FabPosition): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      await store.put(`${preferenceName}-x`, value.x);
+      await store.put(`${preferenceName}-y`, value.y);
+      await store.flush();
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('FAB position save', error));
+      }
+      throw new Error(appPreferencesFailureMessage('FAB position save', undefined));
+    }
+  }
+
+  private async writeAppearancePreferences(value: AppearancePreferences): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      await store.put(FAB_OPACITY_KEY, value.fabOpacity);
+      await store.put(SHOW_FEED_THUMBNAIL_KEY, value.showFeedThumbnail);
+      await store.put(SHOW_REFRESH_FAB_KEY, value.showRefreshFab);
+      await store.put(FEED_CARD_STYLE_KEY, value.feedCardStyle);
+      await store.flush();
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('Appearance preferences save', error));
+      }
+      throw new Error(appPreferencesFailureMessage('Appearance preferences save', undefined));
+    }
+  }
+
+  async loadExperiencePreferences(): Promise<ExperiencePreferences> {
+    await this.saveQueue;
+    try {
+      const defaults = defaultExperiencePreferences();
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      const readBoolean = async (key: string, fallback: boolean): Promise<boolean> => {
+        const value = await store.get(key, fallback);
+        return typeof value === 'boolean' ? value : fallback;
+      };
+      const readNumber = async (key: string, fallback: number): Promise<number> => {
+        const value = await store.get(key, fallback);
+        return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+      };
+      const readString = async (key: string, fallback: string): Promise<string> => {
+        const value = await store.get(key, fallback);
+        return typeof value === 'string' ? value : fallback;
+      };
+      return normalizeExperiencePreferences({
+        titleAutoHide: await readBoolean('titleAutoHide', defaults.titleAutoHide),
+        autoHideArticleBottomBar: await readBoolean('autoHideArticleBottomBar', defaults.autoHideArticleBottomBar),
+        buttonSkipAnswer: await readBoolean('buttonSkipAnswer', defaults.buttonSkipAnswer),
+        autoHideSkipAnswerButton: await readBoolean('autoHideSkipAnswerButton', defaults.autoHideSkipAnswerButton),
+        pinAnswerDate: await readBoolean('pinAnswerDate', defaults.pinAnswerDate),
+        answerSwitchMode: await readString('answerSwitchMode', defaults.answerSwitchMode) as AnswerSwitchMode,
+        answerSwitchSensitivity: await readNumber('answerSwitchSensitivity', defaults.answerSwitchSensitivity),
+        startDestination: await readString('startDestination', defaults.startDestination),
+        bottomBarItems: await readString('bottom_bar_item_order', defaults.bottomBarItems),
+        tapToRefresh: await readBoolean('tapToRefresh', defaults.tapToRefresh),
+        autoHideBottomBar: await readBoolean('autoHideBottomBar', defaults.autoHideBottomBar),
+        volumeKeyPageTurn: await readBoolean('volumeKeyPageTurn', defaults.volumeKeyPageTurn),
+        pageTurnSwitchAnswer: await readBoolean('pageTurnSwitchAnswer', defaults.pageTurnSwitchAnswer),
+        showPageTurnFab: await readBoolean('showPageTurnFab', defaults.showPageTurnFab),
+        pageTurnPercent: await readNumber('pageTurnPercent', defaults.pageTurnPercent),
+        showPageTurnGuide: await readBoolean('showPageTurnGuide', defaults.showPageTurnGuide),
+        showContentEndMarker: await readBoolean('showContentEndMarker', defaults.showContentEndMarker),
+        shareActionMode: await readString('shareActionMode', defaults.shareActionMode) as ShareActionMode,
+        showSearchHotSearch: await readBoolean('showSearchHotSearch', defaults.showSearchHotSearch),
+        showSearchHistory: await readBoolean('showSearchHistory', defaults.showSearchHistory)
+      });
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('Experience preferences load', error));
+      }
+      throw new Error(appPreferencesFailureMessage('Experience preferences load', undefined));
+    }
+  }
+
+  saveExperiencePreferences(value: ExperiencePreferences): Promise<void> {
+    const normalized = normalizeExperiencePreferences(value);
+    const operation = this.saveQueue.then(
+      (): Promise<void> => this.writeExperiencePreferences(normalized),
+      (): Promise<void> => this.writeExperiencePreferences(normalized)
+    );
+    this.saveQueue = operation.then((): void => {}, (): void => {});
+    return operation;
+  }
+
+  private async writeExperiencePreferences(value: ExperiencePreferences): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      await store.put('titleAutoHide', value.titleAutoHide);
+      await store.put('autoHideArticleBottomBar', value.autoHideArticleBottomBar);
+      await store.put('buttonSkipAnswer', value.buttonSkipAnswer);
+      await store.put('autoHideSkipAnswerButton', value.autoHideSkipAnswerButton);
+      await store.put('pinAnswerDate', value.pinAnswerDate);
+      await store.put('answerSwitchMode', value.answerSwitchMode);
+      await store.put('answerSwitchSensitivity', value.answerSwitchSensitivity);
+      await store.put('startDestination', value.startDestination);
+      await store.put('bottom_bar_item_order', value.bottomBarItems);
+      await store.put('tapToRefresh', value.tapToRefresh);
+      await store.put('autoHideBottomBar', value.autoHideBottomBar);
+      await store.put('volumeKeyPageTurn', value.volumeKeyPageTurn);
+      await store.put('pageTurnSwitchAnswer', value.pageTurnSwitchAnswer);
+      await store.put('showPageTurnFab', value.showPageTurnFab);
+      await store.put('pageTurnPercent', value.pageTurnPercent);
+      await store.put('showPageTurnGuide', value.showPageTurnGuide);
+      await store.put('showContentEndMarker', value.showContentEndMarker);
+      await store.put('shareActionMode', value.shareActionMode);
+      await store.put('showSearchHotSearch', value.showSearchHotSearch);
+      await store.put('showSearchHistory', value.showSearchHistory);
+      await store.flush();
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('Experience preferences save', error));
+      }
+      throw new Error(appPreferencesFailureMessage('Experience preferences save', undefined));
     }
   }
 
