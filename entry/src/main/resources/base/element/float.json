@@ -47,6 +47,38 @@
     {
       "name": "p1_spacing_xsmall",
       "value": "4vp"
+    },
+    {
+      "name": "p3_settings_slider_height",
+      "value": "48vp"
+    },
+    {
+      "name": "p3_settings_slider_track_thickness",
+      "value": "16vp"
+    },
+    {
+      "name": "p3_settings_slider_track_radius",
+      "value": "8vp"
+    },
+    {
+      "name": "p3_settings_slider_thumb_width",
+      "value": "4vp"
+    },
+    {
+      "name": "p3_settings_slider_thumb_height",
+      "value": "44vp"
+    },
+    {
+      "name": "p3_settings_slider_thumb_radius",
+      "value": "2vp"
+    },
+    {
+      "name": "p3_settings_slider_thumb_gap_width",
+      "value": "16vp"
+    },
+    {
+      "name": "p3_settings_slider_thumb_gap_offset",
+      "value": "-6vp"
     }
   ]
 }

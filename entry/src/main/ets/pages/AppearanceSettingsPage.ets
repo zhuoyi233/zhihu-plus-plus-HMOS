@@ -25,6 +25,19 @@ import { getAbilityContext } from '../entryability/AbilityContextHolder';
  * “外观与阅读体验”设置页。保留上游跨平台设置语义，但移除 Material You、
  * Material 配色和 Android popup 造型等在 HarmonyOS 上不成立的选项。
  */
+/** 滑块设置项参数。@Builder 以单个对象字面量传参（按引用），状态变化才能触发 UI 刷新。 */
+interface SliderSettingOptions {
+  title: string;
+  description: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  testId: string;
+  showSteps: boolean;
+  onChange: (value: number) => void;
+}
+
 @Component
 export struct AppearanceSettingsPage {
   @Prop themeMode: AppThemeMode = AppThemeMode.SYSTEM;
@@ -85,10 +98,15 @@ export struct AppearanceSettingsPage {
         Column() {
           this.themeModeSetting()
           Divider().color($r('app.color.divider_color'))
-          this.sliderSetting('悬浮按钮透明度', `控制页面悬浮操作的透明度（${this.fabOpacity}%）`,
-            this.fabOpacity, 10, 100, 5, 'p3_appearance_fab_opacity', (value: number): void => {
+          this.sliderSetting({
+            title: '悬浮按钮透明度',
+            description: `控制页面悬浮操作的透明度（${this.fabOpacity}%）`,
+            value: this.fabOpacity, min: 10, max: 100, step: 5,
+            testId: 'p3_appearance_fab_opacity', showSteps: false,
+            onChange: (value: number): void => {
               this.updateAppearance(value, this.showFeedThumbnail, this.showRefreshFab, this.feedCardStyleValue());
-            })
+            }
+          })
         }
         .width('100%')
         .borderRadius($r('app.float.p1_card_radius'))
@@ -98,15 +116,25 @@ export struct AppearanceSettingsPage {
         Column() {
           this.fontSizeSetting()
           Divider().color($r('app.color.divider_color'))
-          this.sliderSetting('行高', `调整内容行间距（${this.contentLineHeight}%）`, this.contentLineHeight,
-            100, 300, 10, 'p3_appearance_line_height', (value: number): void => {
+          this.sliderSetting({
+            title: '行高',
+            description: `调整内容行间距（${this.contentLineHeight}%）`,
+            value: this.contentLineHeight, min: 100, max: 300, step: 10,
+            testId: 'p3_appearance_line_height', showSteps: false,
+            onChange: (value: number): void => {
               this.updateTypography(this.contentFontSize, decodeContentLineHeight(value), this.contentBlockSpacing);
-            })
+            }
+          })
           Divider().color($r('app.color.divider_color'))
-          this.sliderSetting('段间距', `调整正文段落和块级内容间距（${this.contentBlockSpacing}%）`,
-            this.contentBlockSpacing, 0, 300, 10, 'p3_appearance_block_spacing', (value: number): void => {
+          this.sliderSetting({
+            title: '段间距',
+            description: `调整正文段落和块级内容间距（${this.contentBlockSpacing}%）`,
+            value: this.contentBlockSpacing, min: 0, max: 300, step: 10,
+            testId: 'p3_appearance_block_spacing', showSteps: false,
+            onChange: (value: number): void => {
               this.updateTypography(this.contentFontSize, this.contentLineHeight, decodeContentBlockSpacing(value));
-            })
+            }
+          })
         }
         .width('100%')
         .borderRadius($r('app.float.p1_card_radius'))
@@ -154,9 +182,13 @@ export struct AppearanceSettingsPage {
             (index: number): void => this.updateAnswerSwitchMode(index))
           if (this.answerSwitchMode !== AnswerSwitchMode.OFF) {
             Divider().color($r('app.color.divider_color'))
-            this.sliderSetting('回答切换灵敏度', `当前 ${this.answerSwitchSensitivity.toFixed(1)}x，数值越高滑动越短`,
-              this.answerSwitchSensitivity, 0.5, 3, 0.1, 'p3_appearance_answer_switch_sensitivity',
-              (value: number): void => this.updateExperienceNumber('answerSwitchSensitivity', value))
+            this.sliderSetting({
+              title: '回答切换灵敏度',
+              description: `当前 ${this.answerSwitchSensitivity.toFixed(1)}x，数值越高滑动越短`,
+              value: this.answerSwitchSensitivity, min: 0.5, max: 3, step: 0.1,
+              testId: 'p3_appearance_answer_switch_sensitivity', showSteps: false,
+              onChange: (value: number): void => this.updateExperienceNumber('answerSwitchSensitivity', value)
+            })
           }
           Divider().color($r('app.color.divider_color'))
           Column({ space: $r('app.float.p1_spacing_small') }) {
@@ -238,9 +270,13 @@ export struct AppearanceSettingsPage {
           this.switchSetting('显示翻页悬浮按钮', '只在支持翻页的可滚动页面显示', this.showPageTurnFab,
             'p3_appearance_page_turn_fab', (value: boolean): void => this.updateExperienceBoolean('showPageTurnFab', value))
           Divider().color($r('app.color.divider_color'))
-          this.sliderSetting('翻页距离', `每次滚动可见区域的 ${this.pageTurnPercent}%`, this.pageTurnPercent,
-            50, 100, 5, 'p3_appearance_page_turn_percent',
-            (value: number): void => this.updateExperienceNumber('pageTurnPercent', value))
+          this.sliderSetting({
+            title: '翻页距离',
+            description: `每次滚动可见区域的 ${this.pageTurnPercent}%`,
+            value: this.pageTurnPercent, min: 50, max: 100, step: 5,
+            testId: 'p3_appearance_page_turn_percent', showSteps: false,
+            onChange: (value: number): void => this.updateExperienceNumber('pageTurnPercent', value)
+          })
           Divider().color($r('app.color.divider_color'))
           this.switchSetting('显示翻页位置线', '翻页后标记上一页与下一页的重叠位置', this.showPageTurnGuide,
             'p3_appearance_page_turn_guide', (value: boolean): void => this.updateExperienceBoolean('showPageTurnGuide', value))
@@ -347,16 +383,17 @@ export struct AppearanceSettingsPage {
         .fontSize($r('app.float.p1_secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
-      Slider({ value: this.fontSizeLevelIndex(), min: 0, max: contentFontSizeLevels().length - 1,
-        step: 1, style: SliderStyle.OutSet })
-        .id('p3_appearance_font_size')
-        .width('100%')
-        .showSteps(true)
-        .onChange((value: number, _mode: SliderChangeMode): void => {
+      this.sliderControl({
+        title: '字号',
+        description: `调整内容文字大小（${this.contentFontSize}%）`,
+        value: this.fontSizeLevelIndex(), min: 0, max: contentFontSizeLevels().length - 1, step: 1,
+        testId: 'p3_appearance_font_size', showSteps: true,
+        onChange: (value: number): void => {
           const levels = contentFontSizeLevels();
           const index = Math.min(levels.length - 1, Math.max(0, Math.round(value)));
           this.updateTypography(levels[index], this.contentLineHeight, this.contentBlockSpacing);
-        })
+        }
+      })
     }
     .alignItems(HorizontalAlign.Start)
     .width('100%')
@@ -364,26 +401,95 @@ export struct AppearanceSettingsPage {
   }
 
   @Builder
-  private sliderSetting(title: string, description: string, value: number, min: number, max: number,
-    step: number, testId: string, onChange: (value: number) => void) {
+  private sliderSetting($$: SliderSettingOptions) {
     Column({ space: $r('app.float.p1_spacing_small') }) {
-      Text(title)
+      Text($$.title)
         .fontSize($r('app.float.p1_body_font_size'))
         .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.primary_text'))
         .width('100%')
-      Text(description)
+      Text($$.description)
         .fontSize($r('app.float.p1_secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
-      Slider({ value: value, min: min, max: max, step: step, style: SliderStyle.OutSet })
-        .id(testId)
-        .width('100%')
-        .onChange((next: number, _mode: SliderChangeMode): void => onChange(next))
+      this.sliderControl($$)
     }
     .alignItems(HorizontalAlign.Start)
     .width('100%')
     .padding($r('app.float.p1_card_padding'))
+  }
+
+  private sliderProgressPercent(value: number, min: number, max: number): number {
+    if (max <= min) {
+      return 0;
+    }
+    return Math.min(100, Math.max(0, (value - min) / (max - min) * 100));
+  }
+
+  @Builder
+  private sliderControl($$: SliderSettingOptions) {
+    Stack({ alignContent: Alignment.Center }) {
+      Row() {
+        Row()
+          .width(`${this.sliderProgressPercent($$.value, $$.min, $$.max)}%`)
+          .height('100%')
+          .backgroundColor($r('app.color.brand_primary'))
+        Row()
+          .width(`${100 - this.sliderProgressPercent($$.value, $$.min, $$.max)}%`)
+          .height('100%')
+          .backgroundColor($r('app.color.control_background'))
+      }
+      .width('calc(100% - 4vp)')
+      .height($r('app.float.p3_settings_slider_track_thickness'))
+      .borderRadius($r('app.float.p3_settings_slider_track_radius'))
+      .clip(true)
+      .hitTestBehavior(HitTestMode.None)
+
+      Row() {
+        Blank().layoutWeight(Math.max(0, $$.value - $$.min))
+        Stack({ alignContent: Alignment.Center }) {
+          Row()
+            .width('100%')
+            .height($r('app.float.p3_settings_slider_track_thickness'))
+            .backgroundColor($r('app.color.surface_background'))
+          Row()
+            .width($r('app.float.p3_settings_slider_thumb_width'))
+            .height($r('app.float.p3_settings_slider_thumb_height'))
+            .borderRadius($r('app.float.p3_settings_slider_thumb_radius'))
+            .backgroundColor($r('app.color.brand_primary'))
+        }
+        .width($r('app.float.p3_settings_slider_thumb_gap_width'))
+        .height($r('app.float.p3_settings_slider_height'))
+        Blank().layoutWeight(Math.max(0, $$.max - $$.value))
+      }
+      .width('calc(100% + 12vp)')
+      .height($r('app.float.p3_settings_slider_height'))
+      .translate({ x: '-6vp' })
+      .hitTestBehavior(HitTestMode.None)
+
+      Slider({ value: $$.value, min: $$.min, max: $$.max, step: $$.step, style: SliderStyle.OutSet })
+        .id($$.testId)
+        .width('100%')
+        .height($r('app.float.p3_settings_slider_height'))
+        .trackColor(Color.Transparent)
+        .selectedColor(Color.Transparent)
+        .blockColor(Color.Transparent)
+        .blockSize({
+          width: $r('app.float.p3_settings_slider_thumb_width'),
+          height: $r('app.float.p3_settings_slider_thumb_height')
+        })
+        .blockStyle({
+          type: SliderBlockType.SHAPE,
+          shape: new Rect({
+            width: $r('app.float.p3_settings_slider_thumb_width'),
+            height: $r('app.float.p3_settings_slider_thumb_height')
+          }).radius($r('app.float.p3_settings_slider_thumb_radius'))
+        })
+        .showSteps($$.showSteps)
+        .onChange((next: number, _mode: SliderChangeMode): void => $$.onChange(next))
+    }
+    .width('100%')
+    .height($r('app.float.p3_settings_slider_height'))
   }
 
   @Builder
