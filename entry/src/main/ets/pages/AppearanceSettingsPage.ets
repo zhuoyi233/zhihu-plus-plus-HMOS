@@ -209,9 +209,9 @@ export struct AppearanceSettingsPage {
 
         this.sectionTitle('底部导航栏')
         Column() {
-          this.selectSetting('应用启动默认页面', '启动后默认打开的底部页签', this.startDestinationLabel(),
-            this.startDestinationOptions(), this.startDestinationIndex(), 'p3_appearance_start_destination',
-            (index: number): void => this.updateStartDestination(index))
+          // 不能走 selectSetting：其 options/selected/value 是 @Builder 按值传参，
+          // 首渲染后固化，底部栏项目实时增删时下拉列表不会更新（builder 体内直读状态才可刷新）。
+          this.startDestinationSetting()
           Divider().color($r('app.color.divider_color'))
           Column({ space: $r('app.float.p1_spacing_small') }) {
             Text('底部栏项目与顺序')
@@ -602,6 +602,35 @@ export struct AppearanceSettingsPage {
       .justifyContent(FlexAlign.End)
     }
     .width('100%')
+    .alignItems(VerticalAlign.Center)
+  }
+
+  /** 启动默认页选择：独立 @Builder，选项/选中项在体内直读状态，随底部栏项目变更实时刷新。 */
+  @Builder
+  private startDestinationSetting() {
+    Row({ space: $r('app.float.p1_spacing_medium') }) {
+      Column({ space: $r('app.float.p1_spacing_xsmall') }) {
+        Text('应用启动默认页面')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor($r('app.color.primary_text'))
+          .width('100%')
+        Text('启动后默认打开的底部页签')
+          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .width('100%')
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+      Select(this.startDestinationOptions())
+        .id('p3_appearance_start_destination')
+        .selected(this.startDestinationIndex())
+        .value(this.startDestinationLabel())
+        .fontColor($r('app.color.primary_text'))
+        .constraintSize({ maxWidth: 160 })
+        .onSelect((index: number): void => this.updateStartDestination(index))
+    }
+    .width('100%')
+    .padding($r('app.float.p1_card_padding'))
     .alignItems(VerticalAlign.Center)
   }
 
