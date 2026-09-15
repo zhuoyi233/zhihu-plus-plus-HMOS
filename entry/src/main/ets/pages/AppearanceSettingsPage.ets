@@ -152,7 +152,9 @@ export struct AppearanceSettingsPage {
               this.updateAppearance(this.fabOpacity, this.showFeedThumbnail, value, this.feedCardStyleValue());
             })
           Divider().color($r('app.color.divider_color'))
-          this.feedStyleSetting()
+          this.selectSetting('信息流样式', '卡片样式使用圆角卡片展示，分割线样式使用细线分隔条目。',
+            this.feedCardStyleLabel(), this.feedCardStyleOptions(), this.feedCardStyleIndex(),
+            'p3_appearance_feed_style', (index: number): void => this.updateFeedCardStyle(index))
         }
         .width('100%')
         .borderRadius($r('app.float.p1_card_radius'))
@@ -191,31 +193,15 @@ export struct AppearanceSettingsPage {
             })
           }
           Divider().color($r('app.color.divider_color'))
-          Column({ space: $r('app.float.p1_spacing_small') }) {
-          Text('双击回答动作')
-            .fontSize($r('app.float.p1_body_font_size'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.primary_text'))
-            .width('100%')
-          Text('双击回答正文时执行的动作，默认弹窗询问')
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .width('100%')
-          Select(this.answerDoubleTapSelectOptions())
-            .id('p3_appearance_answer_double_tap')
-            .selected(this.answerDoubleTapAction)
-            .value(answerDoubleTapActionLabel(this.answerDoubleTapAction))
-            .fontColor($r('app.color.primary_text'))
-            .onSelect((index: number): void => {
+          this.selectSetting('双击回答动作', '双击回答正文时执行的动作，默认弹窗询问',
+            answerDoubleTapActionLabel(this.answerDoubleTapAction), this.answerDoubleTapSelectOptions(),
+            this.answerDoubleTapIndex(), 'p3_appearance_answer_double_tap',
+            (index: number): void => {
               const actions = allAnswerDoubleTapActions();
               if (index >= 0 && index < actions.length) {
                 this.updateAnswerDoubleTapAction(actions[index]);
               }
             })
-          }
-          .alignItems(HorizontalAlign.Start)
-          .width('100%')
-          .padding($r('app.float.p1_card_padding'))
         }
         .width('100%')
         .borderRadius($r('app.float.p1_card_radius'))
@@ -538,6 +524,7 @@ export struct AppearanceSettingsPage {
         .selected(selected)
         .value(value)
         .fontColor($r('app.color.primary_text'))
+        .constraintSize({ maxWidth: 160 })
         .onSelect((index: number): void => onSelect(index))
     }
     .width('100%')
@@ -587,39 +574,24 @@ export struct AppearanceSettingsPage {
     .alignItems(VerticalAlign.Center)
   }
 
-  @Builder
-  private feedStyleSetting() {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
-      Text('信息流样式')
-        .fontSize($r('app.float.p1_body_font_size'))
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.primary_text'))
-        .width('100%')
-      Text('选择圆角卡片或更紧凑的分割线列表')
-        .fontSize($r('app.float.p1_secondary_font_size'))
-        .fontColor($r('app.color.secondary_text'))
-        .width('100%')
-      Row({ space: $r('app.float.p1_spacing_small') }) {
-        this.feedStyleButton('卡片', FeedCardStyle.CARD, 'p3_appearance_feed_style_card')
-        this.feedStyleButton('分割线', FeedCardStyle.DIVIDER, 'p3_appearance_feed_style_divider')
-      }
-      .width('100%')
-    }
-    .alignItems(HorizontalAlign.Start)
-    .width('100%')
-    .padding($r('app.float.p1_card_padding'))
+  private feedCardStyleOptions(): SelectOption[] {
+    return [{ value: '卡片样式' }, { value: '分割线样式' }];
   }
 
-  @Builder
-  private feedStyleButton(label: string, style: FeedCardStyle, testId: string) {
-    Button(label, { type: ButtonType.ROUNDED_RECTANGLE, stateEffect: true })
-      .id(testId)
-      .layoutWeight(1)
-      .fontColor(this.feedCardStyle === style ? $r('app.color.on_brand') : $r('app.color.primary_text'))
-      .backgroundColor(this.feedCardStyle === style ? $r('app.color.brand_primary') : $r('app.color.control_background'))
-      .onClick((): void => {
-        this.updateAppearance(this.fabOpacity, this.showFeedThumbnail, this.showRefreshFab, style);
-      })
+  private feedCardStyleIndex(): number {
+    return this.feedCardStyleValue() === FeedCardStyle.CARD ? 0 : 1;
+  }
+
+  private feedCardStyleLabel(): string {
+    return this.feedCardStyleValue() === FeedCardStyle.CARD ? '卡片样式' : '分割线样式';
+  }
+
+  private updateFeedCardStyle(index: number): void {
+    if (index === 0) {
+      this.updateAppearance(this.fabOpacity, this.showFeedThumbnail, this.showRefreshFab, FeedCardStyle.CARD);
+    } else if (index === 1) {
+      this.updateAppearance(this.fabOpacity, this.showFeedThumbnail, this.showRefreshFab, FeedCardStyle.DIVIDER);
+    }
   }
 
   private fontSizeLevelIndex(): number {
@@ -635,6 +607,11 @@ export struct AppearanceSettingsPage {
     return allAnswerDoubleTapActions().map((action: AnswerDoubleTapAction): SelectOption => {
       return { value: answerDoubleTapActionLabel(action) } as SelectOption;
     });
+  }
+
+  private answerDoubleTapIndex(): number {
+    const index = allAnswerDoubleTapActions().indexOf(this.answerDoubleTapAction);
+    return index >= 0 ? index : 0;
   }
 
   private answerSwitchModeValue(): AnswerSwitchMode {
