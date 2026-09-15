@@ -809,15 +809,16 @@ export struct P1Shell {
           AppStorage.setOrCreate('tabScrollTopTick', (AppStorage.get<number>('tabScrollTopTick') ?? 0) + 1);
         }
       }) {
-        this.topLevelTabSlot(0)
-        this.topLevelTabSlot(1)
-        this.topLevelTabSlot(2)
-        if (this.bottomBarOrder.length > 3) {
-          this.topLevelTabSlot(3)
-        }
-        if (this.bottomBarOrder.length > 4) {
-          this.topLevelTabSlot(4)
-        }
+        // 页签必须经 ForEach（key=tab 值）生成：@Builder 按值传参在 HdsTabs 的
+        // TabContent 构建树下不会触发已挂载子组件更新，写死槽位会让“底部栏项目与顺序”
+        // 实时变更后 TabContent 属性（id/tabBar）刷新但内容仍是旧顺序的页面。
+        ForEach(this.bottomBarOrder, (tab: number): void => {
+          TabContent() {
+            this.topLevelTabPage(tab as P1TopLevelTab)
+          }
+          .id(`p1_top_level_${this.tabKey(tab as P1TopLevelTab)}_content`)
+          .tabBar(this.topLevelTabBarStyle(tab as P1TopLevelTab))
+        }, (tab: number): string => `${tab}`)
       }
     }
     .titleBar({
@@ -836,15 +837,6 @@ export struct P1Shell {
     .backgroundColor($r('app.color.page_background'))
     .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
-  }
-
-  @Builder
-  private topLevelTabSlot(index: number) {
-    TabContent() {
-      this.topLevelTabPage(this.tabAtDisplayIndex(index))
-    }
-    .id(`p1_top_level_${this.tabKey(this.tabAtDisplayIndex(index))}_content`)
-    .tabBar(this.topLevelTabBarStyle(this.tabAtDisplayIndex(index)))
   }
 
   @Builder
@@ -2092,6 +2084,9 @@ export struct P1Shell {
     this.bottomBarOrder = nextBottomBarOrder;
     const activeDisplayIndex = nextBottomBarOrder.indexOf(activeTab);
     this.topLevelTabIndex = activeDisplayIndex >= 0 ? activeDisplayIndex : 0;
+    // ForEach 重建页签后 Tabs 选中索引可能被重置/钳制（索引值未变时 @Watch 不触发），
+    // 这里无条件用控制器再同步一次。
+    this.tabsController.changeIndex(this.topLevelTabIndex);
   }
 
   private navigate(destination: P1Destination): void {
