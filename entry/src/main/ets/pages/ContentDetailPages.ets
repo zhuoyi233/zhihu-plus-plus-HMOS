@@ -432,8 +432,10 @@ struct ContentDetailPage {
 
       // 悬浮"下一个回答"按钮（对齐上游 SkipNext FAB）：右下角、底部操作栏上方，可拖动避让正文；
       // 底部"下一答"预览卡展开时隐藏，避免盖住预览卡。
+      // 贴底时不回显（对齐上游 showSkipButton = !autoHideSkipAnswerButton || isScrollingUp || isAtTop：
+      // 贴底既非上滑也非贴顶，自动隐藏开启时保持隐藏，避免盖住刚回显的底部操作栏）。
       if (this.kind === ContentDetailKind.ANSWER && this.buttonSkipAnswer && !this.immersiveReading &&
-        (!this.autoHideSkipAnswerButton || !this.chromeHiddenByScroll) &&
+        (!this.autoHideSkipAnswerButton || (!this.chromeHiddenByScroll && !this.contentAtBottom)) &&
         this.content !== undefined && this.phase === ContentDetailPhase.READY &&
         this.answerOverscrollOffset >= 0 && this.navigatorHasNext()) {
         Stack({ alignContent: Alignment.BottomEnd }) {
@@ -616,6 +618,11 @@ struct ContentDetailPage {
           documentHeader: (): void => { this.contentHeader(content) },
           documentFooter: (): void => { this.contentDateFooter(content) },
           onScrollOffset: (offset: number): void => {
+            // 快速贴底过滑切换回答时，moveAnswer 复位折叠态后、controller.load 置 LOADING
+            // 卸载旧文档前，旧 List 的残余惯性滚动回调仍会到达，把刚复位的折叠态重新打成
+            // 隐藏（新文档加载后未滚动前没有回调来纠正，底部操作栏便一直不显示）——
+            // 切换窗口（navigatorBusy / 非 READY）内的滚动回调一律忽略。
+            if (this.navigatorBusy || this.phase !== ContentDetailPhase.READY) { return; }
             this.updateChromeHiddenByScroll(offset);
             if (this.kind === ContentDetailKind.ANSWER) {
               this.updateAnswerTitleScrolled(content, offset);
@@ -625,6 +632,9 @@ struct ContentDetailPage {
           },
           onBottomEdgeChange: (atBottom: boolean): void => {
             this.contentAtBottom = atBottom;
+            // 贴底回显上下栏（对齐上游 ArticleTopBarState/ArticleBottomBarState 的
+            // distanceFromBottom < heightPx 分支：拉到底/翻页到底时两栏强制回显）。
+            this.revealChromeAtBottom(atBottom);
           },
           onTopEdgeChange: (atTop: boolean): void => {
             this.contentAtTop = atTop;
@@ -1177,6 +1187,16 @@ struct ContentDetailPage {
     AppStorage.setOrCreate('detailTitleHiddenByScroll', this.titleAutoHide && this.chromeHiddenByScroll);
   }
 
+  /** 贴底回显：对齐上游 ArticleTopBarState/ArticleBottomBarState——距底不足一个栏高时
+   * offset 强制归零（本页为二元显隐，用贴底布尔近似），无论滚动方向，拉到底即回显
+   * 折叠标题栏与底部操作栏（"下一个回答"悬浮按钮除外，上游贴底时它保持隐藏）。 */
+  private revealChromeAtBottom(atBottom: boolean): void {
+    if (atBottom && this.chromeHiddenByScroll) {
+      this.chromeHiddenByScroll = false;
+      AppStorage.setOrCreate('detailTitleHiddenByScroll', this.titleAutoHide && this.chromeHiddenByScroll);
+    }
+  }
+
   /** 文章页顶栏折叠联动：信息头入列随正文滚动，滚过文章主标题（高度经 onAreaChange 实测，
    * 未测得前用 64vp 兜底）即折叠为顶栏"标题 + 作者"两行，滚回复原；经 AppStorage 广播给
    * HDS 标题栏（对齐回答页模式，通道键固定用路由 contentId，陈旧回调按内容 id 丢弃）。 */
@@ -1699,6 +1719,11 @@ struct ContentDetailPage {
     this.contentAtTop = true;
     // 顶栏折叠态随新答复位：新内容从顶部渲染，问题标题回到视口内。
     this.answerQuestionScrolled = false;
+    // 折叠的标题栏/底部操作栏随新答复位回显（对齐上游：切回答 = 新建 ScrollState，
+    // currentScroll == 0 时 offset.snapTo(0) 强制回显；本页组件复用 @State，需手动复位）。
+    this.chromeHiddenByScroll = false;
+    this.lastContentScrollOffset = 0;
+    AppStorage.setOrCreate('detailTitleHiddenByScroll', false);
     try {
       const id = await this.answerNavigator?.move(direction);
       this.navigatorRevision += 1;
