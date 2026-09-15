@@ -20,6 +20,7 @@ import {
   contentCreatedAtText,
   contentEmptyMessage,
   contentHtml,
+  contentIpInfo,
   contentStatistics,
   contentTitle,
   contentUpdatedAtText,
@@ -252,6 +253,38 @@ export default function contentDetailStateTest(): void {
       const questionDetail: LoadedQuestionDetail = { kind: ContentDetailKind.QUESTION, value: question };
       expect(contentCreatedAtText(questionDetail)).assertEqual('');
       expect(contentUpdatedAtText(questionDetail)).assertEqual('');
+    });
+
+    it('surfacesIpInfoOnlyForAnswerAndArticleLikeUpstream', 0, () => {
+      // 上游 ArticleScreen：IP 属地仅回答/文章尾部显示，无值隐藏、首尾空白剔除。
+      const answer = answerFixture();
+      const answerDetail: LoadedAnswerDetail = { kind: ContentDetailKind.ANSWER, value: answer };
+      answer.ipInfo = '  广东  ';
+      expect(contentIpInfo(answerDetail)).assertEqual('广东');
+
+      answer.ipInfo = '   ';
+      expect(contentIpInfo(answerDetail)).assertEqual('');
+      answer.ipInfo = undefined;
+      expect(contentIpInfo(answerDetail)).assertEqual('');
+
+      const question = questionFixture();
+      const questionDetail: LoadedQuestionDetail = { kind: ContentDetailKind.QUESTION, value: question };
+      expect(contentIpInfo(questionDetail)).assertEqual('');
+    });
+
+    it('keepsIpInfoAndEndorsementsInSnapshotClone', 0, async () => {
+      // 回归：snapshot() 逐字段克隆曾丢掉 ipInfo/endorsements，导致 UI 拿不到 IP 属地。
+      const repository = new ControlledContentRepository();
+      const controller = new ContentDetailController(repository);
+      controller.activate();
+      const answer = answerFixture();
+      answer.ipInfo = '贵州';
+      repository.answer = answer;
+      await controller.load(ContentDetailKind.ANSWER, '2');
+
+      const state = controller.snapshot();
+      const loaded = state.content as LoadedAnswerDetail;
+      expect(loaded.value.ipInfo).assertEqual('贵州');
     });
   });
 }

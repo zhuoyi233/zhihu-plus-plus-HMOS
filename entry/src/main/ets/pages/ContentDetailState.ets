@@ -310,7 +310,9 @@ function cloneLoadedContent(content: LoadedContentDetail): LoadedContentDetail {
           author: cloneAuthor(content.value.author),
           voteState: content.value.voteState,
           thanksCount: content.value.thanksCount,
-          isThanked: content.value.isThanked
+          isThanked: content.value.isThanked,
+          endorsements: content.value.endorsements,
+          ipInfo: content.value.ipInfo
         }
       };
     case ContentDetailKind.ARTICLE:
@@ -329,7 +331,9 @@ function cloneLoadedContent(content: LoadedContentDetail): LoadedContentDetail {
           author: cloneAuthor(content.value.author),
           voteState: content.value.voteState,
           thanksCount: content.value.thanksCount,
-          isThanked: content.value.isThanked
+          isThanked: content.value.isThanked,
+          endorsements: content.value.endorsements,
+          ipInfo: content.value.ipInfo
         }
       };
   }

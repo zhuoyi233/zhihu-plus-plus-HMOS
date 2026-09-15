@@ -948,13 +948,7 @@ struct ContentDetailPage {
           this.endorsementFlow(contentEndorsements(content))
         }
 
-        if (contentIpInfo(content).length > 0) {
-          Text(`IP 属地：${contentIpInfo(content)}`)
-            .id(`p2_${content.kind}_detail_ip`)
-            .fontSize($r('app.float.p1_caption_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .width('100%')
-        }
+        // IP 属地不进信息头：上游仅在正文尾部（日期下方）右对齐显示，见 contentDateFooter。
 
         if (this.blockingMessage.length > 0) {
           Text(this.blockingMessage)
@@ -990,25 +984,31 @@ struct ContentDetailPage {
 
   @Builder
   private contentDateFooter(content: LoadedContentDetail) {
-    if (!this.pinAnswerDate && (content.kind === ContentDetailKind.ANSWER ||
-      content.kind === ContentDetailKind.ARTICLE)) {
+    // 对齐上游正文尾部：未钉住日期时显示发布/编辑时间，IP 属地（接口有值时）始终显示；
+    // 整块右对齐灰色小字（上游 footer Column horizontalAlignment = End）。
+    if (content.kind === ContentDetailKind.ANSWER || content.kind === ContentDetailKind.ARTICLE) {
       Column({ space: $r('app.float.p1_spacing_xsmall') }) {
-        if (contentCreatedAtText(content).length > 0) {
+        if (!this.pinAnswerDate && contentCreatedAtText(content).length > 0) {
           Text(contentCreatedAtText(content))
             .id(`p2_${content.kind}_detail_created_at`)
             .fontSize($r('app.float.p1_caption_font_size'))
             .fontColor($r('app.color.secondary_text'))
-            .width('100%')
         }
-        if (contentUpdatedAtText(content).length > 0) {
+        if (!this.pinAnswerDate && contentUpdatedAtText(content).length > 0) {
           Text(contentUpdatedAtText(content))
             .id(`p2_${content.kind}_detail_updated_at`)
             .fontSize($r('app.float.p1_caption_font_size'))
             .fontColor($r('app.color.secondary_text'))
-            .width('100%')
+        }
+        if (contentIpInfo(content).length > 0) {
+          Text(`IP属地：${contentIpInfo(content)}`)
+            .id(`p2_${content.kind}_detail_ip`)
+            .fontSize($r('app.float.p1_caption_font_size'))
+            .fontColor($r('app.color.secondary_text'))
         }
       }
       .width('100%')
+      .alignItems(HorizontalAlign.End)
       .padding({ top: $r('app.float.p1_spacing_medium') })
     }
   }
