@@ -535,40 +535,71 @@ export struct AppearanceSettingsPage {
   @Builder
   private bottomBarItemSetting(key: string) {
     Row({ space: $r('app.float.p1_spacing_small') }) {
-      Toggle({ type: ToggleType.Checkbox, isOn: this.bottomBarKeys().includes(key) })
-        .id(`p3_appearance_bottom_item_${key}`)
-        .enabled(key !== 'Settings')
-        .onChange((value: boolean): void => this.toggleBottomBarItem(key, value))
-      Text(this.bottomBarItemLabel(key))
-        .fontSize($r('app.float.p1_body_font_size'))
-        .fontColor($r('app.color.primary_text'))
-        .layoutWeight(1)
-      if (this.bottomBarKeys().includes(key)) {
-        Button({ type: ButtonType.Circle, stateEffect: true }) {
-          SymbolGlyph($r('sys.symbol.chevron_up'))
-            .fontSize(18)
-            .fontColor([$r('app.color.primary_text')])
-        }
-          .id(`p3_appearance_bottom_item_up_${key}`)
-          .width(44)
-          .height(44)
-          .backgroundColor($r('app.color.control_background'))
-          .enabled(this.bottomBarKeys().indexOf(key) > 0)
-          .accessibilityText(`上移${this.bottomBarItemLabel(key)}`)
-          .onClick((): void => this.moveBottomBarItem(key, -1))
-        Button({ type: ButtonType.Circle, stateEffect: true }) {
-          SymbolGlyph($r('sys.symbol.chevron_down'))
-            .fontSize(18)
-            .fontColor([$r('app.color.primary_text')])
-        }
-          .id(`p3_appearance_bottom_item_down_${key}`)
-          .width(44)
-          .height(44)
-          .backgroundColor($r('app.color.control_background'))
-          .enabled(this.bottomBarKeys().indexOf(key) < this.bottomBarKeys().length - 1)
-          .accessibilityText(`下移${this.bottomBarItemLabel(key)}`)
-          .onClick((): void => this.moveBottomBarItem(key, 1))
+      // 点击区只包住勾选框和文字（ClickEvent 无 stopPropagation，按钮区须放在点击区外）
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        // 展示型勾选框（对齐上游 onCheckedChange=null 的 Checkbox）：不持有内部状态，
+        // 避免 Toggle 在点击被拒绝后视觉翻转无法回弹导致与实际选中态脱节
+        SymbolGlyph(this.bottomBarKeys().includes(key) ? $r('sys.symbol.checkmark_circle_fill')
+          : $r('sys.symbol.circle'))
+            .fontSize(22)
+            .fontColor([this.bottomBarKeys().includes(key) ? $r('app.color.brand_primary')
+              : $r('app.color.secondary_text')])
+            .id(`p3_appearance_bottom_item_${key}`)
+        Text(this.bottomBarItemLabel(key))
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor(key === 'Settings' ? $r('app.color.secondary_text') : $r('app.color.primary_text'))
+          .layoutWeight(1)
       }
+      .alignItems(VerticalAlign.Center)
+      .layoutWeight(1)
+      .onClick((): void => {
+        const keys = this.bottomBarKeys();
+        const selected = keys.includes(key);
+        if (key === 'Settings') {
+          return; // “我的”固定保留，不可取消
+        }
+        if (selected && keys.length <= 3) {
+          this.showToast('底部栏至少保留 3 个项目');
+          return;
+        }
+        if (!selected && keys.length >= 5) {
+          this.showToast('底部栏最多显示 5 个项目');
+          return;
+        }
+        this.toggleBottomBarItem(key, !selected);
+      })
+      // 常驻定宽定高容器（对齐上游 96dp 固定宽右列）：勾选态切换时行高不变，不再引起上下边距跳动
+      Row({ space: 4 }) {
+        if (this.bottomBarKeys().includes(key)) {
+          Button({ type: ButtonType.Circle, stateEffect: true }) {
+            SymbolGlyph($r('sys.symbol.chevron_up'))
+              .fontSize(18)
+              .fontColor([$r('app.color.primary_text')])
+          }
+            .id(`p3_appearance_bottom_item_up_${key}`)
+            .width(44)
+            .height(44)
+            .backgroundColor($r('app.color.control_background'))
+            .enabled(this.bottomBarKeys().indexOf(key) > 0)
+            .accessibilityText(`上移${this.bottomBarItemLabel(key)}`)
+            .onClick((): void => this.moveBottomBarItem(key, -1))
+          Button({ type: ButtonType.Circle, stateEffect: true }) {
+            SymbolGlyph($r('sys.symbol.chevron_down'))
+              .fontSize(18)
+              .fontColor([$r('app.color.primary_text')])
+          }
+            .id(`p3_appearance_bottom_item_down_${key}`)
+            .width(44)
+            .height(44)
+            .backgroundColor($r('app.color.control_background'))
+            .enabled(this.bottomBarKeys().indexOf(key) < this.bottomBarKeys().length - 1)
+            .accessibilityText(`下移${this.bottomBarItemLabel(key)}`)
+            .onClick((): void => this.moveBottomBarItem(key, 1))
+        }
+      }
+      .width(92)
+      .height(44)
+      .justifyContent(FlexAlign.End)
     }
     .width('100%')
     .alignItems(VerticalAlign.Center)
@@ -696,14 +727,14 @@ export struct AppearanceSettingsPage {
     const existingIndex = keys.indexOf(key);
     if (selected && existingIndex < 0) {
       if (keys.length >= 5) {
-        this.statusMessage = '底部栏最多显示 5 个项目';
+        this.showToast('底部栏最多显示 5 个项目');
         return;
       }
       const settingsIndex = keys.indexOf('Settings');
       keys.splice(settingsIndex >= 0 ? settingsIndex : keys.length, 0, key);
     } else if (!selected && existingIndex >= 0 && key !== 'Settings') {
       if (keys.length <= 3) {
-        this.statusMessage = '底部栏至少保留 3 个项目';
+        this.showToast('底部栏至少保留 3 个项目');
         return;
       }
       keys.splice(existingIndex, 1);
@@ -716,6 +747,10 @@ export struct AppearanceSettingsPage {
       next.startDestination = keys[0];
     }
     this.persistExperience(next);
+  }
+
+  private showToast(message: string): void {
+    this.getUIContext().getPromptAction().showToast({ message: message, duration: 2000 });
   }
 
   private moveBottomBarItem(key: string, offset: number): void {
