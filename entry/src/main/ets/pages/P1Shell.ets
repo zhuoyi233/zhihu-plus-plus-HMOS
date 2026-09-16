@@ -55,6 +55,9 @@ import { getImmersiveTitleBarStyle } from '../common/style/NavStyles';
 import { ZhihuHdsTabs } from './components/ZhihuHdsTabs';
 import { AppearanceSettingsPage } from './AppearanceSettingsPage';
 import { ContentFilterSettingsPage } from './ContentFilterSettingsPage';
+import { IdentityManagementPage } from './IdentityManagementPage';
+import { ReadingSettingsPage } from './ReadingSettingsPage';
+import { SystemUpdateSettingsPage } from './SystemUpdateSettingsPage';
 import { materialCanvas } from './components/MaterialCanvas';
 import { ChannelFeedInteractionBridge } from './ChannelFeedState';
 import { dailyDateCursor, dailyPickerDate, formatDailyDate } from './DailyFeedDates';
@@ -75,7 +78,8 @@ export struct P1Shell {
     this.emptyReloadableDaily;
   @BuilderParam dailyStoryContent: (id: string, navigate: (destination: P1Destination) => void) => void =
     this.emptyContent;
-  @BuilderParam technicalLabContent: (navigate: (destination: P1Destination) => void) => void =
+  @BuilderParam technicalLabContent: (navigate: (destination: P1Destination) => void,
+    onDeveloperModeDisabled: () => void) => void =
     this.emptyTechnicalLab;
   @BuilderParam searchContent: (query: string, navigate: (destination: P1Destination) => void,
     onBack: () => void) => void =
@@ -141,6 +145,8 @@ export struct P1Shell {
   @StorageProp('p2ImagePreviewUrl') private imagePreviewUrl: string = '';
   @State private installedVersionLabel: string = '正在读取已安装版本…';
   @State private aboutVersionSheetShown: boolean = false;
+  @State private developerModeEnabled: boolean = false;
+  @State private versionTapCount: number = 0;
   /** GitHub 最新 Release 检出有新版本时非空：驱动“我的”页横幅与版本弹层下载入口。 */
   @State private pendingUpdateRelease: AppUpdateRelease | undefined = undefined;
   @State private updateCheckBusy: boolean = false;
@@ -186,6 +192,7 @@ export struct P1Shell {
     void this.restoreReaderTypography();
     void this.restoreAppearancePreferences();
     void this.restoreExperiencePreferences();
+    void this.restoreDeveloperMode();
     this.refreshInstalledVersionLabel();
     this.unsubscribeStartupDestination?.();
     const listener: StartupDestinationListener = (destination: P1Destination): void => {
@@ -234,7 +241,7 @@ export struct P1Shell {
   }
 
   @Builder
-  emptyTechnicalLab(_navigate: (destination: P1Destination) => void) {
+  emptyTechnicalLab(_navigate: (destination: P1Destination) => void, _onDeveloperModeDisabled: () => void) {
     Blank();
   }
 
@@ -337,6 +344,38 @@ export struct P1Shell {
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '外观与阅读体验' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.IDENTITY_MANAGEMENT) {
+      HdsNavDestination() {
+        IdentityManagementPage();
+      }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+        content: { title: { mainTitle: '身份管理' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.READING_SETTINGS) {
+      HdsNavDestination() {
+        ReadingSettingsPage();
+      }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+        content: { title: { mainTitle: '朗读与播放' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.SYSTEM_UPDATE_SETTINGS) {
+      HdsNavDestination() {
+        SystemUpdateSettingsPage({
+          installedVersionLabel: this.installedVersionLabel,
+          updateCheckBusy: this.updateCheckBusy,
+          updateCheckMessage: this.updateCheckMessage,
+          availableVersion: this.pendingUpdateRelease?.versionName ?? '',
+          onCheckUpdate: (): void => { void this.runUpdateCheck(true); },
+          onOpenDownload: (): void => this.openPendingUpdate(),
+          onOpenProject: (): void => this.openProjectHome()
+        });
+      }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+        content: { title: { mainTitle: '系统与更新' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.RECOMMENDATION_FILTER_SETTINGS) {
       HdsNavDestination() {
         ContentFilterSettingsPage({
@@ -398,7 +437,9 @@ export struct P1Shell {
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.TECHNICAL_LAB) {
       HdsNavDestination() {
-        this.technicalLabContent((destination: P1Destination): void => this.navigate(destination));
+        this.technicalLabContent((destination: P1Destination): void => this.navigate(destination), (): void => {
+          this.disableDeveloperMode();
+        });
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '开发者选项' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
@@ -1267,9 +1308,19 @@ export struct P1Shell {
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
           Column({ space: $r('app.float.p1_spacing_small') }) {
+            if (this.sessionSnapshot?.status === SessionStatus.AUTHENTICATED) {
+              AppNavigationRow({ title: '身份管理', description: '创建马甲号或切换当前身份',
+                testId: 'p5_open_identity_management', grouped: true,
+                onRowClick: (): void => this.navigate({ name: P1DestinationName.IDENTITY_MANAGEMENT }) });
+              Divider().color($r('app.color.divider_color'))
+            }
             AppNavigationRow({ title: '外观与阅读体验', description: '主题、阅读排版与信息流显示',
               testId: 'p3_open_appearance_settings', grouped: true,
               onRowClick: (): void => this.navigate({ name: P1DestinationName.APPEARANCE_SETTINGS }) });
+            Divider().color($r('app.color.divider_color'))
+            AppNavigationRow({ title: '朗读与播放', description: '语音、语速与当前播放控制',
+              testId: 'p5_open_reading_settings', grouped: true,
+              onRowClick: (): void => this.navigate({ name: P1DestinationName.READING_SETTINGS }) });
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '推荐系统与内容过滤', description: '推荐来源、质量规则与内容屏蔽',
               testId: 'p3_open_recommendation_filter_settings', grouped: true,
@@ -1280,6 +1331,10 @@ export struct P1Shell {
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '通知设置', description: '设置提醒和推送偏好', testId: 'p3_open_notification_settings', grouped: true,
               onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION_SETTINGS }) });
+            Divider().color($r('app.color.divider_color'))
+            AppNavigationRow({ title: '系统与更新', description: '版本信息、检查更新与问题反馈',
+              testId: 'p5_open_system_update_settings', grouped: true,
+              onRowClick: (): void => this.navigate({ name: P1DestinationName.SYSTEM_UPDATE_SETTINGS }) });
           }
           .width('100%')
           .borderRadius($r('app.float.p1_card_radius'))
@@ -1305,8 +1360,7 @@ export struct P1Shell {
             AppNavigationRow({ title: '应用与版本', description: this.installedVersionLabel,
               testId: 'p3_open_about_version', grouped: true,
               onRowClick: (): void => {
-                this.refreshInstalledVersionLabel();
-                this.aboutVersionSheetShown = true;
+                this.onVersionRowClicked();
               } });
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: 'GitHub', description: '查看项目主页', testId: 'p3_open_project_home', grouped: true,
@@ -1323,9 +1377,12 @@ export struct P1Shell {
               onRowClick: (): void => {
                 this.openSourceLicensesSheetShown = true;
               } });
-            Divider().color($r('app.color.divider_color'))
-            AppNavigationRow({ title: '开发者选项', description: 'Cookie、网络与调试工具', testId: 'p1_open_developer_options', grouped: true,
-              onRowClick: (): void => this.navigate({ name: P1DestinationName.TECHNICAL_LAB }) });
+            if (this.developerModeEnabled) {
+              Divider().color($r('app.color.divider_color'))
+              AppNavigationRow({ title: '开发者选项', description: 'Cookie、网络与调试工具',
+                testId: 'p1_open_developer_options', grouped: true,
+                onRowClick: (): void => this.navigate({ name: P1DestinationName.TECHNICAL_LAB }) });
+            }
           }
           .width('100%')
           .borderRadius($r('app.float.p1_card_radius'))
@@ -1580,16 +1637,31 @@ export struct P1Shell {
           testId: 'p3_search_open_appearance_settings',
           onRowClick: (): void => this.navigate({ name: P1DestinationName.APPEARANCE_SETTINGS }) });
       }
+      if (this.sessionSnapshot?.status === SessionStatus.AUTHENTICATED &&
+        this.settingsSearchMatches('身份管理', '创建马甲号 切换当前身份')) {
+        AppNavigationRow({ title: '身份管理', description: '创建马甲号或切换当前身份',
+          testId: 'p5_open_identity_management',
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.IDENTITY_MANAGEMENT }) });
+      }
+      if (this.settingsSearchMatches('朗读与播放', '语音 语速 音调 播放')) {
+        AppNavigationRow({ title: '朗读与播放', description: '语音、语速与当前播放控制',
+          testId: 'p5_open_reading_settings',
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.READING_SETTINGS }) });
+      }
       if (this.settingsSearchMatches('推荐系统与内容过滤', '推荐算法 质量过滤 智能过滤 关键词 用户 主题 广告 盐选')) {
         AppNavigationRow({ title: '推荐系统与内容过滤', description: '推荐来源、质量规则与内容屏蔽',
           testId: 'p3_search_open_recommendation_filter_settings',
           onRowClick: (): void => this.navigate({ name: P1DestinationName.RECOMMENDATION_FILTER_SETTINGS }) });
       }
+      if (this.settingsSearchMatches('系统与更新', '版本信息 检查更新 问题反馈')) {
+        AppNavigationRow({ title: '系统与更新', description: '版本信息、检查更新与问题反馈',
+          testId: 'p5_open_system_update_settings',
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.SYSTEM_UPDATE_SETTINGS }) });
+      }
       if (this.settingsSearchMatches('应用与版本', this.installedVersionLabel)) {
         AppNavigationRow({ title: '应用与版本', description: this.installedVersionLabel,
           testId: 'p3_open_about_version', onRowClick: (): void => {
-            this.refreshInstalledVersionLabel();
-            this.aboutVersionSheetShown = true;
+            this.onVersionRowClicked();
           } });
       }
       if (this.settingsSearchMatches('GitHub', '查看项目主页')) {
@@ -1608,7 +1680,8 @@ export struct P1Shell {
             this.openSourceLicensesSheetShown = true;
           } });
       }
-      if (this.settingsSearchMatches('开发者选项', 'Cookie 网络 调试工具 技术实验室')) {
+      if (this.developerModeEnabled &&
+        this.settingsSearchMatches('开发者选项', 'Cookie 网络 调试工具 技术实验室')) {
         AppNavigationRow({ title: '开发者选项', description: 'Cookie、网络与调试工具', testId: 'p1_open_developer_options',
           onRowClick: (): void => this.navigate({ name: P1DestinationName.TECHNICAL_LAB }) });
       }
@@ -1662,36 +1735,16 @@ export struct P1Shell {
         .fontSize($r('app.float.p1_secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
+        .onClick((): void => this.onVersionTapped())
       Text('版本信息来自当前已安装的 HAP，便于核对本机安装结果。')
         .fontSize($r('app.float.p1_secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
-      Button('检查更新')
-        .id('p3_check_update')
-        .fontSize($r('app.float.p1_body_font_size'))
-        .enabled(!this.updateCheckBusy)
-        .onClick((): void => {
-          void this.runUpdateCheck(true);
-        })
-      if (this.updateCheckMessage.length > 0) {
-        Text(this.updateCheckMessage)
-          .id('p3_update_check_status')
-          .fontSize($r('app.float.p1_secondary_font_size'))
-          .fontColor($r('app.color.secondary_text'))
-          .width('100%')
-      }
-      if (this.pendingUpdateRelease !== undefined) {
-        Button('前往下载新版 HAP')
-          .id('p3_update_download')
-          .fontSize($r('app.float.p1_body_font_size'))
-          .onClick((): void => {
-            const release = this.pendingUpdateRelease;
-            const url = release !== undefined && release.htmlUrl.length > 0
-              ? release.htmlUrl
-              : PROJECT_HOME_URI + '/releases/latest';
-            this.openExternalUrl(url, '无法打开发布页');
-          })
-      }
+      Text(this.developerModeEnabled ? '开发者选项已开启。检查更新已移至“系统与更新”。' :
+        '连续点击“应用与版本”设置行 5 次可开启开发者选项。检查更新已移至“系统与更新”。')
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
     }
     .width('100%')
     .padding($r('app.float.p1_page_padding'))
@@ -1859,7 +1912,7 @@ export struct P1Shell {
     }
   }
 
-  /** verbose=true 供“应用与版本”弹层手动检查（展示状态、不受节流限制）；false 供启动静默检查
+  /** verbose=true 供“系统与更新”页手动检查（展示状态、不受节流限制）；false 供启动静默检查
     * （3 小时节流，对齐上游 shouldPerformAutoCheck）。检出新版本时经 AppStorage 广播驱动首页更新卡片。 */
   private async runUpdateCheck(verbose: boolean): Promise<void> {
     if (this.updateCheckBusy) {
@@ -1945,6 +1998,52 @@ export struct P1Shell {
     return release !== undefined ? `发现新版本 ${release.versionName}` : '';
   }
 
+  private openPendingUpdate(): void {
+    const release = this.pendingUpdateRelease;
+    const url = release !== undefined ? this.releaseDownloadUrl(release) : PROJECT_HOME_URI + '/releases/latest';
+    this.openExternalUrl(url, '无法打开发布页');
+  }
+
+  private onVersionTapped(): void {
+    if (this.developerModeEnabled) {
+      this.getUIContext().getPromptAction().showToast({ message: '开发者选项已开启' });
+      return;
+    }
+    this.versionTapCount += 1;
+    const remaining = 5 - this.versionTapCount;
+    if (remaining > 0) {
+      this.getUIContext().getPromptAction().showToast({ message: `再点击 ${remaining} 次开启开发者选项` });
+      return;
+    }
+    this.versionTapCount = 0;
+    this.developerModeEnabled = true;
+    const context = getAbilityContext();
+    if (context !== undefined) {
+      void new AppPreferencesStore(context).saveDeveloperMode(true);
+    }
+    this.getUIContext().getPromptAction().showToast({ message: '你已成为开发者' });
+  }
+
+  private onVersionRowClicked(): void {
+    if (this.developerModeEnabled) {
+      this.refreshInstalledVersionLabel();
+      this.aboutVersionSheetShown = true;
+      return;
+    }
+    this.onVersionTapped();
+  }
+
+  private disableDeveloperMode(): void {
+    this.developerModeEnabled = false;
+    this.versionTapCount = 0;
+    const context = getAbilityContext();
+    if (context !== undefined) {
+      void new AppPreferencesStore(context).saveDeveloperMode(false);
+    }
+    this.pathStack.pop();
+    this.getUIContext().getPromptAction().showToast({ message: '开发者选项已关闭' });
+  }
+
   private hasSettingsSearchQuery(): boolean {
     return this.settingsSearchQuery.trim().length > 0;
   }
@@ -1963,13 +2062,18 @@ export struct P1Shell {
       this.settingsSearchMatches('屏蔽记录', '查看最近隐藏的内容') ||
       this.settingsSearchMatches('通知', '查看互动和系统消息') ||
       this.settingsSearchMatches('通知设置', '设置提醒和推送偏好') ||
+      (this.sessionSnapshot?.status === SessionStatus.AUTHENTICATED &&
+        this.settingsSearchMatches('身份管理', '创建马甲号 切换当前身份')) ||
       this.settingsSearchMatches('外观与阅读体验', '主题 阅读排版 信息流 字号 行高 段间距') ||
+      this.settingsSearchMatches('朗读与播放', '语音 语速 音调 播放') ||
       this.settingsSearchMatches('推荐系统与内容过滤', '推荐算法 质量过滤 智能过滤 关键词 用户 主题 广告 盐选') ||
+      this.settingsSearchMatches('系统与更新', '版本信息 检查更新 问题反馈') ||
       this.settingsSearchMatches('应用与版本', this.installedVersionLabel) ||
       this.settingsSearchMatches('GitHub', '查看项目主页') ||
       this.settingsSearchMatches('项目协议', 'GNU AGPL v3.0') ||
       this.settingsSearchMatches('开源许可', '3 个本地 HAR 模块 GNU AGPL v3.0') ||
-      this.settingsSearchMatches('开发者选项', 'Cookie 网络 调试工具 技术实验室');
+      (this.developerModeEnabled &&
+        this.settingsSearchMatches('开发者选项', 'Cookie 网络 调试工具 技术实验室'));
   }
 
   private openExternalUrl(url: string, fallbackPrefix: string): void {
@@ -2242,6 +2346,18 @@ export struct P1Shell {
   private createPreferencesStore(): AppPreferencesStore | undefined {
     const context = getAbilityContext();
     return context === undefined ? undefined : new AppPreferencesStore(context);
+  }
+
+  private async restoreDeveloperMode(): Promise<void> {
+    const context = getAbilityContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      this.developerModeEnabled = await new AppPreferencesStore(context).loadDeveloperMode();
+    } catch (_error) {
+      this.developerModeEnabled = false;
+    }
   }
 
   private createFilterRuntimeStore(): ContentFilterRuntimeStore | undefined {

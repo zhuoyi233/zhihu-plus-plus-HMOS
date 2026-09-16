@@ -17,6 +17,7 @@ import {
   answerDoubleTapActionLabel,
   AnswerEndorsementDisplay,
   AppPreferencesStore,
+  defaultSpeechPreferences,
   AuthorBadge,
   BlockedFeedHistoryGateway,
   BlockingRuleGateway,
@@ -37,6 +38,7 @@ import {
   SessionStatus,
   VoteRepository
 } from 'data';
+import { parseZhihuHtml, ReaderBlock } from 'reader';
 import {
   BlockingActionContext,
   BlockingActionController,
@@ -72,6 +74,7 @@ import { performConfirmHaptic } from '../platform/HapticFeedback';
 import { ShareOutcome, SharePayloadKind, ShareTextPayload } from '../platform/ShareContracts';
 import { hdsMaterial } from '@kit.UIDesignKit';
 import { GlassCapsule } from './components/MaterialCanvas';
+import { getSpeechPlaybackService, SpeechPlaybackStatus } from '../platform/SpeechPlaybackService';
 
 @Component
 struct ContentDetailPage {
@@ -168,6 +171,7 @@ struct ContentDetailPage {
   @StorageProp('answerSwitchMode') private answerSwitchMode: string = 'vertical';
   @StorageProp('answerSwitchSensitivity') private answerSwitchSensitivity: number = 1;
   @StorageProp('shareActionMode') private shareActionMode: string = 'ask';
+  @StorageProp('speechPlaybackTick') private speechPlaybackTick: number = 0;
   @StorageProp('pageTurnSwitchAnswer') private pageTurnSwitchAnswer: boolean = true;
   @State private chromeHiddenByScroll: boolean = false;
   private lastContentScrollOffset: number = 0;
@@ -1898,6 +1902,21 @@ struct ContentDetailPage {
       }
       .width('100%')
 
+      if (this.kind === ContentDetailKind.ANSWER || this.kind === ContentDetailKind.ARTICLE) {
+        Button(this.isCurrentContentSpeaking() ? '停止朗读' : '朗读',
+          { type: ButtonType.Normal, stateEffect: true })
+          .id('p5_detail_menu_speech')
+          .width('100%')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor($r('app.color.primary_text'))
+          .backgroundColor($r('app.color.control_background'))
+          .borderRadius($r('app.float.p1_card_radius'))
+          .onClick((): void => {
+            this.actionMenuShown = false;
+            void this.toggleSpeechPlayback();
+          })
+      }
+
       Button('分享', { type: ButtonType.Normal, stateEffect: true })
         .id('p3_detail_menu_share')
         .width('100%')
@@ -2076,6 +2095,38 @@ struct ContentDetailPage {
       });
     } catch (_error) {
       this.menuStatus = '复制失败，请重试';
+    }
+  }
+
+  private isCurrentContentSpeaking(): boolean {
+    const _tick = this.speechPlaybackTick;
+    const snapshot = getSpeechPlaybackService().getSnapshot();
+    return (snapshot.status === SpeechPlaybackStatus.INITIALIZING ||
+      snapshot.status === SpeechPlaybackStatus.SPEAKING) && snapshot.contentId === this.activeContentId;
+  }
+
+  private async toggleSpeechPlayback(): Promise<void> {
+    const content = this.content;
+    if (content === undefined) {
+      return;
+    }
+    const service = getSpeechPlaybackService();
+    if (this.isCurrentContentSpeaking()) {
+      service.stop();
+      this.menuStatus = '已停止朗读';
+      return;
+    }
+    const context = getAbilityContext();
+    try {
+      const preferences = context === undefined ? defaultSpeechPreferences() :
+        await new AppPreferencesStore(context).loadSpeechPreferences();
+      const title = contentContextTitle(content).length > 0 ? contentContextTitle(content) :
+        contentDetailPageTitle(content.kind);
+      await service.speak(this.activeContentId, title, contentSpeechText(content), preferences);
+      const snapshot = service.getSnapshot();
+      this.menuStatus = snapshot.status === SpeechPlaybackStatus.ERROR ? snapshot.message : '已开始朗读';
+    } catch (_error) {
+      this.menuStatus = '朗读启动失败，请稍后重试';
     }
   }
 
@@ -2533,6 +2584,34 @@ export function contentHtml(content: LoadedContentDetail): string {
     case ContentDetailKind.ARTICLE:
       return content.value.contentHtml;
   }
+}
+
+/** Core Speech Kit 输入：标题、作者和正文纯文本，图片/公式使用 ReaderDocument 的可读替代文本。 */
+export function contentSpeechText(content: LoadedContentDetail): string {
+  const parts: Array<string> = [];
+  const title = contentContextTitle(content);
+  if (title.length > 0) {
+    parts.push(title);
+  }
+  const author = contentAuthorName(content).trim();
+  if (author.length > 0) {
+    parts.push(`作者 ${author}`);
+  }
+  const blocks = parseZhihuHtml(contentHtml(content));
+  blocks.forEach((block: ReaderBlock): void => {
+    const text = block.text.trim();
+    if (text.length > 0) {
+      parts.push(text);
+    }
+  });
+  if (blocks.length === 0 &&
+    (content.kind === ContentDetailKind.ANSWER || content.kind === ContentDetailKind.ARTICLE)) {
+    const excerpt = content.value.excerpt.trim();
+    if (excerpt.length > 0) {
+      parts.push(excerpt);
+    }
+  }
+  return parts.join('。\n');
 }
 
 export function contentEmptyMessage(content: LoadedContentDetail): string {

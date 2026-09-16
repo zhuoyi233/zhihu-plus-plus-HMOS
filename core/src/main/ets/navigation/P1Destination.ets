@@ -23,6 +23,9 @@ export enum P1DestinationName {
   LOGIN = 'Login',
   SETTINGS = 'Settings',
   APPEARANCE_SETTINGS = 'AppearanceSettings',
+  IDENTITY_MANAGEMENT = 'IdentityManagement',
+  READING_SETTINGS = 'ReadingSettings',
+  SYSTEM_UPDATE_SETTINGS = 'SystemUpdateSettings',
   RECOMMENDATION_FILTER_SETTINGS = 'RecommendationFilterSettings',
   BLOCKING_RULES = 'BlockingRules',
   BLOCKED_FEED_HISTORY = 'BlockedFeedHistory',
@@ -49,6 +52,8 @@ export interface StatelessDestination {
 
 export interface InfrastructureDestination {
   readonly name: P1DestinationName.LOGIN | P1DestinationName.SETTINGS | P1DestinationName.APPEARANCE_SETTINGS |
+    P1DestinationName.IDENTITY_MANAGEMENT | P1DestinationName.READING_SETTINGS |
+    P1DestinationName.SYSTEM_UPDATE_SETTINGS |
     P1DestinationName.RECOMMENDATION_FILTER_SETTINGS |
     P1DestinationName.BLOCKING_RULES |
     P1DestinationName.BLOCKED_FEED_HISTORY | P1DestinationName.READ_HISTORY | P1DestinationName.LOCAL_HISTORY |
@@ -163,6 +168,9 @@ export function isP1DestinationName(name: string): boolean {
     case P1DestinationName.LOGIN:
     case P1DestinationName.SETTINGS:
     case P1DestinationName.APPEARANCE_SETTINGS:
+    case P1DestinationName.IDENTITY_MANAGEMENT:
+    case P1DestinationName.READING_SETTINGS:
+    case P1DestinationName.SYSTEM_UPDATE_SETTINGS:
     case P1DestinationName.RECOMMENDATION_FILTER_SETTINGS:
     case P1DestinationName.BLOCKING_RULES:
     case P1DestinationName.BLOCKED_FEED_HISTORY:
@@ -226,6 +234,12 @@ export function decodeP1Destination(name: string, param: Object): P1Destination 
       return hasNoParameters(wire) ? { name: P1DestinationName.NOTIFICATION_SETTINGS } : undefined;
     case P1DestinationName.APPEARANCE_SETTINGS:
       return hasNoParameters(wire) ? { name: P1DestinationName.APPEARANCE_SETTINGS } : undefined;
+    case P1DestinationName.IDENTITY_MANAGEMENT:
+      return hasNoParameters(wire) ? { name: P1DestinationName.IDENTITY_MANAGEMENT } : undefined;
+    case P1DestinationName.READING_SETTINGS:
+      return hasNoParameters(wire) ? { name: P1DestinationName.READING_SETTINGS } : undefined;
+    case P1DestinationName.SYSTEM_UPDATE_SETTINGS:
+      return hasNoParameters(wire) ? { name: P1DestinationName.SYSTEM_UPDATE_SETTINGS } : undefined;
     case P1DestinationName.RECOMMENDATION_FILTER_SETTINGS:
       return hasNoParameters(wire) ? { name: P1DestinationName.RECOMMENDATION_FILTER_SETTINGS } : undefined;
     case P1DestinationName.LOGIN:
@@ -313,6 +327,9 @@ export function isInfrastructureDestination(destination: P1Destination): boolean
     case P1DestinationName.LOGIN:
     case P1DestinationName.SETTINGS:
     case P1DestinationName.APPEARANCE_SETTINGS:
+    case P1DestinationName.IDENTITY_MANAGEMENT:
+    case P1DestinationName.READING_SETTINGS:
+    case P1DestinationName.SYSTEM_UPDATE_SETTINGS:
     case P1DestinationName.RECOMMENDATION_FILTER_SETTINGS:
     case P1DestinationName.BLOCKING_RULES:
     case P1DestinationName.BLOCKED_FEED_HISTORY:

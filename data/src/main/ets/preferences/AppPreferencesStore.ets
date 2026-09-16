@@ -24,6 +24,11 @@ import {
   RecommendationFilterPreferencesGateway,
   RecommendationMode
 } from './RecommendationFilterPreferences';
+import {
+  defaultSpeechPreferences,
+  normalizeSpeechPreferences,
+  SpeechPreferences
+} from './SpeechPreferences';
 
 const PREFERENCES_NAME = 'app_preferences';
 const THEME_MODE_KEY = 'theme_mode';
@@ -53,6 +58,10 @@ const FAB_OPACITY_KEY = 'fabOpacity';
 const SHOW_FEED_THUMBNAIL_KEY = 'showFeedThumbnail';
 const SHOW_REFRESH_FAB_KEY = 'showRefreshFab';
 const FEED_CARD_STYLE_KEY = 'feedCardStyle';
+const DEVELOPER_MODE_KEY = 'developer';
+const SPEECH_SPEED_KEY = 'readingSpeechSpeed';
+const SPEECH_PITCH_KEY = 'readingSpeechPitch';
+const SPEECH_PERSON_KEY = 'readingSpeechPerson';
 
 export const DEFAULT_CONTENT_FONT_SIZE = 100;
 export const DEFAULT_CONTENT_LINE_HEIGHT = 160;
@@ -471,6 +480,80 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
 
   constructor(context: common.Context) {
     this.context = context;
+  }
+
+  async loadDeveloperMode(): Promise<boolean> {
+    await this.saveQueue;
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      const value = await store.get(DEVELOPER_MODE_KEY, false);
+      return typeof value === 'boolean' ? value : false;
+    } catch (error) {
+      const detail = error instanceof Error ? error : undefined;
+      throw new Error(appPreferencesFailureMessage('Developer mode load', detail));
+    }
+  }
+
+  saveDeveloperMode(enabled: boolean): Promise<void> {
+    const operation = this.saveQueue.then(
+      (): Promise<void> => this.writeDeveloperMode(enabled),
+      (): Promise<void> => this.writeDeveloperMode(enabled)
+    );
+    this.saveQueue = operation.then((): void => {}, (): void => {});
+    return operation;
+  }
+
+  private async writeDeveloperMode(enabled: boolean): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      await store.put(DEVELOPER_MODE_KEY, enabled);
+      await store.flush();
+    } catch (error) {
+      const detail = error instanceof Error ? error : undefined;
+      throw new Error(appPreferencesFailureMessage('Developer mode save', detail));
+    }
+  }
+
+  async loadSpeechPreferences(): Promise<SpeechPreferences> {
+    await this.saveQueue;
+    try {
+      const defaults = defaultSpeechPreferences();
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      const speed = await store.get(SPEECH_SPEED_KEY, defaults.speed);
+      const pitch = await store.get(SPEECH_PITCH_KEY, defaults.pitch);
+      const person = await store.get(SPEECH_PERSON_KEY, defaults.person);
+      return normalizeSpeechPreferences({
+        speed: typeof speed === 'number' ? speed : defaults.speed,
+        pitch: typeof pitch === 'number' ? pitch : defaults.pitch,
+        person: typeof person === 'number' ? person : defaults.person
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error : undefined;
+      throw new Error(appPreferencesFailureMessage('Speech preferences load', detail));
+    }
+  }
+
+  saveSpeechPreferences(value: SpeechPreferences): Promise<void> {
+    const normalized = normalizeSpeechPreferences(value);
+    const operation = this.saveQueue.then(
+      (): Promise<void> => this.writeSpeechPreferences(normalized),
+      (): Promise<void> => this.writeSpeechPreferences(normalized)
+    );
+    this.saveQueue = operation.then((): void => {}, (): void => {});
+    return operation;
+  }
+
+  private async writeSpeechPreferences(value: SpeechPreferences): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      await store.put(SPEECH_SPEED_KEY, value.speed);
+      await store.put(SPEECH_PITCH_KEY, value.pitch);
+      await store.put(SPEECH_PERSON_KEY, value.person);
+      await store.flush();
+    } catch (error) {
+      const detail = error instanceof Error ? error : undefined;
+      throw new Error(appPreferencesFailureMessage('Speech preferences save', detail));
+    }
   }
 
   async loadThemeMode(): Promise<AppThemeMode> {

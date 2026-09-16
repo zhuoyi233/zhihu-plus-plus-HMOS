@@ -267,8 +267,9 @@ struct Index {
             this.localHistoryContent(navigate, onBack),
           loginContent: (onBack: () => void, onAuthenticated: () => void, onScanDesktopLogin: () => void): void =>
             this.loginContent(onBack, onAuthenticated, onScanDesktopLogin),
-          technicalLabContent: (navigate: (destination: P1Destination) => void): void =>
-            this.technicalLabContent(navigate),
+          technicalLabContent: (navigate: (destination: P1Destination) => void,
+            onDeveloperModeDisabled: () => void): void =>
+            this.technicalLabContent(navigate, onDeveloperModeDisabled),
           readerProbeContent: (onBack: () => void): void => this.readerProbeContent(onBack),
           imageProbeContent: (onBack: () => void): void => this.imageProbeContent(onBack),
           databaseProbeContent: (onBack: () => void): void => this.databaseProbeContent(onBack),
@@ -618,8 +619,8 @@ struct Index {
   }
 
   @Builder
-  technicalLabContent(navigate: (destination: P1Destination) => void) {
-    TechnicalLabPage({ navigate: navigate });
+  technicalLabContent(navigate: (destination: P1Destination) => void, onDeveloperModeDisabled: () => void) {
+    TechnicalLabPage({ navigate: navigate, onDeveloperModeDisabled: onDeveloperModeDisabled });
   }
 
   @Builder

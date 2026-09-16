@@ -15,6 +15,7 @@ import { AppNavigationRow } from './AppPageChrome';
 
 @Component
 export struct TechnicalLabPage {
+  @State private developerModeEnabled: boolean = true;
   @State private networkStatus: string = 'HTTP 探针尚未运行';
   @State private sessionStatus: string = '会话探针尚未运行';
   @State private loginStatus: string = '正在读取登录状态…';
@@ -23,6 +24,7 @@ export struct TechnicalLabPage {
   @State private authenticated: boolean = false;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
+  onDeveloperModeDisabled: () => void = (): void => {};
   private readonly httpProbeClient: HttpProbeClient = new HttpProbeClient();
 
   aboutToAppear(): void {
@@ -34,6 +36,33 @@ export struct TechnicalLabPage {
       Scroll() {
         Column({ space: $r('app.float.p1_spacing_medium') }) {
           Blank().height(64)
+          Text('开发者模式')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
+          Row() {
+            Column({ space: 4 }) {
+              Text('开发者模式').fontSize($r('app.float.p1_body_font_size'))
+                .fontColor($r('app.color.primary_text'))
+              Text('关闭后将立即隐藏开发者选项并返回设置页')
+                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+            }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.developerModeEnabled })
+              .id('developer_mode_toggle')
+              .onChange((enabled: boolean): void => {
+                this.developerModeEnabled = enabled;
+                if (!enabled) {
+                  this.onDeveloperModeDisabled();
+                }
+              })
+          }
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
+          .padding($r('app.float.p1_card_padding'))
+          .borderRadius($r('app.float.p1_card_radius'))
+          .backgroundColor($r('app.color.surface_background'))
+
           Text('账号与会话')
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))

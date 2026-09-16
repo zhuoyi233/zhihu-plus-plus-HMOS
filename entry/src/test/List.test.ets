@@ -77,6 +77,7 @@ import readerTypographyTest from './ReaderTypography.test';
 import readerScrollGeometryTest from './ReaderScrollGeometry.test';
 import appearancePreferencesTest from './AppearancePreferences.test';
 import recommendationFilterPolicyTest from './RecommendationFilterPolicy.test';
+import identitySpeechSettingsTest from './IdentitySpeechSettings.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -158,4 +159,5 @@ export default function testsuite(): void {
   readerScrollGeometryTest();
   appearancePreferencesTest();
   recommendationFilterPolicyTest();
+  identitySpeechSettingsTest();
 }

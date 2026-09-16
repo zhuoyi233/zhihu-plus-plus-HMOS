@@ -22,6 +22,7 @@ import {
   contentEmptyMessage,
   contentHtml,
   contentIpInfo,
+  contentSpeechText,
   contentStatistics,
   contentTitle,
   contentUpdatedAtText,
@@ -102,6 +103,7 @@ export default function contentDetailStateTest(): void {
         expect(contentStatistics(answer, 42)).assertEqual('42 赞同 · 2 条评论');
         expect(contentHtml(answer)).assertEqual('<p>回答正文</p>');
         expect(contentEmptyMessage(answer)).assertEqual('摘要');
+        expect(contentSpeechText(answer)).assertEqual('回答所属问题。\n作者 回答者。\n回答正文');
       }
 
       await controller.load(ContentDetailKind.ARTICLE, '3');
@@ -111,6 +113,7 @@ export default function contentDetailStateTest(): void {
         expect(contentTitle(article)).assertEqual('完整文章标题');
         expect(contentContextTitle(article)).assertEqual('完整文章标题');
         expect(contentStatistics(article)).assertEqual('20 赞同 · 4 条评论');
+        expect(contentSpeechText(article)).assertEqual('完整文章标题。\n作者 文章作者。\n文章正文');
       }
     });
 
