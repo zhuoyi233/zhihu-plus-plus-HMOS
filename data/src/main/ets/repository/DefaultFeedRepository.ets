@@ -360,7 +360,8 @@ export class DefaultFeedRepository implements FeedRepository {
     const items = page.items.slice();
     items.sort((left: FeedItem, right: FeedItem): number => localRecommendationScore(right) -
       localRecommendationScore(left));
-    return terminalPage({ items: items, cursor: page.cursor });
+    const annotated = items.map((item: FeedItem): FeedItem => localFeedItemWithReason(item));
+    return terminalPage({ items: annotated, cursor: page.cursor });
   }
 }
 
@@ -377,6 +378,23 @@ function terminalPage(page: FeedPage): FeedPage {
 function localRecommendationScore(item: FeedItem): number {
   return (item.target.voteupCount ?? 0) * 4 + (item.target.followerCount ?? 0) * 2 +
     (item.target.answerCount ?? 0) + (item.target.commentCount ?? 0);
+}
+
+/**
+ * 对齐上游 LocalContentCache.CrawlingReason 的 reasonDisplay：本地引擎只缓存推荐快照，
+ * 可推导的来源只有「关注用户」（作者已关注）与默认「热门推荐」两档。
+ */
+function localFeedItemWithReason(item: FeedItem): FeedItem {
+  const reason = item.target.authorIsFollowing === true ? '关注用户的最新动态' : '热门推荐';
+  return {
+    id: item.id,
+    verb: item.verb,
+    actionText: item.actionText,
+    recommendationReason: reason,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    target: item.target
+  };
 }
 
 function mergeFeedSourceItems(first: Array<FeedItem>, second: Array<FeedItem>): Array<FeedItem> {

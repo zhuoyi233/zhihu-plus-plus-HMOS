@@ -170,6 +170,8 @@ export interface FeedItem {
   id: string;
   verb: string;
   actionText?: string;
+  /** 本地推荐（LOCAL 模式）理由标注，对齐上游 reasonDisplay；仅在本地排序页写入。 */
+  recommendationReason?: string;
   createdAt: number;
   updatedAt: number;
   target: FeedTargetSummary;

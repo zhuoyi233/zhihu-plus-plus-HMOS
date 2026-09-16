@@ -106,7 +106,10 @@ function decodeCard(value: JsonValue): FeedItem | undefined {
   const id = jsonString(card.get('id')) ?? `mobile-${target.kind}-${target.id}`;
   return {
     id: id,
+    // 对齐上游 AndroidHomeFeedViewModel：移动端推荐卡 details 追加「手机版推荐」，
+    // 混合推荐模式下与 Web 卡（action_text）区分来源。
     verb: '手机版推荐',
+    actionText: '手机版推荐',
     createdAt: 0,
     updatedAt: 0,
     target: {

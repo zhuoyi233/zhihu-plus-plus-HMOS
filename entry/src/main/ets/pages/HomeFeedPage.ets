@@ -667,6 +667,12 @@ export function feedKindLabel(kind: FeedTargetKind): string {
 }
 
 export function homeFeedActionLabel(item: FeedItem): string {
+  // 对齐上游：LOCAL 模式显示本地推荐理由（reasonDisplay），其余模式显示来源标注
+  // （移动端卡「手机版推荐」/ Web 卡 action_text），均缺失时兜底「推荐内容」。
+  const reason = item.recommendationReason?.trim() ?? '';
+  if (reason.length > 0) {
+    return reason;
+  }
   const actionText = item.actionText?.trim() ?? '';
   return actionText.length > 0 ? actionText : '推荐内容';
 }
