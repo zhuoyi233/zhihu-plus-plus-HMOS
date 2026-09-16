@@ -178,7 +178,7 @@ export struct ContentFilterSettingsPage {
 
         this.sectionTitle('管理与统计')
         Column() {
-          this.navigationSetting('管理屏蔽列表', '关键词、用户和主题精确规则', 'p3_filter_open_blocklist',
+          this.navigationSetting('内容屏蔽', '关键词、用户和主题精确规则', 'p3_filter_open_blocklist',
             this.onOpenBlocklist)
           Divider().color($r('app.color.divider_color'))
           this.navigationSetting('屏蔽记录', '查看最近被过滤或手动隐藏的内容', 'p3_filter_open_history',
