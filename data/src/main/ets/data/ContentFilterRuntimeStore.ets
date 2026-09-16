@@ -10,7 +10,6 @@ import {
 import { BlockedFeedHistoryGateway } from './BlockedFeedHistoryStore';
 
 const VIEW_TABLE = 'content_filter_views';
-const STATS_TABLE = 'content_filter_stats';
 const MAX_CONTENT_FILTER_RECORDS = 10000;
 
 export class ContentFilterRuntimeStore implements ContentFilterRuntimeGateway {
@@ -106,7 +105,6 @@ export class ContentFilterRuntimeStore implements ContentFilterRuntimeGateway {
     return this.enqueue(async (): Promise<void> => {
       const store = await this.database.open();
       await store.delete(new relationalStore.RdbPredicates(VIEW_TABLE));
-      await store.delete(new relationalStore.RdbPredicates(STATS_TABLE));
       await this.history.clear();
     });
   }

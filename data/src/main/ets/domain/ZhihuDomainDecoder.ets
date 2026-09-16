@@ -285,6 +285,7 @@ function feedTargetFromObject(object: JsonObjectValue): FeedTargetSummary {
       `不支持的 Feed 内容类型：${type}`);
   }
   const authorObject = jsonObject(object.get('author'));
+  const questionObject = jsonObject(object.get('question'));
   return {
     kind: kind,
     id: requiredId(object.get('id'), 'feed.target.id'),
@@ -304,6 +305,7 @@ function feedTargetFromObject(object: JsonObjectValue): FeedTargetSummary {
     followerCount: kind === FeedTargetKind.QUESTION
       ? optionalNumberStrict(object.get('follower_count'), 'feed.target.follower_count') : undefined,
     author: optionalUser(object.get('author')),
+    questionAuthor: optionalUser(questionObject?.get('author')),
     authorFollowerCount: optionalNumberStrict(
       authorObject?.get('follower_count') ?? authorObject?.get('followers_count'),
       'feed.target.author.follower_count'),

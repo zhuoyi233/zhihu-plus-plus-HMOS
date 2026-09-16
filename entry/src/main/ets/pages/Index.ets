@@ -10,6 +10,7 @@ import {
   CommentRepository,
   ContentDraftStore,
   ContentFilterRuntimeStore,
+  ContentBlockingStrategy,
   ContentRepository,
   DefaultChannelFeedRepository,
   DefaultCollectionRepository,
@@ -157,9 +158,10 @@ struct Index {
     const blockedFeedHistoryStore = new BlockedFeedHistoryStore(getAppDatabase(context));
     const preferencesStore = new AppPreferencesStore(context);
     const filterRuntimeStore = new ContentFilterRuntimeStore(getAppDatabase(context), blockedFeedHistoryStore);
-    const homeBlockingMatcher = new BlockingRuleMatcher(blockingRuleStore, preferencesStore, preferencesStore,
-      filterRuntimeStore);
-    const blockingMatcher = new BlockingRuleMatcher(blockingRuleStore, preferencesStore);
+    const homeBlockingMatcher = new BlockingRuleMatcher(blockingRuleStore, preferencesStore,
+      ContentBlockingStrategy.HOME_FULL, preferencesStore, filterRuntimeStore);
+    const blockingMatcher = new BlockingRuleMatcher(blockingRuleStore, preferencesStore,
+      ContentBlockingStrategy.RULES_ONLY);
     sessionOwner.restoreDeferred().catch((_error: Error): void => {
     }).then((): void => {
       this.session = session;

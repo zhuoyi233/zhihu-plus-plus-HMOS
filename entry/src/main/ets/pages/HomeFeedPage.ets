@@ -45,6 +45,8 @@ export struct HomeFeedPage {
   @StorageProp('loginFeedReloadTick') @Watch('onLoginFeedReloadTick') loginFeedReloadTick: number = 0;
   // 双击底栏“首页”页签刷新：复用下拉刷新链路
   @StorageProp('tabRefreshTick') @Watch('onTabRefreshRequested') tabRefreshTick: number = 0;
+  @StorageProp('contentFilterSettingsTick') @Watch('onContentFilterSettingsChanged')
+  private contentFilterSettingsTick: number = 0;
   @StorageProp('tabRefreshTabIndex') tabRefreshTabIndex: number = -1;
   @StorageProp('tabScrollTopTick') @Watch('onTabScrollTopRequested') private tabScrollTopTick: number = 0;
   @StorageProp('tabScrollTopTabIndex') private tabScrollTopTabIndex: number = -1;
@@ -128,6 +130,10 @@ export struct HomeFeedPage {
   }
 
   private onLoginFeedReloadTick(): void {
+    this.controller?.refresh();
+  }
+
+  private onContentFilterSettingsChanged(): void {
     this.controller?.refresh();
   }
 

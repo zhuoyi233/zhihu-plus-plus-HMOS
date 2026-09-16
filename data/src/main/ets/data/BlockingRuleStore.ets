@@ -73,6 +73,8 @@ export interface BlockableContentSummary {
   url?: string;
   authorId?: string;
   authorName?: string;
+  questionAuthorId?: string;
+  questionAuthorName?: string;
   authorFollowerCount?: number;
   authorIsFollowing?: boolean;
   topicIds: Array<string>;
@@ -114,6 +116,11 @@ export interface ContentBlockingSession {
 
 export interface ContentBlockingMatcher {
   createSession(): Promise<ContentBlockingSession>;
+}
+
+export enum ContentBlockingStrategy {
+  RULES_ONLY = 'rules_only',
+  HOME_FULL = 'home_full'
 }
 
 export interface ContentFilterRuntimeSnapshot {
@@ -231,15 +238,21 @@ export function matchBlockingRules(content: BlockableContentSummary, snapshot: B
   preferences: BlockingPreferences): BlockingMatch | undefined {
   const normalizedPreferences = normalizeBlockingPreferences(preferences);
   if (normalizedPreferences.userBlockingEnabled && content.authorId !== undefined) {
-    const authorId = content.authorId;
-    const user = snapshot.users.find((candidate: BlockedUserRule): boolean => candidate.userId === authorId);
+    const user = snapshot.users.find((candidate: BlockedUserRule): boolean => candidate.userId === content.authorId);
     if (user !== undefined) {
       return { kind: BlockingRuleKind.USER, ruleId: user.userId, reason: `屏蔽用户：${user.userName}` };
     }
   }
+  if (normalizedPreferences.userBlockingEnabled && content.questionAuthorId !== undefined) {
+    const user = snapshot.users.find((candidate: BlockedUserRule): boolean =>
+      candidate.userId === content.questionAuthorId);
+    if (user !== undefined) {
+      return { kind: BlockingRuleKind.USER, ruleId: user.userId, reason: `屏蔽提问者：${user.userName}` };
+    }
+  }
 
   if (normalizedPreferences.keywordBlockingEnabled) {
-    const text = `${content.title}\n${content.excerpt}`.substring(0, MAX_BLOCKABLE_TEXT_LENGTH);
+    const text = boundedBlockableText(content);
     const keyword = snapshot.keywords.find((candidate: BlockedKeywordRule): boolean =>
       matchesKeyword(text, candidate));
     if (keyword !== undefined) {
@@ -265,6 +278,19 @@ export function matchBlockingRules(content: BlockableContentSummary, snapshot: B
     }
   }
   return undefined;
+}
+
+function boundedBlockableText(content: BlockableContentSummary): string {
+  const fields: Array<string> = [content.title, content.excerpt, content.content ?? ''];
+  let result = '';
+  for (let index = 0; index < fields.length; index += 1) {
+    const separatorLength = result.length > 0 ? 1 : 0;
+    const remaining = MAX_BLOCKABLE_TEXT_LENGTH - result.length - separatorLength;
+    if (remaining <= 0) break;
+    const field = fields[index].substring(0, remaining);
+    result = result.length === 0 ? field : `${result}\n${field}`;
+  }
+  return result;
 }
 
 export function qualityFilterReason(content: BlockableContentSummary,
@@ -340,13 +366,15 @@ export function matchRecommendationFilters(content: BlockableContentSummary,
 export class BlockingRuleMatcher implements ContentBlockingMatcher {
   private readonly rules: BlockingRuleGateway;
   private readonly preferences: BlockingPreferencesGateway;
+  private readonly strategy: ContentBlockingStrategy;
   private readonly recommendationPreferences?: RecommendationFilterPreferencesGateway;
   private readonly runtime?: ContentFilterRuntimeGateway;
 
-  constructor(rules: BlockingRuleGateway, preferences: BlockingPreferencesGateway,
+  constructor(rules: BlockingRuleGateway, preferences: BlockingPreferencesGateway, strategy: ContentBlockingStrategy,
     recommendationPreferences?: RecommendationFilterPreferencesGateway, runtime?: ContentFilterRuntimeGateway) {
     this.rules = rules;
     this.preferences = preferences;
+    this.strategy = strategy;
     this.recommendationPreferences = recommendationPreferences;
     this.runtime = runtime;
   }
@@ -355,13 +383,16 @@ export class BlockingRuleMatcher implements ContentBlockingMatcher {
     try {
       const snapshot = await this.rules.loadSnapshot();
       const preferences = await this.preferences.loadBlockingPreferences();
-      const recommendation = this.recommendationPreferences === undefined
-        ? defaultRecommendationFilterPreferences()
-        : await this.recommendationPreferences.loadRecommendationFilterPreferences();
-      const runtimeSnapshot: ContentFilterRuntimeSnapshot = this.runtime === undefined
-        ? { viewCounts: {} as Record<string, number>, openedKeys: [] as Array<string> }
-        : await this.runtime.loadSnapshot();
-      return new BlockingRuleMatchSession(snapshot, preferences, recommendation, runtimeSnapshot, this.runtime);
+      if (this.strategy === ContentBlockingStrategy.RULES_ONLY) {
+        return new BlockingRuleMatchSession(this.strategy, snapshot, preferences);
+      }
+      if (this.recommendationPreferences === undefined || this.runtime === undefined) {
+        throw new Error('Home content blocking dependencies unavailable');
+      }
+      const recommendation = await this.recommendationPreferences.loadRecommendationFilterPreferences();
+      const runtimeSnapshot = await this.runtime.loadSnapshot();
+      return new BlockingRuleMatchSession(this.strategy, snapshot, preferences, recommendation, runtimeSnapshot,
+        this.runtime);
     } catch (_error) {
       throw new Error('Content blocking rules unavailable');
     }
@@ -369,16 +400,19 @@ export class BlockingRuleMatcher implements ContentBlockingMatcher {
 }
 
 class BlockingRuleMatchSession implements ContentBlockingSession {
+  private readonly strategy: ContentBlockingStrategy;
   private readonly snapshot: BlockingRuleSnapshot;
   private readonly preferences: BlockingPreferences;
-  private readonly recommendation: RecommendationFilterPreferences;
-  private readonly runtimeSnapshot: ContentFilterRuntimeSnapshot;
+  private readonly recommendation?: RecommendationFilterPreferences;
+  private readonly runtimeSnapshot?: ContentFilterRuntimeSnapshot;
   private readonly runtime?: ContentFilterRuntimeGateway;
   private readonly outcomes: Array<ContentFilterOutcome> = [];
+  private flushed: boolean = false;
 
-  constructor(snapshot: BlockingRuleSnapshot, preferences: BlockingPreferences,
-    recommendation: RecommendationFilterPreferences, runtimeSnapshot: ContentFilterRuntimeSnapshot,
+  constructor(strategy: ContentBlockingStrategy, snapshot: BlockingRuleSnapshot, preferences: BlockingPreferences,
+    recommendation?: RecommendationFilterPreferences, runtimeSnapshot?: ContentFilterRuntimeSnapshot,
     runtime?: ContentFilterRuntimeGateway) {
+    this.strategy = strategy;
     this.snapshot = copyBlockingRuleSnapshot(snapshot);
     this.preferences = normalizeBlockingPreferences(preferences);
     this.recommendation = recommendation;
@@ -387,11 +421,16 @@ class BlockingRuleMatchSession implements ContentBlockingSession {
   }
 
   match(content: BlockableContentSummary): BlockingMatch | undefined {
+    if (this.strategy === ContentBlockingStrategy.RULES_ONLY) {
+      return matchBlockingRules(content, this.snapshot, this.preferences);
+    }
     const enriched = this.withRuntimeState(content);
-    const recommendationMatch = matchRecommendationFilters(enriched, this.recommendation);
+    const recommendation = this.recommendation;
+    if (recommendation === undefined) return matchBlockingRules(enriched, this.snapshot, this.preferences);
+    const recommendationMatch = matchRecommendationFilters(enriched, recommendation);
     let result: BlockingMatch | undefined;
-    if (recommendationMatch !== undefined || this.recommendation.reverseBlock ||
-      (!this.recommendation.filterFollowedUserContent && enriched.authorIsFollowing === true)) {
+    if (recommendationMatch !== undefined || recommendation.reverseBlock ||
+      (!recommendation.filterFollowedUserContent && enriched.authorIsFollowing === true)) {
       result = recommendationMatch;
     } else {
       result = matchBlockingRules(enriched, this.snapshot, this.preferences);
@@ -401,16 +440,18 @@ class BlockingRuleMatchSession implements ContentBlockingSession {
   }
 
   qualityReason(content: BlockableContentSummary): string | undefined {
-    return qualityFilterReason(content, this.recommendation);
+    return this.recommendation === undefined ? undefined : qualityFilterReason(content, this.recommendation);
   }
 
   flush(): Promise<void> {
-    return this.runtime === undefined ? Promise.resolve() : this.runtime.recordOutcomes(this.outcomes);
+    if (this.runtime === undefined || this.flushed) return Promise.resolve();
+    this.flushed = true;
+    return this.runtime.recordOutcomes(this.outcomes.slice());
   }
 
   private withRuntimeState(content: BlockableContentSummary): BlockableContentSummary {
     const key = contentIdentityKey(content);
-    if (key.length === 0) return content;
+    if (key.length === 0 || this.runtimeSnapshot === undefined) return content;
     const copy: BlockableContentSummary = {
       contentId: content.contentId,
       contentKind: content.contentKind,
@@ -420,6 +461,8 @@ class BlockingRuleMatchSession implements ContentBlockingSession {
       url: content.url,
       authorId: content.authorId,
       authorName: content.authorName,
+      questionAuthorId: content.questionAuthorId,
+      questionAuthorName: content.questionAuthorName,
       authorFollowerCount: content.authorFollowerCount,
       authorIsFollowing: content.authorIsFollowing,
       topicIds: content.topicIds.slice(),

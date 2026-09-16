@@ -186,7 +186,7 @@ const EXPECTED_HOME_FEED_INCLUDE_QUERY =
   'include=data%5B%2A%5D.content%2Cexcerpt%2Cheadline%2Ctarget.voteup_count%2Ctarget.vote_count%2C' +
     'target.comment_count%2Ctarget.answer_count%2Ctarget.follower_count%2Ctarget.author.badge_v2%2C' +
     'target.author.is_following%2Ctarget.author.follower_count%2Ctarget.bound_topic_ids%2C' +
-    'target.question.bound_topic_ids';
+    'target.question.bound_topic_ids%2Ctarget.question.author';
 
 export default function homeFeedRepositoryTest(): void {
   describe('homeFeedRepositoryTest', () => {

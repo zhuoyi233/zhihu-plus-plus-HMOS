@@ -299,6 +299,8 @@ export class DefaultChannelFeedRepository implements ChannelFeedRepository {
           url: item.feedItem.target.url,
           authorId: authorId,
           authorName: item.feedItem.target.author?.name,
+          questionAuthorId: item.feedItem.target.questionAuthor?.id,
+          questionAuthorName: item.feedItem.target.questionAuthor?.name,
           authorFollowerCount: item.feedItem.target.authorFollowerCount,
           authorIsFollowing: item.feedItem.target.authorIsFollowing,
           topicIds: item.topicIds,

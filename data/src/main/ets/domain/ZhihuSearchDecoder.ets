@@ -178,15 +178,21 @@ function decodeContent(object: JsonObjectValue, wrapperIdValue: JsonValue | unde
   }
   const contentId = requiredId(object.get('id'), 'search.item.object.id');
   const author = optionalObject(object.get('author'), 'search.item.object.author');
+  const question = optionalObject(object.get('question'), 'search.item.object.question');
+  const questionAuthor = optionalObject(question?.get('author'), 'search.item.object.question.author');
   return {
     wrapperId: searchWrapperId(wrapperIdValue, contentId),
     kind: kind,
     contentId: contentId,
     title: searchTitle(object, kind),
     excerpt: textOrEmpty(object.get('excerpt'), 'search.item.object.excerpt'),
+    content: textOrEmpty(object.get('content') ?? object.get('detail'), 'search.item.object.content'),
     authorId: authorId(author),
     authorName: author === undefined ? undefined : optionalText(author.get('name'),
       'search.item.object.author.name'),
+    questionAuthorId: authorId(questionAuthor),
+    questionAuthorName: questionAuthor === undefined ? undefined : optionalText(questionAuthor.get('name'),
+      'search.item.object.question.author.name'),
     topicIds: searchTopicIds(object),
     voteupCount: numberOrDefault(object.get('voteup_count'), 0, 'search.item.object.voteup_count'),
     commentCount: numberOrDefault(object.get('comment_count'), 0, 'search.item.object.comment_count')

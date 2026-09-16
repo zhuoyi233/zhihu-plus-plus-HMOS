@@ -6,8 +6,11 @@ export interface SearchResultItem {
   readonly contentId: string;
   readonly title: string;
   readonly excerpt: string;
+  readonly content?: string;
   readonly authorId?: string;
   readonly authorName?: string;
+  readonly questionAuthorId?: string;
+  readonly questionAuthorName?: string;
   readonly topicIds: Array<string>;
   readonly voteupCount: number;
   readonly commentCount: number;

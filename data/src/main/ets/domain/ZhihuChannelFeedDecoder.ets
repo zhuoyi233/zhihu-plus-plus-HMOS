@@ -278,6 +278,20 @@ export function decodeQuestionAnswerFeedPage(json: string): ChannelFeedPage {
     const title = jsonString(target.get('title')) ?? jsonString(target.get('name')) ??
       (question === undefined ? undefined : jsonString(question.get('title'))) ?? '';
     const authorObject = jsonObject(target.get('author'));
+    const questionAuthorObject = jsonObject(question?.get('author'));
+    const questionAuthorId = jsonString(questionAuthorObject?.get('id'));
+    const questionAuthorName = jsonString(questionAuthorObject?.get('name'));
+    const questionAuthor: UserProfile | undefined = questionAuthorId === undefined || questionAuthorName === undefined
+      ? undefined : {
+        id: questionAuthorId,
+        name: questionAuthorName,
+        headline: jsonString(questionAuthorObject?.get('headline')) ?? '',
+        urlToken: jsonString(questionAuthorObject?.get('url_token')),
+        avatarUrl: jsonString(questionAuthorObject?.get('avatar_url')),
+        followerCount: jsonNumber(questionAuthorObject?.get('follower_count')) ?? 0,
+        isFollowing: jsonBoolean(questionAuthorObject?.get('is_following')) ?? false,
+        isOrganization: false
+      };
     const author: UserProfile = {
       id: jsonString(authorObject?.get('id')) ?? '',
       name: jsonString(authorObject?.get('name')) ?? '',
@@ -298,10 +312,12 @@ export function decodeQuestionAnswerFeedPage(json: string): ChannelFeedPage {
       voteupCount: jsonNumber(target.get('voteup_count')),
       commentCount: jsonNumber(target.get('comment_count')),
       author: author,
+      questionAuthor: questionAuthor,
       authorFollowerCount: jsonNumber(authorObject?.get('follower_count')) ??
         jsonNumber(authorObject?.get('followers_count')),
       authorIsFollowing: jsonBoolean(authorObject?.get('is_following')),
-      topicIds: targetTopicIds
+      topicIds: targetTopicIds,
+      content: jsonString(target.get('content')) ?? ''
     };
     const feedEntry: FeedItem = {
       id: targetId,

@@ -55,6 +55,9 @@ export struct ContentFilterSettingsPage {
   onOpenBlockedHistory: () => void = (): void => {};
   @State private filter: RecommendationFilterPreferences = defaultRecommendationFilterPreferences();
   @State private rules: BlockingPreferences = defaultBlockingPreferences();
+  // restore() 是异步加载；@Builder 按值传参只随首渲染快照固化，
+  // 必须等加载完成后再渲染表单，否则控件会一直显示默认值而非已保存值。
+  @State private loaded: boolean = false;
   @State private statusMessage: string = '';
   @State private settingsSheetShown: boolean = false;
   @State private settingsSheetKind: SettingsSheetKind = 'threshold';
@@ -77,6 +80,14 @@ export struct ContentFilterSettingsPage {
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
         }
+        if (!this.loaded) {
+          Text('正在加载设置…')
+            .id('p3_content_filter_loading')
+            .fontSize($r('app.float.p1_body_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
+        }
+        if (this.loaded) {
         this.sectionTitle('推荐来源')
         Column() {
           this.recommendationModeSetting()
@@ -136,7 +147,7 @@ export struct ContentFilterSettingsPage {
           this.ruleSwitchSetting('启用关键词屏蔽', '屏蔽包含特定关键词的内容',
             this.rules.keywordBlockingEnabled, 'keywordBlockingEnabled', 'p3_filter_keyword_enabled')
           Divider().color($r('app.color.divider_color'))
-          this.ruleSwitchSetting('启用用户屏蔽', '屏蔽特定用户发布的内容',
+          this.ruleSwitchSetting('启用用户屏蔽', '屏蔽特定用户发布的内容，以及由其提出的问题',
             this.rules.userBlockingEnabled, 'userBlockingEnabled', 'p3_filter_user_enabled')
           Divider().color($r('app.color.divider_color'))
           this.ruleSwitchSetting('启用主题屏蔽', '屏蔽包含特定主题的内容',
@@ -184,13 +195,14 @@ export struct ContentFilterSettingsPage {
           this.navigationSetting('屏蔽记录', '查看最近被过滤或手动隐藏的内容', 'p3_filter_open_history',
             this.onOpenBlockedHistory)
           Divider().color($r('app.color.divider_color'))
-          this.navigationSetting('过滤统计', '查看过滤率，并清理过期数据或重置统计', 'p3_filter_statistics', (): void => {
+          this.navigationSetting('过滤统计', '查看当前保留记录的过滤率，并清理或重置数据', 'p3_filter_statistics', (): void => {
             void this.openStats();
           })
         }
         .width('100%')
         .borderRadius($r('app.float.p1_card_radius'))
         .backgroundColor($r('app.color.surface_background'))
+        }
       }
       .width('100%')
       .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'), top: 94,
@@ -228,7 +240,7 @@ export struct ContentFilterSettingsPage {
   @Builder
   private recommendationModeSetting() {
     this.selectSetting('推荐算法', '选择首页推荐内容来源', recommendationModeLabel(this.filter.recommendationMode),
-      [{ value: 'Web 端推荐' }, { value: '安卓端推荐' }, { value: '本地推荐' }, { value: '混合推荐' }],
+      [{ value: 'Web 端推荐' }, { value: '安卓端推荐' }, { value: '本地排序（实验性）' }, { value: '混合推荐' }],
       this.recommendationModeIndex(), 'p3_filter_recommendation_mode', (index: number): void => {
         const values: RecommendationMode[] = [RecommendationMode.WEB, RecommendationMode.ANDROID,
           RecommendationMode.LOCAL, RecommendationMode.MIXED];
@@ -348,6 +360,8 @@ export struct ContentFilterSettingsPage {
     Column({ space: $r('app.float.p1_spacing_medium') }) {
       Text('过滤统计详情').fontSize($r('app.float.p1_heading_font_size')).fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.primary_text')).width('100%')
+      Text('以下数据按当前保留的曝光和屏蔽记录计算。')
+        .fontSize($r('app.float.p1_secondary_font_size')).fontColor($r('app.color.secondary_text')).width('100%')
       Text(`总记录数：${this.stats.totalSeen}`).fontSize($r('app.float.p1_body_font_size')).width('100%')
       Text(`已过滤：${this.stats.totalFiltered}`).fontSize($r('app.float.p1_body_font_size')).width('100%')
       Text(`过滤率：${(this.stats.filterRate * 100).toFixed(1)}%`)
@@ -374,6 +388,7 @@ export struct ContentFilterSettingsPage {
     const store = this.preferences;
     if (store === undefined) {
       this.statusMessage = '设置服务暂不可用';
+      this.loaded = true;
       return;
     }
     try {
@@ -381,6 +396,8 @@ export struct ContentFilterSettingsPage {
       this.rules = await store.loadBlockingPreferences();
     } catch (_error) {
       this.statusMessage = '设置读取失败，已使用默认值';
+    } finally {
+      this.loaded = true;
     }
   }
 

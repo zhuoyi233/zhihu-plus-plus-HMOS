@@ -107,14 +107,14 @@ export function decodeQualityFilterMode(value: string): QualityFilterMode {
 export function recommendationModeLabel(value: RecommendationMode): string {
   if (value === RecommendationMode.WEB) return 'Web 端推荐';
   if (value === RecommendationMode.ANDROID) return '安卓端推荐';
-  if (value === RecommendationMode.LOCAL) return '本地推荐';
+  if (value === RecommendationMode.LOCAL) return '本地排序（实验性）';
   return '混合推荐';
 }
 
 export function recommendationModeDescription(value: RecommendationMode): string {
   if (value === RecommendationMode.WEB) return '使用知乎网页端的推荐算法';
   if (value === RecommendationMode.ANDROID) return '使用知乎安卓端的推荐算法';
-  if (value === RecommendationMode.LOCAL) return '基于本地数据的推荐算法';
+  if (value === RecommendationMode.LOCAL) return '对已有缓存或 Web 候选做本地热度排序，暂不学习用户行为';
   return '融合安卓和网页端推荐算法，并过滤盐选内容';
 }
 

@@ -4,7 +4,7 @@ export interface SchemaMigration {
   statements: Array<string>;
 }
 
-export const CURRENT_SCHEMA_VERSION: number = 7;
+export const CURRENT_SCHEMA_VERSION: number = 8;
 
 export function schemaMigrationTo(targetVersion: number): SchemaMigration {
   if (targetVersion === 1) {
@@ -92,11 +92,15 @@ export function schemaMigrationTo(targetVersion: number): SchemaMigration {
         'CREATE TABLE IF NOT EXISTS content_filter_views (' +
           'content_key TEXT PRIMARY KEY, view_count INTEGER NOT NULL, last_viewed_at INTEGER NOT NULL)',
         'CREATE INDEX IF NOT EXISTS index_content_filter_views_last_viewed ' +
-          'ON content_filter_views(last_viewed_at)',
-        'CREATE TABLE IF NOT EXISTS content_filter_stats (' +
-          'id INTEGER PRIMARY KEY, total_seen INTEGER NOT NULL, total_filtered INTEGER NOT NULL, ' +
-          'last_filtered_at INTEGER NOT NULL)'
+          'ON content_filter_views(last_viewed_at)'
       ]
+    };
+  }
+  if (targetVersion === 8) {
+    return {
+      fromVersion: 7,
+      toVersion: 8,
+      statements: ['DROP TABLE IF EXISTS content_filter_stats']
     };
   }
   throw new Error(`Unsupported schema target version: ${targetVersion}`);
