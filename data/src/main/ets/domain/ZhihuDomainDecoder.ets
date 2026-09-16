@@ -113,9 +113,31 @@ function numberOrDefault(value: JsonValue | undefined, fallback: number, field: 
   return numberValue;
 }
 
+function optionalNumberStrict(value: JsonValue | undefined, field: string): number | undefined {
+  if (value === undefined || value instanceof JsonNullValue) {
+    return undefined;
+  }
+  const numberValue = jsonNumber(value);
+  if (numberValue === undefined || !Number.isFinite(numberValue)) {
+    throw invalid(`${field} 类型无效`);
+  }
+  return numberValue;
+}
+
 function booleanOrDefault(value: JsonValue | undefined, fallback: boolean, field: string): boolean {
   if (value === undefined || value instanceof JsonNullValue) {
     return fallback;
+  }
+  const booleanValue = jsonBoolean(value);
+  if (booleanValue === undefined) {
+    throw invalid(`${field} 类型无效`);
+  }
+  return booleanValue;
+}
+
+function optionalBooleanStrict(value: JsonValue | undefined, field: string): boolean | undefined {
+  if (value === undefined || value instanceof JsonNullValue) {
+    return undefined;
   }
   const booleanValue = jsonBoolean(value);
   if (booleanValue === undefined) {
@@ -262,24 +284,31 @@ function feedTargetFromObject(object: JsonObjectValue): FeedTargetSummary {
     throw new DomainDecodeError(DomainDecodeFailureKind.UNSUPPORTED_CONTENT,
       `不支持的 Feed 内容类型：${type}`);
   }
+  const authorObject = jsonObject(object.get('author'));
   return {
     kind: kind,
     id: requiredId(object.get('id'), 'feed.target.id'),
     title: title,
     excerpt: textOrEmpty(object.get('excerpt'), 'feed.target.excerpt'),
     url: textOrEmpty(object.get('url'), 'feed.target.url'),
-    voteupCount: numberOrDefault(kind === FeedTargetKind.VIDEO ? object.get('vote_count') : object.get('voteup_count'),
-      0, 'feed.target.voteup_count'),
-    commentCount: numberOrDefault(object.get('comment_count'), 0, 'feed.target.comment_count'),
+    voteupCount: optionalNumberStrict(
+      kind === FeedTargetKind.VIDEO ? object.get('vote_count') : object.get('voteup_count'),
+      'feed.target.voteup_count'),
+    commentCount: optionalNumberStrict(object.get('comment_count'), 'feed.target.comment_count'),
     thumbnailUrl: optionalTextStrict(object.get('thumbnail'), 'feed.target.thumbnail'),
     answerCount: kind === FeedTargetKind.QUESTION
-      ? numberOrDefault(object.get('answer_count'), 0, 'feed.target.answer_count') : undefined,
+      ? optionalNumberStrict(object.get('answer_count'), 'feed.target.answer_count') : undefined,
     visitCount: kind === FeedTargetKind.QUESTION && object.get('visit_count') !== undefined &&
       !(object.get('visit_count') instanceof JsonNullValue)
       ? numberOrDefault(object.get('visit_count'), 0, 'feed.target.visit_count') : undefined,
     followerCount: kind === FeedTargetKind.QUESTION
-      ? numberOrDefault(object.get('follower_count'), 0, 'feed.target.follower_count') : undefined,
+      ? optionalNumberStrict(object.get('follower_count'), 'feed.target.follower_count') : undefined,
     author: optionalUser(object.get('author')),
+    authorFollowerCount: optionalNumberStrict(
+      authorObject?.get('follower_count') ?? authorObject?.get('followers_count'),
+      'feed.target.author.follower_count'),
+    authorIsFollowing: optionalBooleanStrict(authorObject?.get('is_following'),
+      'feed.target.author.is_following'),
     topicIds: topicIdsFromObject(object),
     content: textOrEmpty(object.get('content') ?? object.get('detail'), 'feed.target.content'),
     isPaid: object.get('paid_info') !== undefined && !(object.get('paid_info') instanceof JsonNullValue)

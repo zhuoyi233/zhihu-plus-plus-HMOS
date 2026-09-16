@@ -86,6 +86,25 @@ export default function recommendationFilterPolicyTest(): void {
       expect(matchRecommendationFilters(answer, preferences)?.kind).assertEqual(BlockingRuleKind.QUALITY);
     });
 
+    it('doesNotTreatMissingQualitySignalsAsZero', 0, () => {
+      const preferences = defaultRecommendationFilterPreferences();
+      const answer = content('answer');
+      answer.voteupCount = undefined;
+      expect(qualityFilterReason(answer, preferences)).assertUndefined();
+      const article = content('article');
+      article.voteupCount = undefined;
+      article.authorFollowerCount = undefined;
+      expect(qualityFilterReason(article, preferences)).assertUndefined();
+      const video = content('video');
+      video.voteupCount = undefined;
+      video.authorFollowerCount = 0;
+      expect(qualityFilterReason(video, preferences)).assertUndefined();
+      const question = content('question');
+      question.answerCount = undefined;
+      question.followerCount = 0;
+      expect(qualityFilterReason(question, preferences)).assertUndefined();
+    });
+
     it('blocksAllConfiguredPromotionAndPaidContentTypes', 0, () => {
       const preferences = defaultRecommendationFilterPreferences();
       const paid = content();

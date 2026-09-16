@@ -454,10 +454,10 @@ export struct HomeFeedPage {
           } else {
             Blank().layoutWeight(1)
           }
-          Text(`${item.target.voteupCount} 赞同`)
+          Text(`${item.target.voteupCount ?? '—'} 赞同`)
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
-          Text(`${item.target.commentCount} 评论`)
+          Text(`${item.target.commentCount ?? '—'} 评论`)
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
         }

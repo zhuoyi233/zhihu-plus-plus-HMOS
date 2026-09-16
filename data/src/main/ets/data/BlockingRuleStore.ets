@@ -273,21 +273,23 @@ export function qualityFilterReason(content: BlockableContentSummary,
     return undefined;
   }
   if (content.contentKind === 'answer' && content.authorIsFollowing === false &&
-    (content.voteupCount ?? 0) < preferences.answerVoteupThreshold) {
+    content.voteupCount !== undefined && content.voteupCount < preferences.answerVoteupThreshold) {
     return `回答赞同数低于 ${preferences.answerVoteupThreshold}`;
   }
   if (content.contentKind === 'article' && content.authorIsFollowing === false &&
-    ((content.voteupCount ?? 0) < preferences.articleVoteupThreshold ||
-      (content.authorFollowerCount ?? 0) < preferences.articleFollowersThreshold)) {
+    ((content.voteupCount !== undefined && content.voteupCount < preferences.articleVoteupThreshold) ||
+      (content.authorFollowerCount !== undefined &&
+        content.authorFollowerCount < preferences.articleFollowersThreshold))) {
     return '文章赞同数或作者粉丝数低于阈值';
   }
   if (content.contentKind === 'video' && content.authorIsFollowing === false &&
-    (content.voteupCount ?? 0) < preferences.videoVoteThreshold &&
-    (content.authorFollowerCount ?? 0) < preferences.videoFollowersThreshold) {
+    content.voteupCount !== undefined && content.voteupCount < preferences.videoVoteThreshold &&
+    content.authorFollowerCount !== undefined && content.authorFollowerCount < preferences.videoFollowersThreshold) {
     return '视频赞同数或作者粉丝数低于阈值';
   }
-  if (content.contentKind === 'question' && (content.answerCount ?? 0) < preferences.questionAnswerThreshold &&
-    (content.followerCount ?? 0) < preferences.questionFollowersThreshold) {
+  if (content.contentKind === 'question' && content.answerCount !== undefined &&
+    content.answerCount < preferences.questionAnswerThreshold && content.followerCount !== undefined &&
+    content.followerCount < preferences.questionFollowersThreshold) {
     return '问题回答数或关注数低于阈值';
   }
   return undefined;

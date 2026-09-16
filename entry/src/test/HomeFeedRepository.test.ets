@@ -178,32 +178,32 @@ const MOBILE_PAGE = '{"data":[{"id":"mobile-card-1","type":"ComponentCard",' +
   '"children":[{"id":"Text","text":"移动推荐回答"},' +
   '{"id":"text_pin_summary","text":"移动摘要"},' +
   '{"type":"Line","elements":[{"reaction":"Vote","count":88},{"reaction":"Comment","count":7}]},' +
-  '{"style":"RecommendAuthorLine_default","elements":[{"type":"Text","text":"移动作者"},' +
+  '{"style":"RecommendAuthorLine_default","follower_count":200,"is_following":false,' +
+  '"elements":[{"type":"Text","text":"移动作者"},' +
   '{"style":"Avatar_default","image":{"url":"https://pic.zhimg.com/avatar.jpg"}}]}]}],' +
   '"paging":{"is_end":true,"is_start":true}}';
+const EXPECTED_HOME_FEED_INCLUDE_QUERY =
+  'include=data%5B%2A%5D.content%2Cexcerpt%2Cheadline%2Ctarget.voteup_count%2Ctarget.vote_count%2C' +
+    'target.comment_count%2Ctarget.answer_count%2Ctarget.follower_count%2Ctarget.author.badge_v2%2C' +
+    'target.author.is_following%2Ctarget.author.follower_count%2Ctarget.bound_topic_ids%2C' +
+    'target.question.bound_topic_ids';
 
 export default function homeFeedRepositoryTest(): void {
   describe('homeFeedRepositoryTest', () => {
     it('buildsExactInitialAndPagingRequestUrls', 0, () => {
       expect(buildHomeFeedRequestUrl()).assertEqual(HOME_FEED_URL);
       expect(buildHomeFeedRequestUrl('https://www.zhihu.com/api/v3/feed/topstory/recommend?offset=2')).assertEqual(
-        'https://www.zhihu.com/api/v3/feed/topstory/recommend?offset=2&' +
-          'include=data%5B%2A%5D.content%2Cexcerpt%2Cheadline%2Ctarget.author.badge_v2%2C' +
-            'target.bound_topic_ids%2Ctarget.question.bound_topic_ids'
+        'https://www.zhihu.com/api/v3/feed/topstory/recommend?offset=2&' + EXPECTED_HOME_FEED_INCLUDE_QUERY
       );
       expect(buildHomeFeedRequestUrl(
         'https://www.zhihu.com/api/v3/feed/topstory/recommend?include=stale&offset=3'
       )).assertEqual(
-        'https://www.zhihu.com/api/v3/feed/topstory/recommend?offset=3&' +
-          'include=data%5B%2A%5D.content%2Cexcerpt%2Cheadline%2Ctarget.author.badge_v2%2C' +
-            'target.bound_topic_ids%2Ctarget.question.bound_topic_ids'
+        'https://www.zhihu.com/api/v3/feed/topstory/recommend?offset=3&' + EXPECTED_HOME_FEED_INCLUDE_QUERY
       );
       expect(buildHomeFeedRequestUrl(
         'https://www.zhihu.com/api/v3/feed/topstory/recommend?%69nclude=stale&%6fffset=3'
       )).assertEqual(
-        'https://www.zhihu.com/api/v3/feed/topstory/recommend?offset=3&' +
-          'include=data%5B%2A%5D.content%2Cexcerpt%2Cheadline%2Ctarget.author.badge_v2%2C' +
-            'target.bound_topic_ids%2Ctarget.question.bound_topic_ids'
+        'https://www.zhihu.com/api/v3/feed/topstory/recommend?offset=3&' + EXPECTED_HOME_FEED_INCLUDE_QUERY
       );
       expect(canonicalHomeFeedCursorKey(
         'https://www.zhihu.com/api/v3/feed/topstory/recommend?offset=3&limit=10'
@@ -315,6 +315,8 @@ export default function homeFeedRepositoryTest(): void {
       expect(page.items[0].target.id).assertEqual('200');
       expect(page.items[0].target.voteupCount).assertEqual(88);
       expect(page.items[0].target.author?.name).assertEqual('移动作者');
+      expect(page.items[0].target.authorFollowerCount).assertEqual(200);
+      expect(page.items[0].target.authorIsFollowing).assertFalse();
     });
 
     it('ranksCachedCandidatesLocallyWithoutNetworkRequests', 0, async () => {
@@ -339,7 +341,9 @@ export default function homeFeedRepositoryTest(): void {
     it('filtersEachPageWithOneSnapshotAndRealAuthorTopicFields', 0, async () => {
       const factory = new SequenceFeedTransportFactory([{ statusCode: 200, body: '{"data":[' +
         '{"id":"feed-1","target":{"type":"article","id":"1","title":"保留",' +
-        '"author":{"id":"author-1","name":"作者"},"bound_topic_ids":[19551275]}},' +
+        '"voteup_count":2374,"comment_count":424,' +
+        '"author":{"id":"author-1","name":"作者","follower_count":5000,"is_following":false},' +
+        '"bound_topic_ids":[19551275]}},' +
         '{"id":"feed-2","target":{"type":"article","id":"2","title":"屏蔽内容",' +
         '"bound_topic_ids":[19551276]}}],"paging":{"is_end":true}}' }]);
       const matcher = new RecordingFeedBlockingMatcher();
@@ -350,6 +354,10 @@ export default function homeFeedRepositoryTest(): void {
       expect(matcher.session.summaries.length).assertEqual(2);
       expect(matcher.session.summaries[0].authorId).assertEqual('author-1');
       expect(matcher.session.summaries[0].topicIds[0]).assertEqual('19551275');
+      expect(matcher.session.summaries[0].voteupCount).assertEqual(2374);
+      expect(matcher.session.summaries[0].authorFollowerCount).assertEqual(5000);
+      expect(matcher.session.summaries[0].authorIsFollowing).assertFalse();
+      expect(matcher.session.summaries[1].voteupCount).assertUndefined();
       expect(page.items.length).assertEqual(1);
       expect(page.items[0].target.id).assertEqual('1');
     });
@@ -370,9 +378,7 @@ export default function homeFeedRepositoryTest(): void {
       expect(second.cursor.isEnd).assertTrue();
       expect(second.cursor.next).assertUndefined();
       expect(factory.requests[1].url).assertEqual(
-        'https://www.zhihu.com/api/v3/feed/topstory/recommend?offset=2&' +
-          'include=data%5B%2A%5D.content%2Cexcerpt%2Cheadline%2Ctarget.author.badge_v2%2C' +
-            'target.bound_topic_ids%2Ctarget.question.bound_topic_ids'
+        'https://www.zhihu.com/api/v3/feed/topstory/recommend?offset=2&' + EXPECTED_HOME_FEED_INCLUDE_QUERY
       );
     });
 

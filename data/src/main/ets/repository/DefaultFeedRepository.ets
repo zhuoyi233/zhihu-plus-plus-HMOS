@@ -16,7 +16,9 @@ import {
 import { FeedRepository } from './FeedRepository';
 
 export const HOME_FEED_INCLUDE =
-  'data[*].content,excerpt,headline,target.author.badge_v2,target.bound_topic_ids,target.question.bound_topic_ids';
+  'data[*].content,excerpt,headline,target.voteup_count,target.vote_count,target.comment_count,' +
+    'target.answer_count,target.follower_count,target.author.badge_v2,target.author.is_following,' +
+    'target.author.follower_count,target.bound_topic_ids,target.question.bound_topic_ids';
 const HOME_FEED_INCLUDE_QUERY = `include=${encodeURIComponent(HOME_FEED_INCLUDE).replace(/\*/g, '%2A')}`;
 export const HOME_FEED_URL =
   `https://www.zhihu.com/api/v3/feed/topstory/recommend?desktop=true&page_number=1&limit=10&action=down&` +
@@ -367,8 +369,8 @@ function terminalPage(page: FeedPage): FeedPage {
 }
 
 function localRecommendationScore(item: FeedItem): number {
-  return item.target.voteupCount * 4 + (item.target.followerCount ?? 0) * 2 +
-    (item.target.answerCount ?? 0) + item.target.commentCount;
+  return (item.target.voteupCount ?? 0) * 4 + (item.target.followerCount ?? 0) * 2 +
+    (item.target.answerCount ?? 0) + (item.target.commentCount ?? 0);
 }
 
 function mergeFeedSourceItems(first: Array<FeedItem>, second: Array<FeedItem>): Array<FeedItem> {
@@ -401,8 +403,8 @@ function blockableFeedSummary(item: FeedItem): BlockableContentSummary {
   if (item.target.author !== undefined) {
     summary.authorId = item.target.author.id;
     summary.authorName = item.target.author.name;
-    summary.authorFollowerCount = item.target.author.followerCount;
-    summary.authorIsFollowing = item.target.author.isFollowing;
+    summary.authorFollowerCount = item.target.authorFollowerCount;
+    summary.authorIsFollowing = item.target.authorIsFollowing;
   }
   return summary;
 }

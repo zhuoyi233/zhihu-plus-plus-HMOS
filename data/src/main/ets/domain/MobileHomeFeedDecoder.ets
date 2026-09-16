@@ -55,12 +55,15 @@ function routeTarget(url: string): MobileRouteTarget | undefined {
   return undefined;
 }
 
-function mobileAuthor(children: Array<JsonValue>): UserProfile | undefined {
-  const line = children.map((value: JsonValue): JsonObjectValue | undefined => objectValue(value))
+function mobileAuthorLine(children: Array<JsonValue>): JsonObjectValue | undefined {
+  return children.map((value: JsonValue): JsonObjectValue | undefined => objectValue(value))
     .find((value: JsonObjectValue | undefined): boolean => {
       const style = value === undefined ? undefined : jsonString(value.get('style'));
       return style?.startsWith('RecommendAuthorLine') === true || style?.startsWith('LineAuthor_default') === true;
     });
+}
+
+function mobileAuthor(line: JsonObjectValue | undefined): UserProfile | undefined {
   const elements = arrayValue(line?.get('elements'));
   const name = jsonString(findObject(elements, 'type', 'Text')?.get('text'));
   if (name === undefined || name.trim().length === 0) return undefined;
@@ -78,7 +81,7 @@ function mobileAuthor(children: Array<JsonValue>): UserProfile | undefined {
   };
 }
 
-function reactionCount(children: Array<JsonValue>, reaction: string): number {
+function reactionCount(children: Array<JsonValue>, reaction: string): number | undefined {
   for (let index = 0; index < children.length; index += 1) {
     const child = objectValue(children[index]);
     const elements = arrayValue(child?.get('elements'));
@@ -86,7 +89,7 @@ function reactionCount(children: Array<JsonValue>, reaction: string): number {
     const count = jsonNumber(reactionElement?.get('count'));
     if (count !== undefined && Number.isFinite(count)) return count;
   }
-  return 0;
+  return undefined;
 }
 
 function decodeCard(value: JsonValue): FeedItem | undefined {
@@ -96,6 +99,7 @@ function decodeCard(value: JsonValue): FeedItem | undefined {
   const target = url === undefined ? undefined : routeTarget(url);
   if (url === undefined || target === undefined) return undefined;
   const children = arrayValue(card.get('children'));
+  const authorLine = mobileAuthorLine(children);
   const title = jsonString(findObject(children, 'id', 'Text')?.get('text'));
   if (title === undefined || title.trim().length === 0) return undefined;
   const excerpt = jsonString(findObject(children, 'id', 'text_pin_summary')?.get('text')) ?? '';
@@ -113,7 +117,10 @@ function decodeCard(value: JsonValue): FeedItem | undefined {
       url: url,
       voteupCount: reactionCount(children, 'Vote'),
       commentCount: reactionCount(children, 'Comment'),
-      author: mobileAuthor(children),
+      author: mobileAuthor(authorLine),
+      authorFollowerCount: jsonNumber(authorLine?.get('follower_count')) ??
+        jsonNumber(authorLine?.get('followers_count')),
+      authorIsFollowing: jsonBoolean(authorLine?.get('is_following')),
       topicIds: []
     }
   };

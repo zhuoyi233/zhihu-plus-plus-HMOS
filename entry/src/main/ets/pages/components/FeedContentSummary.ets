@@ -38,7 +38,7 @@ export struct FeedContentSummary {
           .maxLines(3).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
       }
       if (this.showStatistics) {
-        Text(`${this.target.voteupCount} 赞同 · ${this.target.commentCount} 评论`)
+        Text(`${this.target.voteupCount ?? '—'} 赞同 · ${this.target.commentCount ?? '—'} 评论`)
           .fontSize($r('app.float.p1_secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
       }

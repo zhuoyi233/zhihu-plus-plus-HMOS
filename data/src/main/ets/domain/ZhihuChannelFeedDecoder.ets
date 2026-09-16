@@ -11,6 +11,7 @@ import {
 import { FeedItem, FeedPage, FeedTargetKind, FeedTargetSummary, PageCursor, UserProfile } from './DomainModels';
 import {
   JsonArrayValue,
+  jsonBoolean,
   JsonBooleanValue,
   jsonIntegerLiteral,
   jsonNumber,
@@ -294,9 +295,12 @@ export function decodeQuestionAnswerFeedPage(json: string): ChannelFeedPage {
       title: title,
       excerpt: jsonString(target.get('excerpt')) ?? '',
       url: jsonString(target.get('url')) ?? '',
-      voteupCount: jsonNumber(target.get('voteup_count')) ?? 0,
-      commentCount: jsonNumber(target.get('comment_count')) ?? 0,
+      voteupCount: jsonNumber(target.get('voteup_count')),
+      commentCount: jsonNumber(target.get('comment_count')),
       author: author,
+      authorFollowerCount: jsonNumber(authorObject?.get('follower_count')) ??
+        jsonNumber(authorObject?.get('followers_count')),
+      authorIsFollowing: jsonBoolean(authorObject?.get('is_following')),
       topicIds: targetTopicIds
     };
     const feedEntry: FeedItem = {

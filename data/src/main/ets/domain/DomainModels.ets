@@ -148,13 +148,16 @@ export interface FeedTargetSummary {
   title: string;
   excerpt: string;
   url: string;
-  voteupCount: number;
-  commentCount: number;
+  voteupCount?: number;
+  commentCount?: number;
   thumbnailUrl?: string;
   answerCount?: number;
   visitCount?: number;
   followerCount?: number;
   author?: UserProfile;
+  /** Feed 响应中实际返回的作者质量信号；缺省表示上游未返回，不能按 0/未关注处理。 */
+  authorFollowerCount?: number;
+  authorIsFollowing?: boolean;
   topicIds: Array<string>;
   content?: string;
   isPaid?: boolean;
