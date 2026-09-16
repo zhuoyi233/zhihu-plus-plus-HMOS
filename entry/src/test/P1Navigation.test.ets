@@ -57,6 +57,7 @@ export default function p1NavigationTest(): void {
         P1DestinationName.LOGIN,
         P1DestinationName.SETTINGS,
         P1DestinationName.APPEARANCE_SETTINGS,
+        P1DestinationName.RECOMMENDATION_FILTER_SETTINGS,
         P1DestinationName.BLOCKING_RULES,
         P1DestinationName.BLOCKED_FEED_HISTORY,
         P1DestinationName.READ_HISTORY,
@@ -155,6 +156,9 @@ export default function p1NavigationTest(): void {
       const appearanceParam: TestDestinationParam = {
         name: P1DestinationName.APPEARANCE_SETTINGS
       };
+      const recommendationFilterParam: TestDestinationParam = {
+        name: P1DestinationName.RECOMMENDATION_FILTER_SETTINGS
+      };
       const desktopLoginScanParam: TestDestinationParam = {
         name: P1DestinationName.QR_DESKTOP_LOGIN_SCAN
       };
@@ -196,6 +200,8 @@ export default function p1NavigationTest(): void {
       const probe = decodeP1Destination(P1DestinationName.READER_PROBE, probeParam);
       const login = decodeP1Destination(P1DestinationName.LOGIN, loginParam);
       const appearance = decodeP1Destination(P1DestinationName.APPEARANCE_SETTINGS, appearanceParam);
+      const recommendationFilter = decodeP1Destination(P1DestinationName.RECOMMENDATION_FILTER_SETTINGS,
+        recommendationFilterParam);
       const desktopLoginScan = decodeP1Destination(P1DestinationName.QR_DESKTOP_LOGIN_SCAN, desktopLoginScanParam);
       const writeAnswer = decodeP1Destination(P1DestinationName.WRITE_ANSWER, writeAnswerParam);
       const writePin = decodeP1Destination(P1DestinationName.WRITE_PIN, writePinParam);
@@ -231,6 +237,7 @@ export default function p1NavigationTest(): void {
         .assertEqual(P1DestinationName.DOMAIN_FIXTURE_PROBE);
       expect(login?.name).assertEqual(P1DestinationName.LOGIN);
       expect(appearance?.name).assertEqual(P1DestinationName.APPEARANCE_SETTINGS);
+      expect(recommendationFilter?.name).assertEqual(P1DestinationName.RECOMMENDATION_FILTER_SETTINGS);
       expect(desktopLoginScan?.name).assertEqual(P1DestinationName.QR_DESKTOP_LOGIN_SCAN);
       if (writeAnswer?.name === P1DestinationName.WRITE_ANSWER) {
         expect(writeAnswer.questionId).assertEqual('123');

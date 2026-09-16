@@ -255,6 +255,9 @@ function feedTargetFromObject(object: JsonObjectValue): FeedTargetSummary {
   } else if (type === FeedTargetKind.QUESTION) {
     kind = FeedTargetKind.QUESTION;
     title = requiredText(object.get('title') ?? object.get('name'), 'feed.target.title');
+  } else if (type === 'zvideo') {
+    kind = FeedTargetKind.VIDEO;
+    title = requiredText(object.get('title'), 'feed.target.title');
   } else {
     throw new DomainDecodeError(DomainDecodeFailureKind.UNSUPPORTED_CONTENT,
       `不支持的 Feed 内容类型：${type}`);
@@ -265,7 +268,8 @@ function feedTargetFromObject(object: JsonObjectValue): FeedTargetSummary {
     title: title,
     excerpt: textOrEmpty(object.get('excerpt'), 'feed.target.excerpt'),
     url: textOrEmpty(object.get('url'), 'feed.target.url'),
-    voteupCount: numberOrDefault(object.get('voteup_count'), 0, 'feed.target.voteup_count'),
+    voteupCount: numberOrDefault(kind === FeedTargetKind.VIDEO ? object.get('vote_count') : object.get('voteup_count'),
+      0, 'feed.target.voteup_count'),
     commentCount: numberOrDefault(object.get('comment_count'), 0, 'feed.target.comment_count'),
     thumbnailUrl: optionalTextStrict(object.get('thumbnail'), 'feed.target.thumbnail'),
     answerCount: kind === FeedTargetKind.QUESTION
@@ -276,7 +280,9 @@ function feedTargetFromObject(object: JsonObjectValue): FeedTargetSummary {
     followerCount: kind === FeedTargetKind.QUESTION
       ? numberOrDefault(object.get('follower_count'), 0, 'feed.target.follower_count') : undefined,
     author: optionalUser(object.get('author')),
-    topicIds: topicIdsFromObject(object)
+    topicIds: topicIdsFromObject(object),
+    content: textOrEmpty(object.get('content') ?? object.get('detail'), 'feed.target.content'),
+    isPaid: object.get('paid_info') !== undefined && !(object.get('paid_info') instanceof JsonNullValue)
   };
 }
 

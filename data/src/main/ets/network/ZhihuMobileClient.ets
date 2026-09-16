@@ -31,6 +31,8 @@ export interface ZhihuMobileHttpRequest {
   contentType?: string;
   /** 移动端加密协议版本声明（如发私信的 `101_1_1.0`）。 */
   xZse93?: string;
+  /** 推荐流允许访客访问；通知和私信保持默认必须携带会话。 */
+  useSession?: boolean;
 }
 
 export function isMobileApiRequestUrl(url: string): boolean {
@@ -51,17 +53,26 @@ export function prepareZhihuMobileHttpRequest(request: ZhihuMobileHttpRequest,
     throw new HttpFailure(HttpFailureKind.CLIENT);
   }
   const cookieHeader = toCookieHeader(cookies, Date.now());
-  if (cookieHeader.length === 0) {
+  if (request.useSession !== false && cookieHeader.length === 0) {
     throw new HttpFailure(HttpFailureKind.AUTHENTICATION);
   }
   let headers: ZhihuRequestHeaders = {
     'Accept': request.accept ?? 'application/json',
     'User-Agent': ZHIHU_MOBILE_USER_AGENT,
-    'Cookie': cookieHeader,
     'x-api-version': ZHIHU_MOBILE_API_VERSION,
     'x-app-version': ZHIHU_MOBILE_APP_VERSION,
     'x-app-za': ZHIHU_MOBILE_APP_ZA
   };
+  if (cookieHeader.length > 0 && request.body === undefined) {
+    headers = {
+      'Accept': request.accept ?? 'application/json',
+      'User-Agent': ZHIHU_MOBILE_USER_AGENT,
+      'Cookie': cookieHeader,
+      'x-api-version': ZHIHU_MOBILE_API_VERSION,
+      'x-app-version': ZHIHU_MOBILE_APP_VERSION,
+      'x-app-za': ZHIHU_MOBILE_APP_ZA
+    };
+  }
   if (request.body !== undefined) {
     headers = {
       'Accept': request.accept ?? 'application/json',

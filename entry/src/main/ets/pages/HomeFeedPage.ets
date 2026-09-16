@@ -7,7 +7,8 @@ import {
   FeedItem,
   FeedRepository,
   FeedTargetKind,
-  isUpdateAnnouncementVisible
+  isUpdateAnnouncementVisible,
+  OpenedContentStore
 } from 'data';
 import { Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -37,6 +38,7 @@ export struct HomeFeedPage {
   repository: FeedRepository | undefined = new DefaultFeedRepository();
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
+  openedContentStore: OpenedContentStore | undefined = undefined;
   @Prop @Watch('reloadAfterAuthentication') reloadToken: number = 0;
   // 登录成功重载信号：reloadToken 走 Builder 参数、@Provide/@Consume 在 HdsTabs 的
   // TabContent 构建树下均实测不可靠，AppStorage 广播是可靠通道（同 bottomRectHeight）
@@ -415,6 +417,14 @@ export struct HomeFeedPage {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
 
+        if ((item.target.qualityFilterReason ?? '').length > 0) {
+          Text(`质量屏蔽规则：${item.target.qualityFilterReason}`)
+            .id(`p3_home_quality_rule_${item.target.kind}_${item.target.id}`)
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.brand_primary'))
+            .width('100%')
+        }
+
         if (this.showFeedThumbnail && (item.target.thumbnailUrl ?? '').length > 0) {
           Image(item.target.thumbnailUrl)
             .width('100%')
@@ -469,7 +479,17 @@ export struct HomeFeedPage {
       radius: this.feedCardStyle === 'card' ? $r('app.float.p1_card_radius') : 0
     })
     .accessibilityText(`打开${feedKindLabel(item.target.kind)}：${item.target.title}`)
-    .onClick(() => this.navigate(homeFeedDestination(item)))
+    .onClick((): void => this.openFeedItem(item))
+  }
+
+  private openFeedItem(item: FeedItem): void {
+    void this.openedContentStore?.upsert({
+      contentKey: `${item.target.kind}:${item.target.id}`,
+      openedAt: Date.now(),
+      contentType: item.target.kind,
+      title: item.target.title
+    }).catch((_error: Error): void => {});
+    this.navigate(homeFeedDestination(item));
   }
 
   private feedBlockMenu(item: FeedItem): Array<MenuElement> {
@@ -622,6 +642,8 @@ export function homeFeedDestination(item: FeedItem): P1Destination {
       return { name: P1DestinationName.ANSWER, id: item.target.id };
     case FeedTargetKind.ARTICLE:
       return { name: P1DestinationName.ARTICLE, id: item.target.id };
+    case FeedTargetKind.VIDEO:
+      return { name: P1DestinationName.VIDEO, id: item.target.id };
   }
 }
 
@@ -633,6 +655,8 @@ export function feedKindLabel(kind: FeedTargetKind): string {
       return '回答';
     case FeedTargetKind.ARTICLE:
       return '文章';
+    case FeedTargetKind.VIDEO:
+      return '视频';
   }
 }
 

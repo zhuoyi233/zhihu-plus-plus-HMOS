@@ -8,6 +8,8 @@ import {
   AppearancePreferences,
   AnswerDoubleTapAction,
   AppPreferencesStore,
+  BlockedFeedHistoryStore,
+  ContentFilterRuntimeStore,
   AppThemeMode,
   ExperiencePreferences,
   normalizeBottomBarItems,
@@ -19,7 +21,8 @@ import {
   ReaderTypography,
   SessionState,
   SessionStatus,
-  shouldAutoCheckForUpdate
+  shouldAutoCheckForUpdate,
+  getAppDatabase
 } from 'data';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import bundleManager from '@ohos.bundle.bundleManager';
@@ -51,6 +54,7 @@ import { DividerShowType, hdsMaterial, HdsNavDestination, HdsNavigation, HdsNavi
 import { getImmersiveTitleBarStyle } from '../common/style/NavStyles';
 import { ZhihuHdsTabs } from './components/ZhihuHdsTabs';
 import { AppearanceSettingsPage } from './AppearanceSettingsPage';
+import { ContentFilterSettingsPage } from './ContentFilterSettingsPage';
 import { materialCanvas } from './components/MaterialCanvas';
 import { ChannelFeedInteractionBridge } from './ChannelFeedState';
 import { dailyDateCursor, dailyPickerDate, formatDailyDate } from './DailyFeedDates';
@@ -331,6 +335,19 @@ export struct P1Shell {
         });
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '外观与阅读体验' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.RECOMMENDATION_FILTER_SETTINGS) {
+      HdsNavDestination() {
+        ContentFilterSettingsPage({
+          preferences: this.createPreferencesStore(),
+          runtime: this.createFilterRuntimeStore(),
+          onOpenBlocklist: (): void => this.navigate({ name: P1DestinationName.BLOCKING_RULES }),
+          onOpenBlockedHistory: (): void => this.navigate({ name: P1DestinationName.BLOCKED_FEED_HISTORY })
+        });
+      }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+        content: { title: { mainTitle: '推荐系统与内容过滤' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.BLOCKING_RULES) {
@@ -1269,6 +1286,10 @@ export struct P1Shell {
               testId: 'p3_open_appearance_settings', grouped: true,
               onRowClick: (): void => this.navigate({ name: P1DestinationName.APPEARANCE_SETTINGS }) });
             Divider().color($r('app.color.divider_color'))
+            AppNavigationRow({ title: '推荐系统与内容过滤', description: '推荐来源、质量规则与内容屏蔽',
+              testId: 'p3_open_recommendation_filter_settings', grouped: true,
+              onRowClick: (): void => this.navigate({ name: P1DestinationName.RECOMMENDATION_FILTER_SETTINGS }) });
+            Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '通知', description: '查看互动和系统消息', testId: 'p3_open_notifications', grouped: true,
               onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION }) });
             Divider().color($r('app.color.divider_color'))
@@ -1573,6 +1594,11 @@ export struct P1Shell {
         AppNavigationRow({ title: '外观与阅读体验', description: '主题、阅读排版与信息流显示',
           testId: 'p3_search_open_appearance_settings',
           onRowClick: (): void => this.navigate({ name: P1DestinationName.APPEARANCE_SETTINGS }) });
+      }
+      if (this.settingsSearchMatches('推荐系统与内容过滤', '推荐算法 质量过滤 智能过滤 关键词 用户 主题 广告 盐选')) {
+        AppNavigationRow({ title: '推荐系统与内容过滤', description: '推荐来源、质量规则与内容屏蔽',
+          testId: 'p3_search_open_recommendation_filter_settings',
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.RECOMMENDATION_FILTER_SETTINGS }) });
       }
       if (this.settingsSearchMatches('应用与版本', this.installedVersionLabel)) {
         AppNavigationRow({ title: '应用与版本', description: this.installedVersionLabel,
@@ -1953,6 +1979,7 @@ export struct P1Shell {
       this.settingsSearchMatches('通知', '查看互动和系统消息') ||
       this.settingsSearchMatches('通知设置', '设置提醒和推送偏好') ||
       this.settingsSearchMatches('外观与阅读体验', '主题 阅读排版 信息流 字号 行高 段间距') ||
+      this.settingsSearchMatches('推荐系统与内容过滤', '推荐算法 质量过滤 智能过滤 关键词 用户 主题 广告 盐选') ||
       this.settingsSearchMatches('应用与版本', this.installedVersionLabel) ||
       this.settingsSearchMatches('GitHub', '查看项目主页') ||
       this.settingsSearchMatches('项目协议', 'GNU AGPL v3.0') ||
@@ -2225,6 +2252,18 @@ export struct P1Shell {
     } catch (_error) {
       // 读取失败保持默认 Ask。
     }
+  }
+
+  private createPreferencesStore(): AppPreferencesStore | undefined {
+    const context = getAbilityContext();
+    return context === undefined ? undefined : new AppPreferencesStore(context);
+  }
+
+  private createFilterRuntimeStore(): ContentFilterRuntimeStore | undefined {
+    const context = getAbilityContext();
+    if (context === undefined) return undefined;
+    const database = getAppDatabase(context);
+    return new ContentFilterRuntimeStore(database, new BlockedFeedHistoryStore(database));
   }
 
   /** 读取排版偏好并广播；失败保持默认 100/160/100（与改造前视觉一致）。 */

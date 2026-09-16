@@ -11,16 +11,50 @@ import {
   ContentBlockingMatcher,
   ContentBlockingSession,
   HOME_FEED_URL,
+  HomeFeedStartupCacheGateway,
   HttpFailure,
   isHomeFeedCursorUrl,
   PreparedZhihuHttpRequest,
+  RecommendationFilterPreferences,
+  RecommendationFilterPreferencesGateway,
+  RecommendationMode,
+  defaultRecommendationFilterPreferences,
   SessionCookie,
   SessionCookieProvider,
   ZhihuHttpClient,
   ZhihuHttpResponse,
   ZhihuHttpTransport,
-  ZhihuHttpTransportFactory
+  ZhihuHttpTransportFactory,
+  ZhihuMobileHttpClient
 } from 'data';
+
+class FixedRecommendationPreferences implements RecommendationFilterPreferencesGateway {
+  value: RecommendationFilterPreferences = defaultRecommendationFilterPreferences();
+
+  loadRecommendationFilterPreferences(): Promise<RecommendationFilterPreferences> {
+    return Promise.resolve(this.value);
+  }
+
+  saveRecommendationFilterPreferences(value: RecommendationFilterPreferences): Promise<void> {
+    this.value = value;
+    return Promise.resolve();
+  }
+}
+
+class MemoryHomeFeedCache implements HomeFeedStartupCacheGateway {
+  web?: string;
+  android?: string;
+
+  loadHomeFeedStartupResponse(mode: RecommendationMode): Promise<string | undefined> {
+    return Promise.resolve(mode === RecommendationMode.ANDROID ? this.android : this.web);
+  }
+
+  saveHomeFeedStartupResponse(mode: RecommendationMode, response: string): Promise<void> {
+    if (mode === RecommendationMode.ANDROID) this.android = response;
+    else this.web = response;
+    return Promise.resolve();
+  }
+}
 
 class CountingSessionProvider implements SessionCookieProvider {
   readCount: number = 0;
@@ -139,6 +173,14 @@ const SECOND_PAGE = '{"data":[{"id":"feed-1","target":{"type":"article",' +
   '"id":"question-2","title":"第二页"}},{"id":"feed-1","target":{"type":"question",' +
   '"id":"question-cross-kind","title":"同 Feed ID 的另一内容"}}],"paging":{"is_end":false,"is_start":false,' +
   '"next":"https://www.zhihu.com/api/v3/feed/topstory/recommend?offset=2"}}';
+const MOBILE_PAGE = '{"data":[{"id":"mobile-card-1","type":"ComponentCard",' +
+  '"action":{"parameter":"route_url=https%3A%2F%2Fwww.zhihu.com%2Fquestion%2F100%2Fanswer%2F200"},' +
+  '"children":[{"id":"Text","text":"移动推荐回答"},' +
+  '{"id":"text_pin_summary","text":"移动摘要"},' +
+  '{"type":"Line","elements":[{"reaction":"Vote","count":88},{"reaction":"Comment","count":7}]},' +
+  '{"style":"RecommendAuthorLine_default","elements":[{"type":"Text","text":"移动作者"},' +
+  '{"style":"Avatar_default","image":{"url":"https://pic.zhimg.com/avatar.jpg"}}]}]}],' +
+  '"paging":{"is_end":true,"is_start":true}}';
 
 export default function homeFeedRepositoryTest(): void {
   describe('homeFeedRepositoryTest', () => {
@@ -192,6 +234,106 @@ export default function homeFeedRepositoryTest(): void {
       expect(factory.requests[0].headers.Cookie?.includes('test-session-cookie')).assertTrue();
       expect(JSON.stringify(factory.requests[0].headers).includes('x-zse-96')).assertTrue();
       expect(provider.readCount).assertEqual(1);
+    });
+
+    it('honorsGuestRecommendationAndSkipsWebCredentials', 0, async () => {
+      const factory = new SequenceFeedTransportFactory([
+        { statusCode: 200, body: '{"data":[],"paging":{"is_end":true}}' }
+      ]);
+      const preferences = new FixedRecommendationPreferences();
+      preferences.value.recommendationMode = RecommendationMode.WEB;
+      preferences.value.loginForRecommendation = false;
+      const repository = new DefaultFeedRepository(new ZhihuHttpClient(undefined, factory), undefined,
+        preferences, new MemoryHomeFeedCache());
+      await repository.loadHomePage();
+
+      expect(factory.requests[0].headers.Cookie).assertUndefined();
+      expect(JSON.stringify(factory.requests[0].headers).includes('x-zse-96')).assertFalse();
+    });
+
+    it('requiresAnAuthenticatedSessionWhenRecommendationLoginIsEnabled', 0, async () => {
+      const factory = new SequenceFeedTransportFactory([]);
+      const preferences = new FixedRecommendationPreferences();
+      preferences.value.recommendationMode = RecommendationMode.WEB;
+      let failure: HttpFailure | undefined;
+      const repository = new DefaultFeedRepository(new ZhihuHttpClient(undefined, factory), undefined,
+        preferences, new MemoryHomeFeedCache());
+      try {
+        await repository.loadHomePage();
+      } catch (error) {
+        if (error instanceof HttpFailure) failure = error;
+      }
+      expect(failure?.kind).assertEqual('authentication');
+      expect(factory.requests.length).assertEqual(0);
+    });
+
+    it('mergesWebAndAndroidRecommendationSources', 0, async () => {
+      const webFactory = new SequenceFeedTransportFactory([{ statusCode: 200, body: FIRST_PAGE }]);
+      const mobileFactory = new SequenceFeedTransportFactory([{ statusCode: 200, body: MOBILE_PAGE }]);
+      const preferences = new FixedRecommendationPreferences();
+      preferences.value.recommendationMode = RecommendationMode.MIXED;
+      preferences.value.loginForRecommendation = false;
+      const mobile = new ZhihuMobileHttpClient(undefined, mobileFactory);
+      const repository = new DefaultFeedRepository(new ZhihuHttpClient(undefined, webFactory), undefined,
+        preferences, new MemoryHomeFeedCache(), mobile);
+      const page = await repository.loadHomePage();
+
+      expect(page.items.length).assertEqual(2);
+      expect(page.items[0].target.title).assertEqual('第一页');
+      expect(page.items[1].target.title).assertEqual('移动推荐回答');
+      expect(mobileFactory.requests[0].headers.Cookie).assertUndefined();
+    });
+
+    it('restoresStartupSnapshotWhenAutomaticRefreshIsDisabled', 0, async () => {
+      const factory = new SequenceFeedTransportFactory([]);
+      const preferences = new FixedRecommendationPreferences();
+      preferences.value.recommendationMode = RecommendationMode.WEB;
+      preferences.value.loginForRecommendation = false;
+      preferences.value.autoRefreshHomeOnStartup = false;
+      const cache = new MemoryHomeFeedCache();
+      cache.web = FIRST_PAGE;
+      const repository = new DefaultFeedRepository(new ZhihuHttpClient(undefined, factory), undefined,
+        preferences, cache);
+      const page = await repository.loadHomePage();
+
+      expect(page.items[0].target.title).assertEqual('第一页');
+      expect(page.cursor.isEnd).assertTrue();
+      expect(factory.requests.length).assertEqual(0);
+    });
+
+    it('decodesAndroidRecommendationCardsAndUsesMobileEndpoint', 0, async () => {
+      const factory = new SequenceFeedTransportFactory([{ statusCode: 200, body: MOBILE_PAGE }]);
+      const preferences = new FixedRecommendationPreferences();
+      preferences.value.recommendationMode = RecommendationMode.ANDROID;
+      preferences.value.loginForRecommendation = false;
+      const repository = new DefaultFeedRepository(new ZhihuHttpClient(undefined, factory), undefined,
+        preferences, new MemoryHomeFeedCache());
+      const page = await repository.loadHomePage();
+
+      expect(factory.requests[0].url).assertEqual('https://api.zhihu.com/topstory/recommend');
+      expect(page.items.length).assertEqual(1);
+      expect(page.items[0].target.id).assertEqual('200');
+      expect(page.items[0].target.voteupCount).assertEqual(88);
+      expect(page.items[0].target.author?.name).assertEqual('移动作者');
+    });
+
+    it('ranksCachedCandidatesLocallyWithoutNetworkRequests', 0, async () => {
+      const low = '{"data":[{"id":"low","target":{"type":"article","id":"1","title":"低分",' +
+        '"voteup_count":1}},{"id":"high","target":{"type":"article","id":"2","title":"高分",' +
+        '"voteup_count":100}}],"paging":{"is_end":true}}';
+      const factory = new SequenceFeedTransportFactory([]);
+      const preferences = new FixedRecommendationPreferences();
+      preferences.value.recommendationMode = RecommendationMode.LOCAL;
+      preferences.value.loginForRecommendation = false;
+      const cache = new MemoryHomeFeedCache();
+      cache.web = low;
+      const repository = new DefaultFeedRepository(new ZhihuHttpClient(undefined, factory), undefined,
+        preferences, cache);
+      const page = await repository.loadHomePage();
+
+      expect(page.items[0].target.title).assertEqual('高分');
+      expect(page.cursor.isEnd).assertTrue();
+      expect(factory.requests.length).assertEqual(0);
     });
 
     it('filtersEachPageWithOneSnapshotAndRealAuthorTopicFields', 0, async () => {

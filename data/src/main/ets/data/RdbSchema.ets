@@ -4,7 +4,7 @@ export interface SchemaMigration {
   statements: Array<string>;
 }
 
-export const CURRENT_SCHEMA_VERSION: number = 6;
+export const CURRENT_SCHEMA_VERSION: number = 7;
 
 export function schemaMigrationTo(targetVersion: number): SchemaMigration {
   if (targetVersion === 1) {
@@ -81,6 +81,21 @@ export function schemaMigrationTo(targetVersion: number): SchemaMigration {
       toVersion: 6,
       statements: [
         "ALTER TABLE opened_content ADD COLUMN title TEXT NOT NULL DEFAULT ''"
+      ]
+    };
+  }
+  if (targetVersion === 7) {
+    return {
+      fromVersion: 6,
+      toVersion: 7,
+      statements: [
+        'CREATE TABLE IF NOT EXISTS content_filter_views (' +
+          'content_key TEXT PRIMARY KEY, view_count INTEGER NOT NULL, last_viewed_at INTEGER NOT NULL)',
+        'CREATE INDEX IF NOT EXISTS index_content_filter_views_last_viewed ' +
+          'ON content_filter_views(last_viewed_at)',
+        'CREATE TABLE IF NOT EXISTS content_filter_stats (' +
+          'id INTEGER PRIMARY KEY, total_seen INTEGER NOT NULL, total_filtered INTEGER NOT NULL, ' +
+          'last_filtered_at INTEGER NOT NULL)'
       ]
     };
   }

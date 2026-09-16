@@ -37,6 +37,7 @@ export interface BlockedFeedHistoryGateway {
   insert(record: BlockedFeedRecordInput): Promise<void>;
   delete(id: number): Promise<void>;
   clear(): Promise<void>;
+  deleteBefore?(cutoff: number): Promise<void>;
 }
 
 export class BlockedFeedHistoryStore implements BlockedFeedHistoryGateway {
@@ -119,6 +120,16 @@ export class BlockedFeedHistoryStore implements BlockedFeedHistoryGateway {
     });
   }
 
+  deleteBefore(cutoff: number): Promise<void> {
+    if (!Number.isSafeInteger(cutoff) || cutoff < 0) {
+      return Promise.reject(new Error('Blocked feed history cutoff is invalid'));
+    }
+    return this.enqueueMutation(async (): Promise<void> => {
+      const store = await this.database.open();
+      await store.delete(new relationalStore.RdbPredicates(TABLE_NAME).lessThan('blocked_at', cutoff));
+    });
+  }
+
   private enqueueMutation(operation: () => Promise<void>): Promise<void> {
     const result = this.mutationQueue.then(operation, operation);
     this.mutationQueue = result.then((): void => {}, (): void => {});
@@ -150,7 +161,9 @@ export function validateBlockedFeedRecordInput(record: BlockedFeedRecordInput): 
 
 function normalizeBlockingRuleKind(value: BlockingRuleKind): BlockingRuleKind {
   if (value === BlockingRuleKind.KEYWORD || value === BlockingRuleKind.USER ||
-    value === BlockingRuleKind.TOPIC) {
+    value === BlockingRuleKind.TOPIC || value === BlockingRuleKind.QUALITY ||
+    value === BlockingRuleKind.SMART || value === BlockingRuleKind.ADVERTISEMENT ||
+    value === BlockingRuleKind.PAID || value === BlockingRuleKind.REVERSE) {
     return value;
   }
   throw new Error('Blocking rule kind is invalid');

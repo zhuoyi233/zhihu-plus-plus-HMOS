@@ -279,14 +279,33 @@ export class DefaultChannelFeedRepository implements ChannelFeedRepository {
       if (item.kind === ChannelFeedItemKind.CONTENT) {
         const authorId = item.feedItem.target.author?.id;
         summary = authorId === undefined ? {
+          contentId: item.feedItem.target.id,
+          contentKind: item.feedItem.target.kind,
           title: item.feedItem.target.title,
           excerpt: item.feedItem.target.excerpt,
-          topicIds: item.topicIds
+          content: item.feedItem.target.content,
+          url: item.feedItem.target.url,
+          topicIds: item.topicIds,
+          voteupCount: item.feedItem.target.voteupCount,
+          answerCount: item.feedItem.target.answerCount,
+          followerCount: item.feedItem.target.followerCount,
+          isPaid: item.feedItem.target.isPaid
         } : {
+          contentId: item.feedItem.target.id,
+          contentKind: item.feedItem.target.kind,
           title: item.feedItem.target.title,
           excerpt: item.feedItem.target.excerpt,
+          content: item.feedItem.target.content,
+          url: item.feedItem.target.url,
           authorId: authorId,
-          topicIds: item.topicIds
+          authorName: item.feedItem.target.author?.name,
+          authorFollowerCount: item.feedItem.target.author?.followerCount,
+          authorIsFollowing: item.feedItem.target.author?.isFollowing,
+          topicIds: item.topicIds,
+          voteupCount: item.feedItem.target.voteupCount,
+          answerCount: item.feedItem.target.answerCount,
+          followerCount: item.feedItem.target.followerCount,
+          isPaid: item.feedItem.target.isPaid
         };
       } else {
         summary = {
@@ -299,6 +318,7 @@ export class DefaultChannelFeedRepository implements ChannelFeedRepository {
         visible.push(item);
       }
     }
+    await session.flush?.();
     return visible;
   }
 }

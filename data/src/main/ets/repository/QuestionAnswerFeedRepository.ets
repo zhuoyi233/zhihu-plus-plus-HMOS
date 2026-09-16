@@ -174,19 +174,35 @@ export class DefaultQuestionAnswerFeedRepository implements QuestionAnswerFeedRe
     items.forEach((item: ChannelContentItem): void => {
       const authorId = item.feedItem.target.author?.id;
       const summary: BlockableContentSummary = authorId === undefined ? {
+        contentId: item.feedItem.target.id,
+        contentKind: item.feedItem.target.kind,
         title: item.feedItem.target.title,
         excerpt: item.feedItem.target.excerpt,
-        topicIds: item.topicIds
+        content: item.feedItem.target.content,
+        url: item.feedItem.target.url,
+        topicIds: item.topicIds,
+        voteupCount: item.feedItem.target.voteupCount,
+        isPaid: item.feedItem.target.isPaid
       } : {
+        contentId: item.feedItem.target.id,
+        contentKind: item.feedItem.target.kind,
         title: item.feedItem.target.title,
         excerpt: item.feedItem.target.excerpt,
+        content: item.feedItem.target.content,
+        url: item.feedItem.target.url,
         authorId: authorId,
-        topicIds: item.topicIds
+        authorName: item.feedItem.target.author?.name,
+        authorFollowerCount: item.feedItem.target.author?.followerCount,
+        authorIsFollowing: item.feedItem.target.author?.isFollowing,
+        topicIds: item.topicIds,
+        voteupCount: item.feedItem.target.voteupCount,
+        isPaid: item.feedItem.target.isPaid
       };
       if (session.match(summary) === undefined) {
         visible.push(item);
       }
     });
+    await session.flush?.();
     return visible;
   }
 }

@@ -9,6 +9,7 @@ import {
   CollectionRepository,
   CommentRepository,
   ContentDraftStore,
+  ContentFilterRuntimeStore,
   ContentRepository,
   DefaultChannelFeedRepository,
   DefaultCollectionRepository,
@@ -155,6 +156,9 @@ struct Index {
     const blockingRuleStore = new BlockingRuleStore(getAppDatabase(context));
     const blockedFeedHistoryStore = new BlockedFeedHistoryStore(getAppDatabase(context));
     const preferencesStore = new AppPreferencesStore(context);
+    const filterRuntimeStore = new ContentFilterRuntimeStore(getAppDatabase(context), blockedFeedHistoryStore);
+    const homeBlockingMatcher = new BlockingRuleMatcher(blockingRuleStore, preferencesStore, preferencesStore,
+      filterRuntimeStore);
     const blockingMatcher = new BlockingRuleMatcher(blockingRuleStore, preferencesStore);
     sessionOwner.restoreDeferred().catch((_error: Error): void => {
     }).then((): void => {
@@ -163,7 +167,8 @@ struct Index {
       this.blockingRuleStore = blockingRuleStore;
       this.blockedFeedHistoryStore = blockedFeedHistoryStore;
       this.preferencesStore = preferencesStore;
-      this.homeRepository = new DefaultFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
+      this.homeRepository = new DefaultFeedRepository(new ZhihuHttpClient(session), homeBlockingMatcher,
+        preferencesStore, preferencesStore, new ZhihuMobileHttpClient(session), session);
       this.searchRepository = new DefaultSearchRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.followingRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.followingRecommendRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
@@ -286,7 +291,8 @@ struct Index {
       reloadToken: reloadToken,
       navigate: navigate,
       rules: this.blockingRuleStore,
-      history: this.blockedFeedHistoryStore
+      history: this.blockedFeedHistoryStore,
+      openedContentStore: this.openedContentStore
     });
   }
 

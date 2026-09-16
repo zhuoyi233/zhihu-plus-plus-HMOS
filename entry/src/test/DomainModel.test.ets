@@ -124,7 +124,7 @@ export default function domainModelTest(): void {
         }
       }
       const page = decodeFeedPage('{"data":[{"type":"tab_list"},{"id":"feed-2",' +
-        '"target":{"type":"zvideo","id":"video-1"}},{"id":"feed-3",' +
+        '"target":{"type":"pin","id":"pin-1"}},{"id":"feed-3",' +
         '"target":{"type":"article","id":"article-1","title":"可支持文章"}}]}');
 
       expect(missingKind).assertEqual(DomainDecodeFailureKind.MISSING_FIELD);

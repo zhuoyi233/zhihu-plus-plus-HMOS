@@ -138,7 +138,8 @@ export interface Article {
 export enum FeedTargetKind {
   QUESTION = 'question',
   ANSWER = 'answer',
-  ARTICLE = 'article'
+  ARTICLE = 'article',
+  VIDEO = 'video'
 }
 
 export interface FeedTargetSummary {
@@ -155,6 +156,9 @@ export interface FeedTargetSummary {
   followerCount?: number;
   author?: UserProfile;
   topicIds: Array<string>;
+  content?: string;
+  isPaid?: boolean;
+  qualityFilterReason?: string;
 }
 
 export interface FeedItem {

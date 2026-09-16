@@ -775,6 +775,8 @@ export function channelFeedDestination(item: ChannelContentItem): P1Destination 
       return { name: P1DestinationName.ANSWER, id: item.feedItem.target.id };
     case FeedTargetKind.ARTICLE:
       return { name: P1DestinationName.ARTICLE, id: item.feedItem.target.id };
+    case FeedTargetKind.VIDEO:
+      return { name: P1DestinationName.VIDEO, id: item.feedItem.target.id };
   }
 }
 
@@ -786,6 +788,8 @@ export function channelKindLabel(kind: FeedTargetKind): string {
       return '回答';
     case FeedTargetKind.ARTICLE:
       return '文章';
+    case FeedTargetKind.VIDEO:
+      return '视频';
   }
 }
 

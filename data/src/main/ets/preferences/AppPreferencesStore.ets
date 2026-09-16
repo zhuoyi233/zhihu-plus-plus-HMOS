@@ -14,13 +14,27 @@ import {
   normalizeNotificationPreferences
 } from '../domain/NotificationModels';
 import { JsonArrayValue, JsonStringValue, parseStrictJson } from 'core';
+import {
+  decodeQualityFilterMode,
+  decodeRecommendationMode,
+  defaultRecommendationFilterPreferences,
+  HomeFeedStartupCacheGateway,
+  normalizeRecommendationFilterPreferences,
+  RecommendationFilterPreferences,
+  RecommendationFilterPreferencesGateway,
+  RecommendationMode
+} from './RecommendationFilterPreferences';
 
 const PREFERENCES_NAME = 'app_preferences';
 const THEME_MODE_KEY = 'theme_mode';
-const KEYWORD_BLOCKING_KEY = 'enable_keyword_blocking';
-const USER_BLOCKING_KEY = 'enable_user_blocking';
-const TOPIC_BLOCKING_KEY = 'enable_topic_blocking';
-const TOPIC_BLOCKING_THRESHOLD_KEY = 'topic_blocking_threshold';
+const KEYWORD_BLOCKING_KEY = 'enableKeywordBlocking';
+const USER_BLOCKING_KEY = 'enableUserBlocking';
+const TOPIC_BLOCKING_KEY = 'enableTopicBlocking';
+const TOPIC_BLOCKING_THRESHOLD_KEY = 'topicBlockingThreshold';
+const LEGACY_KEYWORD_BLOCKING_KEY = 'enable_keyword_blocking';
+const LEGACY_USER_BLOCKING_KEY = 'enable_user_blocking';
+const LEGACY_TOPIC_BLOCKING_KEY = 'enable_topic_blocking';
+const LEGACY_TOPIC_BLOCKING_THRESHOLD_KEY = 'topic_blocking_threshold';
 const NOTIFICATION_DISPLAY_PREFIX = 'notification_display_in_app_';
 const NOTIFICATION_AUTO_MARK_READ_KEY = 'notification_auto_mark_as_read';
 const NOTIFICATION_UNREAD_BADGE_KEY = 'notification_unread_badge';
@@ -450,7 +464,9 @@ function normalizeSearchHistory(history: Array<string>): Array<string> {
   return items.slice(0, SEARCH_HISTORY_MAX_SIZE);
 }
 
-export class AppPreferencesStore implements BlockingPreferencesGateway, NotificationSettingsGateway {  private readonly context: common.Context;
+export class AppPreferencesStore implements BlockingPreferencesGateway, NotificationSettingsGateway,
+  RecommendationFilterPreferencesGateway, HomeFeedStartupCacheGateway {
+  private readonly context: common.Context;
   private saveQueue: Promise<void> = Promise.resolve();
 
   constructor(context: common.Context) {
@@ -590,10 +606,14 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
     try {
       const defaults = defaultBlockingPreferences();
       const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
-      const keywordEnabled = await store.get(KEYWORD_BLOCKING_KEY, defaults.keywordBlockingEnabled);
-      const userEnabled = await store.get(USER_BLOCKING_KEY, defaults.userBlockingEnabled);
-      const topicEnabled = await store.get(TOPIC_BLOCKING_KEY, defaults.topicBlockingEnabled);
-      const threshold = await store.get(TOPIC_BLOCKING_THRESHOLD_KEY, defaults.topicBlockingThreshold);
+      const legacyKeyword = await store.get(LEGACY_KEYWORD_BLOCKING_KEY, defaults.keywordBlockingEnabled);
+      const legacyUser = await store.get(LEGACY_USER_BLOCKING_KEY, defaults.userBlockingEnabled);
+      const legacyTopic = await store.get(LEGACY_TOPIC_BLOCKING_KEY, defaults.topicBlockingEnabled);
+      const legacyThreshold = await store.get(LEGACY_TOPIC_BLOCKING_THRESHOLD_KEY, defaults.topicBlockingThreshold);
+      const keywordEnabled = await store.get(KEYWORD_BLOCKING_KEY, legacyKeyword);
+      const userEnabled = await store.get(USER_BLOCKING_KEY, legacyUser);
+      const topicEnabled = await store.get(TOPIC_BLOCKING_KEY, legacyTopic);
+      const threshold = await store.get(TOPIC_BLOCKING_THRESHOLD_KEY, legacyThreshold);
       return normalizeBlockingPreferences({
         keywordBlockingEnabled: typeof keywordEnabled === 'boolean' ? keywordEnabled : true,
         userBlockingEnabled: typeof userEnabled === 'boolean' ? userEnabled : true,
@@ -614,6 +634,84 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
       (): Promise<void> => this.writeBlockingPreferences(normalized),
       (): Promise<void> => this.writeBlockingPreferences(normalized)
     );
+    this.saveQueue = operation.then((): void => {}, (): void => {});
+    return operation;
+  }
+
+  async loadRecommendationFilterPreferences(): Promise<RecommendationFilterPreferences> {
+    await this.saveQueue;
+    try {
+      const defaults = defaultRecommendationFilterPreferences();
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      const readBoolean = async (key: string, fallback: boolean): Promise<boolean> => {
+        const value = await store.get(key, fallback);
+        return typeof value === 'boolean' ? value : fallback;
+      };
+      const readNumber = async (key: string, fallback: number): Promise<number> => {
+        const value = await store.get(key, fallback);
+        return typeof value === 'number' ? value : fallback;
+      };
+      const recommendationMode = await store.get('recommendationMode', defaults.recommendationMode);
+      const qualityFilterMode = await store.get('qualityFilterMode', defaults.qualityFilterMode);
+      return normalizeRecommendationFilterPreferences({
+        recommendationMode: decodeRecommendationMode(typeof recommendationMode === 'string' ? recommendationMode : ''),
+        loginForRecommendation: await readBoolean('loginForRecommendation', defaults.loginForRecommendation),
+        autoRefreshHomeOnStartup: await readBoolean('autoRefreshHomeOnStartup', defaults.autoRefreshHomeOnStartup),
+        qualityFilterMode: decodeQualityFilterMode(typeof qualityFilterMode === 'string' ? qualityFilterMode : ''),
+        answerVoteupThreshold: await readNumber('answerVoteupThreshold', defaults.answerVoteupThreshold),
+        articleVoteupThreshold: await readNumber('articleVoteupThreshold', defaults.articleVoteupThreshold),
+        articleFollowersThreshold: await readNumber('articleFollowersThreshold', defaults.articleFollowersThreshold),
+        videoVoteThreshold: await readNumber('videoVoteThreshold', defaults.videoVoteThreshold),
+        videoFollowersThreshold: await readNumber('videoFollowersThreshold', defaults.videoFollowersThreshold),
+        questionAnswerThreshold: await readNumber('questionAnswerThreshold', defaults.questionAnswerThreshold),
+        questionFollowersThreshold: await readNumber('questionFollowersThreshold', defaults.questionFollowersThreshold),
+        enableContentFilter: await readBoolean('enableContentFilter', defaults.enableContentFilter),
+        filterFollowedUserContent: await readBoolean('filterFollowedUserContent', defaults.filterFollowedUserContent),
+        blockZhihuAdPlatform: await readBoolean('blockZhihuAdPlatform', defaults.blockZhihuAdPlatform),
+        blockZhihuSchool: await readBoolean('blockZhihuSchool', defaults.blockZhihuSchool),
+        blockWeChatOfficialAccount: await readBoolean('blockWeChatOfficialAccount', defaults.blockWeChatOfficialAccount),
+        blockPaidContent: await readBoolean('blockPaidContent', defaults.blockPaidContent),
+        reverseBlock: await readBoolean('reverseBlock', defaults.reverseBlock)
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error : undefined;
+      throw new Error(appPreferencesFailureMessage('Recommendation filter preferences load', detail));
+    }
+  }
+
+  saveRecommendationFilterPreferences(value: RecommendationFilterPreferences): Promise<void> {
+    const normalized = normalizeRecommendationFilterPreferences(value);
+    const operation = this.saveQueue.then(
+      (): Promise<void> => this.writeRecommendationFilterPreferences(normalized),
+      (): Promise<void> => this.writeRecommendationFilterPreferences(normalized)
+    );
+    this.saveQueue = operation.then((): void => {}, (): void => {});
+    return operation;
+  }
+
+  async loadHomeFeedStartupResponse(mode: RecommendationMode): Promise<string | undefined> {
+    await this.saveQueue;
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      const value = await store.get(`homeFeedStartupCache_${mode}`, '');
+      return typeof value === 'string' && value.length > 0 ? value : undefined;
+    } catch (error) {
+      const detail = error instanceof Error ? error : undefined;
+      throw new Error(appPreferencesFailureMessage('Home feed startup cache load', detail));
+    }
+  }
+
+  saveHomeFeedStartupResponse(mode: RecommendationMode, response: string): Promise<void> {
+    const operation = this.saveQueue.then(async (): Promise<void> => {
+      try {
+        const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+        await store.put(`homeFeedStartupCache_${mode}`, response);
+        await store.flush();
+      } catch (error) {
+        const detail = error instanceof Error ? error : undefined;
+        throw new Error(appPreferencesFailureMessage('Home feed startup cache save', detail));
+      }
+    });
     this.saveQueue = operation.then((): void => {}, (): void => {});
     return operation;
   }
@@ -885,6 +983,34 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
         throw new Error(appPreferencesFailureMessage('Blocking preferences save', error));
       }
       throw new Error(appPreferencesFailureMessage('Blocking preferences save', undefined));
+    }
+  }
+
+  private async writeRecommendationFilterPreferences(value: RecommendationFilterPreferences): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      await store.put('recommendationMode', value.recommendationMode);
+      await store.put('loginForRecommendation', value.loginForRecommendation);
+      await store.put('autoRefreshHomeOnStartup', value.autoRefreshHomeOnStartup);
+      await store.put('qualityFilterMode', value.qualityFilterMode);
+      await store.put('answerVoteupThreshold', value.answerVoteupThreshold);
+      await store.put('articleVoteupThreshold', value.articleVoteupThreshold);
+      await store.put('articleFollowersThreshold', value.articleFollowersThreshold);
+      await store.put('videoVoteThreshold', value.videoVoteThreshold);
+      await store.put('videoFollowersThreshold', value.videoFollowersThreshold);
+      await store.put('questionAnswerThreshold', value.questionAnswerThreshold);
+      await store.put('questionFollowersThreshold', value.questionFollowersThreshold);
+      await store.put('enableContentFilter', value.enableContentFilter);
+      await store.put('filterFollowedUserContent', value.filterFollowedUserContent);
+      await store.put('blockZhihuAdPlatform', value.blockZhihuAdPlatform);
+      await store.put('blockZhihuSchool', value.blockZhihuSchool);
+      await store.put('blockWeChatOfficialAccount', value.blockWeChatOfficialAccount);
+      await store.put('blockPaidContent', value.blockPaidContent);
+      await store.put('reverseBlock', value.reverseBlock);
+      await store.flush();
+    } catch (error) {
+      const detail = error instanceof Error ? error : undefined;
+      throw new Error(appPreferencesFailureMessage('Recommendation filter preferences save', detail));
     }
   }
 

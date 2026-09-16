@@ -76,6 +76,7 @@ import emojiRulesTest from './EmojiRules.test';
 import readerTypographyTest from './ReaderTypography.test';
 import readerScrollGeometryTest from './ReaderScrollGeometry.test';
 import appearancePreferencesTest from './AppearancePreferences.test';
+import recommendationFilterPolicyTest from './RecommendationFilterPolicy.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -156,4 +157,5 @@ export default function testsuite(): void {
   readerTypographyTest();
   readerScrollGeometryTest();
   appearancePreferencesTest();
+  recommendationFilterPolicyTest();
 }
