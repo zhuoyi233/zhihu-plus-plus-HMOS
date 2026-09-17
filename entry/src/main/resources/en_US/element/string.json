@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "Zhihu++ HarmonyOS module"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "Zhihu++ HarmonyOS ability"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "Zhihu++HMOS"
+    }
+  ]
+}

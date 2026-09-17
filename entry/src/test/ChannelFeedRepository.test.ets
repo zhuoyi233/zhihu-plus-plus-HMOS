@@ -311,7 +311,7 @@ export default function channelFeedRepositoryTest(): void {
 
     it('skipsExplicitUnsupportedTargetsButRejectsMalformedSupportedData', 0, () => {
       const unsupported = decodeChannelContentPage('{"data":[{"id":"skip",' +
-        '"target":{"type":"zvideo","id":"1"}}],"paging":{"is_end":true}}');
+        '"target":{"type":"pin","id":"1"}}],"paging":{"is_end":true}}');
       expect(unsupported.items.length).assertEqual(0);
 
       let malformed: DomainDecodeError | undefined = undefined;

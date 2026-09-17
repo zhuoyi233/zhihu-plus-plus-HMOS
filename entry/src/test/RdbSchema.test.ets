@@ -10,15 +10,20 @@ export default function rdbSchemaTest(): void {
       const fourth = schemaMigrationTo(4);
       const fifth = schemaMigrationTo(5);
       const sixth = schemaMigrationTo(6);
+      const seventh = schemaMigrationTo(7);
+      const eighth = schemaMigrationTo(8);
 
-      expect(CURRENT_SCHEMA_VERSION).assertEqual(6);
+      expect(CURRENT_SCHEMA_VERSION).assertEqual(8);
       expect(first.fromVersion).assertEqual(0);
       expect(first.toVersion).assertEqual(second.fromVersion);
       expect(second.toVersion).assertEqual(third.fromVersion);
       expect(third.toVersion).assertEqual(fourth.fromVersion);
       expect(fourth.toVersion).assertEqual(fifth.fromVersion);
       expect(fifth.toVersion).assertEqual(sixth.fromVersion);
-      expect(sixth.toVersion).assertEqual(CURRENT_SCHEMA_VERSION);
+      expect(sixth.toVersion).assertEqual(seventh.fromVersion);
+      expect(seventh.toVersion).assertEqual(eighth.fromVersion);
+      expect(eighth.toVersion).assertEqual(CURRENT_SCHEMA_VERSION);
+      expect(eighth.statements[0]).assertEqual('DROP TABLE IF EXISTS content_filter_stats');
     });
 
     it('addsThreeLocalBlockingRuleTablesWithoutSensitiveContentColumns', 0, () => {
@@ -82,7 +87,7 @@ export default function rdbSchemaTest(): void {
     it('rejectsUnknownSchemaVersion', 0, () => {
       let rejected = false;
       try {
-        schemaMigrationTo(7);
+        schemaMigrationTo(9);
       } catch (_error) {
         rejected = true;
       }

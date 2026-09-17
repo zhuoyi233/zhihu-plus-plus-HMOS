@@ -3,20 +3,26 @@ import { SearchTitleBar } from './SearchTitleBar';
 import { HistoryTitleBar } from './HistoryTitleBar';
 import { AnswerTitleBar } from './AnswerTitleBar';
 import { ArticleTitleBar } from './ArticleTitleBar';
+import { NotificationTitleBar } from './NotificationTitleBar';
 import {
-  allAnswerDoubleTapActions,
+  AppearancePreferences,
   AnswerDoubleTapAction,
-  answerDoubleTapActionLabel,
   AppPreferencesStore,
+  BlockedFeedHistoryStore,
+  ContentFilterRuntimeStore,
   AppThemeMode,
+  ExperiencePreferences,
+  normalizeBottomBarItems,
   AppUpdateCheckResult,
   AppUpdateCheckStatus,
   AppUpdateClient,
   AppUpdateRelease,
   LoginSessionGateway,
+  ReaderTypography,
   SessionState,
   SessionStatus,
-  shouldAutoCheckForUpdate
+  shouldAutoCheckForUpdate,
+  getAppDatabase
 } from 'data';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import bundleManager from '@ohos.bundle.bundleManager';
@@ -31,7 +37,9 @@ import {
   findP1DestinationStackIndex,
   isInfrastructureDestination,
   LatestOperationGuard,
+  NotificationEntryDestination,
   P1Destination,
+  PrivateMessageDestination,
   P1DestinationName,
   shouldReloadAfterAuthentication,
   startupDestinationChannel,
@@ -39,13 +47,17 @@ import {
 } from 'core';
 import { AppNavigationRow } from './AppPageChrome';
 import {
-  isP1TopLevelTabIndex,
   P1TopLevelTab,
   p1TopLevelTabForDestination
 } from './P1TopLevelTabs';
 import { DividerShowType, hdsMaterial, HdsNavDestination, HdsNavigation, HdsNavigationAttribute, HdsNavigationTitleMode, HdsTabsController } from '@kit.UIDesignKit';
 import { getImmersiveTitleBarStyle } from '../common/style/NavStyles';
 import { ZhihuHdsTabs } from './components/ZhihuHdsTabs';
+import { AppearanceSettingsPage } from './AppearanceSettingsPage';
+import { ContentFilterSettingsPage } from './ContentFilterSettingsPage';
+import { IdentityManagementPage } from './IdentityManagementPage';
+import { ReadingSettingsPage } from './ReadingSettingsPage';
+import { SystemUpdateSettingsPage } from './SystemUpdateSettingsPage';
 import { materialCanvas } from './components/MaterialCanvas';
 import { ChannelFeedInteractionBridge } from './ChannelFeedState';
 import { dailyDateCursor, dailyPickerDate, formatDailyDate } from './DailyFeedDates';
@@ -66,7 +78,8 @@ export struct P1Shell {
     this.emptyReloadableDaily;
   @BuilderParam dailyStoryContent: (id: string, navigate: (destination: P1Destination) => void) => void =
     this.emptyContent;
-  @BuilderParam technicalLabContent: (navigate: (destination: P1Destination) => void) => void =
+  @BuilderParam technicalLabContent: (navigate: (destination: P1Destination) => void,
+    onDeveloperModeDisabled: () => void) => void =
     this.emptyTechnicalLab;
   @BuilderParam searchContent: (query: string, navigate: (destination: P1Destination) => void,
     onBack: () => void) => void =
@@ -95,6 +108,10 @@ export struct P1Shell {
     onBack: () => void) => void = this.emptyCollectionContent;
   @BuilderParam notificationContent: (navigate: (destination: P1Destination) => void, onBack: () => void) => void =
     this.emptyHome;
+  @BuilderParam notificationEntryContent: (entryName: string, title: string, navigate: (destination: P1Destination) => void) => void =
+    this.emptyNotificationEntry;
+  @BuilderParam privateMessageContent: (peerId: string, peerName: string, avatarUrl: string, navigate: (destination: P1Destination) => void) => void =
+    this.emptyPrivateMessage;
   @BuilderParam notificationSettingsContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
   @BuilderParam blockingRulesContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam blockedFeedHistoryContent: (onBack: () => void) => void = this.emptyPage;
@@ -123,10 +140,13 @@ export struct P1Shell {
     AnswerDoubleTapAction.ASK;
   /** 回答/文章详情页沉浸式阅读中（页面广播）：隐藏 NavDestination 顶栏（对齐上游 topBar={}）。 */
   @StorageProp('detailImmersiveActive') private detailImmersiveActive: boolean = false;
+  @StorageProp('detailTitleHiddenByScroll') private detailTitleHiddenByScroll: boolean = false;
   /** 全屏图片查看器打开中（详情页广播）：同样隐藏顶栏，使查看器真全屏。 */
   @StorageProp('p2ImagePreviewUrl') private imagePreviewUrl: string = '';
   @State private installedVersionLabel: string = '正在读取已安装版本…';
   @State private aboutVersionSheetShown: boolean = false;
+  @State private developerModeEnabled: boolean = false;
+  @State private versionTapCount: number = 0;
   /** GitHub 最新 Release 检出有新版本时非空：驱动“我的”页横幅与版本弹层下载入口。 */
   @State private pendingUpdateRelease: AppUpdateRelease | undefined = undefined;
   @State private updateCheckBusy: boolean = false;
@@ -138,6 +158,7 @@ export struct P1Shell {
   @State private projectHomeHelpShown: boolean = false;
   @State private projectHomeLaunchStatus: string = '';
   @State private settingsSearchQuery: string = '';
+  @State private accountLogoutBusy: boolean = false;
   @State private homeReloadToken: number = 0;
   @State private followingReloadToken: number = 0;
   @State private hotReloadToken: number = 0;
@@ -150,18 +171,29 @@ export struct P1Shell {
   @Provide('channelFeedInteractionBridge') private channelFeedInteractionBridge: ChannelFeedInteractionBridge =
     new ChannelFeedInteractionBridge();
   @State @Watch('onTopLevelTabIndexChanged') private topLevelTabIndex: number = P1TopLevelTab.HOME;
+  @State private bottomBarOrder: number[] = [P1TopLevelTab.HOME, P1TopLevelTab.FOLLOWING,
+    P1TopLevelTab.HOT, P1TopLevelTab.DAILY, P1TopLevelTab.ACCOUNT];
+  @StorageProp('bottomBarItems') @Watch('onBottomBarItemsChanged') private bottomBarItems: string =
+    'Home,Following,Hot,Daily,Settings';
+  @StorageProp('tapToRefresh') private tapToRefresh: boolean = true;
+  private startDestinationApplied: boolean = false;
   private readonly tabsController: HdsTabsController = new HdsTabsController();
   @Provide('p1PathStack') pathStack: NavPathStack = new NavPathStack();
   private unsubscribeStartupDestination: (() => void) | undefined = undefined;
   private readonly themeOperationGuard: LatestOperationGuard = new LatestOperationGuard();
   private themeMounted: boolean = false;
   private themeSaveQueue: Promise<void> = Promise.resolve();
+  /** 排版偏好专用 store 实例：滑块拖动会高频写盘，需单实例 saveQueue 串行化。 */
 
   aboutToAppear(): void {
     this.themeMounted = true;
     this.sessionSnapshot = this.session?.getState();
     this.restoreThemeMode();
     void this.restoreAnswerDoubleTapAction();
+    void this.restoreReaderTypography();
+    void this.restoreAppearancePreferences();
+    void this.restoreExperiencePreferences();
+    void this.restoreDeveloperMode();
     this.refreshInstalledVersionLabel();
     this.unsubscribeStartupDestination?.();
     const listener: StartupDestinationListener = (destination: P1Destination): void => {
@@ -188,6 +220,16 @@ export struct P1Shell {
   }
 
   @Builder
+  emptyNotificationEntry(_entryName: string, _title: string, _navigate: (destination: P1Destination) => void) {
+    Blank();
+  }
+
+  @Builder
+  emptyPrivateMessage(_peerId: string, _peerName: string, _avatarUrl: string, _navigate: (destination: P1Destination) => void) {
+    Blank();
+  }
+
+  @Builder
   emptyReloadableHome(_reloadToken: number, _navigate: (destination: P1Destination) => void,
     _selectedTabIndex: number = 0) {
     Blank();
@@ -200,7 +242,7 @@ export struct P1Shell {
   }
 
   @Builder
-  emptyTechnicalLab(_navigate: (destination: P1Destination) => void) {
+  emptyTechnicalLab(_navigate: (destination: P1Destination) => void, _onDeveloperModeDisabled: () => void) {
     Blank();
   }
 
@@ -288,7 +330,64 @@ export struct P1Shell {
       HdsNavDestination() {
         this.settingsPage();
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '显示与阅读' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '我的' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.APPEARANCE_SETTINGS) {
+      HdsNavDestination() {
+        AppearanceSettingsPage({
+          themeMode: this.themeMode,
+          onThemeModeChange: (mode: AppThemeMode): void => {
+            void this.selectThemeMode(mode);
+          }
+        });
+      }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '外观与阅读体验' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.IDENTITY_MANAGEMENT) {
+      HdsNavDestination() {
+        IdentityManagementPage();
+      }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+        content: { title: { mainTitle: '身份管理' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.READING_SETTINGS) {
+      HdsNavDestination() {
+        ReadingSettingsPage();
+      }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+        content: { title: { mainTitle: '朗读与播放' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.SYSTEM_UPDATE_SETTINGS) {
+      HdsNavDestination() {
+        SystemUpdateSettingsPage({
+          installedVersionLabel: this.installedVersionLabel,
+          updateCheckBusy: this.updateCheckBusy,
+          updateCheckMessage: this.updateCheckMessage,
+          availableVersion: this.pendingUpdateRelease?.versionName ?? '',
+          onCheckUpdate: (): void => { void this.runUpdateCheck(true); },
+          onOpenDownload: (): void => this.openPendingUpdate(),
+          onOpenProject: (): void => this.openProjectHome()
+        });
+      }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+        content: { title: { mainTitle: '系统与更新' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.RECOMMENDATION_FILTER_SETTINGS) {
+      HdsNavDestination() {
+        ContentFilterSettingsPage({
+          preferences: this.createPreferencesStore(),
+          runtime: this.createFilterRuntimeStore(),
+          onOpenBlocklist: (): void => this.navigate({ name: P1DestinationName.BLOCKING_RULES }),
+          onOpenBlockedHistory: (): void => this.navigate({ name: P1DestinationName.BLOCKED_FEED_HISTORY })
+        });
+      }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+        content: { title: { mainTitle: '推荐系统与内容过滤' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.BLOCKING_RULES) {
@@ -339,9 +438,11 @@ export struct P1Shell {
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.TECHNICAL_LAB) {
       HdsNavDestination() {
-        this.technicalLabContent((destination: P1Destination): void => this.navigate(destination));
+        this.technicalLabContent((destination: P1Destination): void => this.navigate(destination), (): void => {
+          this.disableDeveloperMode();
+        });
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '技术实验室' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '开发者选项' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.LOGIN) {
@@ -428,7 +529,7 @@ export struct P1Shell {
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.questionTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
       // 问题页正文图片同样可打开全屏查看器：隐藏顶栏，返回键优先关查看器。
-      .hideTitleBar(this.detailImmersiveActive || this.imagePreviewUrl.length > 0)
+      .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll || this.imagePreviewUrl.length > 0)
       .onBackPressed((): boolean => {
         if (this.imagePreviewUrl.length > 0) {
           AppStorage.setOrCreate('p2ImagePreviewUrl', '');
@@ -451,7 +552,7 @@ export struct P1Shell {
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.answerTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
       // 沉浸式/图片查看器中隐藏顶栏（对齐上游 topBar={}）；返回键优先关查看器、再退沉浸式。
-      .hideTitleBar(this.detailImmersiveActive || this.imagePreviewUrl.length > 0)
+      .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll || this.imagePreviewUrl.length > 0)
       .onBackPressed((): boolean => {
         if (this.imagePreviewUrl.length > 0) {
           AppStorage.setOrCreate('p2ImagePreviewUrl', '');
@@ -479,7 +580,7 @@ export struct P1Shell {
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.articleTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
       // 与回答页一致：沉浸式/图片查看器中隐藏顶栏，返回键优先关查看器。
-      .hideTitleBar(this.detailImmersiveActive || this.imagePreviewUrl.length > 0)
+      .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll || this.imagePreviewUrl.length > 0)
       .onBackPressed((): boolean => {
         if (this.imagePreviewUrl.length > 0) {
           AppStorage.setOrCreate('p2ImagePreviewUrl', '');
@@ -607,7 +708,43 @@ export struct P1Shell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '通知' }, divider: { showType: DividerShowType.OFF } } })
+      // 消息中心标题栏对齐上游：标题「消息」+ 右上角已读/设置动作（同搜索页 stackBuilder 模式）。
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+        content: {
+          stackBuilder: (): void => this.notificationTitleBar(),
+          backIcon: { action: (): void => { this.pathStack.pop(); } },
+          divider: { showType: DividerShowType.OFF }
+        }
+      })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.NOTIFICATION_ENTRY) {
+      HdsNavDestination() {
+        this.notificationEntryContent(
+          (destination as NotificationEntryDestination).entryName,
+          (destination as NotificationEntryDestination).title,
+          (destination: P1Destination): void => this.navigate(destination)
+        );
+      }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+        content: { title: { mainTitle: (destination as NotificationEntryDestination).title },
+          divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.PRIVATE_MESSAGE) {
+      HdsNavDestination() {
+        this.privateMessageContent(
+          (destination as PrivateMessageDestination).peerId,
+          (destination as PrivateMessageDestination).peerName ?? '',
+          (destination as PrivateMessageDestination).avatarUrl ?? '',
+          (destination: P1Destination): void => this.navigate(destination)
+        );
+      }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+        content: { title: { mainTitle:
+          ((destination as PrivateMessageDestination).peerName ?? '').length > 0
+            ? ((destination as PrivateMessageDestination).peerName as string) : '私信' },
+          divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.NOTIFICATION_SETTINGS) {
@@ -714,46 +851,33 @@ export struct P1Shell {
         controller: this.tabsController,
         onTabDoubleTap: (index: number): void => {
           // 双击页签刷新对应 feed（“我的”除外）；跨页面信号经 AppStorage 广播。
-          if (index < P1TopLevelTab.HOME || index > P1TopLevelTab.DAILY) {
+          const tab = this.tabAtDisplayIndex(index);
+          if (tab < P1TopLevelTab.HOME || tab > P1TopLevelTab.DAILY) {
             return;
           }
           const nextTick = (AppStorage.get<number>('tabRefreshTick') ?? 0) + 1;
           AppStorage.setOrCreate('tabRefreshTick', nextTick);
-          AppStorage.setOrCreate('tabRefreshTabIndex', index);
+          AppStorage.setOrCreate('tabRefreshTabIndex', tab);
+        },
+        onCurrentTabTap: (index: number): void => {
+          const tab = this.tabAtDisplayIndex(index);
+          if (!this.tapToRefresh || tab < P1TopLevelTab.HOME || tab > P1TopLevelTab.DAILY) {
+            return;
+          }
+          AppStorage.setOrCreate('tabScrollTopTabIndex', tab);
+          AppStorage.setOrCreate('tabScrollTopTick', (AppStorage.get<number>('tabScrollTopTick') ?? 0) + 1);
         }
       }) {
-        TabContent() {
-          this.homeContent(this.homeReloadToken, (destination: P1Destination): void => this.navigate(destination));
-        }
-        .id('p1_top_level_home_content')
-        .tabBar(this.topLevelTabBarStyle(P1TopLevelTab.HOME))
-
-        TabContent() {
-          this.followingContent(this.followingReloadToken,
-            (destination: P1Destination): void => this.navigate(destination),
-            this.followingTitleSelectedIndex);
-        }
-        .id('p1_top_level_following_content')
-        .tabBar(this.topLevelTabBarStyle(P1TopLevelTab.FOLLOWING))
-
-        TabContent() {
-          this.hotContent(this.hotReloadToken, (destination: P1Destination): void => this.navigate(destination));
-        }
-        .id('p1_top_level_hot_content')
-        .tabBar(this.topLevelTabBarStyle(P1TopLevelTab.HOT))
-
-        TabContent() {
-          this.dailyContent(this.dailyReloadToken, this.dailyDateCursor,
-            (destination: P1Destination): void => this.navigate(destination));
-        }
-        .id('p1_top_level_daily_content')
-        .tabBar(this.topLevelTabBarStyle(P1TopLevelTab.DAILY))
-
-        TabContent() {
-          this.settingsPage();
-        }
-        .id('p1_top_level_account_content')
-        .tabBar(this.topLevelTabBarStyle(P1TopLevelTab.ACCOUNT))
+        // 页签必须经 ForEach（key=tab 值）生成：@Builder 按值传参在 HdsTabs 的
+        // TabContent 构建树下不会触发已挂载子组件更新，写死槽位会让“底部栏项目与顺序”
+        // 实时变更后 TabContent 属性（id/tabBar）刷新但内容仍是旧顺序的页面。
+        ForEach(this.bottomBarOrder, (tab: number): void => {
+          TabContent() {
+            this.topLevelTabPage(tab as P1TopLevelTab)
+          }
+          .id(`p1_top_level_${this.tabKey(tab as P1TopLevelTab)}_content`)
+          .tabBar(this.topLevelTabBarStyle(tab as P1TopLevelTab))
+        }, (tab: number): string => `${tab}`)
       }
     }
     .titleBar({
@@ -774,6 +898,43 @@ export struct P1Shell {
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
   }
 
+  @Builder
+  private topLevelTabPage(tab: P1TopLevelTab) {
+    if (tab === P1TopLevelTab.HOME) {
+      this.homeContent(this.homeReloadToken, (destination: P1Destination): void => this.navigate(destination))
+    } else if (tab === P1TopLevelTab.FOLLOWING) {
+      this.followingContent(this.followingReloadToken,
+        (destination: P1Destination): void => this.navigate(destination), this.followingTitleSelectedIndex)
+    } else if (tab === P1TopLevelTab.HOT) {
+      this.hotContent(this.hotReloadToken, (destination: P1Destination): void => this.navigate(destination))
+    } else if (tab === P1TopLevelTab.DAILY) {
+      this.dailyContent(this.dailyReloadToken, this.dailyDateCursor,
+        (destination: P1Destination): void => this.navigate(destination))
+    } else if (tab === P1TopLevelTab.HISTORY) {
+      this.readHistoryContent((destination: P1Destination): void => this.navigate(destination), (): void => {})
+    } else if (tab === P1TopLevelTab.COLLECTIONS) {
+      this.topLevelCollectionsPage()
+    } else {
+      this.settingsPage()
+    }
+  }
+
+  @Builder
+  private topLevelCollectionsPage() {
+    if (this.currentAccountIdentifier().length > 0) {
+      this.collectionsContent(this.currentAccountIdentifier(),
+        (destination: P1Destination): void => this.navigate(destination), (): void => {})
+    } else {
+      Column({ space: $r('app.float.p1_spacing_medium') }) {
+        Text('登录后查看收藏夹')
+          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontColor($r('app.color.primary_text'))
+        Button('去登录').onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
+      }
+      .width('100%').height('100%').justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
+    }
+  }
+
   private topLevelTabBarStyle(tab: P1TopLevelTab): BottomTabBarStyle {
     // 图标语义直白优先：house/person_2/flame/doc_text/person（经系统符号表核实）。
     let icon: Resource = $r('sys.symbol.house');
@@ -783,6 +944,10 @@ export struct P1Shell {
       icon = $r('sys.symbol.flame');
     } else if (tab === P1TopLevelTab.DAILY) {
       icon = $r('sys.symbol.doc_text');
+    } else if (tab === P1TopLevelTab.HISTORY) {
+      icon = $r('sys.symbol.clock');
+    } else if (tab === P1TopLevelTab.COLLECTIONS) {
+      icon = $r('sys.symbol.bookmark');
     } else if (tab === P1TopLevelTab.ACCOUNT) {
       icon = $r('sys.symbol.person');
     }
@@ -810,9 +975,37 @@ export struct P1Shell {
         return '热榜';
       case P1TopLevelTab.DAILY:
         return '日报';
+      case P1TopLevelTab.HISTORY:
+        return '历史';
+      case P1TopLevelTab.COLLECTIONS:
+        return '收藏夹';
       case P1TopLevelTab.ACCOUNT:
         return '我的';
     }
+  }
+
+  private tabAtDisplayIndex(index: number): P1TopLevelTab {
+    const value = this.bottomBarOrder[index];
+    return value === undefined ? P1TopLevelTab.HOME : value as P1TopLevelTab;
+  }
+
+  private activeTopLevelTab(): P1TopLevelTab {
+    return this.tabAtDisplayIndex(this.topLevelTabIndex);
+  }
+
+  private tabKey(tab: P1TopLevelTab): string {
+    if (tab === P1TopLevelTab.FOLLOWING) return 'following';
+    if (tab === P1TopLevelTab.HOT) return 'hot';
+    if (tab === P1TopLevelTab.DAILY) return 'daily';
+    if (tab === P1TopLevelTab.HISTORY) return 'history';
+    if (tab === P1TopLevelTab.COLLECTIONS) return 'collections';
+    if (tab === P1TopLevelTab.ACCOUNT) return 'account';
+    return 'home';
+  }
+
+  private currentAccountIdentifier(): string {
+    const profile = this.session?.getState().profile;
+    return profile?.urlToken ?? profile?.id ?? '';
   }
 
   private supportsImmersiveMaterial(): boolean {
@@ -839,6 +1032,12 @@ export struct P1Shell {
   @Builder
   private readHistoryTitleBar() {
     HistoryTitleBar()
+  }
+
+  /** 消息中心标题栏：标题「消息」+ 右上角已读/设置（对齐上游 CenterAlignedTopAppBar actions）。 */
+  @Builder
+  private notificationTitleBar() {
+    NotificationTitleBar({ navigate: (destination: P1Destination): void => this.navigate(destination) })
   }
 
   /** 回答页标题栏：滚动折叠时在返回键右侧显示问题单行 + 答主摘要（对齐上游折叠顶栏）。 */
@@ -900,7 +1099,7 @@ export struct P1Shell {
   @Builder
   private rootTitleBarContent() {
     Stack({ alignContent: Alignment.Center }) {
-    if (this.topLevelTabIndex === P1TopLevelTab.HOME) {
+    if (this.activeTopLevelTab() === P1TopLevelTab.HOME) {
       Row({ space: $r('app.float.p1_spacing_small') }) {
         Button({ type: ButtonType.Normal, stateEffect: true }) {
           Row({ space: $r('app.float.p1_spacing_small') }) {
@@ -942,7 +1141,7 @@ export struct P1Shell {
       .width('100%')
       .padding({ left: 12, right: 12 })
       .hitTestBehavior(HitTestMode.Transparent)
-    } else if (this.topLevelTabIndex === P1TopLevelTab.FOLLOWING) {
+    } else if (this.activeTopLevelTab() === P1TopLevelTab.FOLLOWING) {
       Column() {
         Row() {
           this.followingTitleTabItem('推荐', 0)
@@ -955,7 +1154,7 @@ export struct P1Shell {
       .height('100%')
       .justifyContent(FlexAlign.Center)
       .hitTestBehavior(HitTestMode.Transparent)
-    } else if (this.topLevelTabIndex === P1TopLevelTab.HOT) {
+    } else if (this.activeTopLevelTab() === P1TopLevelTab.HOT) {
       Row() {
         Button({ type: ButtonType.Circle, stateEffect: true }) {
           SymbolGlyph($r('sys.symbol.arrow_clockwise'))
@@ -978,7 +1177,7 @@ export struct P1Shell {
       .justifyContent(FlexAlign.End)
       .padding({ right: 12 })
       .hitTestBehavior(HitTestMode.Transparent)
-    } else if (this.topLevelTabIndex === P1TopLevelTab.DAILY) {
+    } else if (this.activeTopLevelTab() === P1TopLevelTab.DAILY) {
       Row() {
         Column({ space: 2 }) {
           Text('知乎日报')
@@ -1077,6 +1276,26 @@ export struct P1Shell {
     Stack({ alignContent: Alignment.TopStart }) {
       Scroll() {
         Column({ space: $r('app.float.p1_spacing_large') }) {
+          this.accountOverview()
+          this.accountQuickActions()
+
+          Text('创作')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
+          Column() {
+            AppNavigationRow({ title: '发布想法', description: '创建一条新的想法', testId: 'p4_open_pin_publish', grouped: true,
+              showLeadingIcon: true, leadingIcon: $r('sys.symbol.square_and_pencil'),
+              onRowClick: (): void => this.openPinComposer() });
+            Divider().color($r('app.color.divider_color'))
+            AppNavigationRow({ title: '想法草稿', description: '继续编辑本地保存的草稿', testId: 'p4_open_pin_drafts', grouped: true,
+              showLeadingIcon: true, leadingIcon: $r('sys.symbol.doc_text'),
+              onRowClick: (): void => this.navigate({ name: P1DestinationName.PIN_DRAFTS }) });
+          }
+          .width('100%')
+          .borderRadius($r('app.float.p1_card_radius'))
+          .backgroundColor($r('app.color.surface_background'))
+
           TextInput({ text: this.settingsSearchQuery, placeholder: '搜索设置' })
             .id('p3_settings_search')
             .width('100%')
@@ -1087,90 +1306,41 @@ export struct P1Shell {
           if (this.hasSettingsSearchQuery()) {
             this.settingsSearchResults()
           } else {
-            this.accountOverview()
-            this.accountQuickActions()
-
-          Text('创作')
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .width('100%')
-          Column() {
-            AppNavigationRow({ title: '发布想法', description: '创建一条新的想法', testId: 'p4_open_pin_publish', grouped: true,
-              onRowClick: (): void => this.openPinComposer() });
-            Divider().color($r('app.color.divider_color'))
-            AppNavigationRow({ title: '想法草稿', description: '继续编辑本地保存的草稿', testId: 'p4_open_pin_drafts', grouped: true,
-              onRowClick: (): void => this.navigate({ name: P1DestinationName.PIN_DRAFTS }) });
-          }
-          .width('100%')
-          .borderRadius($r('app.float.p1_card_radius'))
-          .backgroundColor($r('app.color.surface_background'))
-
-          Text('内容与隐私')
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .width('100%')
-          Column() {
-            AppNavigationRow({ title: '内容屏蔽', description: '管理作者与关键词屏蔽规则', testId: 'p2_open_blocking_rules', grouped: true,
-              onRowClick: (): void => this.navigate({ name: P1DestinationName.BLOCKING_RULES }) });
-            Divider().color($r('app.color.divider_color'))
-            AppNavigationRow({ title: '屏蔽记录', description: '查看最近隐藏的内容', testId: 'p3_open_blocked_feed_history', grouped: true,
-              onRowClick: (): void => this.navigate({ name: P1DestinationName.BLOCKED_FEED_HISTORY }) });
-          }
-          .width('100%')
-          .borderRadius($r('app.float.p1_card_radius'))
-          .backgroundColor($r('app.color.surface_background'))
-
-          Text('通知与外观')
+          Text('设置')
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
           Column({ space: $r('app.float.p1_spacing_small') }) {
-            AppNavigationRow({ title: '通知', description: '查看互动和系统消息', testId: 'p3_open_notifications', grouped: true,
-              onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION }) });
+            if (this.sessionSnapshot?.status === SessionStatus.AUTHENTICATED) {
+              AppNavigationRow({ title: '身份管理', description: '创建马甲号或切换当前身份',
+                testId: 'p5_open_identity_management', grouped: true,
+                showLeadingIcon: true, leadingIcon: $r('sys.symbol.person_2'),
+                onRowClick: (): void => this.navigate({ name: P1DestinationName.IDENTITY_MANAGEMENT }) });
+              Divider().color($r('app.color.divider_color'))
+            }
+            AppNavigationRow({ title: '外观与阅读体验', description: '主题、阅读排版与信息流显示',
+              testId: 'p3_open_appearance_settings', grouped: true,
+              showLeadingIcon: true, leadingIcon: $r('sys.symbol.eye'),
+              onRowClick: (): void => this.navigate({ name: P1DestinationName.APPEARANCE_SETTINGS }) });
+            Divider().color($r('app.color.divider_color'))
+            AppNavigationRow({ title: '朗读与播放', description: '语音、语速与当前播放控制',
+              testId: 'p5_open_reading_settings', grouped: true,
+              showLeadingIcon: true, leadingIcon: $r('sys.symbol.mic'),
+              onRowClick: (): void => this.navigate({ name: P1DestinationName.READING_SETTINGS }) });
+            Divider().color($r('app.color.divider_color'))
+            AppNavigationRow({ title: '推荐系统与内容过滤', description: '推荐来源、质量规则与内容屏蔽',
+              testId: 'p3_open_recommendation_filter_settings', grouped: true,
+              showLeadingIcon: true, leadingIcon: $r('sys.symbol.eye_slash'),
+              onRowClick: (): void => this.navigate({ name: P1DestinationName.RECOMMENDATION_FILTER_SETTINGS }) });
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '通知设置', description: '设置提醒和推送偏好', testId: 'p3_open_notification_settings', grouped: true,
+              showLeadingIcon: true, leadingIcon: $r('sys.symbol.bell_badge_gearshape'),
               onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION_SETTINGS }) });
             Divider().color($r('app.color.divider_color'))
-            Column({ space: $r('app.float.p1_spacing_small') }) {
-              Text('主题模式')
-                .fontSize($r('app.float.p1_body_font_size'))
-                .fontColor($r('app.color.primary_text'))
-              Text('跟随系统会响应系统深浅色。')
-                .fontSize($r('app.float.p1_secondary_font_size'))
-                .fontColor($r('app.color.secondary_text'))
-              Row({ space: $r('app.float.p1_spacing_small') }) {
-                this.themeButton('跟随系统', AppThemeMode.SYSTEM, 'p1_theme_system');
-                this.themeButton('浅色', AppThemeMode.LIGHT, 'p1_theme_light');
-                this.themeButton('深色', AppThemeMode.DARK, 'p1_theme_dark');
-              }
-              .width('100%')
-            }
-            .alignItems(HorizontalAlign.Start)
-            .width('100%')
-            .padding($r('app.float.p1_card_padding'))
-            Divider().color($r('app.color.divider_color'))
-            Column({ space: $r('app.float.p1_spacing_small') }) {
-              Text('双击回答动作')
-                .fontSize($r('app.float.p1_body_font_size'))
-                .fontColor($r('app.color.primary_text'))
-              Text('双击回答正文时执行的动作。默认弹窗询问。')
-                .fontSize($r('app.float.p1_secondary_font_size'))
-                .fontColor($r('app.color.secondary_text'))
-              Select(this.answerDoubleTapSelectOptions())
-                .id('p3_settings_answer_double_tap_select')
-                .selected(this.answerDoubleTapAction)
-                .value(answerDoubleTapActionLabel(this.answerDoubleTapAction))
-                .fontColor($r('app.color.primary_text'))
-                .onSelect((index: number): void => {
-                  const actions = allAnswerDoubleTapActions();
-                  if (index >= 0 && index < actions.length) {
-                    void this.selectAnswerDoubleTapAction(actions[index]);
-                  }
-                })
-            }
-            .alignItems(HorizontalAlign.Start)
-            .width('100%')
-            .padding($r('app.float.p1_card_padding'))
+            AppNavigationRow({ title: '系统与更新', description: '版本信息、检查更新与问题反馈',
+              testId: 'p5_open_system_update_settings', grouped: true,
+              showLeadingIcon: true, leadingIcon: $r('sys.symbol.arrow_clockwise'),
+              onRowClick: (): void => this.navigate({ name: P1DestinationName.SYSTEM_UPDATE_SETTINGS }) });
           }
           .width('100%')
           .borderRadius($r('app.float.p1_card_radius'))
@@ -1184,6 +1354,7 @@ export struct P1Shell {
             if (this.pendingUpdateRelease !== undefined) {
               AppNavigationRow({ title: this.pendingUpdateTitle(),
                 description: '点击前往 GitHub 下载新版 HAP', testId: 'p3_open_update_download', grouped: true,
+                showLeadingIcon: true, leadingIcon: $r('sys.symbol.arrow_clockwise'),
                 onRowClick: (): void => {
                   const release = this.pendingUpdateRelease;
                   const url = release !== undefined && release.htmlUrl.length > 0
@@ -1195,32 +1366,46 @@ export struct P1Shell {
             }
             AppNavigationRow({ title: '应用与版本', description: this.installedVersionLabel,
               testId: 'p3_open_about_version', grouped: true,
+              showLeadingIcon: true, leadingIcon: $r('sys.symbol.info_circle'),
               onRowClick: (): void => {
-                this.refreshInstalledVersionLabel();
-                this.aboutVersionSheetShown = true;
+                this.onVersionRowClicked();
               } });
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: 'GitHub', description: '查看项目主页', testId: 'p3_open_project_home', grouped: true,
+              showLeadingIcon: true, leadingIcon: $r('app.media.github_mark'), leadingIconIsMedia: true,
               onRowClick: (): void => this.openProjectHome() });
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '项目协议', description: 'GNU AGPL v3.0',
               testId: 'p3_open_project_license', grouped: true,
+              showLeadingIcon: true, leadingIcon: $r('sys.symbol.checkmark_square'),
               onRowClick: (): void => {
                 this.projectLicenseSheetShown = true;
               } });
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '开源许可', description: '3 个本地 HAR 模块 · GNU AGPL v3.0',
               testId: 'p3_open_open_source_licenses', grouped: true,
+              showLeadingIcon: true, leadingIcon: $r('sys.symbol.doc_text'),
               onRowClick: (): void => {
                 this.openSourceLicensesSheetShown = true;
               } });
-            Divider().color($r('app.color.divider_color'))
-            AppNavigationRow({ title: '技术实验室', description: '仅用于本机诊断与验证', testId: 'p1_open_technical_lab', grouped: true,
-              onRowClick: (): void => this.navigate({ name: P1DestinationName.TECHNICAL_LAB }) });
+            if (this.developerModeEnabled) {
+              Divider().color($r('app.color.divider_color'))
+              AppNavigationRow({ title: '开发者选项', description: 'Cookie、网络与调试工具',
+                testId: 'p1_open_developer_options', grouped: true,
+                showLeadingIcon: true, leadingIcon: $r('sys.symbol.gearshape'),
+                onRowClick: (): void => this.navigate({ name: P1DestinationName.TECHNICAL_LAB }) });
+            }
           }
           .width('100%')
           .borderRadius($r('app.float.p1_card_radius'))
           .backgroundColor($r('app.color.surface_background'))
+
+          Text('本软件仅供学习交流使用，应用内内容由知乎网站提供，著作权归其对应作者所有。')
+            .id('p3_account_disclaimer')
+            .fontSize($r('app.float.p1_caption_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
+            .padding({ left: $r('app.float.p1_spacing_medium'), right: $r('app.float.p1_spacing_medium') })
         }
         }
       }
@@ -1230,7 +1415,8 @@ export struct P1Shell {
         left: $r('app.float.p1_page_padding'),
         right: $r('app.float.p1_page_padding'),
         top: 94,
-        bottom: $r('app.float.p1_page_padding')
+        // HdsTabs 的悬浮底栏会覆盖滚动区末端；为最后一个设置项预留可点击空间。
+        bottom: 96
       })
       .id('p1_settings_scroll')
       .width('100%')
@@ -1300,62 +1486,84 @@ export struct P1Shell {
 
   @Builder
   private accountOverview() {
-    Button({ type: ButtonType.Normal, stateEffect: true }) {
-      Row({ space: $r('app.float.p1_spacing_medium') }) {
-        Stack({ alignContent: Alignment.Center }) {
-          Text(this.accountAvatarLetter())
-            .width(56)
-            .height(56)
-            .borderRadius(28)
-            .backgroundColor($r('app.color.brand_primary_container'))
-            .fontSize($r('app.float.p1_heading_font_size'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.brand_primary'))
-            .textAlign(TextAlign.Center)
-          // 有头像地址时叠加真实头像；加载失败露出首字占位。
-          if (this.accountAvatarUrl().length > 0) {
-            Image(this.accountAvatarUrl())
-              .id('p3_account_overview_avatar')
-              .width(56)
-              .height(56)
-              .borderRadius(28)
-              .objectFit(ImageFit.Cover)
+    if (this.accountSessionState()?.status === SessionStatus.AUTHENTICATED) {
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          Row({ space: $r('app.float.p1_spacing_small') }) {
+            Stack({ alignContent: Alignment.Center }) {
+              Text(this.accountAvatarLetter())
+                .width(56)
+                .height(56)
+                .borderRadius(28)
+                .backgroundColor($r('app.color.brand_primary_container'))
+                .fontSize($r('app.float.p1_heading_font_size'))
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('app.color.brand_primary'))
+                .textAlign(TextAlign.Center)
+              // 有头像地址时叠加真实头像；加载失败露出首字占位。
+              if (this.accountAvatarUrl().length > 0) {
+                Image(this.accountAvatarUrl())
+                  .id('p3_account_overview_avatar')
+                  .width(56)
+                  .height(56)
+                  .borderRadius(28)
+                  .objectFit(ImageFit.Cover)
+              }
+            }
+            .id('p3_account_overview_avatar_box')
+            Text(this.accountTitle())
+              .id('p3_account_overview_title')
+              .fontSize($r('app.float.p1_heading_font_size'))
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.primary_text'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .layoutWeight(1)
           }
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
         }
-        .id('p3_account_overview_avatar_box')
-        Column({ space: $r('app.float.p1_spacing_xsmall') }) {
-          Text(this.accountTitle())
-            .id('p3_account_overview_title')
-            .fontSize($r('app.float.p1_heading_font_size'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.primary_text'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-          Text(this.accountSummary())
-            .id('p3_account_overview_summary')
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .maxLines(2)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-        }
-        .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
-        SymbolGlyph($r('sys.symbol.chevron_right'))
-          .fontSize(16)
-          .fontColor([$r('app.color.secondary_text')])
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .accessibilityText('打开个人主页')
+        .onClick((): void => this.openCurrentProfile())
+
+        Button({ type: ButtonType.Circle, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.barcode_viewfinder'))
+            .fontSize(22)
+            .fontColor([$r('app.color.brand_primary')])
+        }
+          .id('p4_account_scan_desktop_login')
+          .width(44)
+          .height(44)
+          .padding(0)
+          .backgroundColor($r('app.color.brand_primary_container'))
+          .accessibilityText('扫描电脑端登录二维码')
+          .onClick((): void => this.navigate({ name: P1DestinationName.QR_DESKTOP_LOGIN_SCAN }))
+
+        Button({ type: ButtonType.Circle, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.arrow_right_and_square'))
+            .fontSize(22)
+            .fontColor([$r('app.color.error_text')])
+        }
+          .id('p2_account_logout')
+          .width(44)
+          .height(44)
+          .padding(0)
+          .backgroundColor($r('app.color.control_background'))
+          .enabled(!this.accountLogoutBusy)
+          .accessibilityText('退出登录')
+          .onClick((): void => this.confirmAccountLogout())
       }
+      .id('p3_account_overview')
       .width('100%')
       .alignItems(VerticalAlign.Center)
+    } else {
+      AppNavigationRow({ title: '登录知乎', description: '管理当前知乎账号的登录状态', testId: 'p2_open_login',
+        grouped: false, showLeadingIcon: true, leadingIcon: $r('sys.symbol.person'),
+        onRowClick: (): void => this.navigate({ name: P1DestinationName.LOGIN }) })
     }
-    .id('p2_open_login')
-    .width('100%')
-    .padding($r('app.float.p1_card_padding'))
-    .borderRadius($r('app.float.p1_card_radius'))
-    .backgroundColor($r('app.color.surface_background'))
-    .accessibilityText('账号与登录')
-    .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
   }
 
   @Builder
@@ -1426,19 +1634,6 @@ export struct P1Shell {
   }
 
   @Builder
-  themeButton(label: string, mode: AppThemeMode, testId: string) {
-    Button(label)
-      .id(testId)
-      .layoutWeight(1)
-      .fontSize($r('app.float.p1_secondary_font_size'))
-      .fontColor(this.themeMode === mode ? $r('app.color.on_brand') : $r('app.color.primary_text'))
-      .backgroundColor(this.themeMode === mode ? $r('app.color.brand_primary') : $r('app.color.control_background'))
-      .onClick(() => {
-        this.selectThemeMode(mode);
-      })
-  }
-
-  @Builder
   private settingsSearchResults() {
     Column({ space: $r('app.float.p1_spacing_small') }) {
       Text('搜索结果')
@@ -1448,83 +1643,100 @@ export struct P1Shell {
         .width('100%')
       if (this.settingsSearchMatches('账号与登录', this.accountSummary())) {
         AppNavigationRow({ title: '账号与登录', description: this.accountSummary(), testId: 'p2_open_login',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.person'),
           onRowClick: (): void => this.navigate({ name: P1DestinationName.LOGIN }) });
       }
       if (this.settingsSearchMatches('发布想法', '创建一条新的想法')) {
         AppNavigationRow({ title: '发布想法', description: '创建一条新的想法', testId: 'p4_open_pin_publish',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.square_and_pencil'),
           onRowClick: (): void => this.openPinComposer() });
       }
       if (this.settingsSearchMatches('想法草稿', '继续编辑本地保存的草稿')) {
         AppNavigationRow({ title: '想法草稿', description: '继续编辑本地保存的草稿', testId: 'p4_open_pin_drafts',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.doc_text'),
           onRowClick: (): void => this.navigate({ name: P1DestinationName.PIN_DRAFTS }) });
       }
       if (this.settingsSearchMatches('我的收藏夹', '查看自己的知乎收藏夹')) {
         AppNavigationRow({ title: '我的收藏夹', description: '查看自己的知乎收藏夹', testId: 'p3_open_my_collections',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.bookmark'),
           onRowClick: (): void => this.openMyCollections() });
       }
       if (this.settingsSearchMatches('内容屏蔽', '管理作者与关键词屏蔽规则')) {
         AppNavigationRow({ title: '内容屏蔽', description: '管理作者与关键词屏蔽规则', testId: 'p2_open_blocking_rules',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.eye_slash'),
           onRowClick: (): void => this.navigate({ name: P1DestinationName.BLOCKING_RULES }) });
       }
       if (this.settingsSearchMatches('屏蔽记录', '查看最近隐藏的内容')) {
         AppNavigationRow({ title: '屏蔽记录', description: '查看最近隐藏的内容', testId: 'p3_open_blocked_feed_history',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.arrow_counterclockwise_clock'),
           onRowClick: (): void => this.navigate({ name: P1DestinationName.BLOCKED_FEED_HISTORY }) });
-      }
-      if (this.settingsSearchMatches('通知', '查看互动和系统消息')) {
-        AppNavigationRow({ title: '通知', description: '查看互动和系统消息', testId: 'p3_open_notifications',
-          onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION }) });
       }
       if (this.settingsSearchMatches('通知设置', '设置提醒和推送偏好')) {
         AppNavigationRow({ title: '通知设置', description: '设置提醒和推送偏好', testId: 'p3_open_notification_settings',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.bell_badge_gearshape'),
           onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION_SETTINGS }) });
       }
-      if (this.settingsSearchMatches('主题模式', '跟随系统 浅色 深色')) {
-        Column({ space: $r('app.float.p1_spacing_small') }) {
-          Text('主题模式')
-            .fontSize($r('app.float.p1_body_font_size'))
-            .fontColor($r('app.color.primary_text'))
-          Text('跟随系统、浅色或深色')
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-          Row({ space: $r('app.float.p1_spacing_small') }) {
-            this.themeButton('跟随系统', AppThemeMode.SYSTEM, 'p1_theme_system');
-            this.themeButton('浅色', AppThemeMode.LIGHT, 'p1_theme_light');
-            this.themeButton('深色', AppThemeMode.DARK, 'p1_theme_dark');
-          }
-          .width('100%')
-        }
-        .id('p3_settings_search_theme_mode')
-        .alignItems(HorizontalAlign.Start)
-        .width('100%')
-        .padding($r('app.float.p1_card_padding'))
-        .borderRadius($r('app.float.p1_card_radius'))
-        .backgroundColor($r('app.color.surface_background'))
+      if (this.settingsSearchMatches('外观与阅读体验', '主题 阅读排版 信息流 字号 行高 段间距')) {
+        AppNavigationRow({ title: '外观与阅读体验', description: '主题、阅读排版与信息流显示',
+          testId: 'p3_search_open_appearance_settings',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.eye'),
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.APPEARANCE_SETTINGS }) });
+      }
+      if (this.sessionSnapshot?.status === SessionStatus.AUTHENTICATED &&
+        this.settingsSearchMatches('身份管理', '创建马甲号 切换当前身份')) {
+        AppNavigationRow({ title: '身份管理', description: '创建马甲号或切换当前身份',
+          testId: 'p5_open_identity_management',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.person_2'),
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.IDENTITY_MANAGEMENT }) });
+      }
+      if (this.settingsSearchMatches('朗读与播放', '语音 语速 音调 播放')) {
+        AppNavigationRow({ title: '朗读与播放', description: '语音、语速与当前播放控制',
+          testId: 'p5_open_reading_settings',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.mic'),
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.READING_SETTINGS }) });
+      }
+      if (this.settingsSearchMatches('推荐系统与内容过滤', '推荐算法 质量过滤 智能过滤 关键词 用户 主题 广告 盐选')) {
+        AppNavigationRow({ title: '推荐系统与内容过滤', description: '推荐来源、质量规则与内容屏蔽',
+          testId: 'p3_search_open_recommendation_filter_settings',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.eye_slash'),
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.RECOMMENDATION_FILTER_SETTINGS }) });
+      }
+      if (this.settingsSearchMatches('系统与更新', '版本信息 检查更新 问题反馈')) {
+        AppNavigationRow({ title: '系统与更新', description: '版本信息、检查更新与问题反馈',
+          testId: 'p5_open_system_update_settings',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.arrow_clockwise'),
+          onRowClick: (): void => this.navigate({ name: P1DestinationName.SYSTEM_UPDATE_SETTINGS }) });
       }
       if (this.settingsSearchMatches('应用与版本', this.installedVersionLabel)) {
         AppNavigationRow({ title: '应用与版本', description: this.installedVersionLabel,
-          testId: 'p3_open_about_version', onRowClick: (): void => {
-            this.refreshInstalledVersionLabel();
-            this.aboutVersionSheetShown = true;
+          testId: 'p3_open_about_version', showLeadingIcon: true, leadingIcon: $r('sys.symbol.info_circle'),
+          onRowClick: (): void => {
+            this.onVersionRowClicked();
           } });
       }
       if (this.settingsSearchMatches('GitHub', '查看项目主页')) {
         AppNavigationRow({ title: 'GitHub', description: '查看项目主页', testId: 'p3_open_project_home',
+          showLeadingIcon: true, leadingIcon: $r('app.media.github_mark'), leadingIconIsMedia: true,
           onRowClick: (): void => this.openProjectHome() });
       }
       if (this.settingsSearchMatches('项目协议', 'GNU AGPL v3.0')) {
         AppNavigationRow({ title: '项目协议', description: 'GNU AGPL v3.0',
-          testId: 'p3_open_project_license', onRowClick: (): void => {
+          testId: 'p3_open_project_license', showLeadingIcon: true,
+          leadingIcon: $r('sys.symbol.checkmark_square'), onRowClick: (): void => {
             this.projectLicenseSheetShown = true;
           } });
       }
       if (this.settingsSearchMatches('开源许可', '3 个本地 HAR 模块 GNU AGPL v3.0')) {
         AppNavigationRow({ title: '开源许可', description: '3 个本地 HAR 模块 · GNU AGPL v3.0',
-          testId: 'p3_open_open_source_licenses', onRowClick: (): void => {
+          testId: 'p3_open_open_source_licenses', showLeadingIcon: true,
+          leadingIcon: $r('sys.symbol.doc_text'), onRowClick: (): void => {
             this.openSourceLicensesSheetShown = true;
           } });
       }
-      if (this.settingsSearchMatches('技术实验室', '仅用于本机诊断与验证')) {
-        AppNavigationRow({ title: '技术实验室', description: '仅用于本机诊断与验证', testId: 'p1_open_technical_lab',
+      if (this.developerModeEnabled &&
+        this.settingsSearchMatches('开发者选项', 'Cookie 网络 调试工具 技术实验室')) {
+        AppNavigationRow({ title: '开发者选项', description: 'Cookie、网络与调试工具', testId: 'p1_open_developer_options',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.gearshape'),
           onRowClick: (): void => this.navigate({ name: P1DestinationName.TECHNICAL_LAB }) });
       }
       if (!this.hasSettingsSearchResults()) {
@@ -1567,7 +1779,7 @@ export struct P1Shell {
           })
       }
       .width('100%')
-      Text('知乎++ HarmonyOS 版')
+      Text('知乎++鸿蒙版')
         .id('p3_about_version_app_name')
         .fontSize($r('app.float.p1_body_font_size'))
         .fontColor($r('app.color.primary_text'))
@@ -1577,36 +1789,16 @@ export struct P1Shell {
         .fontSize($r('app.float.p1_secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
+        .onClick((): void => this.onVersionTapped())
       Text('版本信息来自当前已安装的 HAP，便于核对本机安装结果。')
         .fontSize($r('app.float.p1_secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
-      Button('检查更新')
-        .id('p3_check_update')
-        .fontSize($r('app.float.p1_body_font_size'))
-        .enabled(!this.updateCheckBusy)
-        .onClick((): void => {
-          void this.runUpdateCheck(true);
-        })
-      if (this.updateCheckMessage.length > 0) {
-        Text(this.updateCheckMessage)
-          .id('p3_update_check_status')
-          .fontSize($r('app.float.p1_secondary_font_size'))
-          .fontColor($r('app.color.secondary_text'))
-          .width('100%')
-      }
-      if (this.pendingUpdateRelease !== undefined) {
-        Button('前往下载新版 HAP')
-          .id('p3_update_download')
-          .fontSize($r('app.float.p1_body_font_size'))
-          .onClick((): void => {
-            const release = this.pendingUpdateRelease;
-            const url = release !== undefined && release.htmlUrl.length > 0
-              ? release.htmlUrl
-              : PROJECT_HOME_URI + '/releases/latest';
-            this.openExternalUrl(url, '无法打开发布页');
-          })
-      }
+      Text(this.developerModeEnabled ? '开发者选项已开启。检查更新已移至“系统与更新”。' :
+        '连续点击“应用与版本”设置行 5 次可开启开发者选项。检查更新已移至“系统与更新”。')
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
     }
     .width('100%')
     .padding($r('app.float.p1_page_padding'))
@@ -1774,7 +1966,7 @@ export struct P1Shell {
     }
   }
 
-  /** verbose=true 供“应用与版本”弹层手动检查（展示状态、不受节流限制）；false 供启动静默检查
+  /** verbose=true 供“系统与更新”页手动检查（展示状态、不受节流限制）；false 供启动静默检查
     * （3 小时节流，对齐上游 shouldPerformAutoCheck）。检出新版本时经 AppStorage 广播驱动首页更新卡片。 */
   private async runUpdateCheck(verbose: boolean): Promise<void> {
     if (this.updateCheckBusy) {
@@ -1860,6 +2052,52 @@ export struct P1Shell {
     return release !== undefined ? `发现新版本 ${release.versionName}` : '';
   }
 
+  private openPendingUpdate(): void {
+    const release = this.pendingUpdateRelease;
+    const url = release !== undefined ? this.releaseDownloadUrl(release) : PROJECT_HOME_URI + '/releases/latest';
+    this.openExternalUrl(url, '无法打开发布页');
+  }
+
+  private onVersionTapped(): void {
+    if (this.developerModeEnabled) {
+      this.getUIContext().getPromptAction().showToast({ message: '开发者选项已开启' });
+      return;
+    }
+    this.versionTapCount += 1;
+    const remaining = 5 - this.versionTapCount;
+    if (remaining > 0) {
+      this.getUIContext().getPromptAction().showToast({ message: `再点击 ${remaining} 次开启开发者选项` });
+      return;
+    }
+    this.versionTapCount = 0;
+    this.developerModeEnabled = true;
+    const context = getAbilityContext();
+    if (context !== undefined) {
+      void new AppPreferencesStore(context).saveDeveloperMode(true);
+    }
+    this.getUIContext().getPromptAction().showToast({ message: '你已成为开发者' });
+  }
+
+  private onVersionRowClicked(): void {
+    if (this.developerModeEnabled) {
+      this.refreshInstalledVersionLabel();
+      this.aboutVersionSheetShown = true;
+      return;
+    }
+    this.onVersionTapped();
+  }
+
+  private disableDeveloperMode(): void {
+    this.developerModeEnabled = false;
+    this.versionTapCount = 0;
+    const context = getAbilityContext();
+    if (context !== undefined) {
+      void new AppPreferencesStore(context).saveDeveloperMode(false);
+    }
+    this.pathStack.pop();
+    this.getUIContext().getPromptAction().showToast({ message: '开发者选项已关闭' });
+  }
+
   private hasSettingsSearchQuery(): boolean {
     return this.settingsSearchQuery.trim().length > 0;
   }
@@ -1876,14 +2114,19 @@ export struct P1Shell {
       this.settingsSearchMatches('我的收藏夹', '查看自己的知乎收藏夹') ||
       this.settingsSearchMatches('内容屏蔽', '管理作者与关键词屏蔽规则') ||
       this.settingsSearchMatches('屏蔽记录', '查看最近隐藏的内容') ||
-      this.settingsSearchMatches('通知', '查看互动和系统消息') ||
       this.settingsSearchMatches('通知设置', '设置提醒和推送偏好') ||
-      this.settingsSearchMatches('主题模式', '跟随系统 浅色 深色') ||
+      (this.sessionSnapshot?.status === SessionStatus.AUTHENTICATED &&
+        this.settingsSearchMatches('身份管理', '创建马甲号 切换当前身份')) ||
+      this.settingsSearchMatches('外观与阅读体验', '主题 阅读排版 信息流 字号 行高 段间距') ||
+      this.settingsSearchMatches('朗读与播放', '语音 语速 音调 播放') ||
+      this.settingsSearchMatches('推荐系统与内容过滤', '推荐算法 质量过滤 智能过滤 关键词 用户 主题 广告 盐选') ||
+      this.settingsSearchMatches('系统与更新', '版本信息 检查更新 问题反馈') ||
       this.settingsSearchMatches('应用与版本', this.installedVersionLabel) ||
       this.settingsSearchMatches('GitHub', '查看项目主页') ||
       this.settingsSearchMatches('项目协议', 'GNU AGPL v3.0') ||
       this.settingsSearchMatches('开源许可', '3 个本地 HAR 模块 GNU AGPL v3.0') ||
-      this.settingsSearchMatches('技术实验室', '仅用于本机诊断与验证');
+      (this.developerModeEnabled &&
+        this.settingsSearchMatches('开发者选项', 'Cookie 网络 调试工具 技术实验室'));
   }
 
   private openExternalUrl(url: string, fallbackPrefix: string): void {
@@ -1953,6 +2196,45 @@ export struct P1Shell {
     return state.profile?.avatarUrl?.trim() ?? '';
   }
 
+  private openCurrentProfile(): void {
+    const state = this.accountSessionState();
+    const profile = state?.profile;
+    const identifier = profile?.urlToken ?? profile?.id;
+    if (state?.status === SessionStatus.AUTHENTICATED && identifier !== undefined && identifier.length > 0) {
+      this.navigate({ name: P1DestinationName.PEOPLE, id: identifier });
+    }
+  }
+
+  private confirmAccountLogout(): void {
+    if (this.accountLogoutBusy) {
+      return;
+    }
+    this.getUIContext().showAlertDialog({
+      title: '退出登录',
+      message: '确定要退出登录吗？',
+      primaryButton: { value: '取消', action: (): void => {} },
+      secondaryButton: { value: '退出', action: (): void => { void this.logoutCurrentAccount(); } }
+    });
+  }
+
+  private async logoutCurrentAccount(): Promise<void> {
+    const session = this.session;
+    if (session === undefined || this.accountLogoutBusy) {
+      return;
+    }
+    this.accountLogoutBusy = true;
+    try {
+      const state = await session.logout();
+      this.sessionSnapshot = state;
+      AppStorage.setOrCreate('sessionStateTick', (AppStorage.get<number>('sessionStateTick') ?? 0) + 1);
+      this.getUIContext().getPromptAction().showToast({ message: state.message });
+    } catch (_error) {
+      this.getUIContext().getPromptAction().showToast({ message: '退出登录失败，请重试' });
+    } finally {
+      this.accountLogoutBusy = false;
+    }
+  }
+
   @Builder
   invalidDestinationPage() {
     Stack({ alignContent: Alignment.TopStart }) {
@@ -2004,19 +2286,39 @@ export struct P1Shell {
     this.tabsController.changeIndex(this.topLevelTabIndex);
   }
 
+  private onBottomBarItemsChanged(): void {
+    const activeTab = this.activeTopLevelTab();
+    const nextBottomBarOrder = this.decodeBottomBarOrder(this.bottomBarItems);
+    this.bottomBarOrder = nextBottomBarOrder;
+    const activeDisplayIndex = nextBottomBarOrder.indexOf(activeTab);
+    this.topLevelTabIndex = activeDisplayIndex >= 0 ? activeDisplayIndex : 0;
+    // ForEach 重建页签后 Tabs 选中索引可能被重置/钳制（索引值未变时 @Watch 不触发），
+    // 这里无条件用控制器再同步一次。
+    this.tabsController.changeIndex(this.topLevelTabIndex);
+  }
+
   private navigate(destination: P1Destination): void {
     const topLevelTab = p1TopLevelTabForDestination(destination);
     if (topLevelTab !== undefined) {
-      this.pathStack.clear();
-      this.topLevelTabIndex = topLevelTab;
-      return;
+      const displayIndex = this.bottomBarOrder.indexOf(topLevelTab);
+      if (displayIndex >= 0) {
+        this.pathStack.clear();
+        this.topLevelTabIndex = displayIndex;
+        return;
+      }
     }
     const paths: Array<NavPathInfo> | undefined = this.pathStack.getPathStack();
     if (paths !== undefined && paths.length > 0) {
       // P3-7：同一目标（name+参数）已在返回栈任何位置时不再重复入栈，
       // 防止「返回时只是露出前一个重复页面」（CLAUDE.md 返回栈教训）。
       // 参数化页面不能使用按 name 匹配的 MOVE_TO_TOP_SINGLETON，必须按身份查重。
-      if (findP1DestinationStackIndex(paths, destination) >= 0) {
+      const existingIndex = findP1DestinationStackIndex(paths, destination);
+      if (existingIndex >= 0) {
+        // 已在栈中时弹到栈顶（复用原页面实例与滚动状态），不能静默忽略——
+        // 否则「答案页 → 问题页 → 点原答案」这类回访点击会无响应。
+        if (existingIndex < paths.length - 1) {
+          this.pathStack.popToIndex(existingIndex);
+        }
         return;
       }
     }
@@ -2102,6 +2404,10 @@ export struct P1Shell {
         return `内容：${destination.contentId}`;
       case P1DestinationName.NOTIFICATION:
         return '查看知乎账号的通知消息';
+      case P1DestinationName.NOTIFICATION_ENTRY:
+        return '查看知乎通知分类消息';
+      case P1DestinationName.PRIVATE_MESSAGE:
+        return '查看知乎私信会话';
       case P1DestinationName.QUESTION:
       case P1DestinationName.ANSWER:
       case P1DestinationName.ARTICLE:
@@ -2114,12 +2420,6 @@ export struct P1Shell {
       default:
         return destination.name;
     }
-  }
-
-  private answerDoubleTapSelectOptions(): SelectOption[] {
-    return allAnswerDoubleTapActions().map((action: AnswerDoubleTapAction): SelectOption => {
-      return { value: answerDoubleTapActionLabel(action) } as SelectOption;
-    });
   }
 
   private async restoreAnswerDoubleTapAction(): Promise<void> {
@@ -2135,19 +2435,142 @@ export struct P1Shell {
     }
   }
 
-  private async selectAnswerDoubleTapAction(action: AnswerDoubleTapAction): Promise<void> {
+  private createPreferencesStore(): AppPreferencesStore | undefined {
+    const context = getAbilityContext();
+    return context === undefined ? undefined : new AppPreferencesStore(context);
+  }
+
+  private async restoreDeveloperMode(): Promise<void> {
     const context = getAbilityContext();
     if (context === undefined) {
       return;
     }
-    AppStorage.setOrCreate('answerDoubleTapAction', action);
     try {
-      await new AppPreferencesStore(context).saveAnswerDoubleTapAction(action);
+      this.developerModeEnabled = await new AppPreferencesStore(context).loadDeveloperMode();
     } catch (_error) {
-      // 保存失败时选择已生效，重启后可能恢复此前设置。
+      this.developerModeEnabled = false;
     }
-    this.getUIContext().getPromptAction()
-      .showToast({ message: `已设置为：${answerDoubleTapActionLabel(action)}` });
+  }
+
+  private createFilterRuntimeStore(): ContentFilterRuntimeStore | undefined {
+    const context = getAbilityContext();
+    if (context === undefined) return undefined;
+    const database = getAppDatabase(context);
+    return new ContentFilterRuntimeStore(database, new BlockedFeedHistoryStore(database));
+  }
+
+  /** 读取排版偏好并广播；失败保持默认 100/160/100（与改造前视觉一致）。 */
+  private async restoreReaderTypography(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const typography = await new AppPreferencesStore(context).loadReaderTypography();
+      this.broadcastReaderTypography(typography);
+    } catch (_error) {
+      // 读取失败保持默认值。
+    }
+  }
+
+  private broadcastReaderTypography(value: ReaderTypography): void {
+    AppStorage.setOrCreate('contentFontSize', value.fontSize);
+    AppStorage.setOrCreate('contentLineHeight', value.lineHeight);
+    AppStorage.setOrCreate('contentBlockSpacing', value.blockSpacing);
+  }
+
+  private async restoreAppearancePreferences(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const value: AppearancePreferences = await new AppPreferencesStore(context).loadAppearancePreferences();
+      AppStorage.setOrCreate('fabOpacity', value.fabOpacity);
+      AppStorage.setOrCreate('showFeedThumbnail', value.showFeedThumbnail);
+      AppStorage.setOrCreate('showRefreshFab', value.showRefreshFab);
+      AppStorage.setOrCreate('feedCardStyle', value.feedCardStyle);
+    } catch (_error) {
+      // 读取失败时沿用与上游一致的默认值。
+    }
+  }
+
+  private async restoreExperiencePreferences(): Promise<void> {
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const value: ExperiencePreferences = await new AppPreferencesStore(context).loadExperiencePreferences();
+      this.broadcastExperiencePreferences(value);
+      if (!this.startDestinationApplied) {
+        this.startDestinationApplied = true;
+        const tab = this.topLevelTabFromPreference(value.startDestination);
+        const displayIndex = this.bottomBarOrder.indexOf(tab);
+        this.topLevelTabIndex = displayIndex >= 0 ? displayIndex : 0;
+        this.tabsController.changeIndex(this.topLevelTabIndex);
+      }
+    } catch (_error) {
+      // 读取失败时沿用上游默认值。
+    }
+  }
+
+  private topLevelTabFromPreference(value: string): P1TopLevelTab {
+    if (value === 'Following') return P1TopLevelTab.FOLLOWING;
+    if (value === 'Hot') return P1TopLevelTab.HOT;
+    if (value === 'Daily') return P1TopLevelTab.DAILY;
+    if (value === 'ReadHistory') return P1TopLevelTab.HISTORY;
+    if (value === 'Collections') return P1TopLevelTab.COLLECTIONS;
+    if (value === 'Settings') return P1TopLevelTab.ACCOUNT;
+    return P1TopLevelTab.HOME;
+  }
+
+  private broadcastExperiencePreferences(value: ExperiencePreferences): void {
+    const activeTab = this.activeTopLevelTab();
+    const nextBottomBarOrder = this.decodeBottomBarOrder(value.bottomBarItems);
+    this.bottomBarOrder = nextBottomBarOrder;
+    const activeDisplayIndex = nextBottomBarOrder.indexOf(activeTab);
+    if (activeDisplayIndex >= 0) {
+      this.topLevelTabIndex = activeDisplayIndex;
+    } else if (this.topLevelTabIndex >= nextBottomBarOrder.length) {
+      this.topLevelTabIndex = 0;
+    }
+    AppStorage.setOrCreate('titleAutoHide', value.titleAutoHide);
+    AppStorage.setOrCreate('autoHideArticleBottomBar', value.autoHideArticleBottomBar);
+    AppStorage.setOrCreate('buttonSkipAnswer', value.buttonSkipAnswer);
+    AppStorage.setOrCreate('autoHideSkipAnswerButton', value.autoHideSkipAnswerButton);
+    AppStorage.setOrCreate('pinAnswerDate', value.pinAnswerDate);
+    AppStorage.setOrCreate('answerSwitchMode', value.answerSwitchMode);
+    AppStorage.setOrCreate('answerSwitchSensitivity', value.answerSwitchSensitivity);
+    AppStorage.setOrCreate('startDestination', value.startDestination);
+    AppStorage.setOrCreate('bottomBarItems', value.bottomBarItems);
+    AppStorage.setOrCreate('tapToRefresh', value.tapToRefresh);
+    AppStorage.setOrCreate('autoHideBottomBar', value.autoHideBottomBar);
+    AppStorage.setOrCreate('volumeKeyPageTurn', value.volumeKeyPageTurn);
+    AppStorage.setOrCreate('pageTurnSwitchAnswer', value.pageTurnSwitchAnswer);
+    AppStorage.setOrCreate('showPageTurnFab', value.showPageTurnFab);
+    AppStorage.setOrCreate('pageTurnPercent', value.pageTurnPercent);
+    AppStorage.setOrCreate('showPageTurnGuide', value.showPageTurnGuide);
+    AppStorage.setOrCreate('showContentEndMarker', value.showContentEndMarker);
+    AppStorage.setOrCreate('shareActionMode', value.shareActionMode);
+    AppStorage.setOrCreate('showSearchHotSearch', value.showSearchHotSearch);
+    AppStorage.setOrCreate('showSearchHistory', value.showSearchHistory);
+  }
+
+  private decodeBottomBarOrder(raw: string): number[] {
+    const values: string[] = raw.split(',');
+    const result: number[] = [];
+    for (let index = 0; index < values.length; index += 1) {
+      const tab = this.topLevelTabFromPreference(values[index]);
+      if (!result.includes(tab)) {
+        result.push(tab);
+      }
+    }
+    if (result.length < 3 || result.length > 5 || !result.includes(P1TopLevelTab.ACCOUNT)) {
+      return [P1TopLevelTab.HOME, P1TopLevelTab.FOLLOWING, P1TopLevelTab.HOT,
+        P1TopLevelTab.DAILY, P1TopLevelTab.ACCOUNT];
+    }
+    return result;
   }
 
   private async restoreThemeMode(): Promise<void> {

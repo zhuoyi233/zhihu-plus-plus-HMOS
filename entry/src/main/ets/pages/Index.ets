@@ -9,6 +9,8 @@ import {
   CollectionRepository,
   CommentRepository,
   ContentDraftStore,
+  ContentFilterRuntimeStore,
+  ContentBlockingStrategy,
   ContentRepository,
   DefaultChannelFeedRepository,
   DefaultCollectionRepository,
@@ -26,13 +28,13 @@ import {
   DefaultRecentFollowingUsersRepository,
   DefaultSearchRepository,
   DefaultOnlineHistoryRepository,
-  DefaultNotificationRepository,
+  DefaultMobileNotificationRepository,
   DefaultVoteRepository,
   FeedRepository,
   FollowRepository,
   getAppDatabase,
   getAppSessionOwner,
-  NotificationRepository,
+  MobileNotificationRepository,
   NotificationSettingsGateway,
   OpenedContentStore,
   OnlineHistoryRepository,
@@ -51,7 +53,8 @@ import {
   PinPublishRepository,
   QuestionAnswerFeedRepository,
   VoteRepository,
-  ZhihuHttpClient
+  ZhihuHttpClient,
+  ZhihuMobileHttpClient
 } from 'data';
 import { BackgroundTaskProbePage } from './BackgroundTaskProbe';
 import { DatabaseProbePage } from './DatabaseProbe';
@@ -93,6 +96,8 @@ import { LocalHistoryPage } from './LocalHistoryPage';
 import { CollectionPage } from './CollectionPage';
 import { CollectionContentPage } from './CollectionContentPage';
 import { NotificationPage } from './NotificationPage';
+import { NotificationTimelinePage } from './NotificationTimelinePage';
+import { PrivateMessagePage } from './PrivateMessagePage';
 import { NotificationSettingsPage } from './NotificationSettingsPage';
 import { ReadHistoryContentKind, ReadHistoryOpenTarget } from './ReadHistoryState';
 import { ProductionImageAttachmentUploaderFactory } from '../platform/SystemImageUploadPlatform';
@@ -128,7 +133,7 @@ struct Index {
   @State private followRepository?: FollowRepository = undefined;
   @State private collectionRepository?: CollectionRepository = undefined;
   @State private commentRepository?: CommentRepository = undefined;
-  @State private notificationRepository?: NotificationRepository = undefined;
+  @State private notificationRepository?: MobileNotificationRepository = undefined;
   @State private notificationSettings?: NotificationSettingsGateway = undefined;
   private answerPublishFactory: AnswerPublishPageControllerFactory | undefined = undefined;
   private answerImageUploaderFactory: AnswerPublishImageUploaderFactory | undefined = undefined;
@@ -152,7 +157,11 @@ struct Index {
     const blockingRuleStore = new BlockingRuleStore(getAppDatabase(context));
     const blockedFeedHistoryStore = new BlockedFeedHistoryStore(getAppDatabase(context));
     const preferencesStore = new AppPreferencesStore(context);
-    const blockingMatcher = new BlockingRuleMatcher(blockingRuleStore, preferencesStore);
+    const filterRuntimeStore = new ContentFilterRuntimeStore(getAppDatabase(context), blockedFeedHistoryStore);
+    const homeBlockingMatcher = new BlockingRuleMatcher(blockingRuleStore, preferencesStore,
+      ContentBlockingStrategy.HOME_FULL, preferencesStore, filterRuntimeStore);
+    const blockingMatcher = new BlockingRuleMatcher(blockingRuleStore, preferencesStore,
+      ContentBlockingStrategy.RULES_ONLY);
     sessionOwner.restoreDeferred().catch((_error: Error): void => {
     }).then((): void => {
       this.session = session;
@@ -160,7 +169,8 @@ struct Index {
       this.blockingRuleStore = blockingRuleStore;
       this.blockedFeedHistoryStore = blockedFeedHistoryStore;
       this.preferencesStore = preferencesStore;
-      this.homeRepository = new DefaultFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
+      this.homeRepository = new DefaultFeedRepository(new ZhihuHttpClient(session), homeBlockingMatcher,
+        preferencesStore, preferencesStore, new ZhihuMobileHttpClient(session), session);
       this.searchRepository = new DefaultSearchRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.followingRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.followingRecommendRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
@@ -182,7 +192,8 @@ struct Index {
       this.followRepository = new DefaultFollowRepository(new ZhihuHttpClient(session));
       this.collectionRepository = new DefaultCollectionRepository(new ZhihuHttpClient(session));
       this.commentRepository = new DefaultCommentRepository(new ZhihuHttpClient(session));
-      this.notificationRepository = new DefaultNotificationRepository(new ZhihuHttpClient(session));
+      this.notificationRepository = new DefaultMobileNotificationRepository(
+        new ZhihuMobileHttpClient(session));
       this.notificationSettings = new AppPreferencesStore(context);
       this.answerPublishFactory = new LocalDraftAnswerPublishControllerFactory(session, draftRepository,
         (editSeed: ExistingAnswerForEditing | undefined): AnswerPublishRepository =>
@@ -242,6 +253,10 @@ struct Index {
             onBack: () => void): void => this.collectionContentContent(id, navigate, onBack),
           notificationContent: (navigate: (destination: P1Destination) => void, onBack: () => void): void =>
             this.notificationContent(navigate, onBack),
+          notificationEntryContent: (entryName: string, title: string, navigate: (destination: P1Destination) => void): void =>
+            this.notificationEntryContent(entryName, title, navigate),
+          privateMessageContent: (peerId: string, peerName: string, avatarUrl: string, navigate: (destination: P1Destination) => void): void =>
+            this.privateMessageContent(peerId, peerName, avatarUrl, navigate),
           notificationSettingsContent: (navigate: (destination: P1Destination) => void): void =>
             this.notificationSettingsContent(navigate),
           blockingRulesContent: (onBack: () => void): void => this.blockingRulesContent(onBack),
@@ -252,8 +267,9 @@ struct Index {
             this.localHistoryContent(navigate, onBack),
           loginContent: (onBack: () => void, onAuthenticated: () => void, onScanDesktopLogin: () => void): void =>
             this.loginContent(onBack, onAuthenticated, onScanDesktopLogin),
-          technicalLabContent: (navigate: (destination: P1Destination) => void): void =>
-            this.technicalLabContent(navigate),
+          technicalLabContent: (navigate: (destination: P1Destination) => void,
+            onDeveloperModeDisabled: () => void): void =>
+            this.technicalLabContent(navigate, onDeveloperModeDisabled),
           readerProbeContent: (onBack: () => void): void => this.readerProbeContent(onBack),
           imageProbeContent: (onBack: () => void): void => this.imageProbeContent(onBack),
           databaseProbeContent: (onBack: () => void): void => this.databaseProbeContent(onBack),
@@ -278,7 +294,8 @@ struct Index {
       reloadToken: reloadToken,
       navigate: navigate,
       rules: this.blockingRuleStore,
-      history: this.blockedFeedHistoryStore
+      history: this.blockedFeedHistoryStore,
+      openedContentStore: this.openedContentStore
     });
   }
 
@@ -518,6 +535,28 @@ struct Index {
       settings: this.notificationSettings
     });
   }
+  @Builder
+  notificationEntryContent(entryName: string, title: string, navigate: (destination: P1Destination) => void) {
+    NotificationTimelinePage({
+      entryName: entryName,
+      repository: this.notificationRepository,
+      settings: this.notificationSettings,
+      session: this.session,
+      navigate: navigate
+    });
+  }
+
+  @Builder
+  privateMessageContent(peerId: string, peerName: string, avatarUrl: string, navigate: (destination: P1Destination) => void) {
+    PrivateMessagePage({
+      peerId: peerId,
+      peerName: peerName,
+      avatarUrl: avatarUrl,
+      repository: this.notificationRepository,
+      session: this.session,
+      navigate: navigate
+    });
+  }
 
   @Builder
   blockingRulesContent(onBack: () => void) {
@@ -580,8 +619,8 @@ struct Index {
   }
 
   @Builder
-  technicalLabContent(navigate: (destination: P1Destination) => void) {
-    TechnicalLabPage({ navigate: navigate });
+  technicalLabContent(navigate: (destination: P1Destination) => void, onDeveloperModeDisabled: () => void) {
+    TechnicalLabPage({ navigate: navigate, onDeveloperModeDisabled: onDeveloperModeDisabled });
   }
 
   @Builder

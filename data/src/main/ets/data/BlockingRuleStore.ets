@@ -1,5 +1,11 @@
 import { relationalStore } from '@kit.ArkData';
 import { AppDatabase } from './AppDatabase';
+import {
+  defaultRecommendationFilterPreferences,
+  QualityFilterMode,
+  RecommendationFilterPreferences,
+  RecommendationFilterPreferencesGateway
+} from '../preferences/RecommendationFilterPreferences';
 
 const KEYWORD_TABLE = 'blocked_keywords';
 const USER_TABLE = 'blocked_users';
@@ -17,7 +23,12 @@ const REGEX_QUANTIFIED_GROUP_PATTERN: RegExp = /\)[*+?{]/;
 export enum BlockingRuleKind {
   KEYWORD = 'keyword',
   USER = 'user',
-  TOPIC = 'topic'
+  TOPIC = 'topic',
+  QUALITY = 'quality',
+  SMART = 'smart',
+  ADVERTISEMENT = 'advertisement',
+  PAID = 'paid',
+  REVERSE = 'reverse'
 }
 
 export interface BlockedKeywordRule {
@@ -54,10 +65,25 @@ export interface BlockingPreferences {
 }
 
 export interface BlockableContentSummary {
+  contentId?: string;
+  contentKind?: string;
   title: string;
   excerpt: string;
+  content?: string;
+  url?: string;
   authorId?: string;
+  authorName?: string;
+  questionAuthorId?: string;
+  questionAuthorName?: string;
+  authorFollowerCount?: number;
+  authorIsFollowing?: boolean;
   topicIds: Array<string>;
+  voteupCount?: number;
+  answerCount?: number;
+  followerCount?: number;
+  isPaid?: boolean;
+  viewCount?: number;
+  opened?: boolean;
 }
 
 export interface BlockingMatch {
@@ -84,10 +110,42 @@ export interface BlockingPreferencesGateway {
 
 export interface ContentBlockingSession {
   match(content: BlockableContentSummary): BlockingMatch | undefined;
+  qualityReason?(content: BlockableContentSummary): string | undefined;
+  flush?(): Promise<void>;
 }
 
 export interface ContentBlockingMatcher {
   createSession(): Promise<ContentBlockingSession>;
+}
+
+export enum ContentBlockingStrategy {
+  RULES_ONLY = 'rules_only',
+  HOME_FULL = 'home_full'
+}
+
+export interface ContentFilterRuntimeSnapshot {
+  viewCounts: Record<string, number>;
+  openedKeys: Array<string>;
+}
+
+export interface ContentFilterOutcome {
+  content: BlockableContentSummary;
+  match?: BlockingMatch;
+}
+
+export interface ContentFilterStats {
+  totalSeen: number;
+  totalFiltered: number;
+  filterRate: number;
+  lastFilteredAt: number;
+}
+
+export interface ContentFilterRuntimeGateway {
+  loadSnapshot(): Promise<ContentFilterRuntimeSnapshot>;
+  recordOutcomes(outcomes: Array<ContentFilterOutcome>): Promise<void>;
+  loadStats(): Promise<ContentFilterStats>;
+  cleanupOldData(cutoff: number): Promise<void>;
+  clearAllData(): Promise<void>;
 }
 
 export function defaultBlockingPreferences(): BlockingPreferences {
@@ -180,15 +238,21 @@ export function matchBlockingRules(content: BlockableContentSummary, snapshot: B
   preferences: BlockingPreferences): BlockingMatch | undefined {
   const normalizedPreferences = normalizeBlockingPreferences(preferences);
   if (normalizedPreferences.userBlockingEnabled && content.authorId !== undefined) {
-    const authorId = content.authorId;
-    const user = snapshot.users.find((candidate: BlockedUserRule): boolean => candidate.userId === authorId);
+    const user = snapshot.users.find((candidate: BlockedUserRule): boolean => candidate.userId === content.authorId);
     if (user !== undefined) {
       return { kind: BlockingRuleKind.USER, ruleId: user.userId, reason: `屏蔽用户：${user.userName}` };
     }
   }
+  if (normalizedPreferences.userBlockingEnabled && content.questionAuthorId !== undefined) {
+    const user = snapshot.users.find((candidate: BlockedUserRule): boolean =>
+      candidate.userId === content.questionAuthorId);
+    if (user !== undefined) {
+      return { kind: BlockingRuleKind.USER, ruleId: user.userId, reason: `屏蔽提问者：${user.userName}` };
+    }
+  }
 
   if (normalizedPreferences.keywordBlockingEnabled) {
-    const text = `${content.title}\n${content.excerpt}`.substring(0, MAX_BLOCKABLE_TEXT_LENGTH);
+    const text = boundedBlockableText(content);
     const keyword = snapshot.keywords.find((candidate: BlockedKeywordRule): boolean =>
       matchesKeyword(text, candidate));
     if (keyword !== undefined) {
@@ -216,20 +280,119 @@ export function matchBlockingRules(content: BlockableContentSummary, snapshot: B
   return undefined;
 }
 
+function boundedBlockableText(content: BlockableContentSummary): string {
+  const fields: Array<string> = [content.title, content.excerpt, content.content ?? ''];
+  let result = '';
+  for (let index = 0; index < fields.length; index += 1) {
+    const separatorLength = result.length > 0 ? 1 : 0;
+    const remaining = MAX_BLOCKABLE_TEXT_LENGTH - result.length - separatorLength;
+    if (remaining <= 0) break;
+    const field = fields[index].substring(0, remaining);
+    result = result.length === 0 ? field : `${result}\n${field}`;
+  }
+  return result;
+}
+
+export function qualityFilterReason(content: BlockableContentSummary,
+  preferences: RecommendationFilterPreferences): string | undefined {
+  if (preferences.qualityFilterMode === QualityFilterMode.OFF || content.authorIsFollowing === true) {
+    return undefined;
+  }
+  if (content.contentKind === 'answer' && content.authorIsFollowing === false &&
+    content.voteupCount !== undefined && content.voteupCount < preferences.answerVoteupThreshold) {
+    return `回答赞同数低于 ${preferences.answerVoteupThreshold}`;
+  }
+  if (content.contentKind === 'article' && content.authorIsFollowing === false &&
+    ((content.voteupCount !== undefined && content.voteupCount < preferences.articleVoteupThreshold) ||
+      (content.authorFollowerCount !== undefined &&
+        content.authorFollowerCount < preferences.articleFollowersThreshold))) {
+    return '文章赞同数或作者粉丝数低于阈值';
+  }
+  if (content.contentKind === 'video' && content.authorIsFollowing === false &&
+    content.voteupCount !== undefined && content.voteupCount < preferences.videoVoteThreshold &&
+    content.authorFollowerCount !== undefined && content.authorFollowerCount < preferences.videoFollowersThreshold) {
+    return '视频赞同数或作者粉丝数低于阈值';
+  }
+  if (content.contentKind === 'question' && content.answerCount !== undefined &&
+    content.answerCount < preferences.questionAnswerThreshold && content.followerCount !== undefined &&
+    content.followerCount < preferences.questionFollowersThreshold) {
+    return '问题回答数或关注数低于阈值';
+  }
+  return undefined;
+}
+
+export function promotionalFilterReason(content: BlockableContentSummary,
+  preferences: RecommendationFilterPreferences): BlockingMatch | undefined {
+  if (preferences.blockPaidContent && content.isPaid === true) {
+    return { kind: BlockingRuleKind.PAID, ruleId: 'paid', reason: '知乎盐选付费内容' };
+  }
+  const text = `${content.url ?? ''}\n${content.content ?? ''}\n${content.excerpt}`;
+  if (preferences.blockZhihuAdPlatform && text.includes('xg.zhihu.com')) {
+    return { kind: BlockingRuleKind.ADVERTISEMENT, ruleId: 'xg.zhihu.com', reason: '知乎广告平台内容' };
+  }
+  if (preferences.blockZhihuSchool && (text.includes('d.zhihu.com') || text.includes('data-edu-card-id'))) {
+    return { kind: BlockingRuleKind.ADVERTISEMENT, ruleId: 'zhihu-school', reason: '知乎学堂内容' };
+  }
+  if (preferences.blockWeChatOfficialAccount && text.includes('mp.weixin.qq.com')) {
+    return { kind: BlockingRuleKind.ADVERTISEMENT, ruleId: 'mp.weixin.qq.com', reason: '微信公众号文章' };
+  }
+  return undefined;
+}
+
+export function matchRecommendationFilters(content: BlockableContentSummary,
+  preferences: RecommendationFilterPreferences): BlockingMatch | undefined {
+  const promotional = promotionalFilterReason(content, preferences);
+  if (preferences.reverseBlock) {
+    return promotionalFilterReason(content, defaultRecommendationFilterPreferences()) === undefined
+      ? { kind: BlockingRuleKind.REVERSE, ruleId: 'reverse', reason: '反向屏蔽：非广告或付费内容' }
+      : undefined;
+  }
+  if (!preferences.filterFollowedUserContent && content.authorIsFollowing === true) {
+    return undefined;
+  }
+  if (promotional !== undefined) {
+    return promotional;
+  }
+  const qualityReason = qualityFilterReason(content, preferences);
+  if (qualityReason !== undefined && preferences.qualityFilterMode === QualityFilterMode.HIDE) {
+    return { kind: BlockingRuleKind.QUALITY, ruleId: content.contentKind ?? 'content', reason: qualityReason };
+  }
+  if (preferences.enableContentFilter && content.opened !== true && (content.viewCount ?? 0) >= 2) {
+    return { kind: BlockingRuleKind.SMART, ruleId: content.contentId ?? 'content', reason: '已展示超过2次且未点击' };
+  }
+  return undefined;
+}
+
 export class BlockingRuleMatcher implements ContentBlockingMatcher {
   private readonly rules: BlockingRuleGateway;
   private readonly preferences: BlockingPreferencesGateway;
+  private readonly strategy: ContentBlockingStrategy;
+  private readonly recommendationPreferences?: RecommendationFilterPreferencesGateway;
+  private readonly runtime?: ContentFilterRuntimeGateway;
 
-  constructor(rules: BlockingRuleGateway, preferences: BlockingPreferencesGateway) {
+  constructor(rules: BlockingRuleGateway, preferences: BlockingPreferencesGateway, strategy: ContentBlockingStrategy,
+    recommendationPreferences?: RecommendationFilterPreferencesGateway, runtime?: ContentFilterRuntimeGateway) {
     this.rules = rules;
     this.preferences = preferences;
+    this.strategy = strategy;
+    this.recommendationPreferences = recommendationPreferences;
+    this.runtime = runtime;
   }
 
   async createSession(): Promise<ContentBlockingSession> {
     try {
       const snapshot = await this.rules.loadSnapshot();
       const preferences = await this.preferences.loadBlockingPreferences();
-      return new BlockingRuleMatchSession(snapshot, preferences);
+      if (this.strategy === ContentBlockingStrategy.RULES_ONLY) {
+        return new BlockingRuleMatchSession(this.strategy, snapshot, preferences);
+      }
+      if (this.recommendationPreferences === undefined || this.runtime === undefined) {
+        throw new Error('Home content blocking dependencies unavailable');
+      }
+      const recommendation = await this.recommendationPreferences.loadRecommendationFilterPreferences();
+      const runtimeSnapshot = await this.runtime.loadSnapshot();
+      return new BlockingRuleMatchSession(this.strategy, snapshot, preferences, recommendation, runtimeSnapshot,
+        this.runtime);
     } catch (_error) {
       throw new Error('Content blocking rules unavailable');
     }
@@ -237,17 +400,86 @@ export class BlockingRuleMatcher implements ContentBlockingMatcher {
 }
 
 class BlockingRuleMatchSession implements ContentBlockingSession {
+  private readonly strategy: ContentBlockingStrategy;
   private readonly snapshot: BlockingRuleSnapshot;
   private readonly preferences: BlockingPreferences;
+  private readonly recommendation?: RecommendationFilterPreferences;
+  private readonly runtimeSnapshot?: ContentFilterRuntimeSnapshot;
+  private readonly runtime?: ContentFilterRuntimeGateway;
+  private readonly outcomes: Array<ContentFilterOutcome> = [];
+  private flushed: boolean = false;
 
-  constructor(snapshot: BlockingRuleSnapshot, preferences: BlockingPreferences) {
+  constructor(strategy: ContentBlockingStrategy, snapshot: BlockingRuleSnapshot, preferences: BlockingPreferences,
+    recommendation?: RecommendationFilterPreferences, runtimeSnapshot?: ContentFilterRuntimeSnapshot,
+    runtime?: ContentFilterRuntimeGateway) {
+    this.strategy = strategy;
     this.snapshot = copyBlockingRuleSnapshot(snapshot);
     this.preferences = normalizeBlockingPreferences(preferences);
+    this.recommendation = recommendation;
+    this.runtimeSnapshot = runtimeSnapshot;
+    this.runtime = runtime;
   }
 
   match(content: BlockableContentSummary): BlockingMatch | undefined {
-    return matchBlockingRules(content, this.snapshot, this.preferences);
+    if (this.strategy === ContentBlockingStrategy.RULES_ONLY) {
+      return matchBlockingRules(content, this.snapshot, this.preferences);
+    }
+    const enriched = this.withRuntimeState(content);
+    const recommendation = this.recommendation;
+    if (recommendation === undefined) return matchBlockingRules(enriched, this.snapshot, this.preferences);
+    const recommendationMatch = matchRecommendationFilters(enriched, recommendation);
+    let result: BlockingMatch | undefined;
+    if (recommendationMatch !== undefined || recommendation.reverseBlock ||
+      (!recommendation.filterFollowedUserContent && enriched.authorIsFollowing === true)) {
+      result = recommendationMatch;
+    } else {
+      result = matchBlockingRules(enriched, this.snapshot, this.preferences);
+    }
+    this.outcomes.push(result === undefined ? { content: enriched } : { content: enriched, match: result });
+    return result;
   }
+
+  qualityReason(content: BlockableContentSummary): string | undefined {
+    return this.recommendation === undefined ? undefined : qualityFilterReason(content, this.recommendation);
+  }
+
+  flush(): Promise<void> {
+    if (this.runtime === undefined || this.flushed) return Promise.resolve();
+    this.flushed = true;
+    return this.runtime.recordOutcomes(this.outcomes.slice());
+  }
+
+  private withRuntimeState(content: BlockableContentSummary): BlockableContentSummary {
+    const key = contentIdentityKey(content);
+    if (key.length === 0 || this.runtimeSnapshot === undefined) return content;
+    const copy: BlockableContentSummary = {
+      contentId: content.contentId,
+      contentKind: content.contentKind,
+      title: content.title,
+      excerpt: content.excerpt,
+      content: content.content,
+      url: content.url,
+      authorId: content.authorId,
+      authorName: content.authorName,
+      questionAuthorId: content.questionAuthorId,
+      questionAuthorName: content.questionAuthorName,
+      authorFollowerCount: content.authorFollowerCount,
+      authorIsFollowing: content.authorIsFollowing,
+      topicIds: content.topicIds.slice(),
+      voteupCount: content.voteupCount,
+      answerCount: content.answerCount,
+      followerCount: content.followerCount,
+      isPaid: content.isPaid,
+      viewCount: this.runtimeSnapshot.viewCounts[key] ?? 0,
+      opened: this.runtimeSnapshot.openedKeys.includes(key)
+    };
+    return copy;
+  }
+}
+
+export function contentIdentityKey(content: BlockableContentSummary): string {
+  return content.contentKind === undefined || content.contentId === undefined ? '' :
+    `${content.contentKind}:${content.contentId}`;
 }
 
 export class BlockingRuleStore implements BlockingRuleGateway {

@@ -60,6 +60,7 @@ export class HomeFeedController {
   private requiresLogin: boolean = false;
   private retryLoadMore: boolean = false;
   private paginationRetryRequired: boolean = false;
+  private refreshPending: boolean = false;
 
   constructor(repository: FeedRepository, observer: HomeFeedStateObserver = (_state: HomeFeedViewState): void => {
   }) {
@@ -86,6 +87,7 @@ export class HomeFeedController {
     this.generation += 1;
     this.refreshing = false;
     this.loadingMore = false;
+    this.refreshPending = false;
     this.repository.cancel();
   }
 
@@ -110,6 +112,9 @@ export class HomeFeedController {
 
   refresh(): Promise<void> {
     if (!this.active || this.refreshing || this.loadingMore || this.phase === HomeFeedPhase.INITIAL_LOADING) {
+      if (this.active && (this.refreshing || this.loadingMore)) {
+        this.refreshPending = true;
+      }
       return Promise.resolve();
     }
     return this.loadFirstPage(this.items.length > 0);
@@ -170,6 +175,10 @@ export class HomeFeedController {
       if (this.isCurrent(generation)) {
         this.loadingMore = false;
         this.emit();
+        if (this.refreshPending) {
+          this.refreshPending = false;
+          void this.refresh();
+        }
       }
     }
   }
@@ -208,6 +217,10 @@ export class HomeFeedController {
       if (this.isCurrent(generation)) {
         this.refreshing = false;
         this.emit();
+        if (this.refreshPending) {
+          this.refreshPending = false;
+          void this.refresh();
+        }
       }
     }
   }

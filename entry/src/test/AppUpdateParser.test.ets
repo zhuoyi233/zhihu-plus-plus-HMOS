@@ -5,6 +5,7 @@ import {
   AUTO_UPDATE_CHECK_INTERVAL_MS,
   compareVersionNames,
   decodeLatestRelease,
+  decodeLatestReleaseAtom,
   isUpdateAnnouncementVisible,
   parseHmosTagVersion,
   resolveAppUpdateCheck,
@@ -61,6 +62,18 @@ export default function appUpdateParserTest(): void {
       expect(decodeLatestRelease('not-json')).assertEqual(undefined);
       expect(decodeLatestRelease('{"name":"no tag"}')).assertEqual(undefined);
       expect(decodeLatestRelease('{"tag_name":"nightly"}')).assertEqual(undefined);
+    });
+
+    it('decodesLatestReleaseFromAtomFallback', 0, () => {
+      const payload = '<?xml version="1.0"?><feed><entry>' +
+        '<updated>2026-09-06T12:41:08Z</updated>' +
+        '<link rel="alternate" type="text/html" ' +
+        'href="https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.4.0"/>' +
+        '<title>HMOSv0.4.0</title></entry></feed>';
+      const release = decodeLatestReleaseAtom(payload);
+      expect(release?.versionName).assertEqual('0.4.0');
+      expect(release?.tagName).assertEqual('HMOSv0.4.0');
+      expect(release?.publishedAt).assertEqual('2026-09-06T12:41:08Z');
     });
 
     it('resolvesUpdateAvailabilityAgainstLocalVersion', 0, () => {

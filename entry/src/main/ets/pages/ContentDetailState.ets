@@ -259,7 +259,8 @@ function cloneAuthor(author?: UserProfile): UserProfile | undefined {
     avatarUrl: author.avatarUrl,
     followerCount: author.followerCount,
     isFollowing: author.isFollowing,
-    isOrganization: author.isOrganization
+    isOrganization: author.isOrganization,
+    badge: author.badge
   };
 }
 
@@ -310,7 +311,9 @@ function cloneLoadedContent(content: LoadedContentDetail): LoadedContentDetail {
           author: cloneAuthor(content.value.author),
           voteState: content.value.voteState,
           thanksCount: content.value.thanksCount,
-          isThanked: content.value.isThanked
+          isThanked: content.value.isThanked,
+          endorsements: content.value.endorsements,
+          ipInfo: content.value.ipInfo
         }
       };
     case ContentDetailKind.ARTICLE:
@@ -329,7 +332,10 @@ function cloneLoadedContent(content: LoadedContentDetail): LoadedContentDetail {
           author: cloneAuthor(content.value.author),
           voteState: content.value.voteState,
           thanksCount: content.value.thanksCount,
-          isThanked: content.value.isThanked
+          isThanked: content.value.isThanked,
+          endorsements: content.value.endorsements,
+          topics: cloneQuestionTopics(content.value.topics),
+          ipInfo: content.value.ipInfo
         }
       };
   }

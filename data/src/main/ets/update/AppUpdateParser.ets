@@ -79,6 +79,41 @@ export function decodeLatestRelease(payload: string): AppUpdateRelease | undefin
   return release;
 }
 
+function decodeXmlText(value: string): string {
+  return value.replace(/&amp;/g, '&').replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'");
+}
+
+/**
+ * 解析 GitHub Releases Atom 的首条发布记录。Atom 页面不消耗 REST API 的匿名请求配额，
+ * 用作 api.github.com 返回 403/429 或暂时不可用时的只读备用源。
+ */
+export function decodeLatestReleaseAtom(payload: string): AppUpdateRelease | undefined {
+  const entryMatch = /<entry>([\s\S]*?)<\/entry>/.exec(payload);
+  if (entryMatch === null) {
+    return undefined;
+  }
+  const entry = entryMatch[1];
+  const titleMatch = /<title>([\s\S]*?)<\/title>/.exec(entry);
+  const linkMatch = /<link\s+[^>]*rel="alternate"[^>]*href="([^"]+)"[^>]*\/?\s*>/.exec(entry);
+  const updatedMatch = /<updated>([^<]+)<\/updated>/.exec(entry);
+  if (titleMatch === null || linkMatch === null) {
+    return undefined;
+  }
+  const tagName = decodeXmlText(titleMatch[1]).trim();
+  const versionName = parseHmosTagVersion(tagName);
+  if (versionName === undefined) {
+    return undefined;
+  }
+  return {
+    tagName: tagName,
+    versionName: versionName,
+    releaseTitle: tagName,
+    htmlUrl: decodeXmlText(linkMatch[1]),
+    publishedAt: updatedMatch === null ? '' : updatedMatch[1].trim()
+  };
+}
+
 /** 自动检查更新的节流间隔，对齐上游 UpdateManager 的 3 小时。 */
 export const AUTO_UPDATE_CHECK_INTERVAL_MS: number = 3 * 60 * 60 * 1000;
 

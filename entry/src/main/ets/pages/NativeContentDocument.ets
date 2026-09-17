@@ -1,7 +1,8 @@
+import { fileIo, fileUri } from '@kit.CoreFileKit';
 import { image } from '@kit.ImageKit';
 import { http } from '@kit.NetworkKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
-import { abilityAccessCtrl, Want } from '@kit.AbilityKit';
+import { Want } from '@kit.AbilityKit';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import {
   createSystemShareService
@@ -24,9 +25,31 @@ import {
   ReaderInlineKind,
   ReaderInlineRun
 } from 'reader';
+import {
+  READING_PROGRESS_BAR_HIT_WIDTH_VP,
+  READING_PROGRESS_BAR_RIGHT_INSET_VP,
+  ReadingProgressBar
+} from './components/ReadingProgressBar';
+import {
+  readerBlockSpacing,
+  readerBodyFontSize,
+  readerBodyLineHeight,
+  readerHeadingFontSize
+} from './ReaderTypography';
 
 function inlineFormulaWidth(tex: string): number {
   return Math.min(220, Math.max(20, tex.length * 9));
+}
+
+/**
+ * 块高缺失时的估算兜底（vp）：未渲染块按实测平均块高估，无实测值时用该值。
+ * 见 NativeContentDocument 的"内容总高估算"注释。
+ */
+const DEFAULT_BLOCK_HEIGHT_VP = 48;
+
+/** 暂无实测块时，未测块按"默认块高 + 一个块间距"计入估算。 */
+function defaultEstimatedBlockHeightVp(blockSpacingPercent: number): number {
+  return DEFAULT_BLOCK_HEIGHT_VP + readerBlockSpacing(blockSpacingPercent);
 }
 
 /** 对齐上游 telephoto 默认 ZoomSpec(maxZoomFactor = 2f)。 */
@@ -67,6 +90,7 @@ export struct ContentImagePreview {
   @State private previewOffsetY: number = 0;
   @State private actionStatus: string = '';
   private saveInFlight: boolean = false;
+  private statusTimerId: number = -1;
   private pinchStartScale: number = 1;
   /** 源图宽高比与容器尺寸：用于计算放大后允许的平移范围。 */
   private imageRatio: number = 0;
@@ -74,6 +98,13 @@ export struct ContentImagePreview {
   private containerHeight: number = 0;
   private panStartX: number = 0;
   private panStartY: number = 0;
+
+  aboutToDisappear(): void {
+    if (this.statusTimerId >= 0) {
+      clearTimeout(this.statusTimerId);
+      this.statusTimerId = -1;
+    }
+  }
 
   build() {
     Stack({ alignContent: Alignment.Center }) {
@@ -197,6 +228,22 @@ export struct ContentImagePreview {
     }
   }
 
+  /** 状态提示 2 秒自动消退；空串表示不展示。 */
+  private showStatus(message: string): void {
+    if (this.statusTimerId >= 0) {
+      clearTimeout(this.statusTimerId);
+      this.statusTimerId = -1;
+    }
+    this.actionStatus = message;
+    if (message.length === 0) {
+      return;
+    }
+    this.statusTimerId = setTimeout((): void => {
+      this.statusTimerId = -1;
+      this.actionStatus = '';
+    }, 2000);
+  }
+
   private async openInBrowser(): Promise<void> {
     const context = getAbilityContext();
     if (context === undefined || !isTrustedPreviewImageUrl(this.url)) {
@@ -209,36 +256,32 @@ export struct ContentImagePreview {
     try {
       await context.startAbility(want);
     } catch (_error) {
-      this.getUIContext().getPromptAction().showToast({ message: '暂时无法在浏览器中打开' });
-    }
+      this.getUIContext().getPromptAction().showToast({ message: '暂时无法在浏览器中打开' });    }
   }
 
+  /**
+   * 保存走系统安全弹窗（showAssetsCreationDialog，带图片预览与禁止/允许），无需
+   * WRITE_IMAGEVIDEO 权限：先下载到应用沙箱临时文件，用户允许后把字节写入返回的
+   * 媒体库 URI；用户拒绝返回空列表，视为取消。
+   */
   private async saveImage(): Promise<void> {
-    if (this.saveInFlight || !isTrustedPreviewImageUrl(this.url)) {
-      this.actionStatus = '图片来源不受支持';
+    if (this.saveInFlight) {
+      return;
+    }
+    if (!isTrustedPreviewImageUrl(this.url)) {
+      this.showStatus('图片来源不受支持');
       return;
     }
     const context = getAbilityContext();
     if (context === undefined) {
-      this.actionStatus = '当前页面无法访问相册';
+      this.showStatus('当前页面无法访问相册');
       return;
     }
     this.saveInFlight = true;
-    this.actionStatus = '正在保存…';
+    this.showStatus('正在下载图片…');
     let request: http.HttpRequest | undefined = undefined;
+    let tempPath: string = '';
     try {
-      await abilityAccessCtrl.createAtManager().requestPermissionsFromUser(
-        context,
-        ['ohos.permission.WRITE_IMAGEVIDEO']
-      );
-      const grantStatus = await abilityAccessCtrl.createAtManager().checkAccessToken(
-        context.applicationInfo.accessTokenId,
-        'ohos.permission.WRITE_IMAGEVIDEO'
-      );
-      if (grantStatus !== abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED) {
-        this.actionStatus = '未获得相册写入权限';
-        return;
-      }
       request = http.createHttp();
       const response = await request.request(this.url, {
         method: http.RequestMethod.GET,
@@ -251,30 +294,70 @@ export struct ContentImagePreview {
       });
       if (Number(response.responseCode) !== 200 || !(response.result instanceof ArrayBuffer) ||
         response.result.byteLength === 0 || response.result.byteLength > 8 * 1024 * 1024) {
-        this.actionStatus = '图片下载失败';
+        this.showStatus('图片下载失败');
         return;
       }
-      const helper = photoAccessHelper.getPhotoAccessHelper(context);
-      const changeRequest = photoAccessHelper.MediaAssetChangeRequest.createAssetRequest(
-        context,
-        photoAccessHelper.PhotoType.IMAGE,
-        previewImageExtension(this.url)
-      );
-      changeRequest.addResource(photoAccessHelper.ResourceType.IMAGE_RESOURCE, response.result);
-      await helper.applyChanges(changeRequest);
-      this.actionStatus = '已保存到相册';
+      const buffer: ArrayBuffer = response.result as ArrayBuffer;
+      const extension = previewImageExtension(this.url);
+      tempPath = `${context.cacheDir}/preview-save-${Date.now()}.${extension}`;
+      this.writeBufferToFile(tempPath, buffer);
+      this.showStatus('正在保存…');
+      const config: photoAccessHelper.PhotoCreationConfig = {
+        title: `zhihu_${Date.now()}`,
+        fileNameExtension: extension,
+        photoType: photoAccessHelper.PhotoType.IMAGE
+      };
+      const uris = await photoAccessHelper.getPhotoAccessHelper(context)
+        .showAssetsCreationDialog([fileUri.getUriFromPath(tempPath)], [config]);
+      if (uris.length === 0) {
+        this.showStatus('');
+        return;
+      }
+      this.writeBufferToUri(uris[0], buffer);
+      this.showStatus('已保存到相册');
     } catch {
-      this.actionStatus = '保存失败，请稍后重试';
+      this.showStatus('保存失败，请稍后重试');
     } finally {
       request?.destroy();
       this.saveInFlight = false;
+      this.removeTempFileBestEffort(tempPath);
+    }
+  }
+
+  private writeBufferToFile(path: string, buffer: ArrayBuffer): void {
+    const file = fileIo.openSync(path,
+      fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC);
+    try {
+      fileIo.writeSync(file.fd, buffer);
+    } finally {
+      fileIo.closeSync(file);
+    }
+  }
+
+  private writeBufferToUri(uri: string, buffer: ArrayBuffer): void {
+    const file = fileIo.openSync(uri, fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.TRUNC);
+    try {
+      fileIo.writeSync(file.fd, buffer);
+    } finally {
+      fileIo.closeSync(file);
+    }
+  }
+
+  private removeTempFileBestEffort(path: string): void {
+    if (path.length === 0) {
+      return;
+    }
+    try {
+      fileIo.unlinkSync(path);
+    } catch (_error) {
+      // 清理失败不影响保存结果
     }
   }
 
   private shareImage(): void {
     const context = getAbilityContext();
     if (context === undefined || !isTrustedPreviewImageUrl(this.url)) {
-      this.actionStatus = '图片来源不受支持';
+      this.showStatus('图片来源不受支持');
       return;
     }
     const shareService = createSystemShareService(context);
@@ -286,9 +369,9 @@ export struct ContentImagePreview {
       trustedImageUrl: this.url
     };
     shareService.share(payload).then((outcome: ShareOutcome): void => {
-      this.actionStatus = outcome === ShareOutcome.CANCELLED ? '' : '已打开分享面板';
+      this.showStatus(outcome === ShareOutcome.CANCELLED ? '' : '已打开分享面板');
     }).catch((): void => {
-      this.actionStatus = '暂时无法打开分享面板';
+      this.showStatus('暂时无法打开分享面板');
     });
   }
 }
@@ -302,6 +385,9 @@ struct ContentInlineFormula {
     sourceUrl: '',
     inlineRuns: []
   };
+  /** 排版偏好与宿主同源（AppStorage 广播），行内公式所在段落随字号/行高联动。 */
+  @StorageProp('contentFontSize') private fontSizePercent: number = 100;
+  @StorageProp('contentLineHeight') private lineHeightPercent: number = 160;
   @State private loadedRunIds: Array<string> = [];
   private pixelMaps: Map<string, image.PixelMap> = new Map();
   private active: boolean = false;
@@ -352,8 +438,8 @@ struct ContentInlineFormula {
         }
       }, (run: ReaderInlineRun): string => run.id)
     }
-    .fontSize($r('app.float.p1_body_font_size'))
-    .lineHeight(30)
+    .fontSize(readerBodyFontSize(this.fontSizePercent))
+    .lineHeight(readerBodyLineHeight(this.fontSizePercent, this.lineHeightPercent))
     .fontColor($r('app.color.primary_text'))
     .width('100%')
   }
@@ -506,6 +592,9 @@ export struct NativeContentDocument {
   onBottomEdgeChange?: (atBottom: boolean) => void;
   /** 回答详情页切换：正文是否贴在列表顶边（顶部过滑切上一答依赖此信号）。 */
   onTopEdgeChange?: (atTop: boolean) => void;
+  /** 电纸书翻页在正文边界继续翻页时，由回答页切换相邻回答。 */
+  onPageTurnPastStart?: () => void;
+  onPageTurnPastEnd?: () => void;
   /** 回答详情页关闭 Spring 边缘效果：自定义 overscroll 需要独占边界拖动量。 */
   disableEdgeSpring: boolean = false;
   /** 问题页正文折叠预览：正文超阈值（纯文本≥100 字或含图）时收起为 180vp 视口。 */
@@ -524,6 +613,33 @@ export struct NativeContentDocument {
   private lastYOffset: number = 0;
   private readonly dataSource: ReaderBlockDataSource = new ReaderBlockDataSource();
   private readonly scroller: Scroller = new Scroller();
+  /**
+   * 正文排版偏好（AppStorage 广播，键名与持久化键同名，对齐上游 contentFontSize 等）：
+   * 设置页滑块实时写入，详情页开着即联动。
+   */
+  @StorageProp('contentFontSize') @Watch('onTypographyChanged') private fontSizePercent: number = 100;
+  @StorageProp('contentLineHeight') @Watch('onTypographyChanged') private lineHeightPercent: number = 160;
+  @StorageProp('contentBlockSpacing') @Watch('onTypographyChanged') private blockSpacingPercent: number = 100;
+  @StorageProp('showPageTurnFab') private showPageTurnFab: boolean = false;
+  @StorageProp('volumeKeyPageTurn') private volumeKeyPageTurn: boolean = false;
+  @StorageProp('pageTurnPercent') private pageTurnPercent: number = 90;
+  @StorageProp('showPageTurnGuide') private showPageTurnGuide: boolean = false;
+  @StorageProp('showContentEndMarker') private showContentEndMarker: boolean = false;
+  @State private pageTurnGuideVisible: boolean = false;
+  /** 正文视口高度（vp）：List 的 onAreaChange 回填，供阅读进度条换算拇指高度。 */
+  @State private viewportHeightVp: number = 0;
+  /** 正文内容总高（vp）：本页 SDK 无最大滚动距离 API，按实测块高估算、触底时校准。 */
+  @State private contentHeightVp: number = 0;
+  /** 当前滚动偏移（vp）：onDidScroll 回填，驱动阅读进度条拇指位置。 */
+  @State private scrollYVp: number = 0;
+  /** 实测块高（vp，块 id → 高度）：已渲染块实测后用 onAreaChange 回填，用于估算内容总高。 */
+  private readonly blockHeights: Map<string, number> = new Map();
+  private measuredBlockHeightSumVp: number = 0;
+  private measuredBlockCount: number = 0;
+  /** 实测的非正文块固定槽位高（vp，槽位名 → 高度）：页头/正文页脚/页脚等。 */
+  private readonly chromeHeights: Map<string, number> = new Map();
+  /** 触底校准得到的精确内容总高（vp）：0 表示尚未校准；内容增高后自动失效。 */
+  private exactContentHeightVp: number = 0;
 
   @Builder
   private emptyFooter(): void {
@@ -538,7 +654,7 @@ export struct NativeContentDocument {
   private collapsibleBodyViewport() {
     Stack({ alignContent: Alignment.Bottom }) {
       Scroll() {
-        Column({ space: 12 }) {
+        Column({ space: this.blockSpacing() }) {
           ForEach(this.blocks, (item: ReaderBlock) => {
             this.readerBlock(item)
           }, (item: ReaderBlock): string => item.id)
@@ -626,9 +742,13 @@ export struct NativeContentDocument {
   }
 
   build() {
-    Stack({ alignContent: Alignment.Center }) {
-      List({ space: 12, scroller: this.scroller }) {
+    // TopEnd：正文 List 为 100%×100% 不受影响，进度条靠右缘对齐。
+    Stack({ alignContent: Alignment.TopEnd }) {
+      List({ space: this.blockSpacing(), scroller: this.scroller }) {
           ListItem() { this.documentHeader() }
+            .onAreaChange((_oldArea: Area, newArea: Area): void => {
+              this.reportChromeHeight('header', newArea);
+            })
           if (this.empty) {
             ListItem() {
               Text(this.emptyMessage).id('p2_content_document_empty')
@@ -645,14 +765,34 @@ export struct NativeContentDocument {
               ListItem() {
                 this.readerBlock(item)
               }
+              .onAreaChange((_oldArea: Area, newArea: Area): void => {
+                this.reportBlockHeight(item.id, newArea);
+              })
             }, (item: ReaderBlock): string => item.id)
           }
           ListItem() { this.documentBodyFooter() }
+            .onAreaChange((_oldArea: Area, newArea: Area): void => {
+              this.reportChromeHeight('bodyFooter', newArea);
+            })
           this.documentItems()
+          if (this.showContentEndMarker && !this.empty) {
+            ListItem() {
+              Text('— 内容结束 —')
+                .id('p3_content_end_marker')
+                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+                .width('100%')
+                .textAlign(TextAlign.Center)
+                .padding({ top: 24, bottom: 12 })
+            }
+          }
           ListItem() {
             this.documentFooter()
           }
           .width('100%')
+          .onAreaChange((_oldArea: Area, newArea: Area): void => {
+            this.reportChromeHeight('footer', newArea);
+          })
         }
         .id('p2_content_document_list')
         .width('100%')
@@ -667,9 +807,22 @@ export struct NativeContentDocument {
         .contentEndOffset(100)
         .cachedCount(6)
         .edgeEffect(this.disableEdgeSpring ? EdgeEffect.None : EdgeEffect.Spring)
+        .onAreaChange((_oldArea: Area, newArea: Area): void => {
+          const height = Number(newArea.height);
+          if (height > 0 && Math.abs(height - this.viewportHeightVp) > 0.5) {
+            this.viewportHeightVp = height;
+            this.refreshContentHeightEstimate();
+          }
+        })
         // 触底回调：问题详情页据此加载回答信息流下一页。
         .onReachEnd((): void => {
           this.updateBottomEdge(true);
+          // 触底即拿到真实内容总高：本页 SDK 无读取最大滚动距离的 API，
+          // 只能在此把估算值校准为精确值（此后拇指比例完全正确）。
+          const yOffset = this.scroller.currentOffset().yOffset;
+          this.scrollYVp = yOffset;
+          this.exactContentHeightVp = yOffset + this.viewportHeightVp;
+          this.refreshContentHeightEstimate();
           const callback = this.onListReachEnd;
           if (callback !== undefined) {
             callback();
@@ -686,15 +839,210 @@ export struct NativeContentDocument {
           }
           this.updateTopEdge(yOffset <= 2);
           this.lastYOffset = yOffset;
+          this.scrollYVp = yOffset;
+          this.refreshContentHeightEstimate();
           const callback = this.onScrollOffset;
           if (callback !== undefined) {
             callback(yOffset);
           }
         })
 
+      // 右缘可拖动阅读进度条：问题/回答/文章三页共用（上游 ArticleScreen 接入方式一致）。
+      // 上下留白与几何换算在组件内按上游 `ArticleScreen`（statusBars + 64 / systemBars + 96）
+      // 与 `VerticalReadingProgressBar`（拇指高度与行程都按"轨道高"）对齐，宿主无需传参。
+      // 直接作为 Stack 的右对齐子节点、宽仅 12vp：Stack 内重叠区域的触摸测试默认只命中
+      // 最上层节点，进度条可见时右缘这 12vp 归它（拖动定位），其余区域照常命中正文列表；
+      // 隐藏时进度条自身把 `hitTestBehavior` 切到 `HitTestMode.None`，右缘手势完整交回正文。
+      // 不用整页覆盖层：加宽后即使 `HitTestMode.Transparent` 也会进入命中链，
+      // 实测会干扰正文列表自身的滚动（详见 ReadingProgressBar 顶部注释）。
+      ReadingProgressBar({
+        scroller: this.scroller,
+        viewportHeightVp: this.viewportHeightVp,
+        contentHeightVp: this.contentHeightVp,
+        scrollYVp: this.scrollYVp,
+        onSeekStateChange: (dragging: boolean): void => {
+          if (dragging) {
+            // 拖动期间正文由 scrollTo 驱动：屏蔽贴边过滑，否则贴底向上拖滚动条
+            // 会被回答页误判为"下一答"过滑。
+            this.updateBottomEdge(false);
+            this.updateTopEdge(false);
+          }
+        }
+      })
+        .width(READING_PROGRESS_BAR_HIT_WIDTH_VP)
+        .height('100%')
+        .margin({ right: READING_PROGRESS_BAR_RIGHT_INSET_VP })
+
+      if (this.pageTurnGuideVisible && this.showPageTurnGuide) {
+        Divider()
+          .id('p3_page_turn_guide')
+          .color($r('app.color.brand_primary'))
+          .strokeWidth(1)
+          .opacity(0.55)
+          .width('100%')
+          .align(Alignment.Center)
+          .hitTestBehavior(HitTestMode.None)
+      }
+
+      if (this.showPageTurnFab) {
+        Column({ space: 8 }) {
+          Button({ type: ButtonType.Circle, stateEffect: true }) {
+            SymbolGlyph($r('sys.symbol.chevron_up')).fontSize(20)
+          }
+          .id('p3_page_turn_previous')
+          .width(44).height(44)
+          .backgroundColor($r('app.color.surface_background'))
+          .onClick((): void => this.turnPage(-1))
+          Button({ type: ButtonType.Circle, stateEffect: true }) {
+            SymbolGlyph($r('sys.symbol.chevron_down')).fontSize(20)
+          }
+          .id('p3_page_turn_next')
+          .width(44).height(44)
+          .backgroundColor($r('app.color.surface_background'))
+          .onClick((): void => this.turnPage(1))
+        }
+        .align(Alignment.End)
+        .margin({ right: 20 })
+      }
     }
     .width('100%')
     .height('100%')
+    .focusable(this.volumeKeyPageTurn)
+    .defaultFocus(this.volumeKeyPageTurn)
+    .onKeyPreIme((event: KeyEvent): boolean => {
+      if (!this.volumeKeyPageTurn || (event.keyCode !== 16 && event.keyCode !== 17)) {
+        return false;
+      }
+      if (event.type === KeyType.Down) {
+        this.turnPage(event.keyCode === 16 ? -1 : 1);
+      }
+      return true;
+    })
+  }
+
+  /** 正文字号（fp，`Text.fontSize` 传 number 即 fp）：16 × 字号%，默认 16 == 改造前 16fp。 */
+  private bodyFontSize(): number {
+    return readerBodyFontSize(this.fontSizePercent);
+  }
+
+  private turnPage(direction: number): void {
+    const maxOffset = Math.max(0, this.contentHeightVp - this.viewportHeightVp);
+    if (direction < 0 && this.scrollYVp <= 2) {
+      const callback = this.onPageTurnPastStart;
+      if (callback !== undefined) callback();
+      return;
+    }
+    if (direction > 0 && this.scrollYVp >= maxOffset - 2) {
+      const callback = this.onPageTurnPastEnd;
+      if (callback !== undefined) callback();
+      return;
+    }
+    const distance = this.viewportHeightVp * this.pageTurnPercent / 100;
+    const target = Math.max(0, Math.min(maxOffset, this.scrollYVp + direction * distance));
+    this.scroller.scrollTo({ xOffset: 0, yOffset: target, animation: true });
+    this.pageTurnGuideVisible = this.showPageTurnGuide;
+  }
+
+  /** 正文行高（fp）：行高 160% ↔ 改造前的 30，见 ReaderTypography 的归一说明。 */
+  private bodyLineHeight(): number {
+    return readerBodyLineHeight(this.fontSizePercent, this.lineHeightPercent);
+  }
+
+  /** 段间距/块间距（vp，`List({ space })` 传 number 即 vp）：12 × 段间距%，默认 12 == 改造前。 */
+  private blockSpacing(): number {
+    return readerBlockSpacing(this.blockSpacingPercent);
+  }
+
+  /** 标题字号（fp）：20 × 字号%，默认 20 == 改造前 p1_heading_font_size。 */
+  private headingFontSize(): number {
+    return readerHeadingFontSize(this.fontSizePercent);
+  }
+
+  /**
+   * 字号/行高/段间距变化：已实测块高随排版失效，清空重算；列表块自身靠 @StorageProp
+   * 依赖刷新（行内公式子组件同源，无需外部传参）。
+   */
+  private onTypographyChanged(): void {
+    this.blockHeights.clear();
+    this.measuredBlockHeightSumVp = 0;
+    this.measuredBlockCount = 0;
+    this.exactContentHeightVp = 0;
+    this.refreshContentHeightEstimate();
+  }
+
+  /** 正文块渲染后回报实测高度（vp），用于估算未渲染块的高度。 */
+  private reportBlockHeight(id: string, area: Area): void {
+    if (id.length === 0) {
+      return;
+    }
+    const height = Number(area.height);
+    if (!(height > 0)) {
+      return;
+    }
+    const previous = this.blockHeights.get(id);
+    if (previous !== undefined && Math.abs(previous - height) < 0.5) {
+      return;
+    }
+    this.blockHeights.set(id, height);
+    if (previous === undefined) {
+      this.measuredBlockCount += 1;
+      // 每个块自带一段 List space（末块多算的一段在误差范围内）。
+      this.measuredBlockHeightSumVp += height + this.blockSpacing();
+    } else {
+      this.measuredBlockHeightSumVp += height - previous;
+    }
+    this.refreshContentHeightEstimate();
+  }
+
+  /** 正文块之外的固定槽位（页头/正文页脚/页脚）实测高度（vp）。 */
+  private reportChromeHeight(key: string, area: Area): void {
+    const height = Number(area.height);
+    if (!(height > 0)) {
+      return;
+    }
+    const previous = this.chromeHeights.get(key);
+    if (previous !== undefined && Math.abs(previous - height) < 0.5) {
+      return;
+    }
+    this.chromeHeights.set(key, height);
+    this.refreshContentHeightEstimate();
+  }
+
+  private chromeHeightVp(): number {
+    let sum = 0;
+    this.chromeHeights.forEach((height: number): void => {
+      sum += height;
+    });
+    return sum;
+  }
+
+  /**
+   * 内容总高估算：已测块高 + 未测块数 × 实测均块高 + 页头页脚；
+   * 并以"已滚过的范围"为硬下界（估算偏小时拇指会越出轨道）。
+   * 触底校准值为精确值时优先采用，直到内容增高（回答流分页）使其失效。
+   */
+  private refreshContentHeightEstimate(): void {
+    const scrollExtent = this.scrollYVp + this.viewportHeightVp;
+    if (this.exactContentHeightVp > 0 && scrollExtent <= this.exactContentHeightVp + 1) {
+      this.updateContentHeight(this.exactContentHeightVp);
+      return;
+    }
+    this.exactContentHeightVp = 0;
+    const total = this.blocks.length;
+    const average = this.measuredBlockCount > 0
+      ? this.measuredBlockHeightSumVp / this.measuredBlockCount
+      : defaultEstimatedBlockHeightVp(this.blockSpacingPercent);
+    const estimated = this.measuredBlockHeightSumVp
+      + Math.max(0, total - this.measuredBlockCount) * average
+      + this.chromeHeightVp();
+    this.updateContentHeight(Math.max(estimated, scrollExtent));
+  }
+
+  private updateContentHeight(value: number): void {
+    const next = Math.round(value);
+    if (Math.abs(next - this.contentHeightVp) >= 1) {
+      this.contentHeightVp = next;
+    }
   }
 
   /** 触底/离底状态变化时通知页面侧（下滑切换回答依赖此信号）。 */
@@ -722,7 +1070,7 @@ export struct NativeContentDocument {
   private readerBlock(item: ReaderBlock) {
     if (item.kind === ReaderBlockKind.HEADING) {
       Text(item.text)
-        .fontSize($r('app.float.p1_heading_font_size'))
+        .fontSize(this.headingFontSize())
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.primary_text'))
         .width('100%')
@@ -744,8 +1092,8 @@ export struct NativeContentDocument {
       ContentInlineFormula({ item: item })
     } else {
       Text(item.kind === ReaderBlockKind.LIST_ITEM ? `• ${item.text}` : item.text)
-        .fontSize($r('app.float.p1_body_font_size'))
-        .lineHeight(30)
+        .fontSize(this.bodyFontSize())
+        .lineHeight(this.bodyLineHeight())
         .fontColor($r('app.color.primary_text'))
         .width('100%')
     }

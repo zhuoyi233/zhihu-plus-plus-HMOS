@@ -33,6 +33,7 @@ export struct CollectionPage {
   @State private showActionSheet: boolean = false;
   @State private pendingDelete?: CollectionSummary = undefined;
   @State private showDeleteSheet: boolean = false;
+  @StorageProp('bottomRectHeight') private bottomRectHeightVp: number = 0;
   private controller?: CollectionController;
 
   aboutToAppear(): void {
@@ -139,16 +140,29 @@ export struct CollectionPage {
       .backgroundColor($r('app.color.page_background'))
 
       if (this.phase === CollectionPhase.READY || this.phase === CollectionPhase.EMPTY) {
-        Button(this.busy ? '处理中…' : '新建', { type: ButtonType.Capsule })
+        // FAB 悬浮在 P1Shell 底部页签之上：页签 barHeight 64 + barBottomMargin（bottomRectHeight）
+        // + 悬浮渐变遮罩余量 12，避免被页签遮挡（对齐上游 Scaffold FAB 位于内容之上的行为）。
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          if (this.busy) {
+            LoadingProgress()
+              .width(20)
+              .height(20)
+              .color(Color.White)
+          } else {
+            SymbolGlyph($r('sys.symbol.plus'))
+              .fontSize(20)
+              .fontColor([Color.White])
+          }
+        }
           .id('p3_collections_create_button')
-          .width(96)
+          .width(48)
           .height(48)
-          .fontSize($r('app.float.p1_body_font_size'))
-          .fontColor(Color.White)
+          .padding(0)
+          .borderRadius(24)
           .backgroundColor($r('app.color.brand_primary'))
           .margin({
             right: $r('app.float.p1_page_padding'),
-            bottom: $r('app.float.p1_page_padding')
+            bottom: Math.max(this.bottomRectHeightVp, 0) + 76
           })
           .accessibilityText('新建收藏夹')
           .enabled(!this.busy)

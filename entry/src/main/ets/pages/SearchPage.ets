@@ -107,6 +107,8 @@ export struct SearchPage {
   @State private errorMessage: string = '';
   @State private history: Array<string> = [];
   @State private hotItems: Array<SearchHotItem> = [];
+  @StorageProp('showSearchHotSearch') private showSearchHotSearch: boolean = true;
+  @StorageProp('showSearchHistory') private showSearchHistory: boolean = true;
   // @StorageProp 键用字面量（装饰器要求编译期常量），值与 SearchTitleBar 导出的常量一一对应。
   @StorageProp('searchSubmitTick') @Watch('onSubmitTick') private submitTick: number = 0;
   @StorageProp('searchFilterTick') @Watch('onFilterTick') private filterTick: number = 0;
@@ -134,8 +136,12 @@ export struct SearchPage {
     if (this.initialQuery.trim().length > 0) {
       this.controller.submit(this.initialQuery);
     } else {
-      void this.loadHistory();
-      void this.loadHotSearch();
+      if (this.showSearchHistory) {
+        void this.loadHistory();
+      }
+      if (this.showSearchHotSearch) {
+        void this.loadHotSearch();
+      }
     }
   }
 
@@ -187,7 +193,7 @@ export struct SearchPage {
   }
 
   private recordHistory(query: string): void {
-    if (this.preferences === undefined) {
+    if (this.preferences === undefined || !this.showSearchHistory) {
       return;
     }
     const next: Array<string> = [query].concat(
@@ -271,7 +277,7 @@ export struct SearchPage {
   private idlePanel() {
     Scroll() {
       Column() {
-        if (this.history.length > 0) {
+        if (this.showSearchHistory && this.history.length > 0) {
           Row() {
             Text('搜索历史')
               .fontSize($r('app.float.p1_body_font_size'))

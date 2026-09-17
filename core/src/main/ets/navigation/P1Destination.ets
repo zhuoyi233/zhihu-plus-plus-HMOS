@@ -17,9 +17,16 @@ export enum P1DestinationName {
   COLLECTION = 'Collection',
   COLLECTIONS = 'Collections',
   NOTIFICATION = 'Notification',
+  NOTIFICATION_ENTRY = 'NotificationEntry',
   NOTIFICATION_SETTINGS = 'NotificationSettings',
+  PRIVATE_MESSAGE = 'PrivateMessage',
   LOGIN = 'Login',
   SETTINGS = 'Settings',
+  APPEARANCE_SETTINGS = 'AppearanceSettings',
+  IDENTITY_MANAGEMENT = 'IdentityManagement',
+  READING_SETTINGS = 'ReadingSettings',
+  SYSTEM_UPDATE_SETTINGS = 'SystemUpdateSettings',
+  RECOMMENDATION_FILTER_SETTINGS = 'RecommendationFilterSettings',
   BLOCKING_RULES = 'BlockingRules',
   BLOCKED_FEED_HISTORY = 'BlockedFeedHistory',
   READ_HISTORY = 'ReadHistory',
@@ -44,10 +51,15 @@ export interface StatelessDestination {
 }
 
 export interface InfrastructureDestination {
-  readonly name: P1DestinationName.LOGIN | P1DestinationName.SETTINGS | P1DestinationName.BLOCKING_RULES |
+  readonly name: P1DestinationName.LOGIN | P1DestinationName.SETTINGS | P1DestinationName.APPEARANCE_SETTINGS |
+    P1DestinationName.IDENTITY_MANAGEMENT | P1DestinationName.READING_SETTINGS |
+    P1DestinationName.SYSTEM_UPDATE_SETTINGS |
+    P1DestinationName.RECOMMENDATION_FILTER_SETTINGS |
+    P1DestinationName.BLOCKING_RULES |
     P1DestinationName.BLOCKED_FEED_HISTORY | P1DestinationName.READ_HISTORY | P1DestinationName.LOCAL_HISTORY |
     P1DestinationName.TECHNICAL_LAB |
-    P1DestinationName.NOTIFICATION_SETTINGS |
+    P1DestinationName.NOTIFICATION_SETTINGS | P1DestinationName.NOTIFICATION_ENTRY |
+    P1DestinationName.PRIVATE_MESSAGE |
     P1DestinationName.READER_PROBE | P1DestinationName.IMAGE_PROBE |
     P1DestinationName.DATABASE_PROBE | P1DestinationName.DEEP_LINK_PROBE |
     P1DestinationName.QR_SCAN_PROBE | P1DestinationName.QR_DESKTOP_LOGIN_SCAN |
@@ -85,8 +97,24 @@ export interface WritePinDestination {
   readonly draftId: string;
 }
 
+/** 通知分类/邀请回答时间线入口（对齐上游 `Notification.Entry`）。 */
+export interface NotificationEntryDestination {
+  readonly name: P1DestinationName.NOTIFICATION_ENTRY;
+  readonly entryName: string;
+  readonly title: string;
+}
+
+/** 私信会话页（对齐上游 `Notification.Message`）。 */
+export interface PrivateMessageDestination {
+  readonly name: P1DestinationName.PRIVATE_MESSAGE;
+  readonly peerId: string;
+  readonly peerName?: string;
+  readonly avatarUrl?: string;
+}
+
 export type P1Destination = StatelessDestination | InfrastructureDestination | ContentDestination |
-  CommentDestination | SearchDestination | WriteAnswerDestination | WritePinDestination;
+  CommentDestination | SearchDestination | WriteAnswerDestination | WritePinDestination |
+  NotificationEntryDestination | PrivateMessageDestination;
 
 export const MAX_SEARCH_QUERY_LENGTH: number = 200;
 export const MAX_DECIMAL_CONTENT_ID_LENGTH: number = 30;
@@ -134,9 +162,16 @@ export function isP1DestinationName(name: string): boolean {
     case P1DestinationName.COLLECTION:
     case P1DestinationName.COLLECTIONS:
     case P1DestinationName.NOTIFICATION:
+    case P1DestinationName.NOTIFICATION_ENTRY:
     case P1DestinationName.NOTIFICATION_SETTINGS:
+    case P1DestinationName.PRIVATE_MESSAGE:
     case P1DestinationName.LOGIN:
     case P1DestinationName.SETTINGS:
+    case P1DestinationName.APPEARANCE_SETTINGS:
+    case P1DestinationName.IDENTITY_MANAGEMENT:
+    case P1DestinationName.READING_SETTINGS:
+    case P1DestinationName.SYSTEM_UPDATE_SETTINGS:
+    case P1DestinationName.RECOMMENDATION_FILTER_SETTINGS:
     case P1DestinationName.BLOCKING_RULES:
     case P1DestinationName.BLOCKED_FEED_HISTORY:
     case P1DestinationName.READ_HISTORY:
@@ -191,8 +226,22 @@ export function decodeP1Destination(name: string, param: Object): P1Destination 
       return decodeContent(wire, P1DestinationName.DAILY_STORY);
     case P1DestinationName.NOTIFICATION:
       return hasNoParameters(wire) ? { name: P1DestinationName.NOTIFICATION } : undefined;
+    case P1DestinationName.NOTIFICATION_ENTRY:
+      return decodeNotificationEntry(wire);
+    case P1DestinationName.PRIVATE_MESSAGE:
+      return decodePrivateMessage(wire);
     case P1DestinationName.NOTIFICATION_SETTINGS:
       return hasNoParameters(wire) ? { name: P1DestinationName.NOTIFICATION_SETTINGS } : undefined;
+    case P1DestinationName.APPEARANCE_SETTINGS:
+      return hasNoParameters(wire) ? { name: P1DestinationName.APPEARANCE_SETTINGS } : undefined;
+    case P1DestinationName.IDENTITY_MANAGEMENT:
+      return hasNoParameters(wire) ? { name: P1DestinationName.IDENTITY_MANAGEMENT } : undefined;
+    case P1DestinationName.READING_SETTINGS:
+      return hasNoParameters(wire) ? { name: P1DestinationName.READING_SETTINGS } : undefined;
+    case P1DestinationName.SYSTEM_UPDATE_SETTINGS:
+      return hasNoParameters(wire) ? { name: P1DestinationName.SYSTEM_UPDATE_SETTINGS } : undefined;
+    case P1DestinationName.RECOMMENDATION_FILTER_SETTINGS:
+      return hasNoParameters(wire) ? { name: P1DestinationName.RECOMMENDATION_FILTER_SETTINGS } : undefined;
     case P1DestinationName.LOGIN:
       return hasNoParameters(wire) ? { name: P1DestinationName.LOGIN } : undefined;
     case P1DestinationName.SETTINGS:
@@ -277,12 +326,19 @@ export function isInfrastructureDestination(destination: P1Destination): boolean
   switch (destination.name) {
     case P1DestinationName.LOGIN:
     case P1DestinationName.SETTINGS:
+    case P1DestinationName.APPEARANCE_SETTINGS:
+    case P1DestinationName.IDENTITY_MANAGEMENT:
+    case P1DestinationName.READING_SETTINGS:
+    case P1DestinationName.SYSTEM_UPDATE_SETTINGS:
+    case P1DestinationName.RECOMMENDATION_FILTER_SETTINGS:
     case P1DestinationName.BLOCKING_RULES:
     case P1DestinationName.BLOCKED_FEED_HISTORY:
     case P1DestinationName.READ_HISTORY:
     case P1DestinationName.LOCAL_HISTORY:
     case P1DestinationName.TECHNICAL_LAB:
     case P1DestinationName.NOTIFICATION_SETTINGS:
+    case P1DestinationName.NOTIFICATION_ENTRY:
+    case P1DestinationName.PRIVATE_MESSAGE:
     case P1DestinationName.READER_PROBE:
     case P1DestinationName.IMAGE_PROBE:
     case P1DestinationName.DATABASE_PROBE:
@@ -312,6 +368,8 @@ export function shouldReloadAfterAuthentication(destination: P1Destination): boo
     case P1DestinationName.COLLECTION:
     case P1DestinationName.COLLECTIONS:
     case P1DestinationName.NOTIFICATION:
+    case P1DestinationName.NOTIFICATION_ENTRY:
+    case P1DestinationName.PRIVATE_MESSAGE:
     case P1DestinationName.WRITE_ANSWER:
     case P1DestinationName.WRITE_PIN:
     case P1DestinationName.PIN_DRAFTS:
@@ -350,6 +408,67 @@ function hasNoParameters(wire: JsonObjectValue): boolean {
     readString(wire, 'questionId') === undefined && readString(wire, 'answerId') === undefined &&
     readString(wire, 'draftId') === undefined &&
     hasOnlyFields(wire, ['name']);
+}
+
+/**
+ * 通知分类/邀请回答时间线入口（对齐上游 `Notification.Entry`）。entryName 仅接受
+ * 移动端 v3 的已知入口命名（comment/like/favlist_me/follow/invite 等）。
+ */
+function isSafeNotificationEntryName(value: string | undefined): boolean {
+  return typeof value === 'string' && /^[a-z_]{1,40}$/.test(value);
+}
+
+function isSafeNotificationEntryTitle(value: string | undefined): boolean {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= 60 &&
+    !/[\u0000-\u001F\u007F-\u009F]/.test(value);
+}
+
+function isSafePrivateMessagePeerId(value: string | undefined): boolean {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value);
+}
+
+function isSafePrivateMessagePeerName(value: string | undefined): boolean {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= 60 &&
+    !/[\u0000-\u001F\u007F-\u009F]/.test(value);
+}
+
+function isSafePrivateMessageAvatarUrl(value: string | undefined): boolean {
+  return typeof value === 'string' && value.length > 0 && value.length <= 500 &&
+    /^https:\/\/[A-Za-z0-9.-]+(?::\d{2,5})?\/[A-Za-z0-9._~/%-]*(\?[A-Za-z0-9._~&=%-]*)?$/.test(value);
+}
+
+function decodeNotificationEntry(wire: JsonObjectValue): NotificationEntryDestination | undefined {
+  const entryName = readString(wire, 'entryName');
+  const title = readString(wire, 'title');
+  if (!isSafeNotificationEntryName(entryName) || !isSafeNotificationEntryTitle(title) ||
+    !hasOnlyFields(wire, ['name', 'entryName', 'title'])) {
+    return undefined;
+  }
+  const destination: NotificationEntryDestination = {
+    name: P1DestinationName.NOTIFICATION_ENTRY,
+    entryName: entryName as string,
+    title: title as string
+  };
+  return destination;
+}
+
+function decodePrivateMessage(wire: JsonObjectValue): PrivateMessageDestination | undefined {
+  const peerId = readString(wire, 'peerId');
+  const peerName = readString(wire, 'peerName');
+  const avatarUrl = readString(wire, 'avatarUrl');
+  if (!isSafePrivateMessagePeerId(peerId) ||
+    (peerName !== undefined && !isSafePrivateMessagePeerName(peerName)) ||
+    (avatarUrl !== undefined && !isSafePrivateMessageAvatarUrl(avatarUrl)) ||
+    !hasOnlyFields(wire, ['name', 'peerId', 'peerName', 'avatarUrl'])) {
+    return undefined;
+  }
+  const destination: PrivateMessageDestination = {
+    name: P1DestinationName.PRIVATE_MESSAGE,
+    peerId: peerId as string,
+    peerName: peerName,
+    avatarUrl: avatarUrl
+  };
+  return destination;
 }
 
 function decodeWriteAnswer(wire: JsonObjectValue): WriteAnswerDestination | undefined {

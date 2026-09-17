@@ -4,6 +4,13 @@ export enum ContentVoteState {
   DOWN = 'down'
 }
 
+/** 作者认证徽章（对齐上游 OfficialBadge 的 display 精简模型，详情页作者名旁渲染）。 */
+export interface AuthorBadge {
+  readonly title: string;
+  readonly description: string;
+  readonly iconUrl: string;
+}
+
 export interface UserProfile {
   id: string;
   name: string;
@@ -13,6 +20,8 @@ export interface UserProfile {
   followerCount: number;
   isFollowing: boolean;
   isOrganization: boolean;
+  /** 作者认证徽章（badge_v2）；未返回时缺省。 */
+  badge?: AuthorBadge;
 }
 
 export interface PeopleProfile extends UserProfile {
@@ -70,6 +79,10 @@ export interface AnswerEndorsementDisplay {
   readonly backgroundColorAlpha: number;
   readonly textColorGroup?: string;
   readonly textColorAlpha: number;
+  /** 前导图标 key（如 zhicon_icon_24_chat_bubble_hash_fill → # 图标）；未返回时缺省。 */
+  readonly leadingIconKey?: string;
+  /** 尾随图标 key（如 zhicon_icon_16_arrow_right / arrow_down → 箭头）；未返回时缺省。 */
+  readonly trailingIconKey?: string;
 }
 
 export interface Answer {
@@ -116,6 +129,8 @@ export interface Article {
   isThanked?: boolean;
   /** 文章认可徽章流（对齐上游 Article.endorsements）。 */
   endorsements?: Array<AnswerEndorsementDisplay>;
+  /** 文章话题（详情 include 的 topics，信息头胶囊流展示）；未返回时缺省。 */
+  topics?: QuestionTopicSummary[];
   /** IP 属地（如「广东」）；接口未返回时缺省。 */
   ipInfo?: string;
 }
@@ -123,7 +138,8 @@ export interface Article {
 export enum FeedTargetKind {
   QUESTION = 'question',
   ANSWER = 'answer',
-  ARTICLE = 'article'
+  ARTICLE = 'article',
+  VIDEO = 'video'
 }
 
 export interface FeedTargetSummary {
@@ -132,19 +148,30 @@ export interface FeedTargetSummary {
   title: string;
   excerpt: string;
   url: string;
-  voteupCount: number;
-  commentCount: number;
+  voteupCount?: number;
+  commentCount?: number;
+  thumbnailUrl?: string;
   answerCount?: number;
   visitCount?: number;
   followerCount?: number;
   author?: UserProfile;
+  /** 回答所属问题的提问者；仅使用上游真实字段，不按名称推断身份。 */
+  questionAuthor?: UserProfile;
+  /** Feed 响应中实际返回的作者质量信号；缺省表示上游未返回，不能按 0/未关注处理。 */
+  authorFollowerCount?: number;
+  authorIsFollowing?: boolean;
   topicIds: Array<string>;
+  content?: string;
+  isPaid?: boolean;
+  qualityFilterReason?: string;
 }
 
 export interface FeedItem {
   id: string;
   verb: string;
   actionText?: string;
+  /** 本地推荐（LOCAL 模式）理由标注，对齐上游 reasonDisplay；仅在本地排序页写入。 */
+  recommendationReason?: string;
   createdAt: number;
   updatedAt: number;
   target: FeedTargetSummary;

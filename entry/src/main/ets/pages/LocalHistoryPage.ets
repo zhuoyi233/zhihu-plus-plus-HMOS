@@ -1,5 +1,5 @@
 import { ReadHistoryGateway } from 'data';
-import { feedPullDownIndicator, FeedPullDownIndicatorOptions } from './AppPageChrome';
+import { FLOATING_TITLE_BAR_OFFSET, feedPullDownIndicator, FeedPullDownIndicatorOptions } from './AppPageChrome';
 import { ComponentContent } from '@kit.ArkUI';
 import {
   LocalHistoryController,
@@ -25,6 +25,7 @@ export struct LocalHistoryPage {
     loadingMore: false,
     canLoadMore: false
   };
+  @State private refreshing: boolean = false;
   private controller?: LocalHistoryController;
   private refreshContent?: ComponentContent<FeedPullDownIndicatorOptions> = undefined;
 
@@ -48,6 +49,9 @@ export struct LocalHistoryPage {
     }
     this.controller = new LocalHistoryController(history, (state: ReadHistoryViewState): void => {
       this.viewState = state;
+      // 对齐上游 FeedPullToRefresh：指示器 = 下拉触发 && 加载中，加载结束（无论成败）才停。
+      // Refresh 需 $$ 双向绑定让手势回写生效，否则刷新圈会永远卡住（见 ReadHistoryPage 注释）。
+      this.refreshing = state.busy && state.phase === ReadHistoryPhase.LOADING;
     });
     this.refreshContent = new ComponentContent(this.getUIContext(), wrapBuilder(feedPullDownIndicator),
       new FeedPullDownIndicatorOptions());
@@ -97,7 +101,7 @@ export struct LocalHistoryPage {
           .width('100%')
         } else {
           Refresh({
-            refreshing: false,
+            refreshing: $$this.refreshing,
             refreshingContent: this.refreshContent,
             offset: 80,
             friction: 100
@@ -125,8 +129,10 @@ export struct LocalHistoryPage {
       }
       .width('100%')
       .height('100%')
+      // 让位统一约定：内容容器 padding top = FLOATING_TITLE_BAR_OFFSET，刷新指示区域
+      // 从悬浮标题栏下沿开始（对齐上游 FeedPullToRefresh 的 indicator padding）
       .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
-        top: 94, bottom: $r('app.float.p1_page_padding') })
+        top: FLOATING_TITLE_BAR_OFFSET, bottom: $r('app.float.p1_page_padding') })
       .backgroundColor($r('app.color.page_background'))
     }
     .id('p2_local_history_page')

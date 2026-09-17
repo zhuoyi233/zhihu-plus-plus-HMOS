@@ -7,7 +7,8 @@ import {
   FeedItem,
   FeedRepository,
   FeedTargetKind,
-  isUpdateAnnouncementVisible
+  isUpdateAnnouncementVisible,
+  OpenedContentStore
 } from 'data';
 import { Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -23,10 +24,12 @@ import { ComponentContent } from '@kit.ArkUI';
 import {
   AppPageStatusKind,
   AppPageStatusPanel,
+  FLOATING_TITLE_BAR_OFFSET,
   FeedPullDownIndicatorOptions,
   feedPullDownIndicator
 } from './AppPageChrome';
 import { HomeFeedController, HomeFeedPhase, HomeFeedViewState } from './HomeFeedState';
+import { DraggableRefreshButton } from './components/DraggableRefreshButton';
 
 const PROJECT_RELEASES_URI: string = 'https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/latest';
 
@@ -35,13 +38,22 @@ export struct HomeFeedPage {
   repository: FeedRepository | undefined = new DefaultFeedRepository();
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
+  openedContentStore: OpenedContentStore | undefined = undefined;
   @Prop @Watch('reloadAfterAuthentication') reloadToken: number = 0;
   // 登录成功重载信号：reloadToken 走 Builder 参数、@Provide/@Consume 在 HdsTabs 的
   // TabContent 构建树下均实测不可靠，AppStorage 广播是可靠通道（同 bottomRectHeight）
   @StorageProp('loginFeedReloadTick') @Watch('onLoginFeedReloadTick') loginFeedReloadTick: number = 0;
   // 双击底栏“首页”页签刷新：复用下拉刷新链路
   @StorageProp('tabRefreshTick') @Watch('onTabRefreshRequested') tabRefreshTick: number = 0;
+  @StorageProp('contentFilterSettingsTick') @Watch('onContentFilterSettingsChanged')
+  private contentFilterSettingsTick: number = 0;
   @StorageProp('tabRefreshTabIndex') tabRefreshTabIndex: number = -1;
+  @StorageProp('tabScrollTopTick') @Watch('onTabScrollTopRequested') private tabScrollTopTick: number = 0;
+  @StorageProp('tabScrollTopTabIndex') private tabScrollTopTabIndex: number = -1;
+  @StorageProp('showFeedThumbnail') private showFeedThumbnail: boolean = true;
+  @StorageProp('showRefreshFab') private showRefreshFab: boolean = true;
+  @StorageProp('feedCardStyle') private feedCardStyle: string = 'divider';
+  @StorageProp('fabOpacity') private fabOpacity: number = 100;
   // 首页更新卡片（对齐上游 HomeScreen 顶部 AnnouncementCard）：P1Shell 启动检查到新版本后经
   // AppStorage 广播（HdsTabs 树下跨页面信号唯一可靠通道）。“以后”仅本次会话内忽略，对齐上游。
   @StorageProp('homeUpdateAnnouncementVersion') private pendingUpdateVersion: string = '';
@@ -66,6 +78,8 @@ export struct HomeFeedPage {
   private controller: HomeFeedController | undefined = undefined;
   private blockingAction?: BlockingActionController;
   private pendingBlockItem?: FeedItem = undefined;
+  private readonly listScroller: ListScroller = new ListScroller();
+  private firstVisibleIndex: number = 0;
 
   aboutToAppear(): void {
     this.refreshContent = new ComponentContent(this.getUIContext(), wrapBuilder(feedPullDownIndicator),
@@ -119,8 +133,24 @@ export struct HomeFeedPage {
     this.controller?.refresh();
   }
 
+  private onContentFilterSettingsChanged(): void {
+    this.controller?.refresh();
+  }
+
   private onTabRefreshRequested(): void {
     if (this.tabRefreshTabIndex === 0) {
+      this.controller?.refresh();
+    }
+  }
+
+  private onTabScrollTopRequested(): void {
+    if (this.tabScrollTopTabIndex !== 0) {
+      return;
+    }
+    if (this.firstVisibleIndex > 0) {
+      this.firstVisibleIndex = 0;
+      this.listScroller.scrollToIndex(0, true, ScrollAlign.START);
+    } else {
       this.controller?.refresh();
     }
   }
@@ -158,7 +188,7 @@ export struct HomeFeedPage {
             offset: 80,
             friction: 100
           }) {
-            List() {
+            List({ scroller: this.listScroller }) {
               if (isUpdateAnnouncementVisible(this.pendingUpdateVersion, this.dismissedUpdateVersion)) {
                 ListItem() {
                   this.updateAnnouncementCard()
@@ -170,7 +200,7 @@ export struct HomeFeedPage {
                 ListItem() {
                   this.feedCard(item);
                 }
-                .margin({ bottom: $r('app.float.p1_spacing_medium') })
+                .margin({ bottom: this.feedCardStyle === 'card' ? $r('app.float.p1_spacing_medium') : 0 })
               }, (item: FeedItem): string => feedItemIdentity(item))
 
               if (this.loadingMore) {
@@ -186,10 +216,18 @@ export struct HomeFeedPage {
                 .padding({ top: 12, bottom: 12 })
               }
             }
+            .onScrollIndex((start: number): void => {
+              const previous = this.firstVisibleIndex;
+              this.firstVisibleIndex = start;
+              if (start > previous) {
+                AppStorage.setOrCreate('bottomBarHiddenByScroll', true);
+              } else if (start < previous || start === 0) {
+                AppStorage.setOrCreate('bottomBarHiddenByScroll', false);
+              }
+            })
             .id('p2_home_feed_list')
             .width('100%')
             .scrollBar(BarState.Off)
-            .padding({ top: 94 })
             .height('100%')
             .edgeEffect(EdgeEffect.Spring)
             .onReachEnd(() => this.controller?.loadMore())
@@ -217,11 +255,27 @@ export struct HomeFeedPage {
       .alignItems(HorizontalAlign.Start)
       .width('100%')
       .height('100%')
+      // 让位统一约定：内容容器 padding top = FLOATING_TITLE_BAR_OFFSET，Refresh 指示
+      // 区域从悬浮标题栏下沿开始（对齐上游 FeedPullToRefresh 的 indicator padding）；
+      // 列表不设顶 padding，滚动内容仍可穿越玻璃标题栏（List 默认不裁剪）
       .padding({
         left: $r('app.float.p1_page_padding'),
         right: $r('app.float.p1_page_padding'),
+        top: FLOATING_TITLE_BAR_OFFSET,
         bottom: $r('app.float.p1_page_padding')
       })
+
+      if (this.showRefreshFab && this.phase === HomeFeedPhase.READY) {
+        DraggableRefreshButton({
+          elementId: 'p3_home_refresh_fab',
+          accessibilityLabel: '刷新首页',
+          fabOpacity: this.fabOpacity,
+          loading: this.refreshing,
+          onRefresh: (): void => {
+            void this.controller?.refresh();
+          }
+        })
+      }
     }
     .id('p2_home_top_start_container')
     .width('100%')
@@ -369,6 +423,23 @@ export struct HomeFeedPage {
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
 
+        if ((item.target.qualityFilterReason ?? '').length > 0) {
+          Text(`质量屏蔽规则：${item.target.qualityFilterReason}`)
+            .id(`p3_home_quality_rule_${item.target.kind}_${item.target.id}`)
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor($r('app.color.brand_primary'))
+            .width('100%')
+        }
+
+        if (this.showFeedThumbnail && (item.target.thumbnailUrl ?? '').length > 0) {
+          Image(item.target.thumbnailUrl)
+            .width('100%')
+            .height(128)
+            .borderRadius($r('app.float.p1_spacing_small'))
+            .objectFit(ImageFit.Cover)
+            .alt('内容缩略图')
+        }
+
         if (item.target.excerpt.trim().length > 0) {
           Text(item.target.excerpt)
             .fontSize($r('app.float.p1_body_font_size'))
@@ -389,10 +460,10 @@ export struct HomeFeedPage {
           } else {
             Blank().layoutWeight(1)
           }
-          Text(`${item.target.voteupCount} 赞同`)
+          Text(`${item.target.voteupCount ?? '—'} 赞同`)
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
-          Text(`${item.target.commentCount} 评论`)
+          Text(`${item.target.commentCount ?? '—'} 评论`)
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
         }
@@ -404,10 +475,27 @@ export struct HomeFeedPage {
     .id(`p2_home_feed_card_${item.target.kind}_${item.target.id}`)
     .width('100%')
     .padding($r('app.float.p1_card_padding'))
-    .borderRadius($r('app.float.p1_card_radius'))
-    .backgroundColor($r('app.color.surface_background'))
+    .borderRadius(this.feedCardStyle === 'card' ? $r('app.float.p1_card_radius') : 0)
+    .backgroundColor(this.feedCardStyle === 'card' ? $r('app.color.surface_background') : Color.Transparent)
+    // border 的 radius 优先级高于 borderRadius 属性（未指定时按 0 处理），
+    // 卡片模式必须把圆角同步写进 border，否则背景圆角被重置成直角。
+    .border({
+      width: { bottom: this.feedCardStyle === 'divider' ? 1 : 0 },
+      color: $r('app.color.divider_color'),
+      radius: this.feedCardStyle === 'card' ? $r('app.float.p1_card_radius') : 0
+    })
     .accessibilityText(`打开${feedKindLabel(item.target.kind)}：${item.target.title}`)
-    .onClick(() => this.navigate(homeFeedDestination(item)))
+    .onClick((): void => this.openFeedItem(item))
+  }
+
+  private openFeedItem(item: FeedItem): void {
+    void this.openedContentStore?.upsert({
+      contentKey: `${item.target.kind}:${item.target.id}`,
+      openedAt: Date.now(),
+      contentType: item.target.kind,
+      title: item.target.title
+    }).catch((_error: Error): void => {});
+    this.navigate(homeFeedDestination(item));
   }
 
   private feedBlockMenu(item: FeedItem): Array<MenuElement> {
@@ -560,6 +648,8 @@ export function homeFeedDestination(item: FeedItem): P1Destination {
       return { name: P1DestinationName.ANSWER, id: item.target.id };
     case FeedTargetKind.ARTICLE:
       return { name: P1DestinationName.ARTICLE, id: item.target.id };
+    case FeedTargetKind.VIDEO:
+      return { name: P1DestinationName.VIDEO, id: item.target.id };
   }
 }
 
@@ -571,10 +661,18 @@ export function feedKindLabel(kind: FeedTargetKind): string {
       return '回答';
     case FeedTargetKind.ARTICLE:
       return '文章';
+    case FeedTargetKind.VIDEO:
+      return '视频';
   }
 }
 
 export function homeFeedActionLabel(item: FeedItem): string {
+  // 对齐上游：LOCAL 模式显示本地推荐理由（reasonDisplay），其余模式显示来源标注
+  // （移动端卡「手机版推荐」/ Web 卡 action_text），均缺失时兜底「推荐内容」。
+  const reason = item.recommendationReason?.trim() ?? '';
+  if (reason.length > 0) {
+    return reason;
+  }
   const actionText = item.actionText?.trim() ?? '';
   return actionText.length > 0 ? actionText : '推荐内容';
 }

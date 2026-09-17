@@ -33,6 +33,14 @@ export interface ZhihuRequestHeaders {
   'x-zse-96'?: string;
   'x-xsrftoken'?: string;
   'Content-Type'?: string;
+  /** 以下为移动端协议（api.zhihu.com）专用头，见 ZhihuMobileHttpClient。 */
+  'x-api-version'?: string;
+  'x-app-version'?: string;
+  'x-app-za'?: string;
+  'x-app-build'?: string;
+  'x-app-bundleid'?: string;
+  'x-app-flavor'?: string;
+  'x-network-type'?: string;
 }
 
 export interface ZhihuHttpRequest {
@@ -47,6 +55,8 @@ export interface ZhihuHttpRequest {
   /** 仅接受站内路径，防止调用方借 Referer 写入任意外部地址。 */
   refererPath?: string;
   contentType?: string;
+  /** 知乎身份管理接口需要官方移动端兼容头；仅用于 api.zhihu.com。 */
+  useIdentityHeaders?: boolean;
 }
 
 export interface PreparedZhihuHttpRequest {
@@ -125,6 +135,9 @@ export function prepareZhihuHttpRequest(
   }
   if ((request.useSession === true || request.signWithZse === true || request.includeXsrfToken === true) &&
     !isSessionCapableZhihuRequestUrl(request.url)) {
+    throw new HttpFailure(HttpFailureKind.CLIENT);
+  }
+  if (request.useIdentityHeaders === true && !/^https:\/\/api\.zhihu\.com(?:[/?#]|$)/.test(request.url)) {
     throw new HttpFailure(HttpFailureKind.CLIENT);
   }
   let cookieHeader: string | undefined = undefined;
@@ -206,6 +219,28 @@ export function prepareZhihuHttpRequest(
       'User-Agent': ZHIHU_USER_AGENT
     };
   }
+  if (request.useIdentityHeaders === true) {
+    headers = {
+      'Accept': headers.Accept,
+      'User-Agent': 'com.zhihu.android/Futureve/11.2.0 Mozilla/5.0 (Linux; Android 12; ' +
+        'sdk_gphone64_arm64 Build/SE1A.220630.001.A1; wv) AppleWebKit/537.36 (KHTML, like Gecko) ' +
+        'Version/4.0 Chrome/57.0.1000.10 Mobile Safari/537.36',
+      'Cookie': headers.Cookie,
+      'Referer': referer,
+      'x-requested-with': 'fetch',
+      'x-zse-93': '101_1_1.0',
+      'Content-Type': request.body === undefined ? undefined : bodyContentType,
+      'x-api-version': '3.0.93',
+      'x-app-version': '11.2.0',
+      'x-app-build': 'release',
+      'x-app-bundleid': 'com.zhihu.android',
+      'x-app-flavor': 'zhihuwap64',
+      'x-app-za': 'OS=Android&Release=12&Model=sdk_gphone64_arm64&VersionName=11.2.0&' +
+        'VersionCode=40210&Product=com.zhihu.android&Width=1440&Height=2952&Installer=Market&' +
+        'DeviceType=AndroidPhone&Brand=google',
+      'x-network-type': 'WiFi'
+    };
+  }
   return {
     url: request.url,
     method: request.method ?? ZhihuHttpMethod.GET,
@@ -218,7 +253,7 @@ export function prepareZhihuHttpRequest(
   };
 }
 
-class NetworkKitHttpTransport implements ZhihuHttpTransport {
+export class NetworkKitHttpTransport implements ZhihuHttpTransport {
   private readonly requestHandle: http.HttpRequest = http.createHttp();
 
   async request(request: PreparedZhihuHttpRequest): Promise<ZhihuHttpResponse> {
@@ -259,7 +294,7 @@ class NetworkKitHttpTransport implements ZhihuHttpTransport {
   }
 }
 
-class NetworkKitHttpTransportFactory implements ZhihuHttpTransportFactory {
+export class NetworkKitHttpTransportFactory implements ZhihuHttpTransportFactory {
   create(): ZhihuHttpTransport {
     return new NetworkKitHttpTransport();
   }

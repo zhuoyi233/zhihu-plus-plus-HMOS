@@ -48,8 +48,9 @@ import collectionContentStateTest from './CollectionContentState.test';
 import collectionFavoriteStateTest from './CollectionFavoriteState.test';
 import commentRepositoryTest from './CommentRepository.test';
 import commentStateTest from './CommentState.test';
-import notificationRepositoryTest from './NotificationRepository.test';
+import mobileNotificationRepositoryTest from './NotificationRepository.test';
 import notificationStateTest from './NotificationState.test';
+import privateMessageContentTest from './PrivateMessageContent.test';
 import backStackStateTest from './BackStackState.test';
 import phoneLoginCryptoTest from './PhoneLoginCrypto.test';
 import creationPublishRepositoryTest from './CreationPublishRepository.test';
@@ -71,6 +72,12 @@ import systemPickedImageFileStoreTest from './SystemPickedImageFileStore.test';
 import pinPublishPageStateTest from './PinPublishPageState.test';
 import answerEditSeedStoreTest from './AnswerEditSeedStore.test';
 import appUpdateParserTest from './AppUpdateParser.test';
+import emojiRulesTest from './EmojiRules.test';
+import readerTypographyTest from './ReaderTypography.test';
+import readerScrollGeometryTest from './ReaderScrollGeometry.test';
+import appearancePreferencesTest from './AppearancePreferences.test';
+import recommendationFilterPolicyTest from './RecommendationFilterPolicy.test';
+import identitySpeechSettingsTest from './IdentitySpeechSettings.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -123,8 +130,9 @@ export default function testsuite(): void {
   collectionFavoriteStateTest();
   commentRepositoryTest();
   commentStateTest();
-  notificationRepositoryTest();
+  mobileNotificationRepositoryTest();
   notificationStateTest();
+  privateMessageContentTest();
   backStackStateTest();
   phoneLoginCryptoTest();
   creationPublishRepositoryTest();
@@ -146,4 +154,10 @@ export default function testsuite(): void {
   pinPublishPageStateTest();
   answerEditSeedStoreTest();
   appUpdateParserTest();
+  emojiRulesTest();
+  readerTypographyTest();
+  readerScrollGeometryTest();
+  appearancePreferencesTest();
+  recommendationFilterPolicyTest();
+  identitySpeechSettingsTest();
 }

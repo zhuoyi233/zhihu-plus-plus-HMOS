@@ -10,11 +10,7 @@
     },
     {
       "name": "EntryAbility_label",
-      "value": "知乎++"
-    },
-    {
-      "name": "write_imagevideo_reason",
-      "value": "保存用户主动选择的知乎正文图片到系统相册"
+      "value": "知乎++鸿蒙版"
     }
   ]
 }

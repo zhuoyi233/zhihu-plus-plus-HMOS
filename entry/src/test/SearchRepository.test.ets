@@ -153,14 +153,16 @@ export default function searchRepositoryTest(): void {
       expect(initial.includes('t=general&q=HarmonyOS+ArkTS')).assertTrue();
       expect(initial.includes('offset=0&limit=20&search_source=Normal&show_all_topics=0')).assertTrue();
       expect(initial.includes('include=data%5B%2A%5D.highlight%2Cobject%2Ctype%2Cobject.author%2C' +
-        'object.topics%2Cobject.bound_topic_ids%2Cobject.question.topics%2Cobject.question.bound_topic_ids'))
+        'object.topics%2Cobject.bound_topic_ids%2Cobject.question.topics%2Cobject.question.bound_topic_ids%2C' +
+          'object.question.author%2Cobject.content%2Cobject.detail'))
         .assertTrue();
       expect(buildSearchRequestUrl(QUERY, FILTERS, SearchTab.GENERAL,
         'https://www.zhihu.com/api/v4/search_v3?include=stale&t=general&q=HarmonyOS%20ArkTS&offset=20'
       )).assertEqual(
         'https://www.zhihu.com/api/v4/search_v3?t=general&q=HarmonyOS+ArkTS&offset=20&' +
           'include=data%5B%2A%5D.highlight%2Cobject%2Ctype%2Cobject.author%2Cobject.topics%2C' +
-            'object.bound_topic_ids%2Cobject.question.topics%2Cobject.question.bound_topic_ids'
+            'object.bound_topic_ids%2Cobject.question.topics%2Cobject.question.bound_topic_ids%2C' +
+              'object.question.author%2Cobject.content%2Cobject.detail'
       );
       expect(canonicalSearchCursorKey(QUERY, FILTERS, SearchTab.GENERAL,
         'https://www.zhihu.com/api/v4/search_v3?offset=20&t=general&q=HarmonyOS+ArkTS'

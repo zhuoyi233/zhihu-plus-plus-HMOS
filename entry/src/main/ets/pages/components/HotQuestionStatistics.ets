@@ -70,7 +70,7 @@ export struct HotQuestionStatistics {
         .fontSize($r('app.float.p1_secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .margin({ right: 12, bottom: 4 })
-      Text(`${this.question?.commentCount ?? this.target.commentCount} 评论`)
+      Text(`${this.question?.commentCount ?? this.target.commentCount ?? '—'} 评论`)
         .fontSize($r('app.float.p1_secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .margin({ right: 12, bottom: 4 })

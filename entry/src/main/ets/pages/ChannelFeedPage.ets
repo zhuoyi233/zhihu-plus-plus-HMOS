@@ -28,6 +28,7 @@ import {
 import {
   AppPageStatusKind,
   AppPageStatusPanel,
+  FLOATING_TITLE_BAR_OFFSET,
   FeedPullDownIndicatorOptions,
   feedPullDownIndicator
 } from './AppPageChrome';
@@ -40,6 +41,7 @@ import {
 } from './ChannelFeedState';
 import { dailyStoryDetailErrorMessage } from './DailyStoryDetailState';
 import { dailyFeedDateAtIndex, formatDailyDate } from './DailyFeedDates';
+import { DraggableRefreshButton } from './components/DraggableRefreshButton';
 
 @Component
 export struct ChannelFeedPage {
@@ -66,6 +68,12 @@ export struct ChannelFeedPage {
   // 双击底栏页签刷新：关注=1、热榜=2、日报=3（P1TopLevelTab），复用下拉刷新链路
   @StorageProp('tabRefreshTick') @Watch('onTabRefreshRequested') tabRefreshTick: number = 0;
   @StorageProp('tabRefreshTabIndex') tabRefreshTabIndex: number = -1;
+  @StorageProp('tabScrollTopTick') @Watch('onTabScrollTopRequested') private tabScrollTopTick: number = 0;
+  @StorageProp('tabScrollTopTabIndex') private tabScrollTopTabIndex: number = -1;
+  @StorageProp('showFeedThumbnail') private showFeedThumbnail: boolean = true;
+  @StorageProp('showRefreshFab') private showRefreshFab: boolean = true;
+  @StorageProp('feedCardStyle') private feedCardStyle: string = 'divider';
+  @StorageProp('fabOpacity') private fabOpacity: number = 100;
   // 下拉刷新自定义加载圆圈（refreshingContent 需 ComponentContent，随页面销毁释放）
   private refreshContent?: ComponentContent<FeedPullDownIndicatorOptions> = undefined;
   @Consume('channelFeedInteractionBridge') private interactionBridge: ChannelFeedInteractionBridge =
@@ -180,6 +188,18 @@ export struct ChannelFeedPage {
     }
   }
 
+  private onTabScrollTopRequested(): void {
+    if (this.tabScrollTopTabIndex !== this.tabIndexOfSource()) {
+      return;
+    }
+    if (this.firstVisibleIndex > 0) {
+      this.firstVisibleIndex = 0;
+      this.listScroller.scrollToIndex(0, true, ScrollAlign.START);
+    } else {
+      this.controller?.refresh();
+    }
+  }
+
   private onLoginFeedReloadTick(): void {
     this.controller?.reloadNow();
   }
@@ -251,7 +271,7 @@ export struct ChannelFeedPage {
                   .width('100%')
                 }
               }
-              .margin({ bottom: $r('app.float.p1_spacing_medium') })
+              .margin({ bottom: this.feedCardStyle === 'card' ? $r('app.float.p1_spacing_medium') : 0 })
             }, (item: ChannelFeedItem): string => channelFeedItemIdentity(item))
 
             if (this.loadingMore) {
@@ -270,13 +290,18 @@ export struct ChannelFeedPage {
           .id(`p2_channel_${this.source}_list`)
           .width('100%')
           .scrollBar(BarState.Off)
-          .padding({ top: 94 })
           .height('100%')
           .edgeEffect(EdgeEffect.Spring)
           .onReachEnd(() => this.controller?.loadMore())
           .onScrollIndex((start: number, end: number): void => {
+            const previous = this.firstVisibleIndex;
+            this.firstVisibleIndex = start;
+            if (start > previous) {
+              AppStorage.setOrCreate('bottomBarHiddenByScroll', true);
+            } else if (start < previous || start === 0) {
+              AppStorage.setOrCreate('bottomBarHiddenByScroll', false);
+            }
             if (this.source === ChannelFeedSource.DAILY) {
-              this.firstVisibleIndex = start;
               this.publishDailyViewingDate();
               if (end >= this.items.length - 3) {
                 this.controller?.loadMore();
@@ -308,11 +333,27 @@ export struct ChannelFeedPage {
       .alignItems(HorizontalAlign.Start)
       .width('100%')
       .height('100%')
+      // 让位统一约定：内容容器 padding top = FLOATING_TITLE_BAR_OFFSET，Refresh 指示
+      // 区域从悬浮标题栏下沿开始（对齐上游 FeedPullToRefresh 的 indicator padding）；
+      // 列表不设顶 padding，滚动内容仍可穿越玻璃标题栏（List 默认不裁剪）
       .padding({
         left: $r('app.float.p1_page_padding'),
         right: $r('app.float.p1_page_padding'),
+        top: FLOATING_TITLE_BAR_OFFSET,
         bottom: $r('app.float.p1_page_padding')
       })
+
+      if (this.showRefreshFab && this.phase === ChannelFeedPhase.READY) {
+        DraggableRefreshButton({
+          elementId: `p3_channel_${this.source}_refresh_fab`,
+          accessibilityLabel: `刷新${channelFeedTitle(this.source)}`,
+          fabOpacity: this.fabOpacity,
+          loading: this.refreshing,
+          onRefresh: (): void => {
+            void this.controller?.refresh();
+          }
+        })
+      }
 
       // 打开日报正文时的全屏进度遮罩（无中间跳转页，给触达反馈）。
       if (this.dailyStoryOpening) {
@@ -427,6 +468,14 @@ export struct ChannelFeedPage {
         }
         .width('100%')
         FeedContentSummary({ target: item.feedItem.target, showStatistics: this.source !== ChannelFeedSource.HOT })
+        if (this.showFeedThumbnail && (item.feedItem.target.thumbnailUrl ?? '').length > 0) {
+          Image(item.feedItem.target.thumbnailUrl)
+            .width('100%')
+            .height(128)
+            .borderRadius($r('app.float.p1_spacing_small'))
+            .objectFit(ImageFit.Cover)
+            .alt('内容缩略图')
+        }
         if (this.source === ChannelFeedSource.HOT) {
           HotQuestionStatistics({ target: item.feedItem.target, repositoryFactory: this.questionRepositoryFactory })
         }
@@ -437,8 +486,15 @@ export struct ChannelFeedPage {
     .id(`p2_channel_content_${item.feedItem.target.kind}_${item.feedItem.target.id}`)
     .width('100%')
     .padding($r('app.float.p1_card_padding'))
-    .borderRadius($r('app.float.p1_card_radius'))
-    .backgroundColor($r('app.color.surface_background'))
+    .borderRadius(this.feedCardStyle === 'card' ? $r('app.float.p1_card_radius') : 0)
+    .backgroundColor(this.feedCardStyle === 'card' ? $r('app.color.surface_background') : Color.Transparent)
+    // border 的 radius 优先级高于 borderRadius 属性（未指定时按 0 处理），
+    // 卡片模式必须把圆角同步写进 border，否则背景圆角被重置成直角。
+    .border({
+      width: { bottom: this.feedCardStyle === 'divider' ? 1 : 0 },
+      color: $r('app.color.divider_color'),
+      radius: this.feedCardStyle === 'card' ? $r('app.float.p1_card_radius') : 0
+    })
     .accessibilityText(`打开${channelKindLabel(item.feedItem.target.kind)}：${item.feedItem.target.title}`)
     .onClick(() => {
       const destination = channelFeedDestination(item);
@@ -467,7 +523,7 @@ export struct ChannelFeedPage {
   private dailyCard(item: ChannelDailyStoryItem) {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
       Row({ space: $r('app.float.p1_spacing_medium') }) {
-        if (item.story.imageUrl !== undefined && /^https:\/\/[^\s]+$/i.test(item.story.imageUrl)) {
+        if (this.showFeedThumbnail && item.story.imageUrl !== undefined && /^https:\/\/[^\s]+$/i.test(item.story.imageUrl)) {
           Image(item.story.imageUrl)
             .width('28%')
             .aspectRatio(1)
@@ -501,8 +557,15 @@ export struct ChannelFeedPage {
     .id(`p2_channel_daily_${item.story.id}`)
     .width('100%')
     .padding($r('app.float.p1_card_padding'))
-    .borderRadius($r('app.float.p1_card_radius'))
-    .backgroundColor($r('app.color.surface_background'))
+    .borderRadius(this.feedCardStyle === 'card' ? $r('app.float.p1_card_radius') : 0)
+    .backgroundColor(this.feedCardStyle === 'card' ? $r('app.color.surface_background') : Color.Transparent)
+    // border 的 radius 优先级高于 borderRadius 属性（未指定时按 0 处理），
+    // 卡片模式必须把圆角同步写进 border，否则背景圆角被重置成直角。
+    .border({
+      width: { bottom: this.feedCardStyle === 'divider' ? 1 : 0 },
+      color: $r('app.color.divider_color'),
+      radius: this.feedCardStyle === 'card' ? $r('app.float.p1_card_radius') : 0
+    })
     .accessibilityText(`知乎日报：${item.story.title}`)
     .onClick((): void => {
       this.openDailyStory(item.story.id);
@@ -712,6 +775,8 @@ export function channelFeedDestination(item: ChannelContentItem): P1Destination 
       return { name: P1DestinationName.ANSWER, id: item.feedItem.target.id };
     case FeedTargetKind.ARTICLE:
       return { name: P1DestinationName.ARTICLE, id: item.feedItem.target.id };
+    case FeedTargetKind.VIDEO:
+      return { name: P1DestinationName.VIDEO, id: item.feedItem.target.id };
   }
 }
 
@@ -723,6 +788,8 @@ export function channelKindLabel(kind: FeedTargetKind): string {
       return '回答';
     case FeedTargetKind.ARTICLE:
       return '文章';
+    case FeedTargetKind.VIDEO:
+      return '视频';
   }
 }
 

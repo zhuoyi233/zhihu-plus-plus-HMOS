@@ -222,6 +222,23 @@ export default function homeFeedStateTest(): void {
       expect(merged[2].target.kind).assertEqual(FeedTargetKind.QUESTION);
     });
 
+    it('showsLocalReasonAndMobileSourceLabelsOnCards', 0, () => {
+      const local = feed('local');
+      local.recommendationReason = '热门推荐';
+      local.actionText = '手机版推荐';
+      expect(homeFeedActionLabel(local)).assertEqual('热门推荐');
+
+      const mobile = feed('mobile');
+      mobile.verb = '手机版推荐';
+      mobile.actionText = '手机版推荐';
+      expect(homeFeedActionLabel(mobile)).assertEqual('手机版推荐');
+
+      const web = feed('web');
+      web.verb = 'TOPIC_ACKNOWLEDGED_ANSWER';
+      web.recommendationReason = undefined;
+      expect(homeFeedActionLabel(web)).assertEqual('推荐内容');
+    });
+
     it('hidesRawProtocolVerbFromCards', 0, () => {
       const item = feed('raw');
       item.verb = 'TOPIC_ACKNOWLEDGED_ANSWER';

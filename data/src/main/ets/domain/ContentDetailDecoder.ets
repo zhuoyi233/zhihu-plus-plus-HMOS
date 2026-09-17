@@ -11,7 +11,7 @@ import {
   parseStrictJson,
   StrictJsonError
 } from 'core';
-import { Answer, AnswerEndorsementDisplay, Article, ContentVoteState, Question, QuestionTopicSummary, UserProfile } from './DomainModels';
+import { Answer, AnswerEndorsementDisplay, Article, AuthorBadge, ContentVoteState, Question, QuestionTopicSummary, UserProfile } from './DomainModels';
 import { DomainDecodeError, DomainDecodeFailureKind } from './ZhihuDomainDecoder';
 
 function parseRoot(json: string, contentName: string): JsonObjectValue {
@@ -165,6 +165,8 @@ function endorsementsFromWire(value: JsonValue | undefined): Array<AnswerEndorse
     const textParts: Array<string> = [];
     let textColorGroup: string | undefined = undefined;
     let textColorAlpha = 1;
+    let leadingIconKey: string | undefined = undefined;
+    let trailingIconKey: string | undefined = undefined;
     elements.items.forEach((elementValue: JsonValue): void => {
       const element = optionalObject(elementValue, 'endorsement.element');
       if (element === undefined) {
@@ -182,6 +184,17 @@ function endorsementsFromWire(value: JsonValue | undefined): Array<AnswerEndorse
           ? safeAlpha((element.get('fontColor') as JsonObjectValue).get('alpha'))
           : textColorAlpha;
       }
+      // 图标元素（对齐上游：首个非箭头 IMAGE 为前导图标，末个含 arrow 的 IMAGE 为尾随图标）。
+      if (type instanceof JsonStringValue && type.value === 'IMAGE') {
+        const imageKey = optionalText(element.get('imageKey') ?? element.get('image_key'));
+        if (imageKey !== undefined) {
+          if (imageKey.indexOf('arrow') >= 0) {
+            trailingIconKey = imageKey;
+          } else if (leadingIconKey === undefined) {
+            leadingIconKey = imageKey;
+          }
+        }
+      }
     });
     const text = textParts.join(' ').trim();
     if (text.length === 0) {
@@ -193,7 +206,9 @@ function endorsementsFromWire(value: JsonValue | undefined): Array<AnswerEndorse
       backgroundColorGroup: background === undefined ? undefined : safeTokenGroup(background.get('group')),
       backgroundColorAlpha: background === undefined ? 1 : safeAlpha(background.get('alpha')),
       textColorGroup: textColorGroup,
-      textColorAlpha: textColorAlpha
+      textColorAlpha: textColorAlpha,
+      leadingIconKey: leadingIconKey,
+      trailingIconKey: trailingIconKey
     });
   });
   return result;
@@ -249,6 +264,67 @@ function contentVoteStateFromNumber(value: number): ContentVoteState {
   return ContentVoteState.NEUTRAL;
 }
 
+/** badge_v2 子徽章解析中间结构：在展示模型上附加 wire 的 type 字段用于 primary 选取。 */
+interface AuthorBadgeCandidate extends AuthorBadge {
+  type: string;
+}
+
+/**
+ * 解码作者认证徽章（对齐上游 BadgeV2.officialBadge 的 primary 选取逻辑）：
+ * 优先 detail_badges，其次 merged_badges；跳过未通过审核的徽章；
+ * 首选非 identity 且带图标的徽章，否则取首个带图标徽章；
+ * 顶层 icon 非空时覆盖子徽章图标。无法解析时返回 undefined，不拒绝详情加载。
+ */
+function authorBadgeFromWire(value: JsonValue | undefined): AuthorBadge | undefined {
+  if (value === undefined || !(value instanceof JsonObjectValue)) {
+    return undefined;
+  }
+  const details = value.get('detail_badges') instanceof JsonArrayValue
+    ? value.get('detail_badges') as JsonArrayValue
+    : value.get('detailBadges') instanceof JsonArrayValue
+      ? value.get('detailBadges') as JsonArrayValue
+      : value.get('merged_badges') instanceof JsonArrayValue
+        ? value.get('merged_badges') as JsonArrayValue
+        : value.get('mergedBadges') instanceof JsonArrayValue
+          ? value.get('mergedBadges') as JsonArrayValue
+          : undefined;
+  if (details === undefined) {
+    return undefined;
+  }
+  const badges: AuthorBadgeCandidate[] = [];
+  details.items.forEach((item: JsonValue): void => {
+    if (!(item instanceof JsonObjectValue)) {
+      return;
+    }
+    const status = item.get('badge_status') ?? item.get('badgeStatus');
+    if (status instanceof JsonStringValue && status.value !== 'passed') {
+      return;
+    }
+    const title = optionalText(item.get('title'));
+    if (title === undefined) {
+      return;
+    }
+    const description = optionalText(item.get('description')) ?? title;
+    const iconUrl = optionalText(item.get('icon') ?? item.get('icon_url')) ?? '';
+    const type = optionalText(item.get('type')) ?? '';
+    badges.push({ title: title, description: description, iconUrl: iconUrl, type: type });
+  });
+  if (badges.length === 0) {
+    return undefined;
+  }
+  // 对齐上游：首选非 identity 类型且带图标的徽章，否则取首个带图标徽章。
+  const primary = badges.find((badge: AuthorBadgeCandidate): boolean =>
+    badge.type !== 'identity' && badge.title !== '认证' && badge.iconUrl.length > 0) ??
+    badges.find((badge: AuthorBadgeCandidate): boolean => badge.iconUrl.length > 0);
+  if (primary === undefined) {
+    return undefined;
+  }
+  const topLevelIcon = optionalText(value.get('icon'));
+  return topLevelIcon !== undefined && topLevelIcon.length > 0
+    ? { title: primary.title, description: primary.description, iconUrl: topLevelIcon }
+    : primary;
+}
+
 function authorFromWire(wire: JsonObjectValue | undefined): UserProfile | undefined {
   if (wire === undefined) {
     return undefined;
@@ -273,7 +349,9 @@ function authorFromWire(wire: JsonObjectValue | undefined): UserProfile | undefi
     followerCount: nonNegativeInteger(wire.get('follower_count') ?? wire.get('followers_count'),
       'author.follower_count'),
     isFollowing: optionalBoolean(wire.get('is_following'), 'author.is_following'),
-    isOrganization: optionalBoolean(wire.get('is_org'), 'author.is_org')
+    isOrganization: optionalBoolean(wire.get('is_org'), 'author.is_org'),
+    // 知乎 v4 响应字段为驼峰 badgeV2（上游 @SerialName("badgeV2")），兼容蛇形 badge_v2。
+    badge: authorBadgeFromWire(wire.get('badgeV2') ?? wire.get('badge_v2'))
   };
 }
 
@@ -376,6 +454,7 @@ export function decodeArticleDetail(json: string, expectedId: string): Article {
     thanksCount: nonNegativeInteger(wire.get('thanks_count'), 'article.thanks_count'),
     isThanked: optionalBoolean(wire.get('is_thanked'), 'article.is_thanked'),
     endorsements: endorsementsFromWire(wire.get('endorsements')),
+    topics: questionTopicsFromWire(wire.get('topics')),
     ipInfo: optionalText(wire.get('ip_info'))
   };
 }

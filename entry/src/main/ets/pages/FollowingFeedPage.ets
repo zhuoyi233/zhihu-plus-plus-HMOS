@@ -86,6 +86,7 @@ export struct FollowingFeedPage {
     .loop(false)
     .indicator(false)
     .cachedCount(1)
+    .nestedScroll(SwiperNestedScrollMode.SELF_FIRST)
     .onChange((index: number): void => {
       if (index === this.activeTabIndex) {
         return;

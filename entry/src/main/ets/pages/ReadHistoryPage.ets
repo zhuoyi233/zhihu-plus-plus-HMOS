@@ -1,6 +1,6 @@
 import { ComponentContent } from '@kit.ArkUI';
 import { LoginSessionGateway, OnlineHistoryRepository, ReadHistoryGateway, SessionStatus } from 'data';
-import { FeedPullDownIndicatorOptions, feedPullDownIndicator } from './AppPageChrome';
+import { FLOATING_TITLE_BAR_OFFSET, FeedPullDownIndicatorOptions, feedPullDownIndicator } from './AppPageChrome';
 import {
   ReadHistoryController,
   ReadHistoryItem,
@@ -67,7 +67,10 @@ export struct ReadHistoryPage {
     this.controller = new ReadHistoryController(history, this.onlineHistory, onlineEnabled,
       (state: ReadHistoryViewState): void => {
         this.viewState = state;
-        this.refreshing = false;
+        // 对齐上游 FeedPullToRefresh：指示器 = 下拉触发 && 加载中，加载结束（无论成败）才停。
+        // Refresh 必须用 $$ 双向绑定：手势触发的 refreshing=true 会回写到本状态，
+        // 单向绑定时手势不回写、这里的赋值因值未变化而不生效，刷新圈会永远卡住。
+        this.refreshing = state.busy && state.phase === ReadHistoryPhase.LOADING;
       });
     this.refreshContent = new ComponentContent(this.getUIContext(), wrapBuilder(feedPullDownIndicator),
       new FeedPullDownIndicatorOptions());
@@ -129,7 +132,7 @@ export struct ReadHistoryPage {
           .width('100%')
         } else {
           Refresh({
-            refreshing: this.refreshing,
+            refreshing: $$this.refreshing,
             refreshingContent: this.refreshContent,
             offset: 80,
             friction: 100
@@ -182,8 +185,10 @@ export struct ReadHistoryPage {
       }
       .width('100%')
       .height('100%')
+      // 让位统一约定：内容容器 padding top = FLOATING_TITLE_BAR_OFFSET，刷新指示区域
+      // 从悬浮标题栏下沿开始（对齐上游 FeedPullToRefresh 的 indicator padding）
       .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
-        top: 94, bottom: $r('app.float.p1_page_padding') })
+        top: FLOATING_TITLE_BAR_OFFSET, bottom: $r('app.float.p1_page_padding') })
       .backgroundColor($r('app.color.page_background'))
 
       Column()

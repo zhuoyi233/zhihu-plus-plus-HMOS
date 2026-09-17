@@ -19,7 +19,7 @@ import { SearchRepository } from './SearchRepository';
 
 export const SEARCH_INCLUDE =
   'data[*].highlight,object,type,object.author,object.topics,object.bound_topic_ids,object.question.topics,' +
-    'object.question.bound_topic_ids';
+    'object.question.bound_topic_ids,object.question.author,object.content,object.detail';
 const SEARCH_INCLUDE_QUERY = `include=${encodeURIComponent(SEARCH_INCLUDE).replace(/\*/g, '%2A')}`;
 const SEARCH_BASE_URL = 'https://www.zhihu.com/api/v4/search_v3';
 const HOT_SEARCH_URL = 'https://www.zhihu.com/api/v4/search/hot_search';
@@ -292,11 +292,18 @@ export class DefaultSearchRepository implements SearchRepository {
         return blockingSession.match(item.authorId === undefined ? {
           title: item.title,
           excerpt: item.excerpt,
+          content: item.content,
+          questionAuthorId: item.questionAuthorId,
+          questionAuthorName: item.questionAuthorName,
           topicIds: item.topicIds
         } : {
           title: item.title,
           excerpt: item.excerpt,
+          content: item.content,
           authorId: item.authorId,
+          authorName: item.authorName,
+          questionAuthorId: item.questionAuthorId,
+          questionAuthorName: item.questionAuthorName,
           topicIds: item.topicIds
         }) === undefined;
       });

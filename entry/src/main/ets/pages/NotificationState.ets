@@ -2,14 +2,17 @@ import {
   HttpFailure,
   HttpFailureKind,
   LoginSessionGateway,
-  NotificationCategory,
-  NotificationItem,
-  NotificationPage,
-  NotificationRepository,
-  NotificationUnreadCounts,
-  SessionStatus,
-  notificationItemIdentity,
-  notificationUnreadTotal
+  MobileNotificationCategory,
+  MOBILE_NOTIFICATION_CATEGORIES,
+  mobileNotificationCategoryInfo,
+  MobileNotificationCategoryUnreadCounts,
+  MobileNotificationColumnHead,
+  MobileNotificationMessagePage,
+  MobileNotificationRepository,
+  MobileNotificationTimelineItem,
+  mobileNotificationUnreadTotal,
+  mobileTimelineStableId,
+  SessionStatus
 } from 'data';
 
 export enum NotificationPhase {
@@ -22,56 +25,54 @@ export enum NotificationPhase {
 
 export interface NotificationViewState {
   readonly phase: NotificationPhase;
-  readonly selectedCategory: NotificationCategory;
-  readonly items: Array<NotificationItem>;
+  readonly items: Array<MobileNotificationTimelineItem>;
   readonly loadingMore: boolean;
   readonly canLoadMore: boolean;
   readonly requiresLogin: boolean;
   readonly busy: boolean;
   readonly unreadTotal: number;
-  readonly categoryUnread: NotificationUnreadCounts;
+  readonly categoryUnread: MobileNotificationCategoryUnreadCounts;
+  readonly invitation?: MobileNotificationColumnHead;
   readonly errorMessage?: string;
 }
 
 export type NotificationStateObserver = (state: NotificationViewState) => void;
 
-interface CategoryPaging {
-  nextCursor?: string;
-  reachedEnd: boolean;
-}
-
-function emptyPaging(): CategoryPaging {
-  return { nextCursor: undefined, reachedEnd: true };
-}
-
-function cloneCategoryUnread(counts: NotificationUnreadCounts): NotificationUnreadCounts {
+function cloneCategoryUnread(counts: MobileNotificationCategoryUnreadCounts):
+  MobileNotificationCategoryUnreadCounts {
   return {
-    defaultCount: counts.defaultCount,
-    followCount: counts.followCount,
-    voteThankCount: counts.voteThankCount
+    comment: counts.comment,
+    like: counts.like,
+    favorite: counts.favorite,
+    follow: counts.follow
   };
 }
 
+/**
+ * 消息中心控制器（对齐上游 `NotificationViewModel`）：首屏 message/v3 提供
+ * 四分类未读数、邀请回答列头与会话列表；全部已读按四分类串行 POST readall。
+ */
 export class NotificationController {
-  private readonly repository: NotificationRepository;
+  private readonly repository: MobileNotificationRepository;
   private readonly session: LoginSessionGateway;
   private readonly observer: NotificationStateObserver;
   private active: boolean = false;
   private generation: number = 0;
   private phase: NotificationPhase = NotificationPhase.IDLE;
-  private selectedCategory: NotificationCategory = NotificationCategory.DEFAULT;
-  private categoryData: Map<NotificationCategory, Array<NotificationItem>> = new Map();
-  private categoryPaging: Map<NotificationCategory, CategoryPaging> = new Map();
+  private items: Array<MobileNotificationTimelineItem> = [];
+  private nextCursor?: string;
+  private reachedEnd: boolean = true;
   private loadingMore: boolean = false;
   private paginationBlocked: boolean = false;
-  private retryLoadMore: boolean = false;
   private requiresLogin: boolean = false;
   private busy: boolean = false;
   private unreadTotal: number = 0;
-  private categoryUnread: NotificationUnreadCounts = { defaultCount: 0, followCount: 0, voteThankCount: 0 };
+  private categoryUnread: MobileNotificationCategoryUnreadCounts =
+    { comment: 0, like: 0, favorite: 0, follow: 0 };
+  private invitation?: MobileNotificationColumnHead;
   private errorMessage?: string;
 
-  constructor(repository: NotificationRepository, session: LoginSessionGateway,
+  constructor(repository: MobileNotificationRepository, session: LoginSessionGateway,
     observer: NotificationStateObserver = (_state: NotificationViewState): void => {
     }) {
     this.repository = repository;
@@ -100,14 +101,14 @@ export class NotificationController {
   snapshot(): NotificationViewState {
     return {
       phase: this.phase,
-      selectedCategory: this.selectedCategory,
-      items: this.currentItems().map((item: NotificationItem): NotificationItem => cloneNotification(item)),
+      items: this.items.slice(),
       loadingMore: this.loadingMore,
-      canLoadMore: !this.paginationBlocked && this.hasNext(),
+      canLoadMore: !this.paginationBlocked && !this.reachedEnd && this.nextCursor !== undefined,
       requiresLogin: this.requiresLogin,
       busy: this.busy,
       unreadTotal: this.unreadTotal,
       categoryUnread: cloneCategoryUnread(this.categoryUnread),
+      invitation: this.invitation,
       errorMessage: this.errorMessage
     };
   }
@@ -121,85 +122,42 @@ export class NotificationController {
     this.phase = NotificationPhase.LOADING;
     this.loadingMore = false;
     this.paginationBlocked = false;
-    this.retryLoadMore = false;
     this.requiresLogin = false;
     this.errorMessage = undefined;
     this.emit();
     if (this.session.getState().status !== SessionStatus.AUTHENTICATED) {
       this.phase = NotificationPhase.ERROR;
-      this.errorMessage = '通知需要登录，请登录后重试';
+      this.errorMessage = '消息需要登录，请登录后重试';
       this.requiresLogin = true;
       this.emit();
       return Promise.resolve();
     }
-    return this.loadInitialSerialized(generation);
-  }
-
-  selectCategory(category: NotificationCategory): Promise<void> {
-    if (!this.active || category === this.selectedCategory) {
-      return Promise.resolve();
-    }
-    this.repository.cancel();
-    const generation = ++this.generation;
-    this.selectedCategory = category;
-    this.loadingMore = false;
-    this.paginationBlocked = false;
-    this.retryLoadMore = false;
-    this.requiresLogin = false;
-    this.errorMessage = undefined;
-    const existing = this.categoryData.get(category);
-    if (existing !== undefined && existing.length > 0) {
-      this.phase = NotificationPhase.READY;
-      this.emit();
-      return Promise.resolve();
-    }
-    if (this.session.getState().status !== SessionStatus.AUTHENTICATED) {
-      this.phase = NotificationPhase.ERROR;
-      this.errorMessage = '通知需要登录，请登录后重试';
-      this.requiresLogin = true;
-      this.emit();
-      return Promise.resolve();
-    }
-    this.phase = NotificationPhase.LOADING;
-    this.emit();
-    return this.loadCategory(generation, category, true);
+    return this.fetchPage(generation, undefined);
   }
 
   retry(): Promise<void> {
-    if (this.retryLoadMore) {
-      this.paginationBlocked = false;
-      return this.loadMore();
-    }
     return this.loadInitial();
   }
 
   async loadMore(): Promise<void> {
     if (!this.active || this.phase === NotificationPhase.LOADING || this.loadingMore ||
-      this.paginationBlocked || !this.hasNext()) {
+      this.paginationBlocked || this.reachedEnd || this.nextCursor === undefined) {
       return;
     }
     const generation = this.generation;
-    const cursor = this.paging().nextCursor;
-    if (cursor === undefined) {
-      return;
-    }
+    const cursor = this.nextCursor;
     this.loadingMore = true;
     this.errorMessage = undefined;
-    this.requiresLogin = false;
-    this.retryLoadMore = false;
     this.emit();
     try {
-      const page = await this.repository.getNotificationsPage(this.selectedCategory, cursor);
-      if (!this.isCurrent(generation)) {
-        return;
-      }
-      this.mergePage(page);
-      this.phase = this.currentItems().length === 0 ? NotificationPhase.EMPTY : NotificationPhase.READY;
+      await this.fetchPage(generation, cursor);
     } catch (error) {
       if (!this.isCurrent(generation)) {
         return;
       }
-      this.phase = this.currentItems().length === 0 ? NotificationPhase.ERROR : NotificationPhase.READY;
+      if (this.items.length === 0) {
+        this.phase = NotificationPhase.ERROR;
+      }
       this.setFailure(error, true);
     } finally {
       if (this.isCurrent(generation)) {
@@ -210,26 +168,8 @@ export class NotificationController {
   }
 
   /**
-   * 单条已读：本地乐观更新。上游 NotificationViewModel 没有单条已读接口
-   * （只有三个分类的 readall），点击通知项只做本地已读，不发网络请求。
-   */
-  markItemRead(itemId: string): void {
-    const category = this.selectedCategory;
-    const current = this.categoryData.get(category);
-    if (current === undefined) {
-      return;
-    }
-    const updated: Array<NotificationItem> = [];
-    current.forEach((item: NotificationItem): void => {
-      updated.push(item.id === itemId ? withReadFlag(item, true) : item);
-    });
-    this.categoryData.set(category, updated);
-    this.emit();
-  }
-
-  /**
-   * 全部已读：乐观更新所有已加载分类的未读项，随后按上游语义串行 POST
-   * 三个分类的 readall；任一失败则回滚已读状态并展示结构化错误。
+   * 全部已读（对齐上游 `markAllAsRead`）：乐观清零四分类未读，串行 POST
+   * readall；任一失败则回滚未读数并展示结构化错误。
    */
   async markAllRead(): Promise<boolean> {
     if (!this.active || this.busy) {
@@ -242,24 +182,25 @@ export class NotificationController {
       return false;
     }
     const generation = this.generation;
-    const previousData = this.snapshotCategoryData();
-    const previousUnread = this.unreadTotal;
+    const previousUnread = this.categoryUnread;
     this.busy = true;
     this.errorMessage = undefined;
-    this.markAllItemsReadLocally();
     this.unreadTotal = 0;
-    this.categoryUnread = { defaultCount: 0, followCount: 0, voteThankCount: 0 };
+    this.categoryUnread = { comment: 0, like: 0, favorite: 0, follow: 0 };
     this.emit();
     try {
-      await this.repository.markAllAsRead();
-      if (!this.isCurrent(generation)) {
-        return false;
+      for (let index = 0; index < MOBILE_NOTIFICATION_CATEGORIES.length; index += 1) {
+        await this.repository.markEntryAsRead(
+          mobileNotificationCategoryInfo(MOBILE_NOTIFICATION_CATEGORIES[index]).entryName);
+        if (!this.isCurrent(generation)) {
+          return false;
+        }
       }
       return true;
     } catch (error) {
       if (this.isCurrent(generation)) {
-        this.restoreCategoryData(previousData);
-        this.unreadTotal = previousUnread;
+        this.categoryUnread = previousUnread;
+        this.unreadTotal = mobileNotificationUnreadTotal(previousUnread);
         this.errorMessage = notificationMutationError(error);
         this.requiresLogin = notificationMutationRequiresLogin(error);
       }
@@ -272,23 +213,14 @@ export class NotificationController {
     }
   }
 
-  private async loadInitialSerialized(generation: number): Promise<void> {
-    // ZhihuHttpClient 单飞：未读数与列表请求必须串行，先取未读数（失败不阻断），再取列表。
-    await this.refreshUnreadCounts(generation);
-    if (!this.isCurrent(generation)) {
-      return;
-    }
-    await this.loadCategory(generation, this.selectedCategory, true);
-  }
-
-  private async loadCategory(generation: number, category: NotificationCategory, initial: boolean): Promise<void> {
+  private async fetchPage(generation: number, cursor?: string): Promise<void> {
     try {
-      const page = await this.repository.getNotificationsPage(category);
+      const page: MobileNotificationMessagePage = await this.repository.getMessagePage(cursor);
       if (!this.isCurrent(generation)) {
         return;
       }
-      this.replaceCategoryData(category, page);
-      this.phase = this.currentItems().length === 0 ? NotificationPhase.EMPTY : NotificationPhase.READY;
+      this.applyPage(page, cursor === undefined);
+      this.phase = this.items.length === 0 ? NotificationPhase.EMPTY : NotificationPhase.READY;
     } catch (error) {
       if (!this.isCurrent(generation)) {
         return;
@@ -302,86 +234,55 @@ export class NotificationController {
     }
   }
 
-  private async refreshUnreadCounts(generation: number): Promise<void> {
-    try {
-      const counts = await this.repository.getUnreadCounts();
-      if (!this.isCurrent(generation)) {
-        return;
-      }
-      this.categoryUnread = cloneCategoryUnread(counts);
-      this.unreadTotal = notificationUnreadTotal(counts);
-      this.emit();
-    } catch (_error) {
-      // 未读数获取失败不阻断列表加载
-    }
-  }
-
-  private mergePage(page: NotificationPage): void {
-    const category = this.selectedCategory;
-    const current = this.categoryData.get(category) ?? [];
-    const merged = mergeNotifications(current, page.items);
-    this.categoryData.set(category, merged);
-    this.applyPaging(category, page);
-  }
-
-  private replaceCategoryData(category: NotificationCategory, page: NotificationPage): void {
-    this.categoryData.set(category, mergeNotifications([], page.items));
-    this.applyPaging(category, page);
-  }
-
-  private applyPaging(category: NotificationCategory, page: NotificationPage): void {
-    this.categoryPaging.set(category, {
-      nextCursor: page.cursor.next,
-      reachedEnd: page.cursor.isEnd
-    });
-    this.paginationBlocked = false;
-  }
-
-  private currentItems(): Array<NotificationItem> {
-    return this.categoryData.get(this.selectedCategory) ?? [];
-  }
-
-  private paging(): CategoryPaging {
-    return this.categoryPaging.get(this.selectedCategory) ?? emptyPaging();
-  }
-
-  private hasNext(): boolean {
-    const paging = this.paging();
-    return !paging.reachedEnd && paging.nextCursor !== undefined && paging.nextCursor.length > 0;
-  }
-
-  private markAllItemsReadLocally(): void {
-    NOTIFICATION_CATEGORY_ORDER.forEach((category: NotificationCategory): void => {
-      const current = this.categoryData.get(category);
-      if (current === undefined) {
-        return;
-      }
-      const updated: Array<NotificationItem> = [];
-      current.forEach((item: NotificationItem): void => {
-        updated.push(item.isRead ? item : withReadFlag(item, true));
+  private applyPage(page: MobileNotificationMessagePage, isFirstPage: boolean): void {
+    if (isFirstPage) {
+      let comment = 0;
+      let like = 0;
+      let favorite = 0;
+      let follow = 0;
+      MOBILE_NOTIFICATION_CATEGORIES.forEach((category: MobileNotificationCategory): void => {
+        const detailTitle = mobileNotificationCategoryInfo(category).detailTitle;
+        const entry = page.overview.head.find((head): boolean => head.detailTitle === detailTitle);
+        const count = entry === undefined ? 0 : entry.unreadCount;
+        if (category === MobileNotificationCategory.LIKE) {
+          like = count;
+        } else if (category === MobileNotificationCategory.FAVORITE) {
+          favorite = count;
+        } else if (category === MobileNotificationCategory.FOLLOW) {
+          follow = count;
+        } else {
+          comment = count;
+        }
       });
-      this.categoryData.set(category, updated);
+      const unread: MobileNotificationCategoryUnreadCounts = {
+        comment: comment,
+        like: like,
+        favorite: favorite,
+        follow: follow
+      };
+      this.categoryUnread = unread;
+      this.unreadTotal = mobileNotificationUnreadTotal(unread);
+      this.invitation = page.overview.columnHead.length > 0 ? page.overview.columnHead[0] : undefined;
+      this.items = [];
+    }
+    // 对齐上游：过滤 type=="empty" 占位并按 stableId 去重。
+    const existing: Set<string> = new Set<string>();
+    this.items.forEach((item: MobileNotificationTimelineItem): void => {
+      existing.add(mobileTimelineStableId(item));
     });
-  }
-
-  private snapshotCategoryData(): Map<NotificationCategory, Array<NotificationItem>> {
-    const snapshot: Map<NotificationCategory, Array<NotificationItem>> = new Map();
-    NOTIFICATION_CATEGORY_ORDER.forEach((category: NotificationCategory): void => {
-      const current = this.categoryData.get(category);
-      if (current !== undefined) {
-        snapshot.set(category, current.map((item: NotificationItem): NotificationItem => cloneNotification(item)));
+    page.items.forEach((item: MobileNotificationTimelineItem): void => {
+      if (item.type === 'empty') {
+        return;
+      }
+      const id = mobileTimelineStableId(item);
+      if (!existing.has(id)) {
+        existing.add(id);
+        this.items.push(item);
       }
     });
-    return snapshot;
-  }
-
-  private restoreCategoryData(snapshot: Map<NotificationCategory, Array<NotificationItem>>): void {
-    NOTIFICATION_CATEGORY_ORDER.forEach((category: NotificationCategory): void => {
-      const restored = snapshot.get(category);
-      if (restored !== undefined) {
-        this.categoryData.set(category, restored);
-      }
-    });
+    this.nextCursor = page.cursor.next;
+    this.reachedEnd = page.cursor.isEnd || page.cursor.next === undefined;
+    this.paginationBlocked = false;
   }
 
   private setFailure(error: Object, more: boolean): void {
@@ -390,10 +291,9 @@ export class NotificationController {
     this.errorMessage = authentication && error.status === 403
       ? '请求被拒绝，可能需要完成知乎风控验证'
       : this.requiresLogin
-        ? '通知需要登录，请登录后重试'
-        : more ? '加载更多失败，请重试' : '通知加载失败，请检查网络后重试';
+        ? '消息需要登录，请登录后重试'
+        : more ? '加载更多失败，请重试' : '消息加载失败，请检查网络后重试';
     this.paginationBlocked = more;
-    this.retryLoadMore = more;
   }
 
   private isCurrent(generation: number): boolean {
@@ -405,68 +305,6 @@ export class NotificationController {
       this.observer(this.snapshot());
     }
   }
-}
-
-export const NOTIFICATION_CATEGORY_ORDER: Array<NotificationCategory> = [
-  NotificationCategory.DEFAULT,
-  NotificationCategory.FOLLOW,
-  NotificationCategory.VOTE_THANK
-];
-
-export function mergeNotifications(current: Array<NotificationItem>, incoming: Array<NotificationItem>):
-  Array<NotificationItem> {
-  const result: Array<NotificationItem> = [];
-  const seen: Set<string> = new Set<string>();
-  current.concat(incoming).forEach((item: NotificationItem): void => {
-    const identity = notificationItemIdentity(item);
-    if (!seen.has(identity)) {
-      seen.add(identity);
-      result.push(item);
-    }
-  });
-  return result;
-}
-
-function cloneNotification(item: NotificationItem): NotificationItem {
-  return {
-    id: item.id,
-    category: item.category,
-    isRead: item.isRead,
-    createTime: item.createTime,
-    mergeCount: item.mergeCount,
-    verb: item.verb,
-    actors: item.actors.slice(),
-    contentText: item.contentText,
-    contentLink: item.contentLink,
-    extendText: item.extendText,
-    target: item.target === undefined ? undefined : {
-      kind: item.target.kind,
-      id: item.target.id,
-      title: item.target.title,
-      url: item.target.url
-    }
-  };
-}
-
-function withReadFlag(item: NotificationItem, isRead: boolean): NotificationItem {
-  return {
-    id: item.id,
-    category: item.category,
-    isRead: isRead,
-    createTime: item.createTime,
-    mergeCount: item.mergeCount,
-    verb: item.verb,
-    actors: item.actors.slice(),
-    contentText: item.contentText,
-    contentLink: item.contentLink,
-    extendText: item.extendText,
-    target: item.target === undefined ? undefined : {
-      kind: item.target.kind,
-      id: item.target.id,
-      title: item.target.title,
-      url: item.target.url
-    }
-  };
 }
 
 function notificationMutationError(error: Object): string {

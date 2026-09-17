@@ -13,6 +13,7 @@ import {
   ContentDetailPhase,
   contentDetailIdentity,
   LoadedAnswerDetail,
+  LoadedArticleDetail,
   LoadedQuestionDetail
 } from '../main/ets/pages/ContentDetailState';
 import {
@@ -20,6 +21,8 @@ import {
   contentCreatedAtText,
   contentEmptyMessage,
   contentHtml,
+  contentIpInfo,
+  contentSpeechText,
   contentStatistics,
   contentTitle,
   contentUpdatedAtText,
@@ -100,6 +103,7 @@ export default function contentDetailStateTest(): void {
         expect(contentStatistics(answer, 42)).assertEqual('42 赞同 · 2 条评论');
         expect(contentHtml(answer)).assertEqual('<p>回答正文</p>');
         expect(contentEmptyMessage(answer)).assertEqual('摘要');
+        expect(contentSpeechText(answer)).assertEqual('回答所属问题。\n作者 回答者。\n回答正文');
       }
 
       await controller.load(ContentDetailKind.ARTICLE, '3');
@@ -109,6 +113,7 @@ export default function contentDetailStateTest(): void {
         expect(contentTitle(article)).assertEqual('完整文章标题');
         expect(contentContextTitle(article)).assertEqual('完整文章标题');
         expect(contentStatistics(article)).assertEqual('20 赞同 · 4 条评论');
+        expect(contentSpeechText(article)).assertEqual('完整文章标题。\n作者 文章作者。\n文章正文');
       }
     });
 
@@ -252,6 +257,73 @@ export default function contentDetailStateTest(): void {
       const questionDetail: LoadedQuestionDetail = { kind: ContentDetailKind.QUESTION, value: question };
       expect(contentCreatedAtText(questionDetail)).assertEqual('');
       expect(contentUpdatedAtText(questionDetail)).assertEqual('');
+    });
+
+    it('surfacesIpInfoOnlyForAnswerAndArticleLikeUpstream', 0, () => {
+      // 上游 ArticleScreen：IP 属地仅回答/文章尾部显示，无值隐藏、首尾空白剔除。
+      const answer = answerFixture();
+      const answerDetail: LoadedAnswerDetail = { kind: ContentDetailKind.ANSWER, value: answer };
+      answer.ipInfo = '  广东  ';
+      expect(contentIpInfo(answerDetail)).assertEqual('广东');
+
+      answer.ipInfo = '   ';
+      expect(contentIpInfo(answerDetail)).assertEqual('');
+      answer.ipInfo = undefined;
+      expect(contentIpInfo(answerDetail)).assertEqual('');
+
+      const question = questionFixture();
+      const questionDetail: LoadedQuestionDetail = { kind: ContentDetailKind.QUESTION, value: question };
+      expect(contentIpInfo(questionDetail)).assertEqual('');
+    });
+
+    it('keepsIpInfoAndEndorsementsInSnapshotClone', 0, async () => {
+      // 回归：snapshot() 逐字段克隆曾丢掉 ipInfo/endorsements，导致 UI 拿不到 IP 属地。
+      const repository = new ControlledContentRepository();
+      const controller = new ContentDetailController(repository);
+      controller.activate();
+      const answer = answerFixture();
+      answer.ipInfo = '贵州';
+      repository.answer = answer;
+      await controller.load(ContentDetailKind.ANSWER, '2');
+
+      const state = controller.snapshot();
+      const loaded = state.content as LoadedAnswerDetail;
+      expect(loaded.value.ipInfo).assertEqual('贵州');
+    });
+
+    it('keepsAuthorBadgeAndArticleTopicsInSnapshotClone', 0, async () => {
+      // 回归扩展：作者认证徽章（author.badge）与文章话题（article.topics）同样要经克隆存活。
+      const repository = new ControlledContentRepository();
+      const controller = new ContentDetailController(repository);
+      controller.activate();
+      const answer = answerFixture();
+      answer.author = {
+        id: 'author-a',
+        name: '回答者',
+        headline: '回答签名',
+        followerCount: 1,
+        isFollowing: false,
+        isOrganization: false,
+        badge: { title: '中文工程师', description: '中文工程师', iconUrl: 'https://pic.zhimg.com/badge.png' }
+      };
+      repository.answer = answer;
+      await controller.load(ContentDetailKind.ANSWER, '2');
+      const answerSnapshot = controller.snapshot();
+      const loadedAnswer = answerSnapshot.content as LoadedAnswerDetail;
+      expect(loadedAnswer.value.author?.badge?.title).assertEqual('中文工程师');
+      expect(loadedAnswer.value.author?.badge?.iconUrl).assertEqual('https://pic.zhimg.com/badge.png');
+
+      const article = articleFixture();
+      article.topics = [{ id: '901', name: '湿疹' }, { id: '902', name: '健康常识' }];
+      repository.article = article;
+      await controller.load(ContentDetailKind.ARTICLE, '3');
+      const articleSnapshot = controller.snapshot();
+      const loadedArticle = articleSnapshot.content as LoadedArticleDetail;
+      expect(loadedArticle.kind).assertEqual(ContentDetailKind.ARTICLE);
+      const topics = loadedArticle.value.topics ?? [];
+      expect(topics.length).assertEqual(2);
+      expect(topics[0].name).assertEqual('湿疹');
+      expect(topics[1].name).assertEqual('健康常识');
     });
   });
 }
