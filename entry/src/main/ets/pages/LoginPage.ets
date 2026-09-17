@@ -82,7 +82,6 @@ export struct LoginPage {
     retainedSessionRetryEnabled: false
   };
   @State private selectedMode: number = LOGIN_MODE_PHONE;
-  @State private showWebLogin: boolean = false;
   @State private noticeStep: number = 0;
   @State private riskCookies: Array<SessionCookie> = [];
   private controller?: LoginController;
@@ -149,164 +148,140 @@ export struct LoginPage {
     this.controller?.deactivate();
     this.controller = undefined;
     this.abilityContext = undefined;
-    this.showWebLogin = false;
     this.riskCookies = [];
   }
 
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
-      Scroll() {
-        Column({ space: $r('app.float.p1_spacing_large') }) {
-          // 不再展示当前登录账户块；仅在验证/错误等非空闲态保留流程反馈文本
-          if (this.showStatusLine()) {
-            Text(this.viewState.message)
-              .id('p2_login_status')
-              .fontSize($r('app.float.p1_body_font_size'))
-              .fontColor(this.viewState.phase === LoginPhase.ERROR ||
-                this.viewState.phase === LoginPhase.SESSION_EXPIRED
-                ? $r('app.color.error_text')
-                : $r('app.color.secondary_text'))
-              .width('100%')
-          }
-
-          if (this.viewState.retainedSessionRetryEnabled) {
-            Button('重试验证已保留会话')
-              .id('p2_login_retry_retained_session')
-              .width('100%')
-              .onClick(() => this.controller?.retryRetainedSession())
-          }
-
-          Scroll() {
-            Row({ space: $r('app.float.p1_spacing_medium') }) {
-              this.modeTab(LOGIN_MODE_PHONE, '手机号')
-              this.modeTab(LOGIN_MODE_QR, '扫码')
-              this.modeTab(LOGIN_MODE_WEB, '网页')
-            }
-          }
-          .width('100%')
-          .scrollable(ScrollDirection.Horizontal)
-          .scrollBar(BarState.Off)
-
-          if (this.selectedMode === LOGIN_MODE_PHONE) {
-            Column({ space: $r('app.float.p1_spacing_medium') }) {
-              PhoneLoginPage({
-                onCookiesCaptured: (cookies: Array<SessionCookie>): void => {
-                  this.controller?.loginWithCookies(cookies);
-                }
-              })
-            }
-            .alignItems(HorizontalAlign.Start)
+      Column({ space: $r('app.float.p1_spacing_large') }) {
+        // 不再展示当前登录账户块；仅在验证/错误等非空闲态保留流程反馈文本
+        if (this.showStatusLine()) {
+          Text(this.viewState.message)
+            .id('p2_login_status')
+            .fontSize($r('app.float.p1_body_font_size'))
+            .fontColor(this.viewState.phase === LoginPhase.ERROR ||
+              this.viewState.phase === LoginPhase.SESSION_EXPIRED
+              ? $r('app.color.error_text')
+              : $r('app.color.secondary_text'))
             .width('100%')
-            .padding($r('app.float.p1_card_padding'))
-            .borderRadius($r('app.float.p1_card_radius'))
-            .backgroundColor($r('app.color.surface_background'))
-          }
+        }
 
-          if (this.selectedMode === LOGIN_MODE_QR) {
-            Column({ space: $r('app.float.p1_spacing_medium') }) {
-              Text('二维码登录')
-                .fontSize($r('app.float.p1_heading_font_size'))
-                .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.primary_text'))
-              Text('请使用另一台已登录知乎的设备扫码。本机 Scan Kit 识码结果不会被当作登录完成。')
-                .fontSize($r('app.float.p1_secondary_font_size'))
-                .fontColor($r('app.color.secondary_text'))
-
-              Button('扫描电脑端登录二维码')
-                .id('p4_login_desktop_scan_open')
-                .width('100%')
-                .onClick((): void => {
-                  this.onScanDesktopLogin();
-                })
-
-              if (this.viewState.qrLink !== undefined) {
-                QRCode(this.viewState.qrLink)
-                  .id('p2_login_qr_code')
-                  .width(220)
-                  .height(220)
-                  .color(Color.Black)
-                  .backgroundColor(Color.White)
-                  .accessibilityText('知乎登录二维码')
-              }
-
-              if (this.viewState.qrCancelable) {
-                Button('取消二维码登录')
-                  .id('p2_login_qr_cancel')
-                  .width('100%')
-                  .onClick(() => this.controller?.cancelQrLogin())
-              } else {
-                Button(this.viewState.phase === LoginPhase.QR_EXPIRED ? '刷新二维码' : '获取登录二维码')
-                  .id('p2_login_qr_start')
-                  .width('100%')
-                  .enabled(this.viewState.qrStartEnabled)
-                  .onClick(() => this.controller?.startQrLogin())
-              }
-            }
-            .alignItems(HorizontalAlign.Center)
+        if (this.viewState.retainedSessionRetryEnabled) {
+          Button('重试验证已保留会话')
+            .id('p2_login_retry_retained_session')
             .width('100%')
-            .padding($r('app.float.p1_card_padding'))
-            .borderRadius($r('app.float.p1_card_radius'))
-            .backgroundColor($r('app.color.surface_background'))
-          }
+            .onClick(() => this.controller?.retryRetainedSession())
+        }
 
-          if (this.selectedMode === LOGIN_MODE_WEB) {
-            Column({ space: $r('app.float.p1_spacing_medium') }) {
-              Text('网页登录（备用）')
-                .fontSize($r('app.float.p1_heading_font_size'))
-                .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.primary_text'))
-              Text('在应用内打开知乎网页版登录页，支持手机号/密码/邮箱等所有登录方式；登录成功后自动读回会话。')
-                .fontSize($r('app.float.p1_secondary_font_size'))
-                .fontColor($r('app.color.secondary_text'))
-              Button('打开网页登录')
-                .id('p3_web_login_open')
-                .width('100%')
-                .enabled(this.viewState.manualLoginEnabled)
-                .onClick((): void => {
-                  this.showWebLogin = true;
-                })
-            }
-            .alignItems(HorizontalAlign.Start)
-            .width('100%')
-            .padding($r('app.float.p1_card_padding'))
-            .borderRadius($r('app.float.p1_card_radius'))
-            .backgroundColor($r('app.color.surface_background'))
-          }
-
-          if (this.viewState.logoutEnabled) {
-            Button('退出登录')
-              .id('p2_login_logout')
-              .width('100%')
-              .onClick(() => this.controller?.logout())
+        Scroll() {
+          Row({ space: $r('app.float.p1_spacing_medium') }) {
+            this.modeTab(LOGIN_MODE_PHONE, '手机号')
+            this.modeTab(LOGIN_MODE_QR, '扫码')
+            this.modeTab(LOGIN_MODE_WEB, '网页')
           }
         }
-        .alignItems(HorizontalAlign.Start)
         .width('100%')
-        .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
-          top: FLOATING_TITLE_BAR_OFFSET, bottom: $r('app.float.p1_page_padding') })
+        .scrollable(ScrollDirection.Horizontal)
+        .scrollBar(BarState.Off)
+
+        if (this.selectedMode === LOGIN_MODE_WEB) {
+          WebLoginPage({
+            onCookiesCaptured: (cookies: Array<SessionCookie>): void => {
+              this.controller?.loginWithCookies(cookies);
+            },
+            onExternalUrl: (url: string): void => {
+              this.openExternalLogin(url);
+            }
+          })
+            .layoutWeight(1)
+            .width('100%')
+        } else {
+          Scroll() {
+            Column({ space: $r('app.float.p1_spacing_large') }) {
+              if (this.selectedMode === LOGIN_MODE_PHONE) {
+                Column({ space: $r('app.float.p1_spacing_medium') }) {
+                  PhoneLoginPage({
+                    onCookiesCaptured: (cookies: Array<SessionCookie>): void => {
+                      this.controller?.loginWithCookies(cookies);
+                    }
+                  })
+                }
+                .alignItems(HorizontalAlign.Start)
+                .width('100%')
+                .padding($r('app.float.p1_card_padding'))
+                .borderRadius($r('app.float.p1_card_radius'))
+                .backgroundColor($r('app.color.surface_background'))
+              }
+
+              if (this.selectedMode === LOGIN_MODE_QR) {
+                Column({ space: $r('app.float.p1_spacing_medium') }) {
+                  Text('二维码登录')
+                    .fontSize($r('app.float.p1_heading_font_size'))
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor($r('app.color.primary_text'))
+                  Text('请使用另一台已登录知乎的设备扫码。本机 Scan Kit 识码结果不会被当作登录完成。')
+                    .fontSize($r('app.float.p1_secondary_font_size'))
+                    .fontColor($r('app.color.secondary_text'))
+
+                  Button('扫描电脑端登录二维码')
+                    .id('p4_login_desktop_scan_open')
+                    .width('100%')
+                    .onClick((): void => {
+                      this.onScanDesktopLogin();
+                    })
+
+                  if (this.viewState.qrLink !== undefined) {
+                    QRCode(this.viewState.qrLink)
+                      .id('p2_login_qr_code')
+                      .width(220)
+                      .height(220)
+                      .color(Color.Black)
+                      .backgroundColor(Color.White)
+                      .accessibilityText('知乎登录二维码')
+                  }
+
+                  if (this.viewState.qrCancelable) {
+                    Button('取消二维码登录')
+                      .id('p2_login_qr_cancel')
+                      .width('100%')
+                      .onClick(() => this.controller?.cancelQrLogin())
+                  } else {
+                    Button(this.viewState.phase === LoginPhase.QR_EXPIRED ? '刷新二维码' : '获取登录二维码')
+                      .id('p2_login_qr_start')
+                      .width('100%')
+                      .enabled(this.viewState.qrStartEnabled)
+                      .onClick(() => this.controller?.startQrLogin())
+                  }
+                }
+                .alignItems(HorizontalAlign.Center)
+                .width('100%')
+                .padding($r('app.float.p1_card_padding'))
+                .borderRadius($r('app.float.p1_card_radius'))
+                .backgroundColor($r('app.color.surface_background'))
+              }
+
+              if (this.viewState.logoutEnabled) {
+                Button('退出登录')
+                  .id('p2_login_logout')
+                  .width('100%')
+                  .onClick(() => this.controller?.logout())
+              }
+            }
+            .alignItems(HorizontalAlign.Start)
+            .width('100%')
+            .padding({ bottom: $r('app.float.p1_page_padding') })
+          }
+          .scrollBar(BarState.Off)
+          .layoutWeight(1)
+          .width('100%')
+        }
       }
-      .scrollBar(BarState.Off)
+      .alignItems(HorizontalAlign.Start)
       .width('100%')
       .height('100%')
-      .align(Alignment.TopStart)
+      .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
+        top: FLOATING_TITLE_BAR_OFFSET })
       .backgroundColor($r('app.color.page_background'))
-
-      if (this.showWebLogin) {
-        WebLoginPage({
-          onCookiesCaptured: (cookies: Array<SessionCookie>): void => {
-            this.showWebLogin = false;
-            this.controller?.loginWithCookies(cookies);
-          },
-          onExternalUrl: (url: string): void => {
-            this.openExternalLogin(url);
-          },
-          onBack: (): void => {
-            this.showWebLogin = false;
-          }
-        })
-          .width('100%')
-          .height('100%')
-      }
 
       if (this.viewState.phase === LoginPhase.RISK_CONTROL) {
         Column() {

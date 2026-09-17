@@ -1,6 +1,5 @@
 import { webview } from '@kit.ArkWeb';
 import { parseWebCookieHeader, SessionCookie } from 'data';
-import { FLOATING_TITLE_BAR_OFFSET } from './AppPageChrome';
 
 const WEB_LOGIN_HOSTS: Array<string> = ['www.zhihu.com', 'zhuanlan.zhihu.com'];
 
@@ -44,8 +43,6 @@ export struct WebLoginPage {
   };
   onExternalUrl: (url: string) => void = (_url: string): void => {
   };
-  onBack: () => void = (): void => {
-  };
   @State private ready: boolean = false;
   @State private loadFailed: boolean = false;
   @State private status: string = '正在打开知乎登录页…';
@@ -61,37 +58,8 @@ export struct WebLoginPage {
   }
 
   build() {
-    // 让位统一约定：网页叠层整体下移到悬浮标题栏下方，避免玻璃顶栏（标题「登录」+
-    // 返回箭头）压在网页内容上；叠层自带工具栏负责关闭，不再重复悬浮「返回」按钮。
-    Column() {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
-        Text('知乎网页登录')
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.primary_text'))
-          .layoutWeight(1)
-        Button({ type: ButtonType.Normal, stateEffect: true }) {
-          SymbolGlyph($r('sys.symbol.xmark'))
-            .fontSize(18)
-            .fontColor([$r('app.color.primary_text')])
-        }
-          .id('p3_web_login_back')
-          .width(40)
-          .height(40)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .accessibilityText('关闭网页登录')
-          .onClick((): void => {
-            this.onBack();
-          })
-      }
-        .width('100%')
-        .height(48)
-        .padding({ left: $r('app.float.p1_spacing_medium'), right: $r('app.float.p1_spacing_medium') })
-        .backgroundColor($r('app.color.page_background'))
-
-      Stack({ alignContent: Alignment.TopStart }) {
-        Web({ src: 'https://www.zhihu.com/signin?next=%2F', controller: this.controller })
+    Stack({ alignContent: Alignment.TopStart }) {
+      Web({ src: 'https://www.zhihu.com/signin?next=%2F', controller: this.controller })
           .id('p3_web_login_web')
           .width('100%')
           .height('100%')
@@ -133,44 +101,40 @@ export struct WebLoginPage {
             }
           })
 
-        if (!this.ready || this.loadFailed) {
-          Column({ space: $r('app.float.p1_spacing_medium') }) {
-            if (!this.loadFailed) {
-              LoadingProgress()
-                .width(40)
-                .height(40)
-                .color($r('app.color.brand_primary'))
-            }
-            Text(this.status)
-              .fontSize($r('app.float.p1_body_font_size'))
-              .fontColor($r('app.color.secondary_text'))
-              .textAlign(TextAlign.Center)
-              .width('100%')
-            if (this.loadFailed) {
-              Button('重试')
-                .id('p3_web_login_retry')
-                .onClick((): void => {
-                  this.loadFailed = false;
-                  this.ready = false;
-                  this.status = '正在打开知乎登录页…';
-                  this.controller.loadUrl('https://www.zhihu.com/signin?next=%2F');
-                })
-            }
+      if (!this.ready || this.loadFailed) {
+        Column({ space: $r('app.float.p1_spacing_medium') }) {
+          if (!this.loadFailed) {
+            LoadingProgress()
+              .width(40)
+              .height(40)
+              .color($r('app.color.brand_primary'))
           }
-          .justifyContent(FlexAlign.Center)
-          .alignItems(HorizontalAlign.Center)
-          .width('100%')
-          .height('100%')
-          .backgroundColor($r('app.color.page_background'))
+          Text(this.status)
+            .fontSize($r('app.float.p1_body_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .textAlign(TextAlign.Center)
+            .width('100%')
+          if (this.loadFailed) {
+            Button('重试')
+              .id('p3_web_login_retry')
+              .onClick((): void => {
+                this.loadFailed = false;
+                this.ready = false;
+                this.status = '正在打开知乎登录页…';
+                this.controller.loadUrl('https://www.zhihu.com/signin?next=%2F');
+              })
+          }
         }
-      }
-        .layoutWeight(1)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
         .width('100%')
+        .height('100%')
+        .backgroundColor($r('app.color.page_background'))
+      }
     }
       .id('p3_web_login_container')
       .width('100%')
       .height('100%')
-      .padding({ top: FLOATING_TITLE_BAR_OFFSET })
       .backgroundColor($r('app.color.page_background'))
   }
 
