@@ -3,7 +3,9 @@ import { util } from '@kit.ArkTS';
 import { image } from '@kit.ImageKit';
 import { getAppSessionOwner, getGuestDeviceCookieManager, toCookieHeader } from 'data';
 import {
+  blockFormulaDisplayAspectRatio,
   clearFormulaByteCache,
+  inlineFormulaDisplayWidth,
   loadFormulaPixelMap,
   parseZhihuHtml,
   ReaderBlock,
@@ -14,10 +16,6 @@ import {
   ReaderInlineRun,
   readerDocumentStats
 } from 'reader';
-
-function inlineFormulaWidth(tex: string): number {
-  return Math.min(220, Math.max(20, tex.length * 9));
-}
 
 @Component
 struct ReaderInlineFormulaBlock {
@@ -32,7 +30,11 @@ struct ReaderInlineFormulaBlock {
   onFormulaFailed: (id: string, reason: string) => void = () => {};
   @State private failedRunIds: Array<string> = [];
   @State private loadedRunIds: Array<string> = [];
+  @StorageProp('appearanceThemeTick') @Watch('onAppearanceThemeChanged')
+  private appearanceThemeTick: number = 0;
+  @StorageProp('formulaForegroundColor') private formulaColor: string = '#111111';
   private pixelMaps: Map<string, image.PixelMap> = new Map();
+  private formulaWidths: Map<string, number> = new Map();
   private active: boolean = false;
   private loadGeneration: number = 0;
 
@@ -55,6 +57,7 @@ struct ReaderInlineFormulaBlock {
       pixelMap.release();
     });
     this.pixelMaps.clear();
+    this.formulaWidths.clear();
   }
 
   build() {
@@ -72,7 +75,7 @@ struct ReaderInlineFormulaBlock {
           if (this.pixelMaps.get(run.id) !== undefined) {
             ImageSpan(this.pixelMaps.get(run.id) ?? run.text)
               .id(`inline_formula_${run.id}`)
-              .width(inlineFormulaWidth(run.text))
+              .width(this.formulaWidths.get(run.id) ?? 20)
               .height(24)
               .objectFit(ImageFit.Contain)
               .verticalAlign(ImageSpanAlignment.CENTER)
@@ -93,10 +96,14 @@ struct ReaderInlineFormulaBlock {
   }
 
   private async loadFormula(run: ReaderInlineRun, generation: number): Promise<void> {
+    let pixelMap: image.PixelMap | undefined = undefined;
     try {
-      const pixelMap = await loadFormulaPixelMap(run.sourceUrl, await this.formulaCookieHeader());
+      pixelMap = await loadFormulaPixelMap(run.sourceUrl, await this.formulaCookieHeader(),
+        this.formulaColor);
+      const info = await pixelMap.getImageInfo();
       if (!this.active || this.loadGeneration !== generation) {
         await pixelMap.release();
+        pixelMap = undefined;
         return;
       }
       const previous = this.pixelMaps.get(run.id);
@@ -104,14 +111,36 @@ struct ReaderInlineFormulaBlock {
         await previous.release();
       }
       this.pixelMaps.set(run.id, pixelMap);
+      this.formulaWidths.set(run.id, inlineFormulaDisplayWidth(info.size.width, info.size.height));
+      pixelMap = undefined;
       this.loadedRunIds = this.loadedRunIds.concat(run.id);
       this.onFormulaDecoded(run.id);
     } catch (error) {
+      await pixelMap?.release();
       if (this.active) {
         const reason = error instanceof Error ? error.message : '公式加载失败';
         this.failFormula(run.id, reason);
       }
     }
+  }
+
+  private onAppearanceThemeChanged(): void {
+    if (!this.active) {
+      return;
+    }
+    const generation = ++this.loadGeneration;
+    this.loadedRunIds = [];
+    this.failedRunIds = [];
+    this.pixelMaps.forEach((pixelMap: image.PixelMap): void => {
+      pixelMap.release();
+    });
+    this.pixelMaps.clear();
+    this.formulaWidths.clear();
+    this.item.inlineRuns.forEach((run: ReaderInlineRun): void => {
+      if (run.kind === ReaderInlineKind.FORMULA) {
+        this.loadFormula(run, generation);
+      }
+    });
   }
 
   private async formulaCookieHeader(): Promise<string> {
@@ -131,6 +160,7 @@ struct ReaderInlineFormulaBlock {
     if (!this.failedRunIds.includes(id)) {
       const pixelMap = this.pixelMaps.get(id);
       this.pixelMaps.delete(id);
+      this.formulaWidths.delete(id);
       pixelMap?.release();
       this.loadedRunIds = this.loadedRunIds.filter((loadedId: string) => loadedId !== id);
       this.failedRunIds = this.failedRunIds.concat(id);
@@ -152,6 +182,10 @@ struct ReaderBlockFormulaBlock {
   onFormulaFailed: (id: string, reason: string) => void = () => {};
   @State private failed: boolean = false;
   @State private pixelMap: image.PixelMap | undefined = undefined;
+  @State private formulaAspectRatio: number = 4;
+  @StorageProp('appearanceThemeTick') @Watch('onAppearanceThemeChanged')
+  private appearanceThemeTick: number = 0;
+  @StorageProp('formulaForegroundColor') private formulaColor: string = '#111111';
   private active: boolean = false;
   private loadGeneration: number = 0;
 
@@ -173,7 +207,7 @@ struct ReaderBlockFormulaBlock {
         Image(this.pixelMap)
           .id(`formula_${this.item.id}`)
           .width('100%')
-          .height(88)
+          .aspectRatio(this.formulaAspectRatio)
           .objectFit(ImageFit.Contain)
           .onError(() => {
             this.failed = true;
@@ -196,24 +230,40 @@ struct ReaderBlockFormulaBlock {
   }
 
   private async loadFormula(generation: number): Promise<void> {
+    let pixelMap: image.PixelMap | undefined = undefined;
     try {
-      const pixelMap = await loadFormulaPixelMap(this.item.sourceUrl, await this.formulaCookieHeader());
+      pixelMap = await loadFormulaPixelMap(this.item.sourceUrl, await this.formulaCookieHeader(),
+        this.formulaColor);
+      const info = await pixelMap.getImageInfo();
       if (!this.active || this.loadGeneration !== generation) {
         await pixelMap.release();
+        pixelMap = undefined;
         return;
       }
       if (this.pixelMap !== undefined) {
         await this.pixelMap.release();
       }
+      this.formulaAspectRatio = blockFormulaDisplayAspectRatio(info.size.width, info.size.height);
       this.pixelMap = pixelMap;
+      pixelMap = undefined;
       this.onFormulaDecoded(this.item.id);
     } catch (error) {
-      if (this.active) {
+      await pixelMap?.release();
+      if (this.active && this.loadGeneration === generation) {
         this.failed = true;
         const reason = error instanceof Error ? error.message : '公式加载失败';
         this.onFormulaFailed(this.item.id, reason);
       }
     }
+  }
+
+  private onAppearanceThemeChanged(): void {
+    if (!this.active) {
+      return;
+    }
+    this.failed = false;
+    this.releasePixelMap();
+    this.loadFormula(++this.loadGeneration);
   }
 
   private async formulaCookieHeader(): Promise<string> {
