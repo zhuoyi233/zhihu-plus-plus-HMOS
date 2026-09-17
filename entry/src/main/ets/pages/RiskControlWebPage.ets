@@ -6,6 +6,7 @@ import {
   toCookieHeader
 } from 'data';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
+import { FLOATING_TITLE_BAR_OFFSET } from './AppPageChrome';
 
 const ZHIHU_RISK_HOSTS: Array<string> = ['www.zhihu.com', 'zhuanlan.zhihu.com'];
 
@@ -136,6 +137,8 @@ export struct RiskControlWebPage {
     .id('p3_risk_control_container')
     .width('100%')
     .height('100%')
+    // 让位统一约定：验证页叠层下移到悬浮标题栏下方，顶栏不再覆盖网页文字与按钮
+    .padding({ top: FLOATING_TITLE_BAR_OFFSET })
   }
 
   private readCookies(): void {

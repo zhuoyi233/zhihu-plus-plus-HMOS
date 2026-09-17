@@ -8,6 +8,7 @@ import { completesUserAuthentication, LoginController, LoginPhase, LoginViewStat
 import { PhoneLoginPage } from './PhoneLoginPage';
 import { RiskControlWebPage } from './RiskControlWebPage';
 import { WebLoginPage } from './WebLoginPage';
+import { FLOATING_TITLE_BAR_OFFSET } from './AppPageChrome';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 
 /** 登录模式（对齐上游 LOGIN_MODE_PHONE=2 / LOGIN_MODE_QR=1 / LOGIN_MODE_WEB=0）。 */
@@ -255,7 +256,7 @@ export struct LoginPage {
         .alignItems(HorizontalAlign.Start)
         .width('100%')
         .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
-          top: 94, bottom: $r('app.float.p1_page_padding') })
+          top: FLOATING_TITLE_BAR_OFFSET, bottom: $r('app.float.p1_page_padding') })
       }
       .scrollBar(BarState.Off)
       .width('100%')

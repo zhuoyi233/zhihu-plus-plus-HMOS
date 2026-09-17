@@ -1,5 +1,6 @@
 import { webview } from '@kit.ArkWeb';
 import { parseWebCookieHeader, SessionCookie } from 'data';
+import { FLOATING_TITLE_BAR_OFFSET } from './AppPageChrome';
 
 const WEB_LOGIN_HOSTS: Array<string> = ['www.zhihu.com', 'zhuanlan.zhihu.com'];
 
@@ -60,91 +61,117 @@ export struct WebLoginPage {
   }
 
   build() {
-    Stack({ alignContent: Alignment.TopStart }) {
-      Web({ src: 'https://www.zhihu.com/signin?next=%2F', controller: this.controller })
-        .id('p3_web_login_web')
-        .width('100%')
-        .height('100%')
-        .javaScriptAccess(true)
-        .onPageBegin((): void => {
-          this.ready = true;
-          this.status = '登录页加载中…';
-        })
-        .onPageEnd((event): void => {
-          this.ready = true;
-          const currentUrl = event.url;
-          if (!this.loadFailed) {
-            this.status = '登录页已加载';
-          }
-          if (!this.captured && isTrustedWebLoginUrl(currentUrl) && currentUrl === 'https://www.zhihu.com/') {
-            // 登录成功后知乎跳回首页 → 读 cookie（对齐上游 onPageFinished + url == HOME）。
-            this.captured = true;
-            this.readCookies();
-          }
-        })
-        .onLoadIntercept((event): boolean => {
-          if (event === undefined) {
-            return false;
-          }
-          const requestData = event.data;
-          const url = typeof requestData === 'string' ? requestData : requestData.getRequestUrl();
-          if (!isQqLoginSchemeUrl(url)) {
-            return false;
-          }
-          this.onExternalUrl(url);
-          return true;
-        })
-        .onErrorReceive((event): void => {
-          // 仅主框架加载失败才算失败：子资源（图片/脚本）失败不应触发不透明遮罩
-          // 盖住已正常加载的页面（历史 bug：登录/风控页看起来“无法打开”）。
-          if (event !== undefined && event.request.isMainFrame()) {
-            this.loadFailed = true;
-            this.status = '登录页加载失败，请检查网络';
-          }
-        })
-
-      if (!this.ready || this.loadFailed) {
-        Column({ space: $r('app.float.p1_spacing_medium') }) {
-          if (!this.loadFailed) {
-            LoadingProgress()
-              .width(40)
-              .height(40)
-              .color($r('app.color.brand_primary'))
-          }
-          Text(this.status)
-            .fontSize($r('app.float.p1_body_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .textAlign(TextAlign.Center)
-            .width('100%')
-          if (this.loadFailed) {
-            Button('重试')
-              .id('p3_web_login_retry')
-              .onClick((): void => {
-                this.loadFailed = false;
-                this.ready = false;
-                this.status = '正在打开知乎登录页…';
-                this.controller.loadUrl('https://www.zhihu.com/signin?next=%2F');
-              })
-          }
+    // 让位统一约定：网页叠层整体下移到悬浮标题栏下方，避免玻璃顶栏（标题「登录」+
+    // 返回箭头）压在网页内容上；叠层自带工具栏负责关闭，不再重复悬浮「返回」按钮。
+    Column() {
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Text('知乎网页登录')
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.primary_text'))
+          .layoutWeight(1)
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(18)
+            .fontColor([$r('app.color.primary_text')])
         }
-        .justifyContent(FlexAlign.Center)
-        .alignItems(HorizontalAlign.Center)
-        .width('100%')
-        .height('100%')
-        .backgroundColor($r('app.color.page_background'))
+          .id('p3_web_login_back')
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('关闭网页登录')
+          .onClick((): void => {
+            this.onBack();
+          })
       }
+        .width('100%')
+        .height(48)
+        .padding({ left: $r('app.float.p1_spacing_medium'), right: $r('app.float.p1_spacing_medium') })
+        .backgroundColor($r('app.color.page_background'))
 
-      Button('返回')
-        .id('p3_web_login_back')
-        .margin({ left: $r('app.float.p1_spacing_medium'), top: $r('app.float.p1_spacing_medium') })
-        .opacity(0.9)
-        .onClick((): void => {
-          this.onBack();
-        })
+      Stack({ alignContent: Alignment.TopStart }) {
+        Web({ src: 'https://www.zhihu.com/signin?next=%2F', controller: this.controller })
+          .id('p3_web_login_web')
+          .width('100%')
+          .height('100%')
+          .javaScriptAccess(true)
+          .onPageBegin((): void => {
+            this.ready = true;
+            this.status = '登录页加载中…';
+          })
+          .onPageEnd((event): void => {
+            this.ready = true;
+            const currentUrl = event.url;
+            if (!this.loadFailed) {
+              this.status = '登录页已加载';
+            }
+            if (!this.captured && isTrustedWebLoginUrl(currentUrl) && currentUrl === 'https://www.zhihu.com/') {
+              // 登录成功后知乎跳回首页 → 读 cookie（对齐上游 onPageFinished + url == HOME）。
+              this.captured = true;
+              this.readCookies();
+            }
+          })
+          .onLoadIntercept((event): boolean => {
+            if (event === undefined) {
+              return false;
+            }
+            const requestData = event.data;
+            const url = typeof requestData === 'string' ? requestData : requestData.getRequestUrl();
+            if (!isQqLoginSchemeUrl(url)) {
+              return false;
+            }
+            this.onExternalUrl(url);
+            return true;
+          })
+          .onErrorReceive((event): void => {
+            // 仅主框架加载失败才算失败：子资源（图片/脚本）失败不应触发不透明遮罩
+            // 盖住已正常加载的页面（历史 bug：登录/风控页看起来“无法打开”）。
+            if (event !== undefined && event.request.isMainFrame()) {
+              this.loadFailed = true;
+              this.status = '登录页加载失败，请检查网络';
+            }
+          })
+
+        if (!this.ready || this.loadFailed) {
+          Column({ space: $r('app.float.p1_spacing_medium') }) {
+            if (!this.loadFailed) {
+              LoadingProgress()
+                .width(40)
+                .height(40)
+                .color($r('app.color.brand_primary'))
+            }
+            Text(this.status)
+              .fontSize($r('app.float.p1_body_font_size'))
+              .fontColor($r('app.color.secondary_text'))
+              .textAlign(TextAlign.Center)
+              .width('100%')
+            if (this.loadFailed) {
+              Button('重试')
+                .id('p3_web_login_retry')
+                .onClick((): void => {
+                  this.loadFailed = false;
+                  this.ready = false;
+                  this.status = '正在打开知乎登录页…';
+                  this.controller.loadUrl('https://www.zhihu.com/signin?next=%2F');
+                })
+            }
+          }
+          .justifyContent(FlexAlign.Center)
+          .alignItems(HorizontalAlign.Center)
+          .width('100%')
+          .height('100%')
+          .backgroundColor($r('app.color.page_background'))
+        }
+      }
+        .layoutWeight(1)
+        .width('100%')
     }
-    .id('p3_web_login_container')
-    .width('100%')
-    .height('100%')
+      .id('p3_web_login_container')
+      .width('100%')
+      .height('100%')
+      .padding({ top: FLOATING_TITLE_BAR_OFFSET })
+      .backgroundColor($r('app.color.page_background'))
   }
 
   private readCookies(): void {
