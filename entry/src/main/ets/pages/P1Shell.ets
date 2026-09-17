@@ -1765,7 +1765,7 @@ export struct P1Shell {
           })
       }
       .width('100%')
-      Text('知乎++ HarmonyOS 版')
+      Text('知乎++鸿蒙版')
         .id('p3_about_version_app_name')
         .fontSize($r('app.float.p1_body_font_size'))
         .fontColor($r('app.color.primary_text'))

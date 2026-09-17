@@ -16,7 +16,7 @@ export struct SystemUpdateSettingsPage {
         Column({ space: $r('app.float.p1_spacing_medium') }) {
           Row() {
             Column({ space: 4 }) {
-              Text('知乎++ HarmonyOS 版').fontSize($r('app.float.p1_body_font_size'))
+              Text('知乎++鸿蒙版').fontSize($r('app.float.p1_body_font_size'))
                 .fontColor($r('app.color.primary_text'))
               Text(this.installedVersionLabel).id('p5_system_installed_version')
                 .fontSize($r('app.float.p1_secondary_font_size')).fontColor($r('app.color.secondary_text'))
