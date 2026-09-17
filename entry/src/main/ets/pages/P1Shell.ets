@@ -1294,9 +1294,11 @@ export struct P1Shell {
             .width('100%')
           Column() {
             AppNavigationRow({ title: '发布想法', description: '创建一条新的想法', testId: 'p4_open_pin_publish', grouped: true,
+              showLeadingIcon: true, leadingIcon: $r('sys.symbol.square_and_pencil'),
               onRowClick: (): void => this.openPinComposer() });
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '想法草稿', description: '继续编辑本地保存的草稿', testId: 'p4_open_pin_drafts', grouped: true,
+              showLeadingIcon: true, leadingIcon: $r('sys.symbol.doc_text'),
               onRowClick: (): void => this.navigate({ name: P1DestinationName.PIN_DRAFTS }) });
           }
           .width('100%')
@@ -1311,29 +1313,36 @@ export struct P1Shell {
             if (this.sessionSnapshot?.status === SessionStatus.AUTHENTICATED) {
               AppNavigationRow({ title: '身份管理', description: '创建马甲号或切换当前身份',
                 testId: 'p5_open_identity_management', grouped: true,
+                showLeadingIcon: true, leadingIcon: $r('sys.symbol.person_2'),
                 onRowClick: (): void => this.navigate({ name: P1DestinationName.IDENTITY_MANAGEMENT }) });
               Divider().color($r('app.color.divider_color'))
             }
             AppNavigationRow({ title: '外观与阅读体验', description: '主题、阅读排版与信息流显示',
               testId: 'p3_open_appearance_settings', grouped: true,
+              showLeadingIcon: true, leadingIcon: $r('sys.symbol.eye'),
               onRowClick: (): void => this.navigate({ name: P1DestinationName.APPEARANCE_SETTINGS }) });
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '朗读与播放', description: '语音、语速与当前播放控制',
               testId: 'p5_open_reading_settings', grouped: true,
+              showLeadingIcon: true, leadingIcon: $r('sys.symbol.mic'),
               onRowClick: (): void => this.navigate({ name: P1DestinationName.READING_SETTINGS }) });
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '推荐系统与内容过滤', description: '推荐来源、质量规则与内容屏蔽',
               testId: 'p3_open_recommendation_filter_settings', grouped: true,
+              showLeadingIcon: true, leadingIcon: $r('sys.symbol.eye_slash'),
               onRowClick: (): void => this.navigate({ name: P1DestinationName.RECOMMENDATION_FILTER_SETTINGS }) });
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '通知', description: '查看互动和系统消息', testId: 'p3_open_notifications', grouped: true,
+              showLeadingIcon: true, leadingIcon: $r('sys.symbol.bell'),
               onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION }) });
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '通知设置', description: '设置提醒和推送偏好', testId: 'p3_open_notification_settings', grouped: true,
+              showLeadingIcon: true, leadingIcon: $r('sys.symbol.bell_badge_gearshape'),
               onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION_SETTINGS }) });
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '系统与更新', description: '版本信息、检查更新与问题反馈',
               testId: 'p5_open_system_update_settings', grouped: true,
+              showLeadingIcon: true, leadingIcon: $r('sys.symbol.arrow_clockwise'),
               onRowClick: (): void => this.navigate({ name: P1DestinationName.SYSTEM_UPDATE_SETTINGS }) });
           }
           .width('100%')
@@ -1348,6 +1357,7 @@ export struct P1Shell {
             if (this.pendingUpdateRelease !== undefined) {
               AppNavigationRow({ title: this.pendingUpdateTitle(),
                 description: '点击前往 GitHub 下载新版 HAP', testId: 'p3_open_update_download', grouped: true,
+                showLeadingIcon: true, leadingIcon: $r('sys.symbol.arrow_clockwise'),
                 onRowClick: (): void => {
                   const release = this.pendingUpdateRelease;
                   const url = release !== undefined && release.htmlUrl.length > 0
@@ -1359,21 +1369,25 @@ export struct P1Shell {
             }
             AppNavigationRow({ title: '应用与版本', description: this.installedVersionLabel,
               testId: 'p3_open_about_version', grouped: true,
+              showLeadingIcon: true, leadingIcon: $r('sys.symbol.info_circle'),
               onRowClick: (): void => {
                 this.onVersionRowClicked();
               } });
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: 'GitHub', description: '查看项目主页', testId: 'p3_open_project_home', grouped: true,
+              showLeadingIcon: true, leadingIcon: $r('app.media.github_mark'), leadingIconIsMedia: true,
               onRowClick: (): void => this.openProjectHome() });
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '项目协议', description: 'GNU AGPL v3.0',
               testId: 'p3_open_project_license', grouped: true,
+              showLeadingIcon: true, leadingIcon: $r('sys.symbol.checkmark_square'),
               onRowClick: (): void => {
                 this.projectLicenseSheetShown = true;
               } });
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '开源许可', description: '3 个本地 HAR 模块 · GNU AGPL v3.0',
               testId: 'p3_open_open_source_licenses', grouped: true,
+              showLeadingIcon: true, leadingIcon: $r('sys.symbol.doc_text'),
               onRowClick: (): void => {
                 this.openSourceLicensesSheetShown = true;
               } });
@@ -1381,6 +1395,7 @@ export struct P1Shell {
               Divider().color($r('app.color.divider_color'))
               AppNavigationRow({ title: '开发者选项', description: 'Cookie、网络与调试工具',
                 testId: 'p1_open_developer_options', grouped: true,
+                showLeadingIcon: true, leadingIcon: $r('sys.symbol.gearshape'),
                 onRowClick: (): void => this.navigate({ name: P1DestinationName.TECHNICAL_LAB }) });
             }
           }
@@ -1609,87 +1624,105 @@ export struct P1Shell {
         .width('100%')
       if (this.settingsSearchMatches('账号与登录', this.accountSummary())) {
         AppNavigationRow({ title: '账号与登录', description: this.accountSummary(), testId: 'p2_open_login',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.person'),
           onRowClick: (): void => this.navigate({ name: P1DestinationName.LOGIN }) });
       }
       if (this.settingsSearchMatches('发布想法', '创建一条新的想法')) {
         AppNavigationRow({ title: '发布想法', description: '创建一条新的想法', testId: 'p4_open_pin_publish',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.square_and_pencil'),
           onRowClick: (): void => this.openPinComposer() });
       }
       if (this.settingsSearchMatches('想法草稿', '继续编辑本地保存的草稿')) {
         AppNavigationRow({ title: '想法草稿', description: '继续编辑本地保存的草稿', testId: 'p4_open_pin_drafts',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.doc_text'),
           onRowClick: (): void => this.navigate({ name: P1DestinationName.PIN_DRAFTS }) });
       }
       if (this.settingsSearchMatches('我的收藏夹', '查看自己的知乎收藏夹')) {
         AppNavigationRow({ title: '我的收藏夹', description: '查看自己的知乎收藏夹', testId: 'p3_open_my_collections',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.bookmark'),
           onRowClick: (): void => this.openMyCollections() });
       }
       if (this.settingsSearchMatches('内容屏蔽', '管理作者与关键词屏蔽规则')) {
         AppNavigationRow({ title: '内容屏蔽', description: '管理作者与关键词屏蔽规则', testId: 'p2_open_blocking_rules',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.eye_slash'),
           onRowClick: (): void => this.navigate({ name: P1DestinationName.BLOCKING_RULES }) });
       }
       if (this.settingsSearchMatches('屏蔽记录', '查看最近隐藏的内容')) {
         AppNavigationRow({ title: '屏蔽记录', description: '查看最近隐藏的内容', testId: 'p3_open_blocked_feed_history',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.arrow_counterclockwise_clock'),
           onRowClick: (): void => this.navigate({ name: P1DestinationName.BLOCKED_FEED_HISTORY }) });
       }
       if (this.settingsSearchMatches('通知', '查看互动和系统消息')) {
         AppNavigationRow({ title: '通知', description: '查看互动和系统消息', testId: 'p3_open_notifications',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.bell'),
           onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION }) });
       }
       if (this.settingsSearchMatches('通知设置', '设置提醒和推送偏好')) {
         AppNavigationRow({ title: '通知设置', description: '设置提醒和推送偏好', testId: 'p3_open_notification_settings',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.bell_badge_gearshape'),
           onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION_SETTINGS }) });
       }
       if (this.settingsSearchMatches('外观与阅读体验', '主题 阅读排版 信息流 字号 行高 段间距')) {
         AppNavigationRow({ title: '外观与阅读体验', description: '主题、阅读排版与信息流显示',
           testId: 'p3_search_open_appearance_settings',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.eye'),
           onRowClick: (): void => this.navigate({ name: P1DestinationName.APPEARANCE_SETTINGS }) });
       }
       if (this.sessionSnapshot?.status === SessionStatus.AUTHENTICATED &&
         this.settingsSearchMatches('身份管理', '创建马甲号 切换当前身份')) {
         AppNavigationRow({ title: '身份管理', description: '创建马甲号或切换当前身份',
           testId: 'p5_open_identity_management',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.person_2'),
           onRowClick: (): void => this.navigate({ name: P1DestinationName.IDENTITY_MANAGEMENT }) });
       }
       if (this.settingsSearchMatches('朗读与播放', '语音 语速 音调 播放')) {
         AppNavigationRow({ title: '朗读与播放', description: '语音、语速与当前播放控制',
           testId: 'p5_open_reading_settings',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.mic'),
           onRowClick: (): void => this.navigate({ name: P1DestinationName.READING_SETTINGS }) });
       }
       if (this.settingsSearchMatches('推荐系统与内容过滤', '推荐算法 质量过滤 智能过滤 关键词 用户 主题 广告 盐选')) {
         AppNavigationRow({ title: '推荐系统与内容过滤', description: '推荐来源、质量规则与内容屏蔽',
           testId: 'p3_search_open_recommendation_filter_settings',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.eye_slash'),
           onRowClick: (): void => this.navigate({ name: P1DestinationName.RECOMMENDATION_FILTER_SETTINGS }) });
       }
       if (this.settingsSearchMatches('系统与更新', '版本信息 检查更新 问题反馈')) {
         AppNavigationRow({ title: '系统与更新', description: '版本信息、检查更新与问题反馈',
           testId: 'p5_open_system_update_settings',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.arrow_clockwise'),
           onRowClick: (): void => this.navigate({ name: P1DestinationName.SYSTEM_UPDATE_SETTINGS }) });
       }
       if (this.settingsSearchMatches('应用与版本', this.installedVersionLabel)) {
         AppNavigationRow({ title: '应用与版本', description: this.installedVersionLabel,
-          testId: 'p3_open_about_version', onRowClick: (): void => {
+          testId: 'p3_open_about_version', showLeadingIcon: true, leadingIcon: $r('sys.symbol.info_circle'),
+          onRowClick: (): void => {
             this.onVersionRowClicked();
           } });
       }
       if (this.settingsSearchMatches('GitHub', '查看项目主页')) {
         AppNavigationRow({ title: 'GitHub', description: '查看项目主页', testId: 'p3_open_project_home',
+          showLeadingIcon: true, leadingIcon: $r('app.media.github_mark'), leadingIconIsMedia: true,
           onRowClick: (): void => this.openProjectHome() });
       }
       if (this.settingsSearchMatches('项目协议', 'GNU AGPL v3.0')) {
         AppNavigationRow({ title: '项目协议', description: 'GNU AGPL v3.0',
-          testId: 'p3_open_project_license', onRowClick: (): void => {
+          testId: 'p3_open_project_license', showLeadingIcon: true,
+          leadingIcon: $r('sys.symbol.checkmark_square'), onRowClick: (): void => {
             this.projectLicenseSheetShown = true;
           } });
       }
       if (this.settingsSearchMatches('开源许可', '3 个本地 HAR 模块 GNU AGPL v3.0')) {
         AppNavigationRow({ title: '开源许可', description: '3 个本地 HAR 模块 · GNU AGPL v3.0',
-          testId: 'p3_open_open_source_licenses', onRowClick: (): void => {
+          testId: 'p3_open_open_source_licenses', showLeadingIcon: true,
+          leadingIcon: $r('sys.symbol.doc_text'), onRowClick: (): void => {
             this.openSourceLicensesSheetShown = true;
           } });
       }
       if (this.developerModeEnabled &&
         this.settingsSearchMatches('开发者选项', 'Cookie 网络 调试工具 技术实验室')) {
         AppNavigationRow({ title: '开发者选项', description: 'Cookie、网络与调试工具', testId: 'p1_open_developer_options',
+          showLeadingIcon: true, leadingIcon: $r('sys.symbol.gearshape'),
           onRowClick: (): void => this.navigate({ name: P1DestinationName.TECHNICAL_LAB }) });
       }
       if (!this.hasSettingsSearchResults()) {

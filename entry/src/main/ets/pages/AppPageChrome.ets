@@ -104,12 +104,28 @@ export struct AppNavigationRow {
   testId: string = '';
   rowAccessibilityText: string = '';
   grouped: boolean = false;
+  showLeadingIcon: boolean = false;
+  leadingIcon: Resource = $r('sys.symbol.circle');
+  leadingIconIsMedia: boolean = false;
   onRowClick: () => void = (): void => {
   };
 
   build() {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
       Row({ space: $r('app.float.p1_spacing_medium') }) {
+        if (this.showLeadingIcon) {
+          if (this.leadingIconIsMedia) {
+            Image(this.leadingIcon)
+              .width(24)
+              .height(24)
+              .fillColor($r('app.color.primary_text'))
+              .objectFit(ImageFit.Contain)
+          } else {
+            SymbolGlyph(this.leadingIcon)
+              .fontSize(24)
+              .fontColor([$r('app.color.primary_text')])
+          }
+        }
         Column({ space: $r('app.float.p1_spacing_xsmall') }) {
           Text(this.title)
             .fontSize($r('app.float.p1_body_font_size'))
