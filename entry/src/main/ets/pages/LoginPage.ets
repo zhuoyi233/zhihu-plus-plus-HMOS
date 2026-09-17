@@ -157,22 +157,17 @@ export struct LoginPage {
     Stack({ alignContent: Alignment.TopStart }) {
       Scroll() {
         Column({ space: $r('app.float.p1_spacing_large') }) {
-          Column({ space: $r('app.float.p1_spacing_small') }) {
-            Text(this.viewState.profileName === undefined ? '游客模式' : this.viewState.profileName)
-              .id('p2_login_identity')
-              .fontSize($r('app.float.p1_heading_font_size'))
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.primary_text'))
+          // 不再展示当前登录账户块；仅在验证/错误等非空闲态保留流程反馈文本
+          if (this.showStatusLine()) {
             Text(this.viewState.message)
               .id('p2_login_status')
               .fontSize($r('app.float.p1_body_font_size'))
-              .fontColor($r('app.color.secondary_text'))
+              .fontColor(this.viewState.phase === LoginPhase.ERROR ||
+                this.viewState.phase === LoginPhase.SESSION_EXPIRED
+                ? $r('app.color.error_text')
+                : $r('app.color.secondary_text'))
+              .width('100%')
           }
-          .alignItems(HorizontalAlign.Start)
-          .width('100%')
-          .padding($r('app.float.p1_card_padding'))
-          .borderRadius($r('app.float.p1_card_radius'))
-          .backgroundColor($r('app.color.surface_background'))
 
           if (this.viewState.retainedSessionRetryEnabled) {
             Button('重试验证已保留会话')
@@ -431,6 +426,11 @@ export struct LoginPage {
       .onClick((): void => {
         this.selectedMode = index;
       })
+  }
+
+  /** 游客/已登录为空闲态不显示状态文本，其余（验证中/错误/二维码流程等）保留反馈。 */
+  private showStatusLine(): boolean {
+    return this.viewState.phase !== LoginPhase.GUEST && this.viewState.phase !== LoginPhase.AUTHENTICATED;
   }
 
   private openExternalLogin(url: string): void {
