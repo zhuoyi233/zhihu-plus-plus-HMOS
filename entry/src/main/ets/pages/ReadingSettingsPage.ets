@@ -6,7 +6,7 @@ import {
 } from 'data';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { getSpeechPlaybackService, SpeechPlaybackStatus } from '../platform/SpeechPlaybackService';
-import { AppNavigationRow } from './AppPageChrome';
+import { AppNavigationRow, FLOATING_TITLE_BAR_OFFSET } from './AppPageChrome';
 
 @Component
 export struct ReadingSettingsPage {
@@ -84,7 +84,7 @@ export struct ReadingSettingsPage {
       }
       .width('100%')
       .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
-        top: 16, bottom: 40 })
+        top: FLOATING_TITLE_BAR_OFFSET, bottom: 40 })
     }
     .id('p5_reading_settings_scroll')
     .width('100%')
