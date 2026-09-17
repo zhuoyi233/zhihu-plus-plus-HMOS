@@ -64,15 +64,18 @@ export default function identitySpeechSettingsTest(): void {
     });
 
     it('normalizesSpeechPreferencesToSupportedRangeAndVoices', 0, () => {
-      const low = normalizeSpeechPreferences({ speed: 0, pitch: -1, person: 21 });
+      const low = normalizeSpeechPreferences({ speed: 0, pitch: -1, person: 21,
+        language: 'zh-CN', style: 'interaction-broadcast' });
       expect(low.speed).assertEqual(0.5);
       expect(low.pitch).assertEqual(0.5);
-      expect(low.person).assertEqual(0);
+      expect(low.person).assertEqual(21);
 
-      const high = normalizeSpeechPreferences({ speed: 3, pitch: 2.04, person: 13 });
+      const high = normalizeSpeechPreferences({ speed: 3, pitch: 2.04, person: 8,
+        language: 'en-US', style: 'interaction-broadcast' });
       expect(high.speed).assertEqual(2);
       expect(high.pitch).assertEqual(2);
-      expect(high.person).assertEqual(13);
+      expect(high.person).assertEqual(8);
+      expect(high.language).assertEqual('en-US');
       expect(defaultSpeechPreferences().speed).assertEqual(1);
     });
   });

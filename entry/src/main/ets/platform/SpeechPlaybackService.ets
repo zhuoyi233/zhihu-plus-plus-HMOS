@@ -35,6 +35,8 @@ function errorMessage(error: Object): string {
 export class SpeechPlaybackService {
   private engine: textToSpeech.TextToSpeechEngine | undefined = undefined;
   private enginePerson: number = -1;
+  private engineLanguage: string = '';
+  private engineStyle: string = '';
   private requestSequence: number = 0;
   private activeRequestId: string = '';
   private operationGeneration: number = 0;
@@ -61,7 +63,7 @@ export class SpeechPlaybackService {
     const generation = this.operationGeneration;
     this.publish(SpeechPlaybackStatus.INITIALIZING, '', contentId, title, '正在准备语音引擎…');
     try {
-      const engine = await this.ensureEngine(normalized.person);
+      const engine = await this.ensureEngine(normalized);
       if (generation !== this.operationGeneration) {
         return;
       }
@@ -72,7 +74,7 @@ export class SpeechPlaybackService {
         'speed': normalized.speed,
         'volume': 1,
         'pitch': normalized.pitch,
-        'languageContext': 'zh-CN',
+        'languageContext': normalized.language,
         'audioType': 'pcm',
         'soundChannel': 3,
         'playType': 1,
@@ -111,10 +113,13 @@ export class SpeechPlaybackService {
     }
     this.engine = undefined;
     this.enginePerson = -1;
+    this.engineLanguage = '';
+    this.engineStyle = '';
   }
 
-  private async ensureEngine(person: number): Promise<textToSpeech.TextToSpeechEngine> {
-    if (this.engine !== undefined && this.enginePerson === person) {
+  private async ensureEngine(preferences: SpeechPreferences): Promise<textToSpeech.TextToSpeechEngine> {
+    if (this.engine !== undefined && this.enginePerson === preferences.person &&
+      this.engineLanguage === preferences.language && this.engineStyle === preferences.style) {
       return this.engine;
     }
     if (this.engine !== undefined) {
@@ -122,19 +127,21 @@ export class SpeechPlaybackService {
       this.engine = undefined;
     }
     const extraParams: Record<string, Object> = {
-      'style': 'interaction-broadcast',
+      'style': preferences.style,
       'locate': 'CN',
       'name': 'ZhihuPlusReading'
     };
     const engine = await textToSpeech.createEngine({
-      language: 'zh-CN',
-      person: person,
+      language: preferences.language,
+      person: preferences.person,
       online: 1,
       extraParams: extraParams
     });
     engine.setListener(this.createListener());
     this.engine = engine;
-    this.enginePerson = person;
+    this.enginePerson = preferences.person;
+    this.engineLanguage = preferences.language;
+    this.engineStyle = preferences.style;
     return engine;
   }
 

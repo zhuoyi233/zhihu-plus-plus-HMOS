@@ -62,6 +62,8 @@ const DEVELOPER_MODE_KEY = 'developer';
 const SPEECH_SPEED_KEY = 'readingSpeechSpeed';
 const SPEECH_PITCH_KEY = 'readingSpeechPitch';
 const SPEECH_PERSON_KEY = 'readingSpeechPerson';
+const SPEECH_LANGUAGE_KEY = 'readingSpeechLanguage';
+const SPEECH_STYLE_KEY = 'readingSpeechStyle';
 
 export const DEFAULT_CONTENT_FONT_SIZE = 100;
 export const DEFAULT_CONTENT_LINE_HEIGHT = 160;
@@ -522,10 +524,14 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
       const speed = await store.get(SPEECH_SPEED_KEY, defaults.speed);
       const pitch = await store.get(SPEECH_PITCH_KEY, defaults.pitch);
       const person = await store.get(SPEECH_PERSON_KEY, defaults.person);
+      const language = await store.get(SPEECH_LANGUAGE_KEY, defaults.language);
+      const style = await store.get(SPEECH_STYLE_KEY, defaults.style);
       return normalizeSpeechPreferences({
         speed: typeof speed === 'number' ? speed : defaults.speed,
         pitch: typeof pitch === 'number' ? pitch : defaults.pitch,
-        person: typeof person === 'number' ? person : defaults.person
+        person: typeof person === 'number' ? person : defaults.person,
+        language: typeof language === 'string' ? language : defaults.language,
+        style: typeof style === 'string' ? style : defaults.style
       });
     } catch (error) {
       const detail = error instanceof Error ? error : undefined;
@@ -549,6 +555,8 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
       await store.put(SPEECH_SPEED_KEY, value.speed);
       await store.put(SPEECH_PITCH_KEY, value.pitch);
       await store.put(SPEECH_PERSON_KEY, value.person);
+      await store.put(SPEECH_LANGUAGE_KEY, value.language);
+      await store.put(SPEECH_STYLE_KEY, value.style);
       await store.flush();
     } catch (error) {
       const detail = error instanceof Error ? error : undefined;

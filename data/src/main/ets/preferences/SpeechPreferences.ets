@@ -2,13 +2,17 @@ export interface SpeechPreferences {
   speed: number;
   pitch: number;
   person: number;
+  language: string;
+  style: string;
 }
 
 export function defaultSpeechPreferences(): SpeechPreferences {
   return {
     speed: 1,
     pitch: 1,
-    person: 0
+    person: 13,
+    language: 'zh-CN',
+    style: 'interaction-broadcast'
   };
 }
 
@@ -20,10 +24,15 @@ function normalizeSpeechScale(value: number): number {
 }
 
 export function normalizeSpeechPreferences(value: SpeechPreferences): SpeechPreferences {
+  const language = value.language.trim();
+  const style = value.style.trim();
   return {
     speed: normalizeSpeechScale(value.speed),
     pitch: normalizeSpeechScale(value.pitch),
-    // 0/13 均为系统内置聆小珊音色；21 需要额外下载，不在应用内静默触发下载。
-    person: value.person === 13 ? 13 : 0
+    // 音色由 Core Speech Kit 动态返回，不再把可选 person 限制在内置音色中。
+    person: value.person === 0 ? 13 :
+      (Number.isFinite(value.person) && value.person >= 0 ? Math.round(value.person) : 13),
+    language: language.length > 0 && language.length <= 16 ? language : 'zh-CN',
+    style: style.length > 0 && style.length <= 64 ? style : 'interaction-broadcast'
   };
 }
