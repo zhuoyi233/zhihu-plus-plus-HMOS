@@ -16,6 +16,37 @@ const LOGIN_MODE_PHONE = 0;
 const LOGIN_MODE_QR = 1;
 const LOGIN_MODE_WEB = 2;
 
+/** 登录前免责声明页（对齐上游 LoginScreen.loginNotices；次级按钮为空串时隐藏）。 */
+interface LoginNotice {
+  message: string;
+  secondaryText: string;
+  secondaryUrl: string;
+}
+
+const LOGIN_NOTICE_COUNT = 3;
+
+const LOGIN_NOTICES: Array<LoginNotice> = [
+  {
+    message: '我清楚，本应用由开源社区开发和维护，不由知乎官方开发并运营，也不受到知乎官方的承认或支持，' +
+      '使用本应用的一切后果由我本人承担。我可以在 https://www.zhihu.com/app/ 下载官方应用。',
+    secondaryText: '下载官方 App',
+    secondaryUrl: 'https://www.zhihu.com/app/'
+  },
+  {
+    message: '在使用本应用的过程中，我承诺遵守知乎使用协议 https://www.zhihu.com/term/zhihu-terms 。' +
+      '我保证在使用过程中不侵犯知乎及其他作者的著作权，使用本应用产生的一切输出仅用于个人浏览和备份，' +
+      '不会进行传播等其他影响作者著作权的行为。',
+    secondaryText: '查看协议',
+    secondaryUrl: 'https://www.zhihu.com/term/zhihu-terms'
+  },
+  {
+    // 上游第三页指向遥测设置；鸿蒙侧暂无遥测收集，文案据实调整。
+    message: '我知晓，本应用目前不收集用于统计使用人数的遥测数据；如后续引入相关功能，我可以在设置中随时关闭。',
+    secondaryText: '',
+    secondaryUrl: ''
+  }
+];
+
 class LoginApplicationStateCallback extends ApplicationStateChangeCallback {
   private readonly controller: LoginController;
 
@@ -52,6 +83,7 @@ export struct LoginPage {
   };
   @State private selectedMode: number = LOGIN_MODE_PHONE;
   @State private showWebLogin: boolean = false;
+  @State private noticeStep: number = 0;
   @State private riskCookies: Array<SessionCookie> = [];
   private controller?: LoginController;
   private abilityContext?: common.UIAbilityContext;
@@ -315,11 +347,68 @@ export struct LoginPage {
         .width('100%')
         .height('100%')
       }
+
+      // 登录前免责声明：整页不透明叠层盖住登录 UI（对齐上游 LoginScreen noticeStep 流程），
+      // 三页逐页确认后才进入登录方式选择；每次进入登录页重新展示（上游 rememberSaveable 同口径）。
+      if (this.noticeStep < LOGIN_NOTICE_COUNT) {
+        this.loginNoticePage()
+      }
     }
     .id('p2_login_top_start_container')
     .width('100%')
     .height('100%')
     .alignContent(Alignment.TopStart)
+    .backgroundColor($r('app.color.page_background'))
+  }
+
+  /** 免责声明单页：文案居中于剩余空间，底部次级按钮 + 确认（对齐上游 LoginNoticeScreen）。 */
+  @Builder
+  loginNoticePage() {
+    Column() {
+      Column() {
+        Text(LOGIN_NOTICES[this.noticeStep].message)
+          .id('p2_login_notice_message')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .lineHeight(24)
+          .fontColor($r('app.color.primary_text'))
+          .textAlign(TextAlign.Center)
+          .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding') })
+      }
+      .justifyContent(FlexAlign.Center)
+      .layoutWeight(1)
+      .width('100%')
+      .padding({ top: FLOATING_TITLE_BAR_OFFSET })
+
+      Column({ space: $r('app.float.p1_spacing_medium') }) {
+        if (LOGIN_NOTICES[this.noticeStep].secondaryUrl !== '') {
+          Button(LOGIN_NOTICES[this.noticeStep].secondaryText)
+            .id('p2_login_notice_secondary')
+            .width('100%')
+            .fontSize($r('app.float.p1_body_font_size'))
+            .fontColor($r('app.color.brand_primary'))
+            .backgroundColor(Color.Transparent)
+            .border({ width: 1, color: $r('app.color.brand_primary'), radius: $r('app.float.p1_card_radius') })
+            .onClick((): void => {
+              this.openExternalLogin(LOGIN_NOTICES[this.noticeStep].secondaryUrl);
+            })
+        }
+
+        Button('确认')
+          .id('p2_login_notice_confirm')
+          .width('100%')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .onClick((): void => {
+            this.noticeStep += 1;
+          })
+      }
+      .width('100%')
+      .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
+        bottom: $r('app.float.p1_page_padding') })
+    }
+    .id(`p2_login_notice_step_${this.noticeStep + 1}`)
+    .width('100%')
+    .height('100%')
+    .alignItems(HorizontalAlign.Center)
     .backgroundColor($r('app.color.page_background'))
   }
 
