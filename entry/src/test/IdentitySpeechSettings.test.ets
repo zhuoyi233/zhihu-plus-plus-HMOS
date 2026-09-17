@@ -76,6 +76,10 @@ export default function identitySpeechSettingsTest(): void {
       expect(high.pitch).assertEqual(2);
       expect(high.person).assertEqual(8);
       expect(high.language).assertEqual('en-US');
+      const compatibleLanguage = normalizeSpeechPreferences({ speed: 1, pitch: 1, person: 0,
+        language: 'zh_CN', style: 'interaction-broadcast' });
+      expect(compatibleLanguage.person).assertEqual(13);
+      expect(compatibleLanguage.language).assertEqual('zh-CN');
       expect(defaultSpeechPreferences().speed).assertEqual(1);
     });
   });

@@ -268,15 +268,21 @@ export struct ReadingSettingsPage {
       const choices: Array<SpeechVoiceChoice> = [];
       voices.forEach((voice: textToSpeech.VoiceInfo): void => {
         const choice: SpeechVoiceChoice = {
-          language: voice.language,
+          language: this.canonicalVoiceLanguage(voice.language),
           person: voice.person === 0 ? 13 : voice.person,
-          style: voice.style,
+          style: this.canonicalVoiceStyle(voice.style),
           gender: voice.gender,
           description: voice.description,
           status: voice.status ?? ''
         };
-        if (!choices.some((item: SpeechVoiceChoice): boolean => this.sameVoice(item, choice))) {
+        if (choice.status === 'EOM') {
+          return;
+        }
+        const existingIndex = choices.findIndex((item: SpeechVoiceChoice): boolean => this.sameVoice(item, choice));
+        if (existingIndex < 0) {
           choices.push(choice);
+        } else if (choices[existingIndex].status !== 'INSTALLED' && choice.status === 'INSTALLED') {
+          choices[existingIndex] = choice;
         }
       });
       if (choices.length === 0) {
@@ -327,6 +333,16 @@ export struct ReadingSettingsPage {
     return left.language === right.language && left.person === right.person && left.style === right.style;
   }
 
+  private canonicalVoiceLanguage(language: string): string {
+    if (language === 'zh_CN') return 'zh-CN';
+    if (language === 'en_US') return 'en-US';
+    return language;
+  }
+
+  private canonicalVoiceStyle(style: string): string {
+    return style.trim().length > 0 ? style : 'interaction-broadcast';
+  }
+
   private isSelectedVoice(choice: SpeechVoiceChoice): boolean {
     return choice.language === this.preferences.language && choice.person === this.preferences.person &&
       choice.style === this.preferences.style;
@@ -342,13 +358,21 @@ export struct ReadingSettingsPage {
       return;
     }
     if (choice.status === 'GA') {
-      this.downloadVoice(choice);
+      const previous = this.preferences;
+      this.preferences = normalizeSpeechPreferences({
+        speed: previous.speed,
+        pitch: previous.pitch,
+        person: choice.person,
+        language: choice.language,
+        style: choice.style
+      });
+      this.downloadVoice(choice, previous);
       return;
     }
     this.saveVoice(choice);
   }
 
-  private downloadVoice(choice: SpeechVoiceChoice): void {
+  private downloadVoice(choice: SpeechVoiceChoice, previous: SpeechPreferences): void {
     this.voiceRequestSequence += 1;
     this.statusMessage = `正在请求下载${this.voiceLabel(choice).replace('（需下载）', '')}…`;
     textToSpeech.downloadVoice({
@@ -358,14 +382,15 @@ export struct ReadingSettingsPage {
       style: choice.style
     }, (error: BusinessError, response: textToSpeech.DownloadResponse): void => {
       if (error) {
+        this.preferences = previous;
         this.statusMessage = `音色下载失败（${error.code}）`;
         return;
       }
       response.on('complete', (voice: textToSpeech.VoiceInfo): void => {
         const installed: SpeechVoiceChoice = {
-          language: voice.language,
+          language: this.canonicalVoiceLanguage(voice.language),
           person: voice.person === 0 ? 13 : voice.person,
-          style: voice.style,
+          style: this.canonicalVoiceStyle(voice.style),
           gender: voice.gender,
           description: voice.description,
           status: 'INSTALLED'
@@ -374,9 +399,11 @@ export struct ReadingSettingsPage {
         void this.loadVoices();
       });
       response.on('cancel', (_info: string): void => {
+        this.preferences = previous;
         this.statusMessage = '已取消音色下载';
       });
       response.on('error', (downloadError: BusinessError): void => {
+        this.preferences = previous;
         this.statusMessage = `音色下载失败（${downloadError.code}）`;
       });
     });

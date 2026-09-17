@@ -24,7 +24,8 @@ function normalizeSpeechScale(value: number): number {
 }
 
 export function normalizeSpeechPreferences(value: SpeechPreferences): SpeechPreferences {
-  const language = value.language.trim();
+  const rawLanguage = value.language.trim();
+  const language = rawLanguage === 'zh_CN' ? 'zh-CN' : (rawLanguage === 'en_US' ? 'en-US' : rawLanguage);
   const style = value.style.trim();
   return {
     speed: normalizeSpeechScale(value.speed),
