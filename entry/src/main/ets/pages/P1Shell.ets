@@ -158,6 +158,7 @@ export struct P1Shell {
   @State private projectHomeHelpShown: boolean = false;
   @State private projectHomeLaunchStatus: string = '';
   @State private settingsSearchQuery: string = '';
+  @State private accountLogoutBusy: boolean = false;
   @State private homeReloadToken: number = 0;
   @State private followingReloadToken: number = 0;
   @State private hotReloadToken: number = 0;
@@ -1275,18 +1276,8 @@ export struct P1Shell {
     Stack({ alignContent: Alignment.TopStart }) {
       Scroll() {
         Column({ space: $r('app.float.p1_spacing_large') }) {
-          TextInput({ text: this.settingsSearchQuery, placeholder: '搜索设置' })
-            .id('p3_settings_search')
-            .width('100%')
-            .onChange((value: string): void => {
-              this.settingsSearchQuery = value;
-            })
-
-          if (this.hasSettingsSearchQuery()) {
-            this.settingsSearchResults()
-          } else {
-            this.accountOverview()
-            this.accountQuickActions()
+          this.accountOverview()
+          this.accountQuickActions()
 
           Text('创作')
             .fontSize($r('app.float.p1_secondary_font_size'))
@@ -1305,6 +1296,16 @@ export struct P1Shell {
           .borderRadius($r('app.float.p1_card_radius'))
           .backgroundColor($r('app.color.surface_background'))
 
+          TextInput({ text: this.settingsSearchQuery, placeholder: '搜索设置' })
+            .id('p3_settings_search')
+            .width('100%')
+            .onChange((value: string): void => {
+              this.settingsSearchQuery = value;
+            })
+
+          if (this.hasSettingsSearchQuery()) {
+            this.settingsSearchResults()
+          } else {
           Text('设置')
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
@@ -1489,62 +1490,84 @@ export struct P1Shell {
 
   @Builder
   private accountOverview() {
-    Button({ type: ButtonType.Normal, stateEffect: true }) {
-      Row({ space: $r('app.float.p1_spacing_medium') }) {
-        Stack({ alignContent: Alignment.Center }) {
-          Text(this.accountAvatarLetter())
-            .width(56)
-            .height(56)
-            .borderRadius(28)
-            .backgroundColor($r('app.color.brand_primary_container'))
-            .fontSize($r('app.float.p1_heading_font_size'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.brand_primary'))
-            .textAlign(TextAlign.Center)
-          // 有头像地址时叠加真实头像；加载失败露出首字占位。
-          if (this.accountAvatarUrl().length > 0) {
-            Image(this.accountAvatarUrl())
-              .id('p3_account_overview_avatar')
-              .width(56)
-              .height(56)
-              .borderRadius(28)
-              .objectFit(ImageFit.Cover)
+    if (this.accountSessionState()?.status === SessionStatus.AUTHENTICATED) {
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          Row({ space: $r('app.float.p1_spacing_small') }) {
+            Stack({ alignContent: Alignment.Center }) {
+              Text(this.accountAvatarLetter())
+                .width(56)
+                .height(56)
+                .borderRadius(28)
+                .backgroundColor($r('app.color.brand_primary_container'))
+                .fontSize($r('app.float.p1_heading_font_size'))
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('app.color.brand_primary'))
+                .textAlign(TextAlign.Center)
+              // 有头像地址时叠加真实头像；加载失败露出首字占位。
+              if (this.accountAvatarUrl().length > 0) {
+                Image(this.accountAvatarUrl())
+                  .id('p3_account_overview_avatar')
+                  .width(56)
+                  .height(56)
+                  .borderRadius(28)
+                  .objectFit(ImageFit.Cover)
+              }
+            }
+            .id('p3_account_overview_avatar_box')
+            Text(this.accountTitle())
+              .id('p3_account_overview_title')
+              .fontSize($r('app.float.p1_heading_font_size'))
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.primary_text'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .layoutWeight(1)
           }
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
         }
-        .id('p3_account_overview_avatar_box')
-        Column({ space: $r('app.float.p1_spacing_xsmall') }) {
-          Text(this.accountTitle())
-            .id('p3_account_overview_title')
-            .fontSize($r('app.float.p1_heading_font_size'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.primary_text'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-          Text(this.accountSummary())
-            .id('p3_account_overview_summary')
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .maxLines(2)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-        }
-        .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
-        SymbolGlyph($r('sys.symbol.chevron_right'))
-          .fontSize(16)
-          .fontColor([$r('app.color.secondary_text')])
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .accessibilityText('打开个人主页')
+        .onClick((): void => this.openCurrentProfile())
+
+        Button({ type: ButtonType.Circle, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.barcode_viewfinder'))
+            .fontSize(22)
+            .fontColor([$r('app.color.brand_primary')])
+        }
+          .id('p4_account_scan_desktop_login')
+          .width(44)
+          .height(44)
+          .padding(0)
+          .backgroundColor($r('app.color.brand_primary_container'))
+          .accessibilityText('扫描电脑端登录二维码')
+          .onClick((): void => this.navigate({ name: P1DestinationName.QR_DESKTOP_LOGIN_SCAN }))
+
+        Button({ type: ButtonType.Circle, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.arrow_right_and_square'))
+            .fontSize(22)
+            .fontColor([$r('app.color.error_text')])
+        }
+          .id('p2_account_logout')
+          .width(44)
+          .height(44)
+          .padding(0)
+          .backgroundColor($r('app.color.control_background'))
+          .enabled(!this.accountLogoutBusy)
+          .accessibilityText('退出登录')
+          .onClick((): void => this.confirmAccountLogout())
       }
+      .id('p3_account_overview')
       .width('100%')
       .alignItems(VerticalAlign.Center)
+    } else {
+      AppNavigationRow({ title: '登录知乎', description: '管理当前知乎账号的登录状态', testId: 'p2_open_login',
+        grouped: false, showLeadingIcon: true, leadingIcon: $r('sys.symbol.person'),
+        onRowClick: (): void => this.navigate({ name: P1DestinationName.LOGIN }) })
     }
-    .id('p2_open_login')
-    .width('100%')
-    .padding($r('app.float.p1_card_padding'))
-    .borderRadius($r('app.float.p1_card_radius'))
-    .backgroundColor($r('app.color.surface_background'))
-    .accessibilityText('账号与登录')
-    .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
   }
 
   @Builder
@@ -2181,6 +2204,45 @@ export struct P1Shell {
       return '';
     }
     return state.profile?.avatarUrl?.trim() ?? '';
+  }
+
+  private openCurrentProfile(): void {
+    const state = this.accountSessionState();
+    const profile = state?.profile;
+    const identifier = profile?.urlToken ?? profile?.id;
+    if (state?.status === SessionStatus.AUTHENTICATED && identifier !== undefined && identifier.length > 0) {
+      this.navigate({ name: P1DestinationName.PEOPLE, id: identifier });
+    }
+  }
+
+  private confirmAccountLogout(): void {
+    if (this.accountLogoutBusy) {
+      return;
+    }
+    this.getUIContext().showAlertDialog({
+      title: '退出登录',
+      message: '确定要退出登录吗？',
+      primaryButton: { value: '取消', action: (): void => {} },
+      secondaryButton: { value: '退出', action: (): void => { void this.logoutCurrentAccount(); } }
+    });
+  }
+
+  private async logoutCurrentAccount(): Promise<void> {
+    const session = this.session;
+    if (session === undefined || this.accountLogoutBusy) {
+      return;
+    }
+    this.accountLogoutBusy = true;
+    try {
+      const state = await session.logout();
+      this.sessionSnapshot = state;
+      AppStorage.setOrCreate('sessionStateTick', (AppStorage.get<number>('sessionStateTick') ?? 0) + 1);
+      this.getUIContext().getPromptAction().showToast({ message: state.message });
+    } catch (_error) {
+      this.getUIContext().getPromptAction().showToast({ message: '退出登录失败，请重试' });
+    } finally {
+      this.accountLogoutBusy = false;
+    }
   }
 
   @Builder
