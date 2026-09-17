@@ -31,6 +31,7 @@ import {
   SymbolGlyphModifier
 } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { resourceManager } from '@kit.LocalizationKit';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import {
   decodeP1Destination,
@@ -187,6 +188,8 @@ export struct P1Shell {
 
   aboutToAppear(): void {
     this.themeMounted = true;
+    AppStorage.setOrCreate('formulaForegroundColor', this.resolveFormulaForegroundColor(AppThemeMode.SYSTEM));
+    AppStorage.setOrCreate('appearanceThemeTick', AppStorage.get<number>('appearanceThemeTick') ?? 0);
     this.sessionSnapshot = this.session?.getState();
     this.restoreThemeMode();
     void this.restoreAnswerDoubleTapAction();
@@ -2636,9 +2639,31 @@ export struct P1Shell {
         context.setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
       }
       this.themeMode = mode;
+      AppStorage.setOrCreate('formulaForegroundColor', this.resolveFormulaForegroundColor(mode));
+      AppStorage.setOrCreate('appearanceThemeTick',
+        (AppStorage.get<number>('appearanceThemeTick') ?? 0) + 1);
       return true;
     } catch (_error) {
       return false;
+    }
+  }
+
+  private resolveFormulaForegroundColor(mode: AppThemeMode): string {
+    if (mode === AppThemeMode.DARK) {
+      return '#F5F5F5';
+    }
+    if (mode === AppThemeMode.LIGHT) {
+      return '#111111';
+    }
+    const context = getAbilityContext();
+    if (context === undefined) {
+      return '#111111';
+    }
+    try {
+      return context.resourceManager.getConfigurationSync().colorMode ===
+        resourceManager.ColorMode.DARK ? '#F5F5F5' : '#111111';
+    } catch (_error) {
+      return '#111111';
     }
   }
 

@@ -1,6 +1,7 @@
 import { image } from '@kit.ImageKit';
 import { http } from '@kit.NetworkKit';
 import { util } from '@kit.ArkTS';
+import { normalizeFormulaSvgText } from './FormulaRendering';
 import { isTrustedFormulaUrl } from './FormulaSourcePolicy';
 
 const MAX_SVG_BYTES = 1024 * 1024;
@@ -27,20 +28,10 @@ function isSvgResponse(contentType: string, bytes: ArrayBuffer): boolean {
   return /^\uFEFF?\s*(?:<\?xml[^>]*>\s*)?<svg(?:\s|>)/i.test(prefix);
 }
 
-function normalizeZhihuSvg(bytes: ArrayBuffer): ArrayBuffer {
-  let svg = util.TextDecoder.create('utf-8').decodeToString(new Uint8Array(bytes));
-  const width = /\bwidth="([0-9.]+)ex"/i.exec(svg);
-  const height = /\bheight="([0-9.]+)ex"/i.exec(svg);
-  if (width !== null) {
-    const pixels = Math.max(1, Math.ceil(Number(width[1]) * 15));
-    svg = svg.replace(width[0], `width="${pixels}px"`);
-  }
-  if (height !== null) {
-    const pixels = Math.max(1, Math.ceil(Number(height[1]) * 15));
-    svg = svg.replace(height[0], `height="${pixels}px"`);
-  }
-  svg = svg.replace(/currentColor/g, '#000000');
-  return util.TextEncoder.create('utf-8').encodeInto(svg).buffer;
+function normalizeZhihuSvg(bytes: ArrayBuffer, foregroundColor: string): ArrayBuffer {
+  const svg = util.TextDecoder.create('utf-8').decodeToString(new Uint8Array(bytes));
+  const normalized = normalizeFormulaSvgText(svg, foregroundColor);
+  return util.TextEncoder.create('utf-8').encodeInto(normalized).buffer;
 }
 
 function cacheSvg(url: string, bytes: ArrayBuffer): void {
@@ -149,9 +140,10 @@ export function clearFormulaByteCache(): void {
   cachedByteCount = 0;
 }
 
-export async function loadFormulaPixelMap(url: string, cookieHeader?: string): Promise<image.PixelMap> {
+export async function loadFormulaPixelMap(url: string, cookieHeader?: string,
+  foregroundColor: string = '#111111'): Promise<image.PixelMap> {
   const bytes = await cachedSvg(url, cookieHeader);
-  const normalizedBytes = normalizeZhihuSvg(bytes);
+  const normalizedBytes = normalizeZhihuSvg(bytes, foregroundColor);
   let source: image.ImageSource | undefined = undefined;
   try {
     source = image.createImageSource(normalizedBytes.slice(0));

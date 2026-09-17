@@ -1,6 +1,9 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
+  blockFormulaDisplayAspectRatio,
+  inlineFormulaDisplayWidth,
   isTrustedFormulaUrl,
+  normalizeFormulaSvgText,
   parseZhihuHtml,
   ReaderBlockKind,
   ReaderInlineKind,
@@ -74,6 +77,18 @@ export default function readerDocumentTest(): void {
       expect(isTrustedFormulaUrl('https://www.zhihu.com:443/equation?tex=x')).assertFalse();
       expect(isTrustedFormulaUrl('https://www.zhihu.com/equation?tex=')).assertFalse();
       expect(isTrustedFormulaUrl('https://www.zhihu.com/equation/extra?tex=x')).assertFalse();
+    });
+
+    it('usesThemeColorAndDecodedAspectRatioForFormulaRendering', 0, () => {
+      const normalized = normalizeFormulaSvgText(
+        '<svg width="2.5ex" height="1.2ex"><path fill="currentColor"/></svg>', '#F5F5F5');
+      expect(normalized.includes('width="38px"')).assertTrue();
+      expect(normalized.includes('height="18px"')).assertTrue();
+      expect(normalized.includes('fill="#F5F5F5"')).assertTrue();
+      expect(inlineFormulaDisplayWidth(90, 30)).assertEqual(72);
+      expect(inlineFormulaDisplayWidth(30, 30)).assertEqual(24);
+      expect(blockFormulaDisplayAspectRatio(600, 100)).assertEqual(6);
+      expect(blockFormulaDisplayAspectRatio(0, 100)).assertEqual(4);
     });
 
     it('prefersOriginalZhihuImageAndCaption', 0, () => {

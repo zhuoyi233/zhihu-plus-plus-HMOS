@@ -15,7 +15,9 @@ import {
 } from '../platform/ShareContracts';
 import { getAppSessionOwner, getGuestDeviceCookieManager, toCookieHeader } from 'data';
 import {
+  blockFormulaDisplayAspectRatio,
   clearFormulaByteCache,
+  inlineFormulaDisplayWidth,
   loadFormulaPixelMap,
   parseZhihuHtml,
   ReaderBlock,
@@ -36,10 +38,6 @@ import {
   readerBodyLineHeight,
   readerHeadingFontSize
 } from './ReaderTypography';
-
-function inlineFormulaWidth(tex: string): number {
-  return Math.min(220, Math.max(20, tex.length * 9));
-}
 
 /**
  * 块高缺失时的估算兜底（vp）：未渲染块按实测平均块高估，无实测值时用该值。
@@ -388,8 +386,12 @@ struct ContentInlineFormula {
   /** 排版偏好与宿主同源（AppStorage 广播），行内公式所在段落随字号/行高联动。 */
   @StorageProp('contentFontSize') private fontSizePercent: number = 100;
   @StorageProp('contentLineHeight') private lineHeightPercent: number = 160;
+  @StorageProp('appearanceThemeTick') @Watch('onAppearanceThemeChanged')
+  private appearanceThemeTick: number = 0;
+  @StorageProp('formulaForegroundColor') private formulaColor: string = '#111111';
   @State private loadedRunIds: Array<string> = [];
   private pixelMaps: Map<string, image.PixelMap> = new Map();
+  private formulaWidths: Map<string, number> = new Map();
   private active: boolean = false;
   private loadGeneration: number = 0;
 
@@ -411,6 +413,7 @@ struct ContentInlineFormula {
       pixelMap.release();
     });
     this.pixelMaps.clear();
+    this.formulaWidths.clear();
   }
 
   build() {
@@ -428,7 +431,7 @@ struct ContentInlineFormula {
         } else {
           ImageSpan(this.pixelMaps.get(run.id) ?? run.text)
             .id(`p2_content_inline_formula_${run.id}`)
-            .width(inlineFormulaWidth(run.text))
+            .width(this.formulaWidths.get(run.id) ?? 20)
             .height(24)
             .objectFit(ImageFit.Contain)
             .verticalAlign(ImageSpanAlignment.CENTER)
@@ -445,10 +448,14 @@ struct ContentInlineFormula {
   }
 
   private async loadFormula(run: ReaderInlineRun, generation: number): Promise<void> {
+    let pixelMap: image.PixelMap | undefined = undefined;
     try {
-      const pixelMap = await loadFormulaPixelMap(run.sourceUrl, await this.formulaCookieHeader());
+      pixelMap = await loadFormulaPixelMap(run.sourceUrl, await this.formulaCookieHeader(),
+        this.formulaColor);
+      const info = await pixelMap.getImageInfo();
       if (!this.active || this.loadGeneration !== generation) {
         await pixelMap.release();
+        pixelMap = undefined;
         return;
       }
       const previous = this.pixelMaps.get(run.id);
@@ -456,12 +463,33 @@ struct ContentInlineFormula {
         await previous.release();
       }
       this.pixelMaps.set(run.id, pixelMap);
+      this.formulaWidths.set(run.id, inlineFormulaDisplayWidth(info.size.width, info.size.height));
+      pixelMap = undefined;
       this.loadedRunIds = this.loadedRunIds.concat(run.id);
     } catch (_error) {
+      await pixelMap?.release();
       if (this.active && this.loadGeneration === generation) {
         this.failFormula(run.id);
       }
     }
+  }
+
+  private onAppearanceThemeChanged(): void {
+    if (!this.active) {
+      return;
+    }
+    const generation = ++this.loadGeneration;
+    this.loadedRunIds = [];
+    this.pixelMaps.forEach((pixelMap: image.PixelMap): void => {
+      pixelMap.release();
+    });
+    this.pixelMaps.clear();
+    this.formulaWidths.clear();
+    this.item.inlineRuns.forEach((run: ReaderInlineRun): void => {
+      if (run.kind === ReaderInlineKind.FORMULA) {
+        this.loadFormula(run, generation);
+      }
+    });
   }
 
   private async formulaCookieHeader(): Promise<string> {
@@ -480,6 +508,7 @@ struct ContentInlineFormula {
   private failFormula(id: string): void {
     const pixelMap = this.pixelMaps.get(id);
     this.pixelMaps.delete(id);
+    this.formulaWidths.delete(id);
     pixelMap?.release();
     this.loadedRunIds = this.loadedRunIds.filter((loadedId: string): boolean => loadedId !== id);
   }
@@ -496,6 +525,10 @@ struct ContentBlockFormula {
   };
   @State private failed: boolean = false;
   @State private pixelMap: image.PixelMap | undefined = undefined;
+  @State private formulaAspectRatio: number = 4;
+  @StorageProp('appearanceThemeTick') @Watch('onAppearanceThemeChanged')
+  private appearanceThemeTick: number = 0;
+  @StorageProp('formulaForegroundColor') private formulaColor: string = '#111111';
   private active: boolean = false;
   private loadGeneration: number = 0;
 
@@ -516,7 +549,7 @@ struct ContentBlockFormula {
         Image(this.pixelMap)
           .id(`p2_content_formula_${this.item.id}`)
           .width('100%')
-          .height(88)
+          .aspectRatio(this.formulaAspectRatio)
           .objectFit(ImageFit.Contain)
           .onError((): void => {
             this.failed = true;
@@ -538,22 +571,38 @@ struct ContentBlockFormula {
   }
 
   private async loadFormula(generation: number): Promise<void> {
+    let pixelMap: image.PixelMap | undefined = undefined;
     try {
-      const pixelMap = await loadFormulaPixelMap(this.item.sourceUrl, await this.formulaCookieHeader());
+      pixelMap = await loadFormulaPixelMap(this.item.sourceUrl, await this.formulaCookieHeader(),
+        this.formulaColor);
+      const info = await pixelMap.getImageInfo();
       if (!this.active || this.loadGeneration !== generation) {
         await pixelMap.release();
+        pixelMap = undefined;
         return;
       }
       if (this.pixelMap !== undefined) {
         await this.pixelMap.release();
       }
+      this.formulaAspectRatio = blockFormulaDisplayAspectRatio(info.size.width, info.size.height);
       this.pixelMap = pixelMap;
+      pixelMap = undefined;
       this.failed = false;
     } catch (_error) {
+      await pixelMap?.release();
       if (this.active && this.loadGeneration === generation) {
         this.failed = true;
       }
     }
+  }
+
+  private onAppearanceThemeChanged(): void {
+    if (!this.active) {
+      return;
+    }
+    this.failed = false;
+    this.releasePixelMap();
+    this.loadFormula(++this.loadGeneration);
   }
 
   private async formulaCookieHeader(): Promise<string> {
