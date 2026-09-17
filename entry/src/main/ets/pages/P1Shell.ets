@@ -1333,10 +1333,6 @@ export struct P1Shell {
               showLeadingIcon: true, leadingIcon: $r('sys.symbol.eye_slash'),
               onRowClick: (): void => this.navigate({ name: P1DestinationName.RECOMMENDATION_FILTER_SETTINGS }) });
             Divider().color($r('app.color.divider_color'))
-            AppNavigationRow({ title: '通知', description: '查看互动和系统消息', testId: 'p3_open_notifications', grouped: true,
-              showLeadingIcon: true, leadingIcon: $r('sys.symbol.bell'),
-              onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION }) });
-            Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '通知设置', description: '设置提醒和推送偏好', testId: 'p3_open_notification_settings', grouped: true,
               showLeadingIcon: true, leadingIcon: $r('sys.symbol.bell_badge_gearshape'),
               onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION_SETTINGS }) });
@@ -1674,11 +1670,6 @@ export struct P1Shell {
         AppNavigationRow({ title: '屏蔽记录', description: '查看最近隐藏的内容', testId: 'p3_open_blocked_feed_history',
           showLeadingIcon: true, leadingIcon: $r('sys.symbol.arrow_counterclockwise_clock'),
           onRowClick: (): void => this.navigate({ name: P1DestinationName.BLOCKED_FEED_HISTORY }) });
-      }
-      if (this.settingsSearchMatches('通知', '查看互动和系统消息')) {
-        AppNavigationRow({ title: '通知', description: '查看互动和系统消息', testId: 'p3_open_notifications',
-          showLeadingIcon: true, leadingIcon: $r('sys.symbol.bell'),
-          onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION }) });
       }
       if (this.settingsSearchMatches('通知设置', '设置提醒和推送偏好')) {
         AppNavigationRow({ title: '通知设置', description: '设置提醒和推送偏好', testId: 'p3_open_notification_settings',
@@ -2123,7 +2114,6 @@ export struct P1Shell {
       this.settingsSearchMatches('我的收藏夹', '查看自己的知乎收藏夹') ||
       this.settingsSearchMatches('内容屏蔽', '管理作者与关键词屏蔽规则') ||
       this.settingsSearchMatches('屏蔽记录', '查看最近隐藏的内容') ||
-      this.settingsSearchMatches('通知', '查看互动和系统消息') ||
       this.settingsSearchMatches('通知设置', '设置提醒和推送偏好') ||
       (this.sessionSnapshot?.status === SessionStatus.AUTHENTICATED &&
         this.settingsSearchMatches('身份管理', '创建马甲号 切换当前身份')) ||
