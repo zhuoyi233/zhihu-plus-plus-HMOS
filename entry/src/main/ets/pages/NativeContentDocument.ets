@@ -386,8 +386,6 @@ struct ContentInlineFormula {
   /** 排版偏好与宿主同源（AppStorage 广播），行内公式所在段落随字号/行高联动。 */
   @StorageProp('contentFontSize') private fontSizePercent: number = 100;
   @StorageProp('contentLineHeight') private lineHeightPercent: number = 160;
-  @StorageProp('appearanceThemeTick') @Watch('onAppearanceThemeChanged')
-  private appearanceThemeTick: number = 0;
   @StorageProp('formulaForegroundColor') private formulaColor: string = '#111111';
   @State private loadedRunIds: Array<string> = [];
   private pixelMaps: Map<string, image.PixelMap> = new Map();
@@ -474,24 +472,6 @@ struct ContentInlineFormula {
     }
   }
 
-  private onAppearanceThemeChanged(): void {
-    if (!this.active) {
-      return;
-    }
-    const generation = ++this.loadGeneration;
-    this.loadedRunIds = [];
-    this.pixelMaps.forEach((pixelMap: image.PixelMap): void => {
-      pixelMap.release();
-    });
-    this.pixelMaps.clear();
-    this.formulaWidths.clear();
-    this.item.inlineRuns.forEach((run: ReaderInlineRun): void => {
-      if (run.kind === ReaderInlineKind.FORMULA) {
-        this.loadFormula(run, generation);
-      }
-    });
-  }
-
   private async formulaCookieHeader(): Promise<string> {
     const context = getAbilityContext();
     if (context === undefined) {
@@ -526,8 +506,6 @@ struct ContentBlockFormula {
   @State private failed: boolean = false;
   @State private pixelMap: image.PixelMap | undefined = undefined;
   @State private formulaAspectRatio: number = 4;
-  @StorageProp('appearanceThemeTick') @Watch('onAppearanceThemeChanged')
-  private appearanceThemeTick: number = 0;
   @StorageProp('formulaForegroundColor') private formulaColor: string = '#111111';
   private active: boolean = false;
   private loadGeneration: number = 0;
@@ -594,15 +572,6 @@ struct ContentBlockFormula {
         this.failed = true;
       }
     }
-  }
-
-  private onAppearanceThemeChanged(): void {
-    if (!this.active) {
-      return;
-    }
-    this.failed = false;
-    this.releasePixelMap();
-    this.loadFormula(++this.loadGeneration);
   }
 
   private async formulaCookieHeader(): Promise<string> {
@@ -676,6 +645,16 @@ export struct NativeContentDocument {
   @StorageProp('pageTurnPercent') private pageTurnPercent: number = 90;
   @StorageProp('showPageTurnGuide') private showPageTurnGuide: boolean = false;
   @StorageProp('showContentEndMarker') private showContentEndMarker: boolean = false;
+  /**
+   * 主题切换 tick（EntryAbility 系统深浅色联动 / 设置页切换主题时递增）：
+   * readerBlock 里按其奇偶用 if/else 分支翻转强制重建公式组件。
+   * 公式 PixelMap 的前景色在解码时固化，主题切换必须整体重解码；而公式组件在原实例上
+   * 清空重载（@Watch + 清 pixelMaps/loadedRunIds 再异步回填）在 Text+ForEach+ImageSpan
+   * 子树上不生效（实测重载成功但 UI 永远停在回退分支），因此改为整体销毁重建：
+   * 新实例走 aboutToAppear 首载路径（实测可靠），且创建时直读 AppStorage 当前
+   * formulaForegroundColor，天然免疫"颜色与 tick 两个 @StorageProp 广播时序竞态"。
+   */
+  @StorageProp('appearanceThemeTick') private formulaRecreateTick: number = 0;
   @State private pageTurnGuideVisible: boolean = false;
   /** 正文视口高度（vp）：List 的 onAreaChange 回填，供阅读进度条换算拇指高度。 */
   @State private viewportHeightVp: number = 0;
@@ -1128,7 +1107,12 @@ export struct NativeContentDocument {
     } else if (item.kind === ReaderBlockKind.DIVIDER) {
       Divider().margin({ top: 8, bottom: 8 })
     } else if (item.kind === ReaderBlockKind.FORMULA) {
-      ContentBlockFormula({ item: item })
+      // 按主题 tick 奇偶翻转分支强制销毁重建（见 formulaRecreateTick 注释）。
+      if (this.formulaRecreateTick % 2 === 0) {
+        ContentBlockFormula({ item: item })
+      } else {
+        ContentBlockFormula({ item: item })
+      }
     } else if (item.kind === ReaderBlockKind.IMAGE) {
       ReaderImageBlock({
         item: item,
@@ -1172,7 +1156,12 @@ export struct NativeContentDocument {
         }
       })
     } else if (item.inlineRuns.length > 0) {
-      ContentInlineFormula({ item: item })
+      // 按主题 tick 奇偶翻转分支强制销毁重建（见 formulaRecreateTick 注释）。
+      if (this.formulaRecreateTick % 2 === 0) {
+        ContentInlineFormula({ item: item })
+      } else {
+        ContentInlineFormula({ item: item })
+      }
     } else {
       Text(item.kind === ReaderBlockKind.LIST_ITEM ? `• ${item.text}` : item.text)
         .fontSize(this.bodyFontSize())
