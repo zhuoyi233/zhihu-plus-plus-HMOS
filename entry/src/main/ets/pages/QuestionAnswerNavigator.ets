@@ -6,7 +6,10 @@ export interface AnswerNavigationPreview {
   readonly answerId: string;
   readonly authorName: string;
   readonly authorAvatarUrl: string;
+  readonly authorHeadline: string;
   readonly excerpt: string;
+  readonly voteupCount: number;
+  readonly commentCount: number;
   /** false：下一答还在未加载的分页里，暂无作者/摘要等详情。 */
   readonly detailLoaded: boolean;
 }
@@ -56,13 +59,17 @@ export class QuestionAnswerNavigator {
     if (!this.hasNext()) { return undefined; }
     const target = this.controller.snapshot().items[this.index + 1]?.feedItem.target;
     if (target === undefined) {
-      return { answerId: '', authorName: '', authorAvatarUrl: '', excerpt: '', detailLoaded: false };
+      return { answerId: '', authorName: '', authorAvatarUrl: '', authorHeadline: '', excerpt: '',
+        voteupCount: 0, commentCount: 0, detailLoaded: false };
     }
     return {
       answerId: target.id,
       authorName: target.author?.name ?? '',
       authorAvatarUrl: target.author?.avatarUrl ?? '',
+      authorHeadline: target.author?.headline ?? '',
       excerpt: target.excerpt,
+      voteupCount: target.voteupCount ?? 0,
+      commentCount: target.commentCount ?? 0,
       detailLoaded: true
     };
   }
@@ -72,13 +79,17 @@ export class QuestionAnswerNavigator {
     if (!this.hasPrevious()) { return undefined; }
     const target = this.controller.snapshot().items[this.index - 1]?.feedItem.target;
     if (target === undefined) {
-      return { answerId: '', authorName: '', authorAvatarUrl: '', excerpt: '', detailLoaded: false };
+      return { answerId: '', authorName: '', authorAvatarUrl: '', authorHeadline: '', excerpt: '',
+        voteupCount: 0, commentCount: 0, detailLoaded: false };
     }
     return {
       answerId: target.id,
       authorName: target.author?.name ?? '',
       authorAvatarUrl: target.author?.avatarUrl ?? '',
+      authorHeadline: target.author?.headline ?? '',
       excerpt: target.excerpt,
+      voteupCount: target.voteupCount ?? 0,
+      commentCount: target.commentCount ?? 0,
       detailLoaded: true
     };
   }

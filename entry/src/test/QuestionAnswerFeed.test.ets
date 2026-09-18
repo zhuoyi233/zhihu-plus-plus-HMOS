@@ -5,6 +5,7 @@ import {
 } from 'data';
 import { QuestionAnswersController, QuestionAnswersPhase, QuestionAnswersViewState } from '../main/ets/pages/QuestionAnswersState';
 import { QuestionAnswerNavigator } from '../main/ets/pages/QuestionAnswerNavigator';
+import { accumulateAnswerSwitchDrag } from '../main/ets/pages/AnswerSwitchGesture';
 
 class FakeQuestionAnswerRepository implements QuestionAnswerFeedRepository {
   readonly pages: QuestionAnswerFeedPage[];
@@ -98,6 +99,8 @@ export default function questionAnswerFeedTest(): void {
       const preview = navigator.nextAnswerPreview();
       expect(preview?.answerId).assertEqual('3');
       expect(preview?.authorName).assertEqual('作者');
+      expect(preview?.voteupCount).assertEqual(3);
+      expect(preview?.commentCount).assertEqual(4);
       const previousPreview = navigator.previousAnswerPreview();
       expect(previousPreview?.answerId).assertEqual('1');
       expect(previousPreview?.authorName).assertEqual('作者');
@@ -123,6 +126,23 @@ export default function questionAnswerFeedTest(): void {
       expect(navigator.hasPrevious()).assertFalse();
       expect(navigator.previousAnswerPreview()).assertUndefined();
       navigator.dispose();
+    });
+
+    it('horizontalSwitchFromFirstAnswerDoesNotRequireBottomEdge', 0, () => {
+      // 横向分页手势与正文纵向滚动位置无关：首答停在顶部也能向左切下一答。
+      expect(accumulateAnswerSwitchDrag('horizontal', 0, 0, -60,
+        true, false, false, true)).assertEqual(-60);
+      // 同样输入在纵向模式下必须先贴底，避免正文普通上滑误切回答。
+      expect(accumulateAnswerSwitchDrag('vertical', 0, 0, -60,
+        true, false, false, true)).assertEqual(0);
+      // 中间回答向右切上一答同样与正文是否贴顶无关。
+      expect(accumulateAnswerSwitchDrag('horizontal', 0, 0, 60,
+        false, false, true, true)).assertEqual(60);
+      expect(accumulateAnswerSwitchDrag('vertical', 0, 0, 60,
+        false, false, true, true)).assertEqual(0);
+      // 首答没有上一答，向右拖动不得产生切换偏移。
+      expect(accumulateAnswerSwitchDrag('horizontal', 0, 0, 60,
+        true, false, false, true)).assertEqual(0);
     });
 
     it('navigatorSeedlessFallsBackToFirstWhenCurrentAbsent', 0, async () => {
