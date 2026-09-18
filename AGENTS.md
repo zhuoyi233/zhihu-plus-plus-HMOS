@@ -134,6 +134,41 @@ $hdc = "hdc"
 - **分支方向**：功能分支（`feature/<name>`）或累计分支（`dev`）→ `main`；创建/推送 PR 属外发
   操作，仅当用户**当次明确要求**时执行（对齐"严格禁止 push"节）。
 
+## 发版说明（Release Notes）框架
+
+以 `HMOSv0.5.0` 的实际发版说明为标准模板（GitHub Release），生成新版本说明时按此结构撰写：
+
+- **标题**：`# ZhihuPlusPlus-HMOS v<version>`，与 tag `HMOSv<version>` 对应。
+
+- **导语段**（标题后 1~2 句）：概括本版本主题（"本次更新以**主题词**为…：…升级"），
+  末尾给出提交数（`git rev-list HMOSv<上一版本>..HEAD --count` 统计），如"共 62 个提交"。
+
+- **正文主题节**：若干 `## <emoji> <主题>` 二级标题，每节内为无序列表，一条一句、点到
+  行为粒度（不逐文件流水账）；按功能主题分组，与 PR 正文"主要内容"的分组风格一致。
+  常用主题 emoji 参考：🪪 应用名称与图标 / 📨 消息 / 📖 阅读 / 🛡️ 过滤与屏蔽 /
+  🎨 外观与导航 / 🔐 登录与账户 / ✨ 详情与首页 / 🐛 问题修复（按当期实际内容取舍增删，
+  大版本主题多可 6~8 节，小版本可合并为 2~3 节 + 修复）。
+
+- **固定节 `## 📥 下载与安装`**（三步，文案固定）：
+  1. 下载下方附件 `ZhihuPlusPlus-HMOS-v<version>-unsigned.hap`
+  2. 使用 [小白调试助手](https://github.com/likuai2010/auto-installer) 或
+     [HoKit](https://github.com/yabi-zzh/HoKit/releases) 自行签名
+  3. 覆盖安装即可升级，原有登录状态、设置与历史数据会保留
+
+- **末尾固定 `> [!IMPORTANT]` 提示块**：
+  - 要求设备系统为 **HarmonyOS 6.1.0（API 23）及以上**（若最低兼容线变更则同步更新）；
+  - 视当期特性补充一句相关说明（如 v0.5.0 注明"离线朗读可用音色取决于设备中的
+    HarmonyOS Core Speech Kit 服务与资源"）；
+  - 固定声明："本项目非知乎官方产品，内容来自知乎网站，服务端接口变化可能导致部分功能失效。"
+
+- **诚实原则**：与 PR 撰写规范一致——已知问题如实列出，不宣称未修复、未验证的内容。
+
+- **发布流程**：发版说明**只能以草稿形式**经 `gh` 写入（`gh release create HMOSv<version>
+  --draft --notes-file <file> -R zhuoyi233/zhihu-plus-plus-HMOS`，或对已有草稿
+  `gh release edit --draft=false` 前再次确认）；**严格禁止直接发布正式 Release**。
+  仅当用户**当次明确确认草稿内容并要求发布**时，才可将草稿转为正式发版（去除 `--draft`），
+  该确认不延续到后续任务。
+
 ## ArkTS / ArkUI 代码约束
 
 - 显式类型：禁 `any`/`unknown`（用 `Object`）、对象字面量不能作为 `Promise<T>` 返回
@@ -173,6 +208,24 @@ $hdc = "hdc"
   按桌面视口渲染、字体过小）。
 
 ## 并行开发
+
+- **新建分支必须验证非 unborn**：本会话环境实测（Git for Windows 2.54）`git checkout -b`
+  可能**不写 loose ref 文件**，HEAD 立即变 unborn（孤儿分支）——表现为 `git status` 把全库
+  文件显示为暂存态 "A"、`git log` 报 "does not have any commits yet"。创建后必须校验：
+
+  ```bash
+  git rev-parse --verify HEAD   # 必须成功输出 SHA
+  ```
+
+  若命中，**不要** `git reset`/`checkout` 补救（本环境 `git reset` 也会删 ref，加重问题），
+  直接用 node 写 ref 文件恢复（SHA 取基线分支）：
+
+  ```bash
+  mkdir -p ".git/refs/heads/$(dirname <branch>)"   # 分支无 / 时可省
+  node -e "require('fs').writeFileSync('.git/refs/heads/<branch>', '<SHA>\n')"
+  ```
+
+  恢复后 reflog 与对象库均完好，`git status` 即恢复正常。
 
 - 用 git worktree：`git worktree add .worktrees/<name> -b feature/<name>`（`.worktrees/`
   已被 .gitignore 忽略），完成后 `git worktree remove` + `git branch -D`。
