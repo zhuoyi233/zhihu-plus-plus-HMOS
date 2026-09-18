@@ -66,6 +66,7 @@ import {
 import { CollectionDialogComponent } from './CollectionDialogComponent';
 import { CommentLayer } from './CommentLayer';
 import { NativeContentDocument } from './NativeContentDocument';
+import { stageVideoPlaybackContext } from './VideoPlaybackHandoff';
 import { stageAnswerEditSeed } from './AnswerEditSeedStore';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { createSystemShareService } from '../platform/SystemShareService';
@@ -619,6 +620,7 @@ struct ContentDetailPage {
           html: contentHtml(content),
           emptyMessage: contentEmptyMessage(content),
           disableEdgeSpring: this.kind === ContentDetailKind.ANSWER,
+          onVideoOpen: (videoId: string): void => this.openVideo(videoId),
           documentHeader: (): void => { this.contentHeader(content) },
           documentFooter: (): void => { this.contentDateFooter(content) },
           onScrollOffset: (offset: number): void => {
@@ -1230,6 +1232,7 @@ struct ContentDetailPage {
     Refresh({ refreshing: $$this.refreshingAnswers, refreshingContent: this.refreshContent }) {
       NativeContentDocument({
         html: contentHtml(content), emptyMessage: contentEmptyMessage(content), collapsible: true,
+        onVideoOpen: (videoId: string): void => this.openVideo(videoId),
         documentHeader: (): void => { this.contentHeader(content) },
         documentBodyFooter: (): void => { this.questionBodyFooter(content) },
         documentItems: (): void => { this.questionAnswerItems() },
@@ -1246,6 +1249,17 @@ struct ContentDetailPage {
         }
       })
     }.height('100%').width('100%').onRefreshing((): void => { void this.refreshQuestion(); })
+  }
+
+  private openVideo(videoId: string): void {
+    const contentType = this.kind === ContentDetailKind.ANSWER ? 'answer'
+      : this.kind === ContentDetailKind.ARTICLE ? 'article' : 'question';
+    stageVideoPlaybackContext({
+      videoId: videoId,
+      contentId: this.activeContentId,
+      contentType: contentType
+    });
+    this.navigate({ name: P1DestinationName.VIDEO, id: videoId });
   }
 
   @Builder

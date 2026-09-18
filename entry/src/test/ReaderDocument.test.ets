@@ -110,6 +110,26 @@ export default function readerDocumentTest(): void {
       expect(blocks[0].sourceUrl).assertEqual('https://pic1.zhimg.com/v2-abc123def');
     });
 
+    it('parsesEmbeddedZhihuVideoCard', 0, () => {
+      const blocks = parseZhihuHtml('<p>视频如下</p>' +
+        '<a class="video-box content-box" data-lens-id="1944534197600511075" ' +
+        'data-title="演示视频"><img data-actualsrc="https://picx.zhimg.com/video-cover.jpg"></a>');
+
+      expect(blocks.length).assertEqual(2);
+      expect(blocks[1].kind).assertEqual(ReaderBlockKind.VIDEO);
+      expect(blocks[1].targetId).assertEqual('1944534197600511075');
+      expect(blocks[1].text).assertEqual('演示视频');
+      expect(blocks[1].sourceUrl).assertEqual('https://picx.zhimg.com/video-cover.jpg');
+    });
+
+    it('rejectsVideoCardWithoutSafeLensId', 0, () => {
+      const blocks = parseZhihuHtml('<p><a class="video-box" data-lens-id="1/../2">视频</a></p>');
+
+      expect(blocks.length).assertEqual(1);
+      expect(blocks[0].kind).assertEqual(ReaderBlockKind.PARAGRAPH);
+      expect(blocks[0].targetId).assertUndefined();
+    });
+
     it('parsesBlockquoteAndPreAsParagraphs', 0, () => {
       const blocks = parseZhihuHtml('<p>开场</p><blockquote>记者问：如何看待信教人数增长？</blockquote>' +
         '<blockquote><p>答：依法管理宗教事务。</p></blockquote><pre>code sample</pre>');

@@ -72,6 +72,7 @@ export * from './src/main/ets/repository/PeopleContentRepository';
 export * from './src/main/ets/repository/PinRepository';
 export * from './src/main/ets/repository/SearchRepository';
 export * from './src/main/ets/repository/VoteRepository';
+export * from './src/main/ets/repository/VideoRepository';
 export * from './src/main/ets/session/CookieSession';
 export * from './src/main/ets/session/CookieSessionStore';
 export * from './src/main/ets/session/AppSessionOwner';

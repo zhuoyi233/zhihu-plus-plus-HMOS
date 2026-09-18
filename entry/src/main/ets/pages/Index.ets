@@ -53,6 +53,8 @@ import {
   PinPublishRepository,
   QuestionAnswerFeedRepository,
   VoteRepository,
+  VideoRepository,
+  DefaultVideoRepository,
   ZhihuHttpClient,
   ZhihuMobileHttpClient
 } from 'data';
@@ -130,6 +132,7 @@ struct Index {
   @State private pinRepository?: PinRepository = undefined;
   @State private onlineHistoryRepository?: OnlineHistoryRepository = undefined;
   @State private voteRepository?: VoteRepository = undefined;
+  private videoRepository?: VideoRepository = undefined;
   @State private followRepository?: FollowRepository = undefined;
   @State private collectionRepository?: CollectionRepository = undefined;
   @State private commentRepository?: CommentRepository = undefined;
@@ -180,6 +183,7 @@ struct Index {
       this.dailyRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(), blockingMatcher);
       this.dailyStoryRepository = new DefaultDailyStoryRepository(new ZhihuHttpClient());
       this.questionRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
+      this.videoRepository = new DefaultVideoRepository(new ZhihuHttpClient(session));
       this.questionAnswerFeedFactory = (): QuestionAnswerFeedRepository =>
         new DefaultQuestionAnswerFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.answerRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
@@ -416,7 +420,7 @@ struct Index {
 
   @Builder
   videoContent(id: string, _navigate: (destination: P1Destination) => void, onBack: () => void) {
-    VideoPlaybackPage({ contentId: id, onBack: onBack });
+    VideoPlaybackPage({ contentId: id, repository: this.videoRepository, onBack: onBack });
   }
 
   @Builder

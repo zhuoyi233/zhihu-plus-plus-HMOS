@@ -609,6 +609,7 @@ export struct P1Shell {
         );
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '视频' }, divider: { showType: DividerShowType.OFF } } })
+      .hideTitleBar(true)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.WRITE_ANSWER) {

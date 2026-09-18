@@ -32,6 +32,7 @@ export interface ZhihuRequestHeaders {
   'x-zse-93'?: string;
   'x-zse-96'?: string;
   'x-xsrftoken'?: string;
+  'x-referer'?: string;
   'Content-Type'?: string;
   /** 以下为移动端协议（api.zhihu.com）专用头，见 ZhihuMobileHttpClient。 */
   'x-api-version'?: string;
@@ -52,11 +53,15 @@ export interface ZhihuHttpRequest {
   signWithZse?: boolean;
   /** 仅发布等网页写接口需要；令客户端从受保护会话 Cookie 提取 `_xsrf`。 */
   includeXsrfToken?: boolean;
+  /** 读取到 `_xsrf` 时附带；游客会话缺失时仍允许请求。 */
+  includeOptionalXsrfToken?: boolean;
   /** 仅接受站内路径，防止调用方借 Referer 写入任意外部地址。 */
   refererPath?: string;
   contentType?: string;
   /** 知乎身份管理接口需要官方移动端兼容头；仅用于 api.zhihu.com。 */
   useIdentityHeaders?: boolean;
+  /** 知乎正文视频 play_info 接口要求的 Web 播放器标识；只允许用于固定接口。 */
+  useVideoPlayerHeaders?: boolean;
 }
 
 export interface PreparedZhihuHttpRequest {
@@ -140,6 +145,10 @@ export function prepareZhihuHttpRequest(
   if (request.useIdentityHeaders === true && !/^https:\/\/api\.zhihu\.com(?:[/?#]|$)/.test(request.url)) {
     throw new HttpFailure(HttpFailureKind.CLIENT);
   }
+  if (request.useVideoPlayerHeaders === true &&
+    !/^https:\/\/www\.zhihu\.com\/api\/v4\/video\/play_info\?r=[1-9][0-9]{0,29}$/.test(request.url)) {
+    throw new HttpFailure(HttpFailureKind.CLIENT);
+  }
   let cookieHeader: string | undefined = undefined;
   if (request.useSession === true || request.signWithZse === true || request.includeXsrfToken === true) {
     cookieHeader = toCookieHeader(cookies, now);
@@ -155,7 +164,8 @@ export function prepareZhihuHttpRequest(
     }
     zse96 = createZse96Header(request.url, dc0, request.body);
   }
-  const xsrf = request.includeXsrfToken === true ? sessionCookieValue(cookies, '_xsrf') : undefined;
+  const xsrf = request.includeXsrfToken === true || request.includeOptionalXsrfToken === true
+    ? sessionCookieValue(cookies, '_xsrf') : undefined;
   if (request.includeXsrfToken === true && xsrf === undefined) {
     throw new HttpFailure(HttpFailureKind.AUTHENTICATION);
   }
@@ -165,7 +175,21 @@ export function prepareZhihuHttpRequest(
     ? 'https://www.zhihu.com/'
     : `https://www.zhihu.com${request.refererPath}`;
   let headers: ZhihuRequestHeaders;
-  if (zse96 !== undefined && request.body !== undefined) {
+  if (request.useVideoPlayerHeaders === true && zse96 !== undefined && request.body !== undefined) {
+    headers = {
+      'Accept': accept,
+      'User-Agent': ZHIHU_USER_AGENT,
+      'Cookie': cookieHeader,
+      'Referer': referer,
+      'x-requested-with': 'fetch',
+      'x-zse-93': ZHIHU_WEB_ZSE93,
+      'x-zse-96': zse96,
+      'x-xsrftoken': xsrf,
+      'x-app-za': 'OS=webplayer',
+      'x-referer': '',
+      'Content-Type': bodyContentType
+    };
+  } else if (zse96 !== undefined && request.body !== undefined) {
     headers = {
       'Accept': accept,
       'User-Agent': ZHIHU_USER_AGENT,

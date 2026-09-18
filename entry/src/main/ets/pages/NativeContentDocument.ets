@@ -630,6 +630,8 @@ export struct NativeContentDocument {
   emptyMessage: string = '正文为空';
   /** P3-9-B：正文滚动像素偏移回调（用于详情页顶栏折叠联动）。 */
   onScrollOffset?: (offset: number) => void;
+  /** 正文视频卡片点击回调；播放上下文由详情页补齐。 */
+  onVideoOpen?: (videoId: string) => void;
   /** 问题详情页在正文末尾追加的 section（回答信息流）；未传入时渲染空。 */
   @BuilderParam documentHeader: () => void = this.emptyFooter;
   @BuilderParam documentBodyFooter: () => void = this.emptyFooter;
@@ -1135,6 +1137,38 @@ export struct NativeContentDocument {
           // 全屏查看器由详情页根 Stack 叠层渲染（AppStorage 广播）：正文组件处于列表
           // 惰性树内，本地渲染全屏层会受标题栏约束，且模态覆盖层树不响应状态更新。
           AppStorage.setOrCreate('p2ImagePreviewUrl', url);
+        }
+      })
+    } else if (item.kind === ReaderBlockKind.VIDEO) {
+      Stack({ alignContent: Alignment.Center }) {
+        if (item.sourceUrl.length > 0) {
+          Image(item.sourceUrl)
+            .width('100%')
+            .height(200)
+            .objectFit(ImageFit.Cover)
+        } else {
+          Row().width('100%').height(200).backgroundColor('#202124')
+        }
+        Button({ type: ButtonType.Circle, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.play_fill'))
+            .fontSize(30)
+            .fontColor([Color.White])
+        }
+          .width(56)
+          .height(56)
+          .padding(0)
+          .backgroundColor('#B3000000')
+          .accessibilityText('播放视频')
+      }
+      .id(`p2_content_video_${item.targetId ?? 'invalid'}`)
+      .width('100%')
+      .height(200)
+      .borderRadius(12)
+      .clip(true)
+      .accessibilityText(item.text.length > 0 ? `播放视频：${item.text}` : '播放视频')
+      .onClick((): void => {
+        if (item.targetId !== undefined) {
+          this.onVideoOpen?.(item.targetId);
         }
       })
     } else if (item.inlineRuns.length > 0) {

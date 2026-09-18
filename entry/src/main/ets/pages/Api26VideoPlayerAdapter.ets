@@ -1,8 +1,8 @@
 import media from '@ohos.multimedia.media';
 import { VideoPlaybackSource, VideoPlayerAdapter, VideoPlayerCallbacks } from './VideoPlaybackController';
 
-/** API 26 平台层实际需要观察的 AVPlayer 状态。 */
-export type Api26VideoPlayerState = 'prepared' | 'completed';
+/** 平台层实际需要观察的 AVPlayer 状态。 */
+export type Api26VideoPlayerState = 'initialized' | 'prepared' | 'completed';
 
 export type Api26VideoPlayerStateListener = (state: Api26VideoPlayerState) => void;
 export type Api26VideoPlayerErrorListener = () => void;
@@ -15,6 +15,7 @@ export type Api26VideoPlayerTimeListener = (positionMs: number) => void;
 export interface Api26NativeVideoPlayer {
   setSource(url: string): void;
   setSurfaceId(surfaceId: string): void;
+  setScaleToAspect(): void;
   getDuration(): number;
   onStateChange(listener: Api26VideoPlayerStateListener): void;
   onTimeUpdate(listener: Api26VideoPlayerTimeListener): void;
@@ -46,13 +47,18 @@ export class HarmonyApi26NativeVideoPlayer implements Api26NativeVideoPlayer {
     this.player.surfaceId = surfaceId;
   }
 
+  setScaleToAspect(): void {
+    // 上游播放器按视频原始宽高比居中展示；API 20+ 的该模式等价于 contain，空余区域留黑。
+    this.player.videoScaleType = media.VideoScaleType.VIDEO_SCALE_TYPE_SCALED_ASPECT;
+  }
+
   getDuration(): number {
     return this.player.duration;
   }
 
   onStateChange(listener: Api26VideoPlayerStateListener): void {
     this.player.on('stateChange', (state: media.AVPlayerState): void => {
-      if (state === 'prepared' || state === 'completed') {
+      if (state === 'initialized' || state === 'prepared' || state === 'completed') {
         listener(state);
       }
     });
@@ -112,6 +118,7 @@ export class Api26VideoPlayerAdapter implements VideoPlayerAdapter {
   private callbacks: VideoPlayerCallbacks | undefined = undefined;
   private operation: number = 0;
   private released: boolean = false;
+  private pendingPrepareReject: ((error: Error) => void) | undefined = undefined;
 
   constructor(surfaceId: string, factory: Api26NativeVideoPlayerFactory = new HarmonyApi26NativeVideoPlayerFactory()) {
     this.surfaceId = surfaceId;
@@ -133,18 +140,66 @@ export class Api26VideoPlayerAdapter implements VideoPlayerAdapter {
         });
       }
       this.nativePlayer = player;
-      player.onStateChange((state: Api26VideoPlayerState): void => {
-        this.onNativeState(currentOperation, state);
+      return new Promise<void>((resolve: () => void, reject: (error: Error) => void): void => {
+        let prepareStarted: boolean = false;
+        let prepareSettled: boolean = false;
+        this.pendingPrepareReject = reject;
+        player.onStateChange((state: Api26VideoPlayerState): void => {
+          if (state === 'initialized') {
+            if (!this.isCurrent(currentOperation) || prepareStarted) {
+              return;
+            }
+            prepareStarted = true;
+            try {
+              // AVPlayer.url 的状态切换是异步的；API 23 也要求 initialized 后才能绑定 surface。
+              player.setSurfaceId(this.surfaceId);
+              player.prepare().then((): void => {
+                if (this.isCurrent(currentOperation) && !prepareSettled) {
+                  prepareSettled = true;
+                  this.pendingPrepareReject = undefined;
+                  resolve();
+                }
+              }).catch((error: Error): void => {
+                if (!prepareSettled) {
+                  prepareSettled = true;
+                  this.pendingPrepareReject = undefined;
+                  reject(new Error(error.message));
+                }
+              });
+            } catch (_error) {
+              if (!prepareSettled) {
+                prepareSettled = true;
+                this.pendingPrepareReject = undefined;
+                reject(new Error('视频播放器准备失败'));
+              }
+            }
+            return;
+          }
+          this.onNativeState(currentOperation, state);
+        });
+        player.onTimeUpdate((positionMs: number): void => {
+          this.onNativeTimeUpdate(currentOperation, positionMs);
+        });
+        player.onError((): void => {
+          if (!this.isCurrent(currentOperation)) {
+            return;
+          }
+          if (!prepareSettled) {
+            prepareSettled = true;
+            this.pendingPrepareReject = undefined;
+            reject(new Error('视频播放器准备失败'));
+            return;
+          }
+          this.onNativeError(currentOperation);
+        });
+        try {
+          player.setSource(source.url);
+        } catch (_error) {
+          prepareSettled = true;
+          this.pendingPrepareReject = undefined;
+          reject(new Error('视频地址加载失败'));
+        }
       });
-      player.onTimeUpdate((positionMs: number): void => {
-        this.onNativeTimeUpdate(currentOperation, positionMs);
-      });
-      player.onError((): void => {
-        this.onNativeError(currentOperation);
-      });
-      player.setSurfaceId(this.surfaceId);
-      player.setSource(source.url);
-      return player.prepare();
     }).catch((error: Error): Promise<void> => {
       if (this.isCurrent(currentOperation)) {
         this.nativePlayer = undefined;
@@ -181,9 +236,12 @@ export class Api26VideoPlayerAdapter implements VideoPlayerAdapter {
   }
 
   release(): Promise<void> {
+    const pendingReject = this.pendingPrepareReject;
+    this.pendingPrepareReject = undefined;
     this.nextOperation();
     this.released = true;
     this.callbacks = undefined;
+    pendingReject?.(new Error('视频播放器已释放'));
     const player = this.nativePlayer;
     this.nativePlayer = undefined;
     if (player === undefined) {
@@ -199,6 +257,7 @@ export class Api26VideoPlayerAdapter implements VideoPlayerAdapter {
       return;
     }
     if (state === 'prepared') {
+      this.nativePlayer?.setScaleToAspect();
       const durationMs = this.nativePlayer?.getDuration() ?? 0;
       if (Number.isSafeInteger(durationMs) && durationMs > 0) {
         this.callbacks?.onReady(durationMs);
@@ -207,7 +266,9 @@ export class Api26VideoPlayerAdapter implements VideoPlayerAdapter {
       }
       return;
     }
-    this.callbacks?.onCompleted();
+    if (state === 'completed') {
+      this.callbacks?.onCompleted();
+    }
   }
 
   private onNativeError(operation: number): void {
