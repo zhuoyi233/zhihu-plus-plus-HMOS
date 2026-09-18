@@ -265,6 +265,17 @@ export function decodeAppThemeMode(value: preferences.ValueType): AppThemeMode {
   return AppThemeMode.SYSTEM;
 }
 
+/**
+ * 公式前景色：公式 SVG 的 currentColor 在解码为 PixelMap 时被固化为具体颜色，
+ * 已生成的公式不会随应用/系统主题自动变色，只能换色后整体重新解码。
+ */
+export const FORMULA_FOREGROUND_LIGHT: string = '#111111';
+export const FORMULA_FOREGROUND_DARK: string = '#F5F5F5';
+
+export function formulaForegroundColorForColorMode(isDark: boolean): string {
+  return isDark ? FORMULA_FOREGROUND_DARK : FORMULA_FOREGROUND_LIGHT;
+}
+
 /** 回答页双击正文动作（对齐上游 AnswerDoubleTapAction），默认询问并记住。 */
 export enum AnswerDoubleTapAction {
   NONE = 0,
