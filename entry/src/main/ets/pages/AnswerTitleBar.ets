@@ -39,9 +39,14 @@ export struct AnswerTitleBar {
   answerId: string = '';
   onBack: () => void = (): void => {
   };
+  /** 横向过滑预览页复用：跳过过滑驱动的淡出/平移/命中关闭（外层预览容器已自带位移）。 */
+  previewMode: boolean = false;
   @StorageProp('answerTitleStates') private states: AnswerTitleState[] = [];
   /** 回答页过滑切换进行中：整栏淡出让位给整页级预览卡（上游中顶栏随 MainContent 平移滑走）。 */
   @StorageProp('answerOverscrollActive') private overscrollActive: boolean = false;
+  /** 横向切换时与正文使用同一 X 轴偏移，保持当前回答的问题栏随整页一起移动。 */
+  @StorageProp('answerOverscrollOffset') private overscrollOffset: number = 0;
+  @StorageProp('answerSwitchMode') private answerSwitchMode: string = 'vertical';
 
   private state(): AnswerTitleState | undefined {
     return this.states.find((item: AnswerTitleState): boolean => item.id === this.answerId);
@@ -175,8 +180,15 @@ export struct AnswerTitleBar {
       right: $r('app.float.p1_page_padding')
     })
     .alignItems(VerticalAlign.Center)
-    .opacity(this.overscrollActive ? 0 : 1)
-    // 隐藏时同时关闭命中，避免透明返回键仍可点。
-    .hitTestBehavior(this.overscrollActive ? HitTestMode.None : HitTestMode.Transparent)
+    // 纵向模式沿用淡出让位预览卡；横向模式按上游 MainContent 与正文同步平移。
+    // 预览模式恒显示未折叠态且不随过滑平移（位移由预览容器承担）。
+    .opacity(this.previewMode ? 1
+      : (this.overscrollActive && this.answerSwitchMode !== 'horizontal' ? 0 : 1))
+    .translate({
+      x: this.previewMode || this.answerSwitchMode !== 'horizontal' ? 0 : this.overscrollOffset
+    })
+    // 过滑时关闭命中，避免移动中的返回键仍可点。
+    .hitTestBehavior(this.previewMode || this.overscrollActive
+      ? HitTestMode.None : HitTestMode.Transparent)
   }
 }
