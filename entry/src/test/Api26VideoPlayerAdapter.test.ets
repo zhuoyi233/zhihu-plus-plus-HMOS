@@ -20,16 +20,26 @@ class FakeApi26NativeVideoPlayer implements Api26NativeVideoPlayer {
   playCalls: number = 0;
   pauseCalls: number = 0;
   seekCalls: number = 0;
+  scaleToAspectCalls: number = 0;
+  readonly lifecycle: Array<string> = [];
   private stateListener: Api26VideoPlayerStateListener | undefined = undefined;
   private timeListener: Api26VideoPlayerTimeListener | undefined = undefined;
   private errorListener: Api26VideoPlayerErrorListener | undefined = undefined;
 
   setSource(url: string): void {
     this.source = url;
+    this.lifecycle.push('source');
+    this.stateListener?.('initialized');
   }
 
   setSurfaceId(surfaceId: string): void {
     this.surfaceId = surfaceId;
+    this.lifecycle.push('surface');
+  }
+
+  setScaleToAspect(): void {
+    this.scaleToAspectCalls += 1;
+    this.lifecycle.push('aspect');
   }
 
   getDuration(): number {
@@ -50,6 +60,7 @@ class FakeApi26NativeVideoPlayer implements Api26NativeVideoPlayer {
 
   prepare(): Promise<void> {
     this.prepareCalls += 1;
+    this.lifecycle.push('prepare');
     return Promise.resolve();
   }
 
@@ -132,7 +143,9 @@ export default function api26VideoPlayerAdapterTest(): void {
         expect(factory.player.surfaceId).assertEqual('fixture-surface-26');
         expect(factory.player.source).assertEqual('https://video.zhimg.com/fixture.mp4');
         expect(factory.player.prepareCalls).assertEqual(1);
+        expect(factory.player.lifecycle.join(',')).assertEqual('source,surface,prepare');
         factory.player.emitState('prepared');
+        expect(factory.player.scaleToAspectCalls).assertEqual(1);
         factory.player.emitTime(500);
         factory.player.emitState('completed');
         expect(ready[0]).assertEqual(1200);

@@ -6,6 +6,7 @@ export enum ReaderBlockKind {
   DIVIDER,
   FORMULA,
   IMAGE,
+  VIDEO,
   LIST_ITEM
 }
 
@@ -26,6 +27,8 @@ export interface ReaderBlock {
   kind: ReaderBlockKind;
   text: string;
   sourceUrl: string;
+  /** 视频块的 data-lens-id；其他块不设置。 */
+  targetId?: string;
   inlineRuns: Array<ReaderInlineRun>;
 }
 
@@ -39,9 +42,10 @@ export interface ReaderDocumentStats {
   imageCount: number;
 }
 
-const BLOCK_PATTERN = /<(?:h[1-6]|p|li|figure|blockquote|pre)\b[^>]*>[\s\S]*?<\/(?:h[1-6]|p|li|figure|blockquote|pre)>|<hr\b[^>]*\/?>/gi;
+const BLOCK_PATTERN = /<(?:h[1-6]|p|li|figure|blockquote|pre)\b[^>]*>[\s\S]*?<\/(?:h[1-6]|p|li|figure|blockquote|pre)>|<a\b[^>]*>[\s\S]*?<\/a>|<hr\b[^>]*\/?>/gi;
 const IMAGE_PATTERN = /<img\b[^>]*>/gi;
 const NOSCRIPT_PATTERN = /<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi;
+const ANCHOR_PATTERN = /<a\b[^>]*>[\s\S]*?<\/a>/gi;
 
 function attributeValue(tag: string, name: string): string {
   const match = tag.match(new RegExp(`(?:^|\\s)${name}\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s>]+))`, 'i'));
@@ -99,6 +103,15 @@ function preferredImageSource(tag: string): string {
 function formulaSource(tag: string): string {
   const candidate = decodeHtml(attributeValue(tag, 'src')).trim();
   return isTrustedFormulaUrl(candidate) ? candidate : '';
+}
+
+function videoAnchor(fragment: string): string | undefined {
+  const anchors = fragment.match(ANCHOR_PATTERN);
+  return anchors?.find((anchor: string): boolean => {
+    const openingTag = anchor.slice(0, anchor.indexOf('>') + 1);
+    const classes = decodeHtml(attributeValue(openingTag, 'class')).split(/\s+/);
+    return classes.includes('video-box') && /^[1-9][0-9]{0,29}$/.test(attributeValue(openingTag, 'data-lens-id'));
+  });
 }
 
 function inlineRuns(content: string, blockId: string): Array<ReaderInlineRun> {
@@ -168,6 +181,21 @@ export function parseZhihuHtml(html: string): Array<ReaderBlock> {
 
     const content = contentOf(normalized);
     const visibleContent = content.replace(NOSCRIPT_PATTERN, '');
+    const video = videoAnchor(normalized);
+    if (video !== undefined) {
+      const openingTag = video.slice(0, video.indexOf('>') + 1);
+      const imageTag = video.match(/<img\b[^>]*>/i)?.[0] ?? '';
+      const label = decodeHtml(attributeValue(openingTag, 'data-title')).trim() || plainText(video) || '视频';
+      blocks.push({
+        id: blockId,
+        kind: ReaderBlockKind.VIDEO,
+        text: label,
+        sourceUrl: imageTag.length > 0 ? preferredImageSource(imageTag) : '',
+        targetId: attributeValue(openingTag, 'data-lens-id'),
+        inlineRuns: []
+      });
+      return;
+    }
     const imageTags = visibleContent.match(IMAGE_PATTERN);
     const singleImage = imageTags !== null && imageTags.length === 1 &&
       visibleContent.replace(IMAGE_PATTERN, '').trim().length === 0;
