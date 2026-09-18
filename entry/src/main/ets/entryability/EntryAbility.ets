@@ -1,6 +1,8 @@
-import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
+import { AbilityConstant, Configuration, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { display, window } from '@kit.ArkUI';
-import { AppSessionOwner, closeAppDatabase, getAppDatabase, getAppSessionOwner } from 'data';
+import { resourceManager } from '@kit.LocalizationKit';
+import { AppSessionOwner, AppThemeMode, closeAppDatabase, formulaForegroundColorForColorMode,
+  getAppDatabase, getAppSessionOwner } from 'data';
 import { clearAbilityContext, setAbilityContext } from './AbilityContextHolder';
 import {
   AppLogEvent,
@@ -21,10 +23,12 @@ export default class EntryAbility extends UIAbility {
   private sessionOwner: AppSessionOwner | undefined = undefined;
   private readonly lifecycleGuard: LatestOperationGuard = new LatestOperationGuard();
   private lifecycleGeneration: number = 0;
+  private lastObservedIsDark: boolean | undefined = undefined;
 
   onCreate(want: Want, _launchParam: AbilityConstant.LaunchParam): void {
     this.lifecycleGeneration = this.lifecycleGuard.next();
     setAbilityContext(this.context);
+    this.lastObservedIsDark = this.readSystemIsDark();
     AppLogger.info(AppLogEvent.ABILITY_CREATED);
     this.sessionOwner = getAppSessionOwner(this.context);
     const tasks: Array<StartupTask> = [
@@ -73,6 +77,40 @@ export default class EntryAbility extends UIAbility {
 
   onNewWant(want: Want, _launchParam: AbilityConstant.LaunchParam): void {
     this.routeIncomingLink(want);
+  }
+
+  /**
+   * 系统深浅色切换联动：应用为“跟随系统”时，按新的 colorMode 刷新公式前景色并递增主题 tick，
+   * 让已栅格化的公式（currentColor 已固化，无法随主题自动变色）重新解码。
+   * 刚 setColorMode(COLOR_MODE_NOT_SET) 后同步读配置可能读到切换前状态，因此颜色一律取
+   * 回调携带的新配置，而不是再查一次当前配置。
+   */
+  onConfigurationUpdate(newConfig: Configuration): void {
+    // resourceManager.ColorMode 与 ConfigurationConstant.ColorMode 取值不同，统一归一为 boolean。
+    const isDark = newConfig.colorMode !== undefined
+      ? newConfig.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK
+      : this.readSystemIsDark();
+    if (isDark === undefined || isDark === this.lastObservedIsDark) {
+      return;
+    }
+    this.lastObservedIsDark = isDark;
+    // P1Shell 主题恢复前 appThemeMode 未广播，默认按跟随系统处理（与其初始广播值一致）。
+    const themeMode = AppStorage.get<AppThemeMode>('appThemeMode') ?? AppThemeMode.SYSTEM;
+    if (themeMode !== AppThemeMode.SYSTEM) {
+      return;
+    }
+    AppStorage.setOrCreate('formulaForegroundColor', formulaForegroundColorForColorMode(isDark));
+    AppStorage.setOrCreate('appearanceThemeTick',
+      (AppStorage.get<number>('appearanceThemeTick') ?? 0) + 1);
+  }
+
+  private readSystemIsDark(): boolean | undefined {
+    try {
+      return this.context.resourceManager.getConfigurationSync().colorMode ===
+        resourceManager.ColorMode.DARK;
+    } catch (_error) {
+      return undefined;
+    }
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {

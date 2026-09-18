@@ -11,6 +11,8 @@ import {
   BlockedFeedHistoryStore,
   ContentFilterRuntimeStore,
   AppThemeMode,
+  FORMULA_FOREGROUND_DARK,
+  FORMULA_FOREGROUND_LIGHT,
   ExperiencePreferences,
   normalizeBottomBarItems,
   AppUpdateCheckResult,
@@ -188,6 +190,8 @@ export struct P1Shell {
 
   aboutToAppear(): void {
     this.themeMounted = true;
+    // 主题恢复完成前先按跟随系统广播（EntryAbility.onConfigurationUpdate 依赖该键判断是否联动公式换色）。
+    AppStorage.setOrCreate('appThemeMode', AppThemeMode.SYSTEM);
     AppStorage.setOrCreate('formulaForegroundColor', this.resolveFormulaForegroundColor(AppThemeMode.SYSTEM));
     AppStorage.setOrCreate('appearanceThemeTick', AppStorage.get<number>('appearanceThemeTick') ?? 0);
     this.sessionSnapshot = this.session?.getState();
@@ -2640,6 +2644,8 @@ export struct P1Shell {
         context.setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
       }
       this.themeMode = mode;
+      // 广播当前主题模式：EntryAbility.onConfigurationUpdate 仅在跟随系统时联动公式换色。
+      AppStorage.setOrCreate('appThemeMode', mode);
       AppStorage.setOrCreate('formulaForegroundColor', this.resolveFormulaForegroundColor(mode));
       AppStorage.setOrCreate('appearanceThemeTick',
         (AppStorage.get<number>('appearanceThemeTick') ?? 0) + 1);
@@ -2651,20 +2657,21 @@ export struct P1Shell {
 
   private resolveFormulaForegroundColor(mode: AppThemeMode): string {
     if (mode === AppThemeMode.DARK) {
-      return '#F5F5F5';
+      return FORMULA_FOREGROUND_DARK;
     }
     if (mode === AppThemeMode.LIGHT) {
-      return '#111111';
+      return FORMULA_FOREGROUND_LIGHT;
     }
     const context = getAbilityContext();
     if (context === undefined) {
-      return '#111111';
+      return FORMULA_FOREGROUND_LIGHT;
     }
     try {
+      // 跟随系统时的初值按当下配置推导；后续系统切换由 EntryAbility.onConfigurationUpdate 纠正。
       return context.resourceManager.getConfigurationSync().colorMode ===
-        resourceManager.ColorMode.DARK ? '#F5F5F5' : '#111111';
+        resourceManager.ColorMode.DARK ? FORMULA_FOREGROUND_DARK : FORMULA_FOREGROUND_LIGHT;
     } catch (_error) {
-      return '#111111';
+      return FORMULA_FOREGROUND_LIGHT;
     }
   }
 
