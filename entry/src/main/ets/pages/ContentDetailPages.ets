@@ -7,6 +7,8 @@ import { publishArticleTitle } from './ArticleTitleBar';
 import { FeedContentSummary } from './components/FeedContentSummary';
 import { AppPageStatusKind, AppPageStatusPanel, FLOATING_TITLE_BAR_OFFSET, FeedPullDownIndicatorOptions, feedPullDownIndicator } from './AppPageChrome';
 import { pasteboard } from '@kit.BasicServicesKit';
+import { BusinessError } from '@kit.BasicServicesKit';
+import { motion } from '@kit.MultimodalAwarenessKit';
 import { ComponentContent, SegmentButton, SegmentButtonOptions, curves } from '@kit.ArkUI';
 import {
   P1Destination,
@@ -188,6 +190,14 @@ struct ContentDetailPage {
   @StorageProp('autoHideArticleBottomBar') private autoHideArticleBottomBar: boolean = false;
   @StorageProp('buttonSkipAnswer') private buttonSkipAnswer: boolean = true;
   @StorageProp('autoHideSkipAnswerButton') private autoHideSkipAnswerButton: boolean = true;
+  /** 操作跟随智感握姿（设置页广播）：开启后跳转按钮与收藏/评论/更多胶囊吸附握持侧。 */
+  @StorageProp('gripFollowActions') @Watch('onGripFollowActionsChanged') private gripFollowActions: boolean = false;
+  /** 原生智感握姿能力（SystemCapability.MultimodalAwareness.Motion，握持手识别 API 20+）：
+   * 不支持的机型设置开关自动隐藏，跟随逻辑不生效（默认关闭）。 */
+  private readonly gripMotionSupported: boolean = canIUse('SystemCapability.MultimodalAwareness.Motion');
+  private gripMotionSubscribed: boolean = false;
+  /** 最近一次握持手状态：双手/未握持/未识别不改写，保持上一次判定；初始按右手（默认布局）。 */
+  @State private holdingHand: motion.HoldingHandStatus = motion.HoldingHandStatus.RIGHT_HAND_HELD;
   @StorageProp('pinAnswerDate') private pinAnswerDate: boolean = false;
   @StorageProp('answerSwitchMode') private answerSwitchMode: string = 'vertical';
   @StorageProp('answerSwitchSensitivity') private answerSwitchSensitivity: number = 1;
@@ -249,6 +259,8 @@ struct ContentDetailPage {
     if (this.kind === ContentDetailKind.ANSWER && !this.answerFabPositionLoaded) {
       this.loadAnswerFabPosition();
     }
+    // 订阅系统智感握姿（握持手识别）：能力不支持时静默跳过（设置开关已隐藏）。
+    this.subscribeHoldingHand();
     try {
       this.immersiveMaterialSupported =
         hdsMaterial.getSystemMaterialTypes().includes(hdsMaterial.MaterialType.IMMERSIVE);
@@ -312,6 +324,7 @@ struct ContentDetailPage {
 
   aboutToDisappear(): void {
     this.pageActive = false;
+    this.unsubscribeHoldingHand();
     this.refreshContent?.dispose();
     this.refreshContent = undefined;
     this.answersController?.deactivate();
@@ -1126,6 +1139,86 @@ struct ContentDetailPage {
     return center < this.answerFabOverlayWidthVp / 2 ? leftLimit : 0;
   }
 
+  /** 左手握持判定：智感握姿未支持/未识别时按右手（默认布局，收藏/评论/更多胶囊在右侧）。 */
+  private gripIsLeftHand(): boolean {
+    return this.gripMotionSupported && this.holdingHand === motion.HoldingHandStatus.LEFT_HAND_HELD;
+  }
+
+  /** 底部胶囊换位过渡：结构分支切换会重挂载组件，用位移+淡入淡出的过渡模拟平移换位，
+   * 弹簧曲线（慢响应）让互换柔和不生硬。slideVp 为进场起点相对终点的水平偏移，
+   * 退场自动反向——两侧取相反符号即可让新旧胶囊沿同方向滑动。 */
+  private gripSwapTransition(slideVp: number): TransitionEffect {
+    return TransitionEffect.OPACITY
+      .combine(TransitionEffect.translate({ x: slideVp }))
+      .animation({ curve: curves.springMotion(0.5, 0.85) });
+  }
+
+  /** 系统握持手回调（motion.on('holdingHandChanged')）：仅明确单手状态才更新判定。
+   * 双手/未握持/未识别保持现状，避免按钮与胶囊来回跳动。 */
+  private onHoldingHandChanged: Callback<motion.HoldingHandStatus> =
+    (status: motion.HoldingHandStatus): void => {
+      if (status !== motion.HoldingHandStatus.LEFT_HAND_HELD &&
+        status !== motion.HoldingHandStatus.RIGHT_HAND_HELD) {
+        return;
+      }
+      if (status === this.holdingHand) {
+        return;
+      }
+      this.holdingHand = status;
+      this.snapAnswerFabToHand();
+    };
+
+  /** 智感握姿开关切换：开启当下即按当前判定侧吸附跳转按钮（Y 轴不变）。 */
+  private onGripFollowActionsChanged(): void {
+    if (this.gripFollowActions) {
+      this.snapAnswerFabToHand();
+    }
+  }
+
+  /** 握持手变化/开关开启时吸附跳转按钮：保持 Y 轴不变，仅水平吸附到握持侧页边，
+   * 带 300ms 动画并持久化拖放位；收藏/评论/更多胶囊的换位由 holdingHand 状态驱动渲染。 */
+  private snapAnswerFabToHand(): void {
+    if (!this.gripFollowActions || this.kind !== ContentDetailKind.ANSWER ||
+      this.answerFabOverlayWidthVp <= 0 || this.answerFabWidthVp <= 0) {
+      return;
+    }
+    const target = this.gripIsLeftHand() ? this.answerFabMinX() : 0;
+    if (Math.abs(target - this.answerFabOffsetX) >= 1) {
+      this.getUIContext().animateTo({ duration: 300, curve: Curve.EaseOut }, (): void => {
+        this.answerFabOffsetX = target;
+      });
+    }
+    this.persistAnswerFabPosition(target);
+  }
+
+  /** 订阅系统智感握姿。canIUse 已挡不支持机型；801（能力不存在）在 catch 中兜底降级。 */
+  private subscribeHoldingHand(): void {
+    if (!this.gripMotionSupported || this.gripMotionSubscribed) {
+      return;
+    }
+    try {
+      motion.on('holdingHandChanged', this.onHoldingHandChanged);
+      this.gripMotionSubscribed = true;
+    } catch (error) {
+      const e = error as BusinessError;
+      console.error(`subscribeHoldingHand failed, code=${e.code}`);
+      this.gripMotionSubscribed = false;
+    }
+  }
+
+  private unsubscribeHoldingHand(): void {
+    if (!this.gripMotionSubscribed) {
+      return;
+    }
+    try {
+      motion.off('holdingHandChanged', this.onHoldingHandChanged);
+    } catch (error) {
+      const e = error as BusinessError;
+      console.error(`unsubscribeHoldingHand failed, code=${e.code}`);
+    }
+    this.gripMotionSubscribed = false;
+  }
+
   /** 加载持久化的悬浮按钮位置（键 fabSkipAnswer-x/y，与 DraggableRefreshButton 同库同口径）。
    * 读到位置直接写入偏移（钳制待悬浮层实测尺寸就绪后补），随后放行渲染——首帧即落位不闪。 */
   private loadAnswerFabPosition(): void {
@@ -1724,22 +1817,43 @@ struct ContentDetailPage {
             this.questionRightActions()
           }
         } else {
-          GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
-            Row({ space: 0 }) {
-              if (this.voteState !== ContentVoteState.DOWN) {
-                this.voteUpAction()
-              }
-              if (this.voteState !== ContentVoteState.UP) {
-                this.voteDownAction()
+          if (this.kind === ContentDetailKind.ANSWER && this.gripFollowActions && this.gripIsLeftHand()) {
+            // 智感握姿（系统判定左手握持）：收藏/评论/更多胶囊吸附握持侧，赞同/反对胶囊留在另一侧；
+            // 右手判定走默认布局（操作胶囊在右侧），与关闭开关时一致。
+            // GlassCapsule 是自定义组件不能链式通用属性，过渡挂在内容自适应的包裹容器上。
+            Row() {
+              GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
+                this.answerRightActions()
               }
             }
-          }
+              .transition(this.gripSwapTransition(240))
 
-          Blank()
-            .layoutWeight(1)
+            Blank()
+              .layoutWeight(1)
 
-          GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
-            this.answerRightActions()
+            Row() {
+              GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
+                this.answerVoteCapsule()
+              }
+            }
+              .transition(this.gripSwapTransition(-240))
+          } else {
+            Row() {
+              GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
+                this.answerVoteCapsule()
+              }
+            }
+              .transition(this.gripSwapTransition(240))
+
+            Blank()
+              .layoutWeight(1)
+
+            Row() {
+              GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
+                this.answerRightActions()
+              }
+            }
+              .transition(this.gripSwapTransition(-240))
           }
         }
       }
@@ -1759,6 +1873,19 @@ struct ContentDetailPage {
         this.bottomActionBarHeightVp = height;
       }
     })
+  }
+
+  /** 赞同/反对胶囊：智感握姿换位与默认布局共用同一份投票动作。 */
+  @Builder
+  private answerVoteCapsule() {
+    Row({ space: 0 }) {
+      if (this.voteState !== ContentVoteState.DOWN) {
+        this.voteUpAction()
+      }
+      if (this.voteState !== ContentVoteState.UP) {
+        this.voteDownAction()
+      }
+    }
   }
 
   @Builder

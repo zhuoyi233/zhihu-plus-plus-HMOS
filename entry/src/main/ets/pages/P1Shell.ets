@@ -2617,6 +2617,7 @@ export struct P1Shell {
     AppStorage.setOrCreate('shareActionMode', value.shareActionMode);
     AppStorage.setOrCreate('showSearchHotSearch', value.showSearchHotSearch);
     AppStorage.setOrCreate('showSearchHistory', value.showSearchHistory);
+    AppStorage.setOrCreate('gripFollowActions', value.gripFollowActions);
   }
 
   private decodeBottomBarOrder(raw: string): number[] {

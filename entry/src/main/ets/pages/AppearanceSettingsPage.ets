@@ -62,6 +62,7 @@ export struct AppearanceSettingsPage {
   @StorageProp('autoHideArticleBottomBar') private autoHideArticleBottomBar: boolean = false;
   @StorageProp('buttonSkipAnswer') private buttonSkipAnswer: boolean = true;
   @StorageProp('autoHideSkipAnswerButton') private autoHideSkipAnswerButton: boolean = true;
+  @StorageProp('gripFollowActions') private gripFollowActions: boolean = false;
   @StorageProp('pinAnswerDate') private pinAnswerDate: boolean = false;
   @StorageProp('answerSwitchMode') private answerSwitchMode: string = AnswerSwitchMode.VERTICAL;
   @StorageProp('answerSwitchSensitivity') private answerSwitchSensitivity: number = 1;
@@ -79,9 +80,13 @@ export struct AppearanceSettingsPage {
   @StorageProp('showSearchHotSearch') private showSearchHotSearch: boolean = true;
   @StorageProp('showSearchHistory') private showSearchHistory: boolean = true;
   @State private statusMessage: string = '';
+  /** 原生智感握姿能力（SystemCapability.MultimodalAwareness.Motion）：
+   * 不支持的机型自动隐藏该开关（默认关闭，无入口即不可开启）。 */
+  @State private gripMotionSupported: boolean = false;
   private store: AppPreferencesStore | undefined = undefined;
 
   aboutToAppear(): void {
+    this.gripMotionSupported = canIUse('SystemCapability.MultimodalAwareness.Motion');
     const context = getAbilityContext();
     if (context === undefined) {
       this.statusMessage = '设置服务暂不可用';
@@ -183,6 +188,13 @@ export struct AppearanceSettingsPage {
             Divider().color($r('app.color.divider_color'))
             this.switchSetting('滚动时自动隐藏跳转按钮', '上划时淡出，下划时淡入', this.autoHideSkipAnswerButton,
               'p3_appearance_skip_answer_auto_hide', (value: boolean): void => this.updateExperienceBoolean('autoHideSkipAnswerButton', value))
+          }
+          // 原生智感握姿依赖设备硬件传感器：不支持的机型自动隐藏该开关（默认关闭）。
+          if (this.gripMotionSupported) {
+            Divider().color($r('app.color.divider_color'))
+            this.switchSetting('操作跟随智感握姿', '跟随系统识别的握持手：跳转按钮与收藏/评论/更多胶囊移到握持侧，赞同/反对胶囊留在另一侧',
+              this.gripFollowActions, 'p3_appearance_grip_follow_actions',
+              (value: boolean): void => this.updateExperienceBoolean('gripFollowActions', value))
           }
           Divider().color($r('app.color.divider_color'))
           this.switchSetting('置顶回答日期', '将发布和编辑日期移到内容最前面', this.pinAnswerDate,
@@ -893,7 +905,8 @@ export struct AppearanceSettingsPage {
       showContentEndMarker: this.showContentEndMarker,
       shareActionMode: this.shareActionModeValue(),
       showSearchHotSearch: this.showSearchHotSearch,
-      showSearchHistory: this.showSearchHistory
+      showSearchHistory: this.showSearchHistory,
+      gripFollowActions: this.gripFollowActions
     });
   }
 
@@ -913,6 +926,7 @@ export struct AppearanceSettingsPage {
     else if (key === 'showContentEndMarker') next.showContentEndMarker = value;
     else if (key === 'showSearchHotSearch') next.showSearchHotSearch = value;
     else if (key === 'showSearchHistory') next.showSearchHistory = value;
+    else if (key === 'gripFollowActions') next.gripFollowActions = value;
     this.persistExperience(next);
   }
 
@@ -953,6 +967,7 @@ export struct AppearanceSettingsPage {
     AppStorage.setOrCreate('shareActionMode', value.shareActionMode);
     AppStorage.setOrCreate('showSearchHotSearch', value.showSearchHotSearch);
     AppStorage.setOrCreate('showSearchHistory', value.showSearchHistory);
+    AppStorage.setOrCreate('gripFollowActions', value.gripFollowActions);
     void this.store?.saveExperiencePreferences(value).then((): void => {
       this.statusMessage = '';
     }).catch((_error: Object): void => {
