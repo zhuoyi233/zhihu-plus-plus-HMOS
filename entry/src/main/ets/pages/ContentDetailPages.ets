@@ -1804,22 +1804,45 @@ struct ContentDetailPage {
       }
       Row({ space: $r('app.float.p1_spacing_small') }) {
         if (this.kind === ContentDetailKind.QUESTION) {
-          GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
-            if (this.followController !== undefined) {
-              this.followQuestionAction()
+          // 智感握姿对问题页同样生效：收藏/评论/更多等操作胶囊吸附握持侧，关注问题胶囊留在另一侧；
+          // 右手判定走默认布局，与关闭开关时一致。
+          if (this.gripFollowActions && this.gripIsLeftHand()) {
+            Row() {
+              GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
+                this.questionRightActions()
+              }
+            }
+              .transition(this.gripSwapTransition(240))
+
+            Blank()
+              .layoutWeight(1)
+
+            Row() {
+              GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
+                if (this.followController !== undefined) {
+                  this.followQuestionAction()
+                }
+              }
+            }
+              .transition(this.gripSwapTransition(-240))
+          } else {
+            GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
+              if (this.followController !== undefined) {
+                this.followQuestionAction()
+              }
+            }
+
+            Blank()
+              .layoutWeight(1)
+
+            GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
+              this.questionRightActions()
             }
           }
-
-          Blank()
-            .layoutWeight(1)
-
-          GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
-            this.questionRightActions()
-          }
         } else {
-          if (this.kind === ContentDetailKind.ANSWER && this.gripFollowActions && this.gripIsLeftHand()) {
+          if (this.gripFollowActions && this.gripIsLeftHand()) {
             // 智感握姿（系统判定左手握持）：收藏/评论/更多胶囊吸附握持侧，赞同/反对胶囊留在另一侧；
-            // 右手判定走默认布局（操作胶囊在右侧），与关闭开关时一致。
+            // 覆盖回答页、文章页等所有双胶囊详情页；右手判定走默认布局（操作胶囊在右侧），与关闭开关时一致。
             // GlassCapsule 是自定义组件不能链式通用属性，过渡挂在内容自适应的包裹容器上。
             Row() {
               GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {

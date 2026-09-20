@@ -192,7 +192,7 @@ export struct AppearanceSettingsPage {
           // 原生智感握姿依赖设备硬件传感器：不支持的机型自动隐藏该开关（默认关闭）。
           if (this.gripMotionSupported) {
             Divider().color($r('app.color.divider_color'))
-            this.switchSetting('操作跟随智感握姿', '跟随系统识别的握持手：跳转按钮与收藏/评论/更多胶囊移到握持侧，赞同/反对胶囊留在另一侧',
+            this.switchSetting('操作跟随智感握姿', '跟随系统识别的握持手：回答/文章等详情页的操作胶囊与跳转按钮移到握持侧，赞同/反对（关注问题）胶囊留在另一侧',
               this.gripFollowActions, 'p3_appearance_grip_follow_actions',
               (value: boolean): void => this.updateExperienceBoolean('gripFollowActions', value))
           }
