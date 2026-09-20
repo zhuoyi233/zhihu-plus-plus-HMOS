@@ -53,6 +53,12 @@ function defaultEstimatedBlockHeightVp(blockSpacingPercent: number): number {
 /** 对齐上游 telephoto 默认 ZoomSpec(maxZoomFactor = 2f)。 */
 const IMAGE_PREVIEW_MAX_SCALE = 2;
 
+/**
+ * 问题折叠详情的按钮保留区高（vp）：按钮行总高（胶囊 40 + 底边距 8）。
+ * 对齐上游 QUESTION_DETAIL_TOGGLE_ZONE：计入测量列高度，正文止步于按钮区之上。
+ */
+const COLLAPSIBLE_TOGGLE_ZONE_VP = 48;
+
 function clampPreviewScale(value: number): number {
   return Math.min(IMAGE_PREVIEW_MAX_SCALE, Math.max(1, value));
 }
@@ -676,9 +682,11 @@ export struct NativeContentDocument {
   }
 
   /**
-   * 问题正文折叠视口（对齐上游 QuestionAnimatedBodyHeader）：收起 180vp + 底部渐变遮罩 +
+   * 问题正文折叠视口（对齐上游 QuestionDetailAnimatedViewport）：收起 180vp + 底部渐变遮罩 +
    * 右下角展开/收起开关，420ms FastOutSlowIn 动画。内层 Scroll 让子列不受视口高度约束、
    * 始终按自然高度测量（onAreaChange 回填展开目标高度），规避"父锁高→子测量被压缩"死锁。
+   * 对齐上游：测量列自带 bottom=按钮区高 的保留区，展开视口=完整内容高（含保留区），
+   * 正文天然止步于按钮区之上，按钮永不大压文字。
    */
   @Builder
   private collapsibleBodyViewport() {
@@ -690,6 +698,9 @@ export struct NativeContentDocument {
           }, (item: ReaderBlock): string => item.id)
         }
         .width('100%')
+        // 按钮保留区（上游 QUESTION_DETAIL_TOGGLE_ZONE 思路）：计入测量高，
+        // 使展开态视口底部留出按钮行空间；收起态该区域被渐变遮罩与按钮覆盖，无感知。
+        .padding({ bottom: COLLAPSIBLE_TOGGLE_ZONE_VP })
         .onAreaChange((_oldArea: Area, newArea: Area): void => {
           const height = Number(newArea.height);
           if (height > 0 && Math.abs(height - this.naturalHeightVp) > 1) {
@@ -710,7 +721,9 @@ export struct NativeContentDocument {
             colors: [['rgba(0,0,0,0)', 0], [$r('app.color.page_background'), 1]]
           })
           .width('100%')
-          .height(88)
+          // 遮罩底边略超出胶囊按钮顶（胶囊 40 + 底边距 8 = 48，遮罩 56）：收起态渐隐
+          // 覆盖到按钮上缘附近即止，保留上方更多正文可见性。
+          .height(56)
           .opacity(this.detailExpanded ? 0 : 1)
           .hitTestBehavior(HitTestMode.None)
 
@@ -724,8 +737,8 @@ export struct NativeContentDocument {
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.brand_primary'))
         }
-        .padding({ left: 12, right: 12 }).height(56)
-        .borderRadius(16)
+        .padding({ left: 16, right: 16 }).height(40)
+        .borderRadius(20)
         .backgroundColor($r('app.color.surface_background'))
         .onClick((): void => this.toggleDetailExpanded())
         .accessibilityText(this.detailExpanded ? '收起问题详情' : '展开问题详情')
@@ -745,17 +758,24 @@ export struct NativeContentDocument {
     return this.naturalHeightVp > 0 ? Math.min(this.naturalHeightVp, 180) : 180;
   }
 
+  /** 展开态视口高=完整内容高（测量列已含按钮保留区，对齐上游 coerce 到内容高内）。 */
   private expandedViewportHeight(): number {
-    return Math.max(this.naturalHeightVp, 1) + 64;
+    return Math.max(this.naturalHeightVp, 1);
   }
 
   private toggleDetailExpanded(): void {
+    const collapsing = this.detailExpanded;
     this.getUIContext().animateTo({
       duration: 420,
       curve: Curve.FastOutSlowIn
     }, (): void => {
       this.detailExpanded = !this.detailExpanded;
     });
+    // 收起后视口骤缩，若停留在原偏移只会看到回答流；对齐"回到详情开头"预期，
+    // 立即滚回列表顶（标题头+详情起点）。已在顶部时为 no-op。
+    if (collapsing && this.scrollYVp > 1) {
+      this.scroller.scrollToIndex(0, false);
+    }
   }
 
   aboutToAppear(): void {
