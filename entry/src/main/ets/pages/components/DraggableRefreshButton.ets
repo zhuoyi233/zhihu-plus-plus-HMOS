@@ -1,4 +1,4 @@
-import { AppPreferencesStore, FabPosition } from 'data';
+import { AppPreferencesStore, DEFAULT_THEME_COLOR, FabPosition, onThemeColor } from 'data';
 import { getAbilityContext } from '../../entryability/AbilityContextHolder';
 import { performConfirmHaptic } from '../../platform/HapticFeedback';
 
@@ -20,6 +20,7 @@ export struct DraggableRefreshButton {
   bottomAvoidance: number = 0;
   @Prop fabOpacity: number = 100;
   @Prop loading: boolean = false;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   onRefresh: () => void = (): void => {};
 
   @State private offsetX: number = 0;
@@ -132,11 +133,11 @@ export struct DraggableRefreshButton {
             LoadingProgress()
               .width(26)
               .height(26)
-              .color($r('app.color.on_brand'))
+              .color(onThemeColor(this.resolvedThemeColor))
           } else {
             SymbolGlyph($r('sys.symbol.arrow_clockwise'))
               .fontSize(20)
-              .fontColor([$r('app.color.on_brand')])
+              .fontColor([onThemeColor(this.resolvedThemeColor)])
           }
         }
         .id(this.elementId)
@@ -144,7 +145,7 @@ export struct DraggableRefreshButton {
         .height(REFRESH_FAB_SIZE)
         .padding(0)
         .position({ x: this.offsetX, y: this.visibleY() })
-        .backgroundColor($r('app.color.brand_primary'))
+        .backgroundColor(this.resolvedThemeColor)
         .opacity(this.clamp(this.fabOpacity, 10, 100) / 100)
         .accessibilityText(this.accessibilityLabel)
         .gesture(

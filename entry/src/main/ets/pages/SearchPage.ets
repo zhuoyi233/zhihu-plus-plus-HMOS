@@ -1,7 +1,9 @@
 import { Want } from '@kit.AbilityKit';
 import { P1Destination, P1DestinationName, isSafePeopleIdentifier } from 'core';
 import {
+  onThemeColor,
   AppPreferencesStore,
+  DEFAULT_THEME_COLOR,
   SEARCH_HISTORY_MAX_SIZE,
   FeedTargetKind,
   SearchEntity,
@@ -112,6 +114,7 @@ export struct SearchPage {
   // @StorageProp 键用字面量（装饰器要求编译期常量），值与 SearchTitleBar 导出的常量一一对应。
   @StorageProp('searchSubmitTick') @Watch('onSubmitTick') private submitTick: number = 0;
   @StorageProp('searchFilterTick') @Watch('onFilterTick') private filterTick: number = 0;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: SearchController;
   private lastSubmitTick: number = -1;
   private lastFilterTick: number = -1;
@@ -444,6 +447,8 @@ export struct SearchPage {
       if (this.loadingMore || this.canLoadMore) {
         ListItem() {
           Button(this.loadingMore ? '正在加载更多…' : '加载更多')
+            .backgroundColor(this.resolvedThemeColor)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
             .id('p2_search_load_more')
             .width('100%')
             .fontSize($r('app.float.p1_secondary_font_size'))
@@ -469,7 +474,7 @@ export struct SearchPage {
           .id('p2_search_loading_progress')
           .width(40)
           .height(40)
-          .color($r('app.color.brand_primary'))
+          .color(this.resolvedThemeColor)
       }
       Text(message)
         .fontSize($r('app.float.p1_body_font_size'))
@@ -478,12 +483,16 @@ export struct SearchPage {
         .width('100%')
       if (retry) {
         Button('重试')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id(`${testId}_retry`)
           .fontSize($r('app.float.p1_body_font_size'))
           .onClick(() => this.controller?.retry())
       }
       if (this.requiresLogin) {
         Button('去登录')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p2_search_error_login')
           .fontSize($r('app.float.p1_body_font_size'))
           .onClick(() => this.openLogin())
@@ -502,7 +511,7 @@ export struct SearchPage {
       ForEach(splitEmphasis(text), (part: EmphasisPart, index: number) => {
         if (part.emphasized) {
           Span(part.text)
-            .fontColor($r('app.color.brand_primary'))
+            .fontColor(this.resolvedThemeColor)
             .fontWeight(FontWeight.Bold)
         } else {
           Span(part.text)
@@ -522,7 +531,7 @@ export struct SearchPage {
         Row({ space: $r('app.float.p1_spacing_small') }) {
           Text(searchKindLabel(item.kind))
             .fontSize($r('app.float.p1_secondary_font_size'))
-            .fontColor($r('app.color.brand_primary'))
+            .fontColor(this.resolvedThemeColor)
           if (item.authorName !== undefined) {
             Text(stripEmphasis(item.authorName))
               .fontSize($r('app.float.p1_secondary_font_size'))

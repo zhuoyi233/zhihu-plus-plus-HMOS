@@ -28,6 +28,7 @@
  * 拖动：整个 12vp 轨道区挂 `PanGesture`，累加位移换算进度后直接 `scrollTo` 回写正文滚动；
  * ArkUI 无 Compose 的 `startDragImmediately`，PanGesture 的 5vp 起手距离等价于"按下即算"。
  */
+import { DEFAULT_THEME_COLOR } from 'data';
 import {
   MIN_SCROLLABLE_VP,
   readingProgress,
@@ -73,6 +74,7 @@ export struct ReadingProgressBar {
   @Prop bottomInsetVp: number = READING_PROGRESS_BAR_BOTTOM_INSET_VP;
   /** 导航条/系统栏底部避让区（vp）：EntryAbility 经 AppStorage 广播，沉浸态归零。 */
   @StorageProp('bottomRectHeight') private systemBarsBottomVp: number = 0;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   /**
    * 拖动开始/结束通知宿主：拖动期间正文改由 `scrollTo` 驱动，宿主需屏蔽贴边过滑
    * （回答页贴底时向上拖滚动条会被误判为"下一答"过滑）。
@@ -118,7 +120,7 @@ export struct ReadingProgressBar {
         .width(THUMB_WIDTH_VP)
         .height(this.thumbHeightVp())
         .borderRadius(THUMB_WIDTH_VP / 2)
-        .backgroundColor($r('app.color.brand_primary'))
+        .backgroundColor(this.resolvedThemeColor)
         .opacity(0.88)
         .translate({ y: this.thumbOffsetVp() })
     }

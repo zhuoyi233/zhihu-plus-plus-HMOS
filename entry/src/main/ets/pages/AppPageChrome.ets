@@ -4,6 +4,8 @@
  * 页面只传递语义（标题、状态、尾部文本和操作），颜色、间距和可访问性保持一致，
  * 避免各业务页继续复制一套标题行、空态和设置导航行。
  */
+import { DEFAULT_THEME_COLOR, onThemeColor } from 'data';
+
 export enum AppPageStatusKind {
   LOADING = 'loading',
   EMPTY = 'empty',
@@ -23,6 +25,8 @@ export const FLOATING_TITLE_BAR_OFFSET: number = 94;
 
 @Component
 export struct AppPageHeader {
+  /** 当前生效主题色（P1Shell 广播），驱动标题栏动作按钮强调色。 */
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   title: string = '';
   actionLabel: string = '';
   actionId: string = '';
@@ -45,6 +49,8 @@ export struct AppPageHeader {
         Button(this.actionLabel)
           .id(this.actionId)
           .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor(onThemeColor(this.resolvedThemeColor))
+          .backgroundColor(this.resolvedThemeColor)
           .enabled(this.actionEnabled)
           .accessibilityText(this.actionAccessibilityText.length > 0 ? this.actionAccessibilityText : this.actionLabel)
           .onClick((): void => this.onAction())
@@ -65,6 +71,8 @@ export struct AppPageStatusPanel {
   actionAccessibilityText: string = '';
   onAction: () => void = (): void => {
   };
+  /** 当前生效主题色（P1Shell 启动时广播），驱动加载指示器颜色。 */
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
 
   build() {
     Column({ space: $r('app.float.p1_spacing_medium') }) {
@@ -72,7 +80,7 @@ export struct AppPageStatusPanel {
         LoadingProgress()
           .width(40)
           .height(40)
-          .color($r('app.color.brand_primary'))
+          .color(this.resolvedThemeColor)
           .accessibilityText('正在加载')
       }
       Text(this.message)
@@ -84,6 +92,8 @@ export struct AppPageStatusPanel {
         Button(this.actionLabel)
           .id(this.actionId)
           .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor(onThemeColor(this.resolvedThemeColor))
+          .backgroundColor(this.resolvedThemeColor)
           .accessibilityText(this.actionAccessibilityText.length > 0 ? this.actionAccessibilityText : this.actionLabel)
           .onClick((): void => this.onAction())
       }
@@ -186,7 +196,9 @@ export function feedPullDownIndicator(_options: FeedPullDownIndicatorOptions) {
     LoadingProgress()
       .width(40)
       .height(40)
-      .color($r('app.color.brand_primary'))
+      // 文件级 @Builder 无组件上下文，直接读 AppStorage 当前生效主题色；
+      // 指示器随每次刷新动作重新构建，主题切换后下一次下拉即生效。
+      .color(AppStorage.get<string>('resolvedThemeColor') ?? DEFAULT_THEME_COLOR)
   }
   .width('100%')
   .constraintSize({ minHeight: 48 })

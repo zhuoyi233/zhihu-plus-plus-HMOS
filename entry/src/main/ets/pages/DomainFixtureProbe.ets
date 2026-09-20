@@ -5,11 +5,14 @@ import {
   DomainFixtureValidationReport,
   DomainFixtureValidator
 } from '../fixtures/DomainFixtureValidator';
+import { DEFAULT_THEME_COLOR, onThemeColor } from 'data';
 
 const DOMAIN_FIXTURE_COUNT = DOMAIN_FIXTURE_SPECS.length;
 
 @Component
 export struct DomainFixtureProbe {
+  /** 当前生效主题色（P1Shell 广播），驱动强调色控件。 */
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   onBack: () => void = () => {};
   @State private status: string = `正在读取 ${DOMAIN_FIXTURE_COUNT} 份 rawfile fixture…`;
   @State private failures: Array<DomainFixtureCaseResult> = [];
@@ -29,6 +32,8 @@ export struct DomainFixtureProbe {
       Column({ space: $r('app.float.p1_spacing_large') }) {
         Row({ space: $r('app.float.p1_spacing_medium') }) {
           Button('返回')
+            .backgroundColor($r('app.color.control_background'))
+            .fontColor($r('app.color.primary_text'))
             .id('p1_domain_fixture_gate_back')
             .fontSize($r('app.float.p1_secondary_font_size'))
             .onClick(() => this.onBack())
@@ -86,6 +91,8 @@ export struct DomainFixtureProbe {
         }
 
         Button(this.running ? '正在验证…' : '重新运行')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p1_run_domain_fixture_gate')
           .enabled(!this.running)
           .fontSize($r('app.float.p1_body_font_size'))

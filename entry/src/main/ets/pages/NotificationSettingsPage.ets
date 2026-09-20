@@ -1,9 +1,11 @@
 import {
+  DEFAULT_THEME_COLOR,
   NotificationKind,
   NotificationPreferences,
   NotificationSettingsGateway,
   NOTIFICATION_KINDS,
-  notificationKindInfo
+  notificationKindInfo,
+  onThemeColor
 } from 'data';
 import { common } from '@kit.AbilityKit';
 import { deviceInfo } from '@kit.BasicServicesKit';
@@ -24,6 +26,7 @@ export struct NotificationSettingsPage {
   @State private saveStatus: string = '';
   @State private systemNotificationStatus: string = '正在读取系统通知状态…';
   @State private systemNotificationSettingsOpening: boolean = false;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
 
   aboutToAppear(): void {
     this.refreshSystemNotificationStatus();
@@ -101,6 +104,8 @@ export struct NotificationSettingsPage {
             .id('p3_notifications_settings_system_open')
             .width('100%')
             .fontSize($r('app.float.p1_body_font_size'))
+            .fontColor(onThemeColor(this.resolvedThemeColor))
+            .backgroundColor(this.resolvedThemeColor)
             .enabled(!this.systemNotificationSettingsOpening)
             .onClick((): void => {
               this.openSystemNotificationSettings();
@@ -170,6 +175,7 @@ export struct NotificationSettingsPage {
       .layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: checked })
         .id(testId)
+        .selectedColor(this.resolvedThemeColor)
         .onChange((value: boolean): void => {
           onChange(value);
         })

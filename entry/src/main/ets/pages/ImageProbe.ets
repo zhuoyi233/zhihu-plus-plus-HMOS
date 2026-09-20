@@ -1,4 +1,5 @@
 import { P4ImagePickerPanel } from './P4ImagePickerPanel';
+import { DEFAULT_THEME_COLOR, onThemeColor } from 'data';
 
 const STATIC_IMAGE_URL = 'https://picx.zhimg.com/v2-7f36f391170ca2319d6b61239694e0ef_1440w.jpg';
 const GIF_IMAGE_URL = 'https://pic2.zhimg.com/v2-5e25b72ea793eb39f3709e89e56b2513_1440w.gif';
@@ -6,6 +7,8 @@ const FAILURE_IMAGE_URL = 'https://picx.zhimg.com/probe-image-that-does-not-exis
 
 @Component
 export struct ImageProbe {
+  /** 当前生效主题色（P1Shell 广播），驱动强调色控件。 */
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   onBack: () => void = () => {};
   @State private staticStatus: string = '静态图片等待加载';
   @State private gifStatus: string = 'GIF 等待加载';
@@ -20,6 +23,8 @@ export struct ImageProbe {
           Blank().height(64)
           Row({ space: 12 }) {
             Button('返回')
+              .backgroundColor($r('app.color.control_background'))
+              .fontColor($r('app.color.primary_text'))
               .id('image_back')
               .onClick(() => this.onBack())
             Column({ space: 4 }) {
@@ -100,6 +105,8 @@ export struct ImageProbe {
             .fontSize(14)
             .fontColor($r('app.color.secondary_text'))
           Button(`重试（${this.retryAttempt}）`)
+            .backgroundColor(this.resolvedThemeColor)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
             .id('retry_image_button')
             .onClick(() => {
               this.retryStatus = '正在重试…';
@@ -128,6 +135,8 @@ export struct ImageProbe {
             .height('100%')
             .objectFit(ImageFit.Contain)
           Button('关闭预览')
+            .backgroundColor($r('app.color.control_background'))
+            .fontColor($r('app.color.primary_text'))
             .id('close_image_preview')
             .margin(20)
             .onClick(() => {

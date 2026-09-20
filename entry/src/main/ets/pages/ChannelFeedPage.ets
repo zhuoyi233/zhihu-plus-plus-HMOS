@@ -2,6 +2,7 @@ import { FeedContentSummary } from './components/FeedContentSummary';
 import { HotQuestionStatistics } from './components/HotQuestionStatistics';
 import { isSafeDecimalContentId, P1Destination, P1DestinationName } from 'core';
 import {
+  onThemeColor,
   BlockedFeedHistoryGateway,
   BlockingRuleGateway,
   ChannelContentItem,
@@ -13,6 +14,7 @@ import {
   ChannelFeedSource,
   ContentRepository,
   DailyStoryRepository,
+  DEFAULT_THEME_COLOR,
   DefaultChannelFeedRepository,
   FeedItem,
   FeedTargetKind
@@ -74,6 +76,7 @@ export struct ChannelFeedPage {
   @StorageProp('showRefreshFab') private showRefreshFab: boolean = true;
   @StorageProp('feedCardStyle') private feedCardStyle: string = 'divider';
   @StorageProp('fabOpacity') private fabOpacity: number = 100;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   // 下拉刷新自定义加载圆圈（refreshingContent 需 ComponentContent，随页面销毁释放）
   private refreshContent?: ComponentContent<FeedPullDownIndicatorOptions> = undefined;
   @Consume('channelFeedInteractionBridge') private interactionBridge: ChannelFeedInteractionBridge =
@@ -230,10 +233,14 @@ export struct ChannelFeedPage {
               .layoutWeight(1)
             if (this.requiresLogin) {
               Button('去登录')
+                .backgroundColor(this.resolvedThemeColor)
+                .fontColor(onThemeColor(this.resolvedThemeColor))
                 .id(`p2_channel_${this.source}_login`)
                 .onClick(() => this.navigate({ name: P1DestinationName.LOGIN }))
             } else {
               Button('重试')
+                .backgroundColor(this.resolvedThemeColor)
+                .fontColor(onThemeColor(this.resolvedThemeColor))
                 .id(`p2_channel_${this.source}_retry_more`)
                 .onClick(() => this.controller?.retry())
             }
@@ -281,7 +288,7 @@ export struct ChannelFeedPage {
                   .id(`p2_channel_${this.source}_load_more`)
                   .width(40)
                   .height(40)
-                  .color($r('app.color.brand_primary'))
+                  .color(this.resolvedThemeColor)
               }
               .width('100%')
               .padding({ top: 12, bottom: 12 })
@@ -361,7 +368,7 @@ export struct ChannelFeedPage {
           LoadingProgress()
             .width(40)
             .height(40)
-            .color($r('app.color.brand_primary'))
+            .color(this.resolvedThemeColor)
           Text('正在打开日报原文…')
             .id(`p2_channel_${this.source}_daily_opening`)
             .fontSize($r('app.float.p1_body_font_size'))
@@ -385,6 +392,8 @@ export struct ChannelFeedPage {
               .fontColor($r('app.color.secondary_text'))
               .textAlign(TextAlign.Center)
             Button('确定')
+              .backgroundColor(this.resolvedThemeColor)
+              .fontColor(onThemeColor(this.resolvedThemeColor))
               .id(`p2_channel_${this.source}_daily_open_error_ok`)
               .width('100%')
               .onClick((): void => {
@@ -439,7 +448,7 @@ export struct ChannelFeedPage {
               .id(`p2_channel_hot_rank_${item.feedItem.target.id}`)
               .fontSize($r('app.float.p1_heading_font_size'))
               .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.brand_primary'))
+              .fontColor(this.resolvedThemeColor)
           }
           Text(channelActionLabel(item.feedItem, this.source))
             .fontSize($r('app.float.p1_secondary_font_size'))
@@ -449,7 +458,7 @@ export struct ChannelFeedPage {
             .layoutWeight(1)
           Text(channelKindLabel(item.feedItem.target.kind))
             .fontSize($r('app.float.p1_secondary_font_size'))
-            .fontColor($r('app.color.brand_primary'))
+            .fontColor(this.resolvedThemeColor)
 
           // 对齐上游 FeedCardMenuBox：右上角紧凑“更多”符号图标，屏蔽等操作收进菜单。
           Button({ type: ButtonType.Normal, stateEffect: true }) {
@@ -512,7 +521,7 @@ export struct ChannelFeedPage {
         .id(`p2_daily_section_${date}`)
         .fontSize($r('app.float.p1_body_font_size'))
         .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.brand_primary'))
+        .fontColor(this.resolvedThemeColor)
       Divider().layoutWeight(1).color($r('app.color.secondary_text')).opacity(0.2)
     }
     .width('100%')
@@ -679,12 +688,16 @@ export struct ChannelFeedPage {
         .width('100%')
       Row({ space: $r('app.float.p1_spacing_small') }) {
         Button('取消')
+          .backgroundColor($r('app.color.control_background'))
+          .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
           .enabled(!this.blockingBusy)
           .onClick((): void => {
             this.pendingUserBlock = undefined;
           })
         Button('确定屏蔽')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id(`p3_channel_${this.source}_confirm_block_user`)
           .layoutWeight(1)
           .enabled(!this.blockingBusy)
@@ -712,6 +725,8 @@ export struct ChannelFeedPage {
         })
       Row({ space: $r('app.float.p1_spacing_small') }) {
         Button('取消')
+          .backgroundColor($r('app.color.control_background'))
+          .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
           .enabled(!this.blockingBusy)
           .onClick((): void => {
@@ -719,6 +734,8 @@ export struct ChannelFeedPage {
             this.keywordBlockInput = '';
           })
         Button('确认屏蔽')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id(`p3_channel_${this.source}_confirm_block_keyword`)
           .layoutWeight(1)
           .enabled(!this.blockingBusy && this.keywordBlockInput.trim().length > 0)

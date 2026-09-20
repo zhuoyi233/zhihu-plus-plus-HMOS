@@ -1,7 +1,9 @@
 import { P1Destination, P1DestinationName } from 'core';
 import {
+  onThemeColor,
   CollectionRepository,
   CollectionSummary,
+  DEFAULT_THEME_COLOR,
   LoginSessionGateway
 } from 'data';
 import {
@@ -34,6 +36,7 @@ export struct CollectionPage {
   @State private pendingDelete?: CollectionSummary = undefined;
   @State private showDeleteSheet: boolean = false;
   @StorageProp('bottomRectHeight') private bottomRectHeightVp: number = 0;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: CollectionController;
 
   aboutToAppear(): void {
@@ -87,10 +90,14 @@ export struct CollectionPage {
                 .layoutWeight(1)
               if (this.requiresLogin) {
                 Button('去登录')
+                  .backgroundColor(this.resolvedThemeColor)
+                  .fontColor(onThemeColor(this.resolvedThemeColor))
                   .id('p3_collections_login')
                   .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
               } else {
                 Button('重试')
+                  .backgroundColor(this.resolvedThemeColor)
+                  .fontColor(onThemeColor(this.resolvedThemeColor))
                   .id('p3_collections_retry_more')
                   .onClick(() => this.controller?.retry())
               }
@@ -111,6 +118,8 @@ export struct CollectionPage {
             if (this.loadingMore || this.canLoadMore) {
               ListItem() {
                 Button(this.loadingMore ? '正在加载更多…' : '加载更多')
+                  .backgroundColor(this.resolvedThemeColor)
+                  .fontColor(onThemeColor(this.resolvedThemeColor))
                   .id('p3_collections_load_more')
                   .width('100%')
                   .fontSize($r('app.float.p1_secondary_font_size'))
@@ -159,7 +168,7 @@ export struct CollectionPage {
           .height(48)
           .padding(0)
           .borderRadius(24)
-          .backgroundColor($r('app.color.brand_primary'))
+          .backgroundColor(this.resolvedThemeColor)
           .margin({
             right: $r('app.float.p1_page_padding'),
             bottom: Math.max(this.bottomRectHeightVp, 0) + 76
@@ -294,6 +303,8 @@ export struct CollectionPage {
       }
       .width('100%')
       Button('打开')
+        .backgroundColor(this.resolvedThemeColor)
+        .fontColor(onThemeColor(this.resolvedThemeColor))
         .id(`p3_collections_open_${this.actionTarget?.id ?? ''}`)
         .width('100%')
         .enabled(this.actionTarget !== undefined && !this.busy)
@@ -332,7 +343,7 @@ export struct CollectionPage {
           .id('p3_collections_loading_progress')
           .width(40)
           .height(40)
-          .color($r('app.color.brand_primary'))
+          .color(this.resolvedThemeColor)
       }
       Text(message)
         .fontSize($r('app.float.p1_body_font_size'))
@@ -342,11 +353,15 @@ export struct CollectionPage {
       if (retry) {
         if (this.requiresLogin) {
           Button('去登录')
+            .backgroundColor(this.resolvedThemeColor)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
             .id('p3_collections_status_login')
             .fontSize($r('app.float.p1_body_font_size'))
             .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
         } else {
           Button('重新加载')
+            .backgroundColor(this.resolvedThemeColor)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
             .id(`${testId}_retry`)
             .fontSize($r('app.float.p1_body_font_size'))
             .onClick(() => this.controller?.retry())
@@ -389,6 +404,7 @@ export struct CollectionPage {
           .layoutWeight(1)
         Toggle({ type: ToggleType.Switch, isOn: this.createIsPublic })
           .id('p3_collections_create_public_toggle')
+          .selectedColor(this.resolvedThemeColor)
           .onChange((value: boolean): void => {
             this.createIsPublic = value;
           })
@@ -402,12 +418,16 @@ export struct CollectionPage {
       }
       Row({ space: $r('app.float.p1_spacing_small') }) {
         Button('取消')
+          .backgroundColor($r('app.color.control_background'))
+          .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
           .enabled(!this.busy)
           .onClick((): void => {
             this.closeCreateDialog();
           })
         Button(this.busy ? '创建中…' : '创建')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p3_collections_create_submit')
           .layoutWeight(1)
           .enabled(!this.busy && this.createTitle.trim().length > 0)
@@ -432,6 +452,8 @@ export struct CollectionPage {
         .width('100%')
       Row({ space: $r('app.float.p1_spacing_small') }) {
         Button('取消')
+          .backgroundColor($r('app.color.control_background'))
+          .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
           .enabled(!this.busy)
           .onClick((): void => {
@@ -439,6 +461,8 @@ export struct CollectionPage {
             this.pendingDelete = undefined;
           })
         Button('确认删除')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p3_collections_delete_confirm')
           .layoutWeight(1)
           .enabled(!this.busy)

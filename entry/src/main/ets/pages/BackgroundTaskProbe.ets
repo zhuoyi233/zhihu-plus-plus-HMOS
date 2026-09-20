@@ -5,6 +5,7 @@ import {
   decideBackgroundRoute,
   ZhihuWorkload
 } from 'core';
+import { DEFAULT_THEME_COLOR, onThemeColor } from 'data';
 
 class BackgroundProbeFailure extends Error {
   readonly code: number;
@@ -17,6 +18,8 @@ class BackgroundProbeFailure extends Error {
 
 @Component
 export struct BackgroundTaskProbePage {
+  /** 当前生效主题色（P1Shell 广播），驱动探针页按钮强调色。 */
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   onBack: () => void = () => {};
   @State private transientStatus: string = '短时任务配额尚未读取';
   @State private deferredStatus: string = '延迟任务登记尚未验证';
@@ -28,6 +31,8 @@ export struct BackgroundTaskProbePage {
       Column({ space: 16 }) {
         Blank().height(64)
         Button('返回')
+          .backgroundColor($r('app.color.control_background'))
+          .fontColor($r('app.color.primary_text'))
           .id('background_back')
           .onClick(() => this.onBack())
 
@@ -43,6 +48,8 @@ export struct BackgroundTaskProbePage {
 
         Button('读取并释放短时任务配额')
           .id('probe_transient_task')
+          .fontColor(onThemeColor(this.resolvedThemeColor))
+          .backgroundColor(this.resolvedThemeColor)
           .enabled(!this.busy)
           .onClick(() => this.runTransientProbe())
 
@@ -54,6 +61,8 @@ export struct BackgroundTaskProbePage {
 
         Button('登记并清理延迟任务')
           .id('probe_deferred_task')
+          .fontColor(onThemeColor(this.resolvedThemeColor))
+          .backgroundColor(this.resolvedThemeColor)
           .enabled(!this.busy)
           .onClick(() => this.runDeferredProbe())
 

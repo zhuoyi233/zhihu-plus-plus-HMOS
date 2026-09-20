@@ -1,7 +1,10 @@
 import {
+  DEFAULT_THEME_COLOR,
   getAppSessionOwner,
   IdentityManagementClient,
+  onThemeColor,
   SessionStatus,
+  themeColorContainerColor,
   ZhihuIdentityAccount
 } from 'data';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
@@ -19,6 +22,7 @@ export struct IdentityManagementPage {
   @State private confirmationKind: IdentityConfirmationKind = 'switch';
   @State private targetAccount: ZhihuIdentityAccount | undefined = undefined;
   @State private acceptedCreateRules: boolean = false;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private client: IdentityManagementClient | undefined = undefined;
 
   aboutToAppear(): void {
@@ -42,7 +46,7 @@ export struct IdentityManagementPage {
         Column({ space: $r('app.float.p1_spacing_large') }) {
           if (this.loading && this.accounts.length === 0) {
             Column({ space: $r('app.float.p1_spacing_medium') }) {
-              LoadingProgress().width(40).height(40).color($r('app.color.brand_primary'))
+              LoadingProgress().width(40).height(40).color(this.resolvedThemeColor)
               Text('正在加载身份列表…').fontColor($r('app.color.secondary_text'))
             }.width('100%').height(180).justifyContent(FlexAlign.Center)
           }
@@ -54,6 +58,8 @@ export struct IdentityManagementPage {
               Text(this.errorMessage).fontSize($r('app.float.p1_secondary_font_size'))
                 .fontColor($r('app.color.secondary_text')).width('100%')
               Button('重试').id('p5_identity_retry').enabled(!this.busy)
+                .fontColor(onThemeColor(this.resolvedThemeColor))
+                .backgroundColor(this.resolvedThemeColor)
                 .onClick((): void => { void this.refresh(); })
             }.width('100%').padding($r('app.float.p1_card_padding'))
               .borderRadius($r('app.float.p1_card_radius')).backgroundColor($r('app.color.surface_background'))
@@ -78,6 +84,8 @@ export struct IdentityManagementPage {
               Button('创建新账号')
                 .id('p5_identity_create')
                 .width('100%')
+                .fontColor(onThemeColor(this.resolvedThemeColor))
+                .backgroundColor(this.resolvedThemeColor)
                 .enabled(this.canCreateSubAccount() && !this.busy)
                 .onClick((): void => {
                   this.confirmationKind = 'create';
@@ -100,7 +108,7 @@ export struct IdentityManagementPage {
 
       if (this.busy) {
         Column({ space: $r('app.float.p1_spacing_medium') }) {
-          LoadingProgress().width(44).height(44).color($r('app.color.brand_primary'))
+          LoadingProgress().width(44).height(44).color(this.resolvedThemeColor)
           Text(this.confirmationKind === 'create' ? '正在创建并切换账号…' : '正在切换账号…')
             .fontColor($r('app.color.primary_text'))
         }.width('100%').height('100%').justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
@@ -130,7 +138,7 @@ export struct IdentityManagementPage {
         Stack({ alignContent: Alignment.Center }) {
           Text(account.name.length > 0 ? account.name.charAt(0) : '?')
             .width(42).height(42).borderRadius(21).textAlign(TextAlign.Center)
-            .backgroundColor($r('app.color.brand_primary_container')).fontColor($r('app.color.brand_primary'))
+            .backgroundColor(themeColorContainerColor(this.resolvedThemeColor)).fontColor(this.resolvedThemeColor)
           if (account.avatarUrl.length > 0) {
             Image(account.avatarUrl).width(42).height(42).borderRadius(21).objectFit(ImageFit.Cover)
           }
@@ -143,7 +151,7 @@ export struct IdentityManagementPage {
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
         Text(account.id === this.currentAccountId ? '当前登录' : '切换')
           .fontSize($r('app.float.p1_secondary_font_size'))
-          .fontColor(account.id === this.currentAccountId ? $r('app.color.brand_primary') : $r('app.color.secondary_text'))
+          .fontColor(account.id === this.currentAccountId ? this.resolvedThemeColor : $r('app.color.secondary_text'))
       }.width('100%').alignItems(VerticalAlign.Center)
     }
     .id(`p5_identity_account_${index}`)
@@ -167,6 +175,7 @@ export struct IdentityManagementPage {
           .fontSize($r('app.float.p1_body_font_size')).fontColor($r('app.color.primary_text')).width('100%')
         Row({ space: $r('app.float.p1_spacing_small') }) {
           Checkbox({ name: 'identity-create-rules', group: 'identity-create' })
+            .selectedColor(this.resolvedThemeColor)
             .select(this.acceptedCreateRules).onChange((checked: boolean): void => {
               this.acceptedCreateRules = checked;
             })
@@ -177,10 +186,15 @@ export struct IdentityManagementPage {
           .fontSize($r('app.float.p1_body_font_size')).fontColor($r('app.color.primary_text')).width('100%')
       }
       Row({ space: $r('app.float.p1_spacing_small') }) {
-        Button('取消').layoutWeight(1).onClick((): void => { this.confirmationShown = false; })
+        Button('取消').layoutWeight(1)
+          .fontColor($r('app.color.primary_text'))
+          .backgroundColor($r('app.color.control_background'))
+          .onClick((): void => { this.confirmationShown = false; })
         Button(this.confirmationKind === 'create' ? '同意并创建' : '切换')
           .id(this.confirmationKind === 'create' ? 'p5_identity_create_confirm' : 'p5_identity_switch_confirm')
           .layoutWeight(1).enabled(this.confirmationKind !== 'create' || this.acceptedCreateRules)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
+          .backgroundColor(this.resolvedThemeColor)
           .onClick((): void => {
             this.confirmationShown = false;
             if (this.confirmationKind === 'create') {

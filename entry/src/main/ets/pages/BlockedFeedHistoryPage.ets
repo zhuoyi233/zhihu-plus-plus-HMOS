@@ -1,6 +1,8 @@
 import {
+  onThemeColor,
   BlockedFeedHistoryGateway,
-  BlockedFeedRecord
+  BlockedFeedRecord,
+  DEFAULT_THEME_COLOR
 } from 'data';
 import {
   BlockedFeedHistoryController,
@@ -21,6 +23,7 @@ export struct BlockedFeedHistoryPage {
   };
   @State private confirmClear: boolean = false;
   @State private historyActionsSheetShown: boolean = false;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: BlockedFeedHistoryController;
 
   aboutToAppear(): void {
@@ -72,7 +75,7 @@ export struct BlockedFeedHistoryPage {
             .id('p3_blocked_feed_history_loading')
             .width(40)
             .height(40)
-            .color($r('app.color.brand_primary'))
+            .color(this.resolvedThemeColor)
         } else if (this.viewState.records.length === 0) {
           Column({ space: $r('app.float.p1_spacing_medium') }) {
             Text(this.viewState.phase === BlockedFeedHistoryPhase.EMPTY ? '暂无屏蔽记录' : this.viewState.message)
@@ -82,6 +85,8 @@ export struct BlockedFeedHistoryPage {
               .width('100%')
             if (this.viewState.phase === BlockedFeedHistoryPhase.ERROR) {
               Button('重新读取')
+                .backgroundColor(this.resolvedThemeColor)
+                .fontColor(onThemeColor(this.resolvedThemeColor))
                 .id('p3_blocked_feed_history_retry')
                 .enabled(!this.viewState.busy)
                 .onClick((): void => {
@@ -246,6 +251,8 @@ export struct BlockedFeedHistoryPage {
       }
       .layoutWeight(1)
       Button('删除')
+        .backgroundColor($r('app.color.control_background'))
+        .fontColor($r('app.color.primary_text'))
         .id(`p3_blocked_feed_history_delete_${record.id}`)
         .enabled(!this.viewState.busy)
         .onClick((): void => {
@@ -271,12 +278,16 @@ export struct BlockedFeedHistoryPage {
         .width('100%')
       Row({ space: $r('app.float.p1_spacing_small') }) {
         Button('取消')
+          .backgroundColor($r('app.color.control_background'))
+          .fontColor($r('app.color.primary_text'))
           .id('p3_blocked_feed_history_clear_cancel')
           .layoutWeight(1)
           .onClick((): void => {
             this.confirmClear = false;
           })
         Button('确认清空')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p3_blocked_feed_history_clear_confirm')
           .layoutWeight(1)
           .enabled(!this.viewState.busy)

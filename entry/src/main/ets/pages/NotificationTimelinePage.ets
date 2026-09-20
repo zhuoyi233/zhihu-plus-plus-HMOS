@@ -1,5 +1,7 @@
 import { isSafeDecimalContentId, P1Destination, P1DestinationName } from 'core';
 import {
+  onThemeColor,
+  DEFAULT_THEME_COLOR,
   emojiStore,
   LoginSessionGateway,
   MobileNotificationRepository,
@@ -9,7 +11,8 @@ import {
   mobileNotificationDisplayTitle,
   mobileNotificationSourceText,
   NotificationPreferences,
-  NotificationSettingsGateway
+  NotificationSettingsGateway,
+  themeColorContainerColor
 } from 'data';
 import { EmojiText } from './EmojiText';
 import { contentLinkDestination, timelineItemDestination } from './NotificationLinkResolver';
@@ -68,6 +71,7 @@ export struct NotificationTimelinePage {
   @State private requiresLogin: boolean = false;
   @State private errorMessage: string = '';
   @State private preferences?: NotificationPreferences = undefined;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: NotificationTimelineController;
 
   aboutToAppear(): void {
@@ -124,7 +128,7 @@ export struct NotificationTimelinePage {
                 LoadingProgress()
                   .width(20)
                   .height(20)
-                  .color($r('app.color.brand_primary'))
+                  .color(this.resolvedThemeColor)
                 Text('正在加载更多…')
                   .fontSize($r('app.float.p1_secondary_font_size'))
                   .fontColor($r('app.color.secondary_text'))
@@ -237,7 +241,7 @@ export struct NotificationTimelinePage {
     .id(`p3_notification_timeline_item_${item.uniqueId.length > 0 ? item.uniqueId : item.id}`)
     .width('100%')
     .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-    .backgroundColor(item.isRead ? Color.Transparent : $r('app.color.brand_primary_container'))
+    .backgroundColor(item.isRead ? Color.Transparent : themeColorContainerColor(this.resolvedThemeColor))
     .onClick((): void => {
       const destination = timelineItemDestination(item);
       if (destination === undefined) {
@@ -264,7 +268,7 @@ export struct NotificationTimelinePage {
           Circle()
             .width(44)
             .height(44)
-            .fill($r('app.color.brand_primary_container'))
+            .fill(themeColorContainerColor(this.resolvedThemeColor))
         }
 
         Column({ space: 3 }) {
@@ -279,10 +283,10 @@ export struct NotificationTimelinePage {
             if ((item.head?.labels.length ?? 0) > 0) {
               Text(item.head?.labels[0].text ?? '')
                 .fontSize($r('app.float.p1_caption_font_size'))
-                .fontColor($r('app.color.brand_primary'))
+                .fontColor(this.resolvedThemeColor)
                 .padding({ left: 5, right: 5, top: 2, bottom: 2 })
                 .borderRadius(4)
-                .backgroundColor($r('app.color.brand_primary_container'))
+                .backgroundColor(themeColorContainerColor(this.resolvedThemeColor))
                 .margin({ left: 6 })
             }
           }
@@ -343,7 +347,7 @@ export struct NotificationTimelinePage {
             .id(`p3_invitation_answer_${item.uniqueId.length > 0 ? item.uniqueId : item.id}`)
             .height(32)
             .padding({ left: 12, right: 12 })
-            .backgroundColor($r('app.color.brand_primary'))
+            .backgroundColor(this.resolvedThemeColor)
             .onClick((): void => this.openInvitationAnswer(item))
         }
         .width('100%')
@@ -379,7 +383,7 @@ export struct NotificationTimelinePage {
           .id('p3_notification_timeline_loading_progress')
           .width(40)
           .height(40)
-          .color($r('app.color.brand_primary'))
+          .color(this.resolvedThemeColor)
       }
       Text(message)
         .fontSize($r('app.float.p1_body_font_size'))
@@ -389,11 +393,15 @@ export struct NotificationTimelinePage {
       if (retry) {
         if (this.requiresLogin) {
           Button('去登录')
+            .backgroundColor(this.resolvedThemeColor)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
             .id('p3_notification_timeline_status_login')
             .fontSize($r('app.float.p1_body_font_size'))
             .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
         } else {
           Button('重新加载')
+            .backgroundColor(this.resolvedThemeColor)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
             .id(`${testId}_retry`)
             .fontSize($r('app.float.p1_body_font_size'))
             .onClick(() => this.controller?.retry())

@@ -37,7 +37,10 @@ import {
   QuestionAnswerSortOrder,
   QuestionTopicSummary,
   SessionStatus,
-  VoteRepository
+  VoteRepository,
+  DEFAULT_THEME_COLOR,
+  onThemeColor,
+  themeColorContainerColor
 } from 'data';
 import { parseZhihuHtml, ReaderBlock } from 'reader';
 import {
@@ -100,6 +103,8 @@ struct ContentDetailPage {
   /** 阅读排版偏好（AppStorage 广播键，与 NativeContentDocument 同源）：横向预览页摘要排版对齐正文。 */
   @StorageProp('contentFontSize') private previewFontSizePercent: number = 100;
   @StorageProp('contentLineHeight') private previewLineHeightPercent: number = 160;
+  @StorageProp('resolvedThemeColor') @Watch('onResolvedThemeColorChanged') private resolvedThemeColor: string =
+    DEFAULT_THEME_COLOR;
   /** 上一次 pan 手势 offsetY（换算单帧 delta）。 */
   private overscrollPanPrevY: number = 0;
   /** 悬浮"下一个回答"按钮拖动偏移（相对右下角默认位，负值向左/向上、正值向下），松手后水平吸附到较近一侧页边。 */
@@ -602,7 +607,7 @@ struct ContentDetailPage {
           .id(`p2_${this.kind}_detail_loading_progress`)
           .width(40)
           .height(40)
-          .color($r('app.color.brand_primary'))
+          .color(this.resolvedThemeColor)
       }
       Text(message)
         .id(`p2_${this.kind}_detail_status`)
@@ -613,12 +618,16 @@ struct ContentDetailPage {
       if (retry) {
         if (this.requiresLogin) {
           Button('去登录')
+            .backgroundColor(this.resolvedThemeColor)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
             .id(`p2_${this.kind}_detail_login`)
             .onClick((): void => {
               this.navigate({ name: P1DestinationName.LOGIN });
             })
         } else {
           Button('重新加载')
+            .backgroundColor(this.resolvedThemeColor)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
             .id(`p2_${this.kind}_detail_retry`)
             .onClick((): void => {
               this.controller?.load(this.kind, this.activeContentId);
@@ -847,18 +856,18 @@ struct ContentDetailPage {
             Row({ space: 4 }) {
               SymbolGlyph($r('sys.symbol.arrowtriangle_left'))
                 .fontSize(20)
-                .fontColor([$r('app.color.brand_primary')])
+                .fontColor([this.resolvedThemeColor])
                 .rotate({ x: 0, y: 0, z: 1, angle: 90 })
               Text(`${this.answerPreviewVoteupCount(previous)}`)
                 .fontSize($r('app.float.p1_secondary_font_size'))
                 .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.brand_primary'))
+                .fontColor(this.resolvedThemeColor)
             }
             .padding({ left: 8, right: 8, top: 8, bottom: 8 })
 
             SymbolGlyph($r('sys.symbol.arrowtriangle_left'))
               .fontSize(20)
-              .fontColor([$r('app.color.brand_primary')])
+              .fontColor([this.resolvedThemeColor])
               .rotate({ x: 0, y: 0, z: 1, angle: -90 })
               .padding({ left: 8, right: 8, top: 8, bottom: 8 })
           }
@@ -928,7 +937,7 @@ struct ContentDetailPage {
       bottom: previous ? 0 : 8 + Math.max(this.bottomRectHeightVp, 0)
     })
     .backgroundColor(this.answerOverscrollTriggered()
-      ? $r('app.color.brand_primary_container') : $r('app.color.surface_background'))
+      ? themeColorContainerColor(this.resolvedThemeColor) : $r('app.color.surface_background'))
     .opacity(this.answerOverscrollProgress())
   }
 
@@ -939,12 +948,12 @@ struct ContentDetailPage {
       SymbolGlyph(previous ? $r('sys.symbol.arrow_up') : $r('sys.symbol.arrow_down'))
         .fontSize(16)
         .fontColor([this.answerOverscrollTriggered()
-          ? $r('app.color.brand_primary') : $r('app.color.secondary_text')])
+          ? this.resolvedThemeColor : $r('app.color.secondary_text')])
       Text(this.answerOverscrollTriggered() ? '松手切换' : (previous ? '上一个回答' : '下一个回答'))
         .fontSize($r('app.float.p1_caption_font_size'))
         .fontWeight(this.answerOverscrollTriggered() ? FontWeight.Bold : FontWeight.Normal)
         .fontColor(this.answerOverscrollTriggered()
-          ? $r('app.color.brand_primary') : $r('app.color.secondary_text'))
+          ? this.resolvedThemeColor : $r('app.color.secondary_text'))
     }
     .width('100%')
   }
@@ -1007,13 +1016,13 @@ struct ContentDetailPage {
     Button({ type: ButtonType.Circle, stateEffect: true }) {
       SymbolGlyph($r('sys.symbol.forward_end_fill'))
         .fontSize(22)
-        .fontColor([$r('app.color.on_brand')])
+        .fontColor([onThemeColor(this.resolvedThemeColor)])
     }
     .id('p2_answer_next_floating')
     .width(44)
     .height(44)
     .padding(0)
-    .backgroundColor($r('app.color.brand_primary'))
+    .backgroundColor(this.resolvedThemeColor)
     .shadow({ radius: 12, color: '#33000000', offsetY: 4 })
     .opacity(Math.min(100, Math.max(10, this.fabOpacity)) / 100)
     .margin({
@@ -1566,6 +1575,8 @@ struct ContentDetailPage {
 
       Button('写回答')
         .id('question_write_answer').width('100%')
+        .fontColor(onThemeColor(this.resolvedThemeColor))
+        .backgroundColor(this.resolvedThemeColor)
         .onClick((): void => this.navigate(this.authenticated
           ? { name: P1DestinationName.WRITE_ANSWER, questionId: this.activeContentId }
           : { name: P1DestinationName.LOGIN }))
@@ -1598,12 +1609,16 @@ struct ContentDetailPage {
         .width('100%')
       Row({ space: $r('app.float.p1_spacing_small') }) {
         Button('取消')
+          .backgroundColor($r('app.color.control_background'))
+          .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
           .enabled(!this.blockingBusy)
           .onClick((): void => {
             this.pendingUserBlock = undefined;
           })
         Button('确定屏蔽')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id(`p3_${this.kind}_confirm_block_user`)
           .layoutWeight(1)
           .enabled(!this.blockingBusy)
@@ -1631,6 +1646,8 @@ struct ContentDetailPage {
         })
       Row({ space: $r('app.float.p1_spacing_small') }) {
         Button('取消')
+          .backgroundColor($r('app.color.control_background'))
+          .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
           .enabled(!this.blockingBusy)
           .onClick((): void => {
@@ -1638,6 +1655,8 @@ struct ContentDetailPage {
             this.keywordBlockInput = '';
           })
         Button('确认屏蔽')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id(`p3_${this.kind}_confirm_block_keyword`)
           .layoutWeight(1)
           .enabled(!this.blockingBusy && this.keywordBlockInput.trim().length > 0)
@@ -1746,6 +1765,8 @@ struct ContentDetailPage {
   private answerRightActions() {
     if (this.canEditExistingAnswer()) {
       Button('编辑')
+        .backgroundColor(this.resolvedThemeColor)
+        .fontColor(onThemeColor(this.resolvedThemeColor))
         .id('p4_answer_edit_existing')
         .height(36)
         .fontSize($r('app.float.p1_secondary_font_size'))
@@ -1889,9 +1910,11 @@ struct ContentDetailPage {
           AppPageStatusPanel({ kind: AppPageStatusKind.EMPTY, message: '暂无可显示的回答', testId: 'question_answers_empty' })
         } else if (this.answersState.loadingMore) {
           LoadingProgress().id('p3_question_answers_loading_more').width(40).height(40)
-            .color($r('app.color.brand_primary'))
+            .color(this.resolvedThemeColor)
         } else if (this.answersState.canLoadMore) {
           Button('加载更多回答').id('question_answers_more')
+            .backgroundColor(this.resolvedThemeColor)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
             .onClick((): void => { this.answersController?.loadMore(); })
         } else {
           Text('已显示全部回答').fontColor($r('app.color.secondary_text'))
@@ -1921,13 +1944,13 @@ struct ContentDetailPage {
   // SegmentButton 的 options 是 @ObjectLink，须放观察状态（内联对象在真机上会丢点击回调）。
   // 默认配色走 ohos_id_color_button_normal（浅色固定值，深色模式下不切换导致文字不可读），
   // 显式指定与评论页排序芯片一致的自适应色。
-  @State private answersSortOptions: SegmentButtonOptions = SegmentButtonOptions.tab({
-    buttons: [{ text: '默认' }, { text: '最新' }],
-    backgroundColor: $r('app.color.control_background'),
-    fontColor: $r('app.color.secondary_text'),
-    selectedBackgroundColor: $r('app.color.brand_primary_container'),
-    selectedFontColor: $r('app.color.brand_primary')
-  });
+  // 字段初始化器不能用 this 状态：首帧从 AppStorage 直读，运行时主题切换由 onResolvedThemeColorChanged 重建。
+  @State private answersSortOptions: SegmentButtonOptions = buildAnswersSortOptions(
+    AppStorage.get<string>('resolvedThemeColor') ?? DEFAULT_THEME_COLOR);
+
+  private onResolvedThemeColorChanged(): void {
+    this.answersSortOptions = buildAnswersSortOptions(this.resolvedThemeColor);
+  }
 
   private questionAnswerCount(): number {
     const content = this.content;
@@ -2548,12 +2571,12 @@ struct ContentDetailPage {
             ? $r('sys.symbol.arrowtriangle_left_fill')
             : $r('sys.symbol.arrowtriangle_left'))
           .fontSize(20)
-          .fontColor([$r('app.color.brand_primary')])
+          .fontColor([this.resolvedThemeColor])
           .rotate({ x: 0, y: 0, z: 1, angle: 90 })
         Text(`${this.voteupCount}`)
           .fontSize($r('app.float.p1_secondary_font_size'))
           .fontWeight(this.voteState === ContentVoteState.UP ? FontWeight.Bold : FontWeight.Medium)
-          .fontColor($r('app.color.brand_primary'))
+          .fontColor(this.resolvedThemeColor)
       }
       .padding({ left: 8, right: 8, top: 8, bottom: 8 })
     }
@@ -2576,7 +2599,7 @@ struct ContentDetailPage {
             ? $r('sys.symbol.arrowtriangle_left_fill')
             : $r('sys.symbol.arrowtriangle_left'))
           .fontSize(20)
-          .fontColor([$r('app.color.brand_primary')])
+          .fontColor([this.resolvedThemeColor])
           .rotate({ x: 0, y: 0, z: 1, angle: -90 })
       }
       .padding({ left: 8, right: 8, top: 8, bottom: 8 })
@@ -2597,11 +2620,11 @@ struct ContentDetailPage {
       Row({ space: 4 }) {
         SymbolGlyph(this.following ? $r('sys.symbol.checkmark') : $r('sys.symbol.plus'))
           .fontSize(20)
-          .fontColor([this.following ? $r('app.color.brand_primary') : $r('app.color.secondary_text')])
+          .fontColor([this.following ? this.resolvedThemeColor : $r('app.color.secondary_text')])
         Text(this.following ? `已关注 ${this.followerCount}` : `关注问题 ${this.followerCount}`)
           .fontSize($r('app.float.p1_secondary_font_size'))
           .fontWeight(FontWeight.Medium)
-          .fontColor(this.following ? $r('app.color.brand_primary') : $r('app.color.secondary_text'))
+          .fontColor(this.following ? this.resolvedThemeColor : $r('app.color.secondary_text'))
       }
       .padding({ left: 6, right: 6, top: 8, bottom: 8 })
     }
@@ -2624,6 +2647,8 @@ struct ContentDetailPage {
         .layoutWeight(1)
       if (this.interactionRequiresLogin) {
         Button('去登录')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id(`p3_${this.kind}_interaction_login`)
           .fontSize($r('app.float.p1_secondary_font_size'))
           .onClick((): void => {
@@ -3038,7 +3063,18 @@ function endorsementTextColor(endorsement: AnswerEndorsementDisplay): ResourceCo
   if (group.startsWith('GBK') || group.startsWith('GBL') || group.startsWith('GRD') || group.startsWith('GYL')) {
     return endorsementGroupColor(group);
   }
-  return $r('app.color.brand_primary');
+  return AppStorage.get<string>('resolvedThemeColor') ?? DEFAULT_THEME_COLOR;
+}
+
+/** 回答排序段控配色（SegmentButtonOptions 颜色在构造时固化，主题切换须重建实例）。 */
+function buildAnswersSortOptions(themeColor: string): SegmentButtonOptions {
+  return SegmentButtonOptions.tab({
+    buttons: [{ text: '默认' }, { text: '最新' }],
+    backgroundColor: $r('app.color.control_background'),
+    fontColor: $r('app.color.secondary_text'),
+    selectedBackgroundColor: themeColorContainerColor(themeColor),
+    selectedFontColor: themeColor
+  });
 }
 
 /** 知乎认可徽章 token → 具体色值（精简自上游 ZhihuEndorsementColorTokens 的常见组）。 */

@@ -1,8 +1,10 @@
 import { DividerMode, hdsMaterial, HdsTabs, HdsTabsController } from '@kit.UIDesignKit';
+import { DEFAULT_THEME_COLOR } from 'data';
 
 @Component
 export struct ZhihuHdsTabs {
   @Link currentIndex: number;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   @StorageProp('bottomRectHeight') bottomRectHeight: number = 0;
   @StorageProp('autoHideBottomBar') private autoHideBottomBar: boolean = false;
   @StorageProp('bottomBarHiddenByScroll') private bottomBarHiddenByScroll: boolean = false;
@@ -68,7 +70,7 @@ export struct ZhihuHdsTabs {
         maskColor: $r('app.color.page_background'),
         maskHeight: 42
       },
-      lightColor: $r('app.color.brand_primary'),
+      lightColor: this.resolvedThemeColor,
       adaptToHandedness: false,
       thermoCtrl: true
     });

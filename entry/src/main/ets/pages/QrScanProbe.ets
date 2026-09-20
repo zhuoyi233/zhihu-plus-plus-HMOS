@@ -4,6 +4,7 @@ import { assessQrScanValue, QrScanDecision } from 'core';
 import { QrScanner } from '../platform/P4PlatformServices';
 import { SystemQrScanner } from '../platform/SystemQrScanner';
 import { QR_FIXTURE_VALUE, writeQrScanFixture } from '../scan/QrScanFixture';
+import { DEFAULT_THEME_COLOR, onThemeColor } from 'data';
 
 class QrScanServiceFailure extends Error {
   readonly code: number;
@@ -32,6 +33,8 @@ const POLICY_CASES: Array<QrPolicyCase> = [
 
 @Component
 export struct QrScanProbePage {
+  /** 当前生效主题色（P1Shell 广播），驱动强调色控件。 */
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   onBack: () => void = () => {};
   @State private status: string = '尚未启动扫码';
   @State private policyStatus: string = '安全策略矩阵尚未运行';
@@ -50,6 +53,8 @@ export struct QrScanProbePage {
       Column({ space: 16 }) {
         Blank().height(64)
         Button('返回')
+          .backgroundColor($r('app.color.control_background'))
+          .fontColor($r('app.color.primary_text'))
           .id('qr_scan_back')
           .onClick(() => this.onBack())
 
@@ -69,6 +74,8 @@ export struct QrScanProbePage {
           .fontColor($r('app.color.secondary_text'))
 
         Button(this.scanning ? '扫码界面启动中…' : '打开系统扫码')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('open_system_qr_scan')
           .enabled(!this.scanning)
           .onClick(() => {
@@ -76,6 +83,8 @@ export struct QrScanProbePage {
           })
 
         Button('运行内置码图识别')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('decode_qr_fixture')
           .enabled(!this.scanning)
           .onClick(() => {

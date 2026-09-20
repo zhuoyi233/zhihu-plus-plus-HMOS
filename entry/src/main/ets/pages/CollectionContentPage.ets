@@ -1,9 +1,11 @@
 import { P1Destination, P1DestinationName } from 'core';
 import {
+  onThemeColor,
   CollectionContentItem,
   CollectionContentKind,
   CollectionRepository,
   CollectionSummary,
+  DEFAULT_THEME_COLOR,
   LoginSessionGateway
 } from 'data';
 import {
@@ -27,6 +29,7 @@ export struct CollectionContentPage {
   @State private canLoadMore: boolean = false;
   @State private requiresLogin: boolean = false;
   @State private errorMessage: string = '';
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: CollectionContentController;
 
   aboutToAppear(): void {
@@ -75,10 +78,14 @@ export struct CollectionContentPage {
               .layoutWeight(1)
             if (this.requiresLogin) {
               Button('去登录')
+                .backgroundColor(this.resolvedThemeColor)
+                .fontColor(onThemeColor(this.resolvedThemeColor))
                 .id('p3_collection_content_login')
                 .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
             } else {
               Button('重试')
+                .backgroundColor(this.resolvedThemeColor)
+                .fontColor(onThemeColor(this.resolvedThemeColor))
                 .id('p3_collection_content_retry_more')
                 .onClick(() => this.controller?.retry())
             }
@@ -99,6 +106,8 @@ export struct CollectionContentPage {
           if (this.loadingMore || this.canLoadMore) {
             ListItem() {
               Button(this.loadingMore ? '正在加载更多…' : '加载更多')
+                .backgroundColor(this.resolvedThemeColor)
+                .fontColor(onThemeColor(this.resolvedThemeColor))
                 .id('p3_collection_content_load_more')
                 .width('100%')
                 .fontSize($r('app.float.p1_secondary_font_size'))
@@ -189,7 +198,7 @@ export struct CollectionContentPage {
         Row({ space: $r('app.float.p1_spacing_small') }) {
           Text(collectionContentKindLabel(item.kind))
             .fontSize($r('app.float.p1_caption_font_size'))
-            .fontColor($r('app.color.brand_primary'))
+            .fontColor(this.resolvedThemeColor)
           if (item.authorName !== undefined) {
             Text(item.authorName)
               .fontSize($r('app.float.p1_caption_font_size'))
@@ -233,7 +242,7 @@ export struct CollectionContentPage {
           .id('p3_collection_content_loading_progress')
           .width(40)
           .height(40)
-          .color($r('app.color.brand_primary'))
+          .color(this.resolvedThemeColor)
       }
       Text(message)
         .fontSize($r('app.float.p1_body_font_size'))
@@ -243,11 +252,15 @@ export struct CollectionContentPage {
       if (retry) {
         if (this.requiresLogin) {
           Button('去登录')
+            .backgroundColor(this.resolvedThemeColor)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
             .id('p3_collection_content_status_login')
             .fontSize($r('app.float.p1_body_font_size'))
             .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
         } else {
           Button('重新加载')
+            .backgroundColor(this.resolvedThemeColor)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
             .id(`${testId}_retry`)
             .fontSize($r('app.float.p1_body_font_size'))
             .onClick(() => this.controller?.retry())

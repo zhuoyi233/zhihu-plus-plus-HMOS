@@ -2,6 +2,7 @@ import { textToSpeech } from '@kit.CoreSpeechKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import {
   AppPreferencesStore,
+  DEFAULT_THEME_COLOR,
   defaultSpeechPreferences,
   normalizeSpeechPreferences,
   SpeechPreferences
@@ -27,6 +28,7 @@ export struct ReadingSettingsPage {
   @State private voicesLoading: boolean = false;
   @State private voiceChoices: Array<SpeechVoiceChoice> = [];
   @StorageProp('speechPlaybackTick') private playbackTick: number = 0;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private store: AppPreferencesStore | undefined = undefined;
   private voiceRequestSequence: number = 0;
 
@@ -87,7 +89,7 @@ export struct ReadingSettingsPage {
           .borderRadius($r('app.float.p1_card_radius'))
           .backgroundColor($r('app.color.surface_background'))
         } else {
-          LoadingProgress().width(40).height(40).color($r('app.color.brand_primary'))
+          LoadingProgress().width(40).height(40).color(this.resolvedThemeColor)
         }
 
         if (this.statusMessage.length > 0) {
@@ -146,7 +148,7 @@ export struct ReadingSettingsPage {
         Row()
           .width(`${this.sliderProgressPercent(value)}%`)
           .height('100%')
-          .backgroundColor($r('app.color.brand_primary'))
+          .backgroundColor(this.resolvedThemeColor)
         Row()
           .width(`${100 - this.sliderProgressPercent(value)}%`)
           .height('100%')
@@ -169,7 +171,7 @@ export struct ReadingSettingsPage {
             .width($r('app.float.p3_settings_slider_thumb_width'))
             .height($r('app.float.p3_settings_slider_thumb_height'))
             .borderRadius($r('app.float.p3_settings_slider_thumb_radius'))
-            .backgroundColor($r('app.color.brand_primary'))
+            .backgroundColor(this.resolvedThemeColor)
         }
         .width($r('app.float.p3_settings_slider_thumb_gap_width'))
         .height($r('app.float.p3_settings_slider_height'))

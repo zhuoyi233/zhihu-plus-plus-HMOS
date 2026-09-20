@@ -8,6 +8,7 @@ import {
 } from '../scan/QrDesktopLoginScanFlow';
 import { QrDesktopLoginConfirmationPage } from './QrDesktopLoginConfirmationPage';
 import { isConfirmedQrDesktopLoginUrl } from '../scan/QrDesktopLoginConfirmationPolicy';
+import { DEFAULT_THEME_COLOR, onThemeColor } from 'data';
 
 const INITIAL_STATE: QrDesktopLoginScanViewState = {
   phase: QrDesktopLoginScanPhase.READY,
@@ -37,6 +38,8 @@ class QrDesktopLoginApplicationStateCallback extends ApplicationStateChangeCallb
 /** P4-6 生产入口：扫码后只在用户明确确认时打开受限的知乎电脑登录确认页。 */
 @Component
 export struct QrDesktopLoginScanPage {
+  /** 当前生效主题色（P1Shell 广播），驱动强调色控件。 */
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   onBack: () => void = (): void => {
   };
   @State private viewState: QrDesktopLoginScanViewState = INITIAL_STATE;
@@ -110,6 +113,8 @@ export struct QrDesktopLoginScanPage {
               .fontSize($r('app.float.p1_secondary_font_size'))
               .fontColor($r('app.color.secondary_text'))
             Button('确认登录电脑')
+              .backgroundColor(this.resolvedThemeColor)
+              .fontColor(onThemeColor(this.resolvedThemeColor))
               .id('p4_qr_desktop_login_confirm')
               .width('100%')
               .enabled(this.viewState.confirmEnabled)
@@ -117,6 +122,8 @@ export struct QrDesktopLoginScanPage {
                 this.openConfirmation();
               })
             Button('取消')
+              .backgroundColor($r('app.color.control_background'))
+              .fontColor($r('app.color.primary_text'))
               .id('p4_qr_desktop_login_cancel')
               .width('100%')
               .onClick((): void => {
@@ -126,6 +133,8 @@ export struct QrDesktopLoginScanPage {
           .width('100%')
         } else {
           Button(this.viewState.phase === QrDesktopLoginScanPhase.SCANNING ? '系统扫码中…' : '打开系统扫码')
+            .backgroundColor(this.resolvedThemeColor)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
             .id('p4_qr_desktop_login_scan')
             .width('100%')
             .enabled(this.viewState.scanEnabled)
@@ -140,6 +149,8 @@ export struct QrDesktopLoginScanPage {
           .fontColor($r('app.color.secondary_text'))
 
         Button('返回')
+          .backgroundColor($r('app.color.control_background'))
+          .fontColor($r('app.color.primary_text'))
           .id('p4_qr_desktop_login_back')
           .width('100%')
           .onClick((): void => this.onBack())

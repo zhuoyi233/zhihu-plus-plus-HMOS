@@ -1,4 +1,6 @@
 import {
+  DEFAULT_THEME_COLOR,
+  onThemeColor,
   ContentDraftIdentity,
   ContentDraftKind,
   ContentDraftMetadata,
@@ -185,6 +187,8 @@ export class SystemPinTopicSearchScheduler implements PinTopicSearchScheduler {
  */
 @Component
 export struct PinPublishPage {
+  /** 当前生效主题色（P1Shell 广播），驱动强调色控件。 */
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   /** 仅用于 factory 模式；必须是经 P1Destination 校验的本地 UUID。 */
   draftId: string = '';
   configurationFactory: PinPublishPageConfigurationFactory | undefined = undefined;
@@ -325,6 +329,8 @@ export struct PinPublishPage {
         .layoutWeight(1)
       Button(this.publishLabel())
         .id('p4_pin_publish_submit')
+        .fontColor(onThemeColor(this.resolvedThemeColor))
+        .backgroundColor(this.resolvedThemeColor)
         .enabled(this.viewState.canPublish)
         .onClick((): void => {
           this.requestPublishConfirmation();
@@ -341,6 +347,8 @@ export struct PinPublishPage {
         .fontSize($r('app.float.p1_body_font_size'))
         .width('100%')
       Button('去登录')
+        .backgroundColor(this.resolvedThemeColor)
+        .fontColor(onThemeColor(this.resolvedThemeColor))
         .id('p4_pin_publish_login')
         .width('100%')
         .onClick(this.onLoginRequired)
@@ -369,6 +377,8 @@ export struct PinPublishPage {
       })
       this.topicEditor()
       Button('保存草稿')
+        .backgroundColor(this.resolvedThemeColor)
+        .fontColor(onThemeColor(this.resolvedThemeColor))
         .id('p4_pin_publish_save_draft')
         .width('100%')
         .enabled(this.viewState.canSaveDraft)
@@ -394,6 +404,8 @@ export struct PinPublishPage {
           Row() {
             Text(`#${topic.displayName}`).layoutWeight(1)
             Button('移除')
+              .backgroundColor($r('app.color.control_background'))
+              .fontColor($r('app.color.primary_text'))
               .onClick((): void => this.controller?.removeTopic(topic.topicId))
           }
           .id(`p4_pin_publish_topic_${topic.topicId}`)
@@ -405,6 +417,8 @@ export struct PinPublishPage {
           Button(`#${topic.displayName}`)
             .id(`p4_pin_publish_topic_suggestion_${topic.topicId}`)
             .width('100%')
+            .fontColor($r('app.color.primary_text'))
+            .backgroundColor($r('app.color.control_background'))
             .enabled(this.viewState.canEdit)
             .onClick((): void => {
               this.controller?.selectTopic({ topicId: topic.topicId, displayName: topic.displayName });
@@ -453,12 +467,16 @@ export struct PinPublishPage {
         .fontColor($r('app.color.secondary_text'))
       Row({ space: $r('app.float.p1_spacing_small') }) {
         Button('继续编辑')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p4_pin_publish_confirm_cancel')
           .layoutWeight(1)
           .onClick((): void => {
             this.publishConfirmationVisible = false;
           })
         Button('确认发布')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p4_pin_publish_confirm_submit')
           .layoutWeight(1)
           .onClick((): void => {

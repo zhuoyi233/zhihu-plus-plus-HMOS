@@ -5,6 +5,8 @@ import {
   CookieSessionStore,
   getAppSessionOwner,
   HttpProbeClient,
+  onThemeColor,
+  DEFAULT_THEME_COLOR,
   safeSessionSummary,
   SessionCookie,
   SessionRepository,
@@ -22,6 +24,7 @@ export struct TechnicalLabPage {
   @State private cookieInput: string = '';
   @State private loginBusy: boolean = false;
   @State private authenticated: boolean = false;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
   onDeveloperModeDisabled: () => void = (): void => {};
@@ -50,6 +53,7 @@ export struct TechnicalLabPage {
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
             Toggle({ type: ToggleType.Switch, isOn: this.developerModeEnabled })
               .id('developer_mode_toggle')
+              .selectedColor(this.resolvedThemeColor)
               .onChange((enabled: boolean): void => {
                 this.developerModeEnabled = enabled;
                 if (!enabled) {
@@ -76,6 +80,8 @@ export struct TechnicalLabPage {
             Button('验证登录')
               .id('developer_verify_login')
               .width('100%')
+              .fontColor(onThemeColor(this.resolvedThemeColor))
+              .backgroundColor(this.resolvedThemeColor)
               .enabled(!this.loginBusy)
               .onClick((): void => {
                 void this.verifyLogin();
@@ -100,6 +106,8 @@ export struct TechnicalLabPage {
             Button('确认设置并验证')
               .id('developer_cookie_submit')
               .width('100%')
+              .fontColor(onThemeColor(this.resolvedThemeColor))
+              .backgroundColor(this.resolvedThemeColor)
               .enabled(!this.loginBusy && this.cookieInput.trim().length > 0)
               .onClick((): void => {
                 void this.importCookie();
@@ -107,6 +115,8 @@ export struct TechnicalLabPage {
             Button('退出并清理本地会话')
               .id('developer_logout')
               .width('100%')
+              .fontColor(onThemeColor(this.resolvedThemeColor))
+              .backgroundColor(this.resolvedThemeColor)
               .enabled(!this.loginBusy)
               .onClick((): void => {
                 void this.logout();
@@ -131,12 +141,16 @@ export struct TechnicalLabPage {
             Button('运行 HTTP 探针')
               .id('run_http_probe')
               .width('100%')
+              .fontColor(onThemeColor(this.resolvedThemeColor))
+              .backgroundColor(this.resolvedThemeColor)
               .onClick((): void => {
                 void this.runHttpProbe();
               })
             Button('取消 HTTP 探针')
               .id('cancel_http_probe')
               .width('100%')
+              .fontColor($r('app.color.primary_text'))
+              .backgroundColor($r('app.color.control_background'))
               .onClick((): void => {
                 this.httpProbeClient.cancel();
                 this.networkStatus = 'HTTP 探针已取消';
@@ -202,6 +216,8 @@ export struct TechnicalLabPage {
             Button('写入测试会话')
               .id('save_session_probe')
               .width('100%')
+              .fontColor(onThemeColor(this.resolvedThemeColor))
+              .backgroundColor(this.resolvedThemeColor)
               .enabled(!this.authenticated)
               .onClick((): void => {
                 void this.saveSessionProbe();
@@ -209,6 +225,8 @@ export struct TechnicalLabPage {
             Button('恢复并清理测试会话')
               .id('restore_session_probe')
               .width('100%')
+              .fontColor(onThemeColor(this.resolvedThemeColor))
+              .backgroundColor(this.resolvedThemeColor)
               .enabled(!this.authenticated)
               .onClick((): void => {
                 void this.restoreSessionProbe();

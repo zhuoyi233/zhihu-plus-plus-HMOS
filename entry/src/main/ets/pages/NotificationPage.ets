@@ -1,5 +1,7 @@
 import { P1Destination, P1DestinationName } from 'core';
 import {
+  onThemeColor,
+  DEFAULT_THEME_COLOR,
   emojiStore,
   LoginSessionGateway,
   MobileNotificationCategory,
@@ -12,7 +14,8 @@ import {
   mobileNotificationAvatarUrl,
   NotificationPreferences,
   NotificationSettingsGateway,
-  mobileNotificationDisplayTitle
+  mobileNotificationDisplayTitle,
+  themeColorContainerColor
 } from 'data';
 import { NotificationController, NotificationPhase, NotificationViewState } from './NotificationState';
 import { NOTIFICATION_HUB_BUSY_KEY, NOTIFICATION_HUB_MARK_READ_TICK_KEY,
@@ -72,6 +75,7 @@ export struct NotificationPage {
   @State private errorMessage: string = '';
   @State private preferences?: NotificationPreferences = undefined;
   @StorageProp(NOTIFICATION_HUB_MARK_READ_TICK_KEY) @Watch('onMarkReadTick') markReadTick: number = 0;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: NotificationController;
 
   aboutToAppear(): void {
@@ -149,7 +153,7 @@ export struct NotificationPage {
                 LoadingProgress()
                   .width(20)
                   .height(20)
-                  .color($r('app.color.brand_primary'))
+                  .color(this.resolvedThemeColor)
                 Text('正在加载更多…')
                   .fontSize($r('app.float.p1_secondary_font_size'))
                   .fontColor($r('app.color.secondary_text'))
@@ -256,7 +260,7 @@ export struct NotificationPage {
         Circle()
           .width(52)
           .height(52)
-          .fill($r('app.color.brand_primary'))
+          .fill(this.resolvedThemeColor)
         SymbolGlyph($r('sys.symbol.person_crop_circle_fill_1'))
           .fontSize(28)
           .fontColor([Color.White])
@@ -317,10 +321,10 @@ export struct NotificationPage {
           Circle()
             .width(52)
             .height(52)
-            .fill($r('app.color.brand_primary_container'))
+            .fill(themeColorContainerColor(this.resolvedThemeColor))
           SymbolGlyph($r('sys.symbol.bell'))
             .fontSize(22)
-            .fontColor([$r('app.color.brand_primary')])
+            .fontColor([this.resolvedThemeColor])
         }
       }
 
@@ -387,7 +391,7 @@ export struct NotificationPage {
           .id('p3_notifications_loading_progress')
           .width(40)
           .height(40)
-          .color($r('app.color.brand_primary'))
+          .color(this.resolvedThemeColor)
       }
       Text(message)
         .fontSize($r('app.float.p1_body_font_size'))
@@ -397,11 +401,15 @@ export struct NotificationPage {
       if (retry) {
         if (this.requiresLogin) {
           Button('去登录')
+            .backgroundColor(this.resolvedThemeColor)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
             .id('p3_notifications_status_login')
             .fontSize($r('app.float.p1_body_font_size'))
             .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
         } else {
           Button('重新加载')
+            .backgroundColor(this.resolvedThemeColor)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
             .id(`${testId}_retry`)
             .fontSize($r('app.float.p1_body_font_size'))
             .onClick(() => this.controller?.retry())

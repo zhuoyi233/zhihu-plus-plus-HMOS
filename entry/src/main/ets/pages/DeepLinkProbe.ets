@@ -4,6 +4,7 @@ import {
   describeDeepLink,
   resolveZhihuLink
 } from 'core';
+import { DEFAULT_THEME_COLOR, onThemeColor } from 'data';
 
 interface DeepLinkProbeCase {
   name: string;
@@ -131,6 +132,8 @@ const PROBE_CASES: Array<DeepLinkProbeCase> = [
 
 @Component
 export struct DeepLinkProbePage {
+  /** 当前生效主题色（P1Shell 广播），驱动强调色控件。 */
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   onBack: () => void = () => {};
   @State private input: string = 'zhihu://answers/2040633177593619876';
   @State private status: string = '等待解析';
@@ -146,6 +149,8 @@ export struct DeepLinkProbePage {
       Column({ space: 16 }) {
         Blank().height(64)
         Button('返回')
+          .backgroundColor($r('app.color.control_background'))
+          .fontColor($r('app.color.primary_text'))
           .id('deep_link_back')
           .onClick(() => this.onBack())
 
@@ -166,6 +171,8 @@ export struct DeepLinkProbePage {
           })
 
         Button('解析链接')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('run_deep_link_probe')
           .onClick(() => {
             const destination = resolveZhihuLink(this.input);

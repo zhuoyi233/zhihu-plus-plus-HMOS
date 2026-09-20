@@ -1,4 +1,6 @@
 import {
+  DEFAULT_THEME_COLOR,
+  onThemeColor,
   AnswerPublishInput,
   AnswerPublishRepository,
   DraftRepository,
@@ -428,6 +430,8 @@ export class SystemAnswerPublishTraceIdFactory implements AnswerPublishTraceIdFa
 
 @Component
 export struct AnswerPublishPage {
+  /** 当前生效主题色（P1Shell 广播），驱动强调色控件。 */
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   questionId: string = '';
   answerId?: string = undefined;
   session: LoginSessionGateway | undefined = undefined;
@@ -479,6 +483,8 @@ export struct AnswerPublishPage {
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.primary_text'))
         Button('发布')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p4_answer_page_publish')
           .enabled(this.viewState.canPublish)
           .onClick((): void => this.requestPublishConfirmation())
@@ -492,6 +498,8 @@ export struct AnswerPublishPage {
 
       if (this.viewState.phase === AnswerPublishPagePhase.LOGIN_REQUIRED) {
         Button('去登录')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p4_answer_page_go_login')
           .width('100%')
           .onClick((): void => this.onGoLogin())
@@ -517,6 +525,7 @@ export struct AnswerPublishPage {
             .fontColor($r('app.color.primary_text'))
           Toggle({ type: ToggleType.Switch, isOn: this.viewState.tocEnabled })
             .id('p4_answer_page_toc')
+            .selectedColor(this.resolvedThemeColor)
             .onChange((value: boolean): void => {
               this.coordinator?.updateContent(this.viewState.html, value);
             })
@@ -524,6 +533,8 @@ export struct AnswerPublishPage {
         .width('100%')
 
         Button('保存草稿')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p4_answer_page_save_draft')
           .width('100%')
           .enabled(this.viewState.canSaveDraft)
@@ -531,6 +542,8 @@ export struct AnswerPublishPage {
 
         if (this.viewState.canContinueEditing) {
           Button('编辑已有回答')
+            .backgroundColor(this.resolvedThemeColor)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
             .id('p4_answer_page_continue_existing')
             .width('100%')
             .onClick((): void => this.coordinator?.continueEditingExistingAnswer())
@@ -585,12 +598,16 @@ export struct AnswerPublishPage {
         .fontColor($r('app.color.secondary_text'))
       Row({ space: $r('app.float.p1_spacing_small') }) {
         Button('继续编辑')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p4_answer_page_publish_confirm_cancel')
           .layoutWeight(1)
           .onClick((): void => {
             this.publishConfirmationVisible = false;
           })
         Button('确认发布')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p4_answer_page_publish_confirm_submit')
           .layoutWeight(1)
           .onClick((): void => {
