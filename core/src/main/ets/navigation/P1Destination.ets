@@ -77,6 +77,7 @@ export interface ContentDestination {
 
 export interface CommentDestination {
   readonly name: P1DestinationName.COMMENT;
+  readonly contentType: 'answer' | 'article' | 'question' | 'pin';
   readonly contentId: string;
   readonly commentId?: string;
 }
@@ -295,17 +296,20 @@ export function decodeP1Destination(name: string, param: Object): P1Destination 
     case P1DestinationName.WRITE_PIN:
       return decodeWritePin(wire);
     case P1DestinationName.COMMENT:
+      const contentType = readString(wire, 'contentType');
       const contentId = readString(wire, 'contentId');
       const commentId = readString(wire, 'commentId');
-      if (contentId === undefined || !hasText(contentId) || readString(wire, 'id') !== undefined || readString(wire, 'query') !== undefined ||
+      if ((contentType !== 'answer' && contentType !== 'article' && contentType !== 'question' && contentType !== 'pin') ||
+        contentId === undefined || !hasText(contentId) || readString(wire, 'id') !== undefined || readString(wire, 'query') !== undefined ||
         (commentId !== undefined && !hasText(commentId)) ||
-        !hasOnlyFields(wire, ['name', 'contentId', 'commentId'])) {
+        !hasOnlyFields(wire, ['name', 'contentType', 'contentId', 'commentId'])) {
         return undefined;
       }
       return commentId === undefined
-        ? { name: P1DestinationName.COMMENT, contentId: contentId }
+        ? { name: P1DestinationName.COMMENT, contentType: contentType, contentId: contentId }
         : {
           name: P1DestinationName.COMMENT,
+          contentType: contentType,
           contentId: contentId,
           commentId: commentId
         };

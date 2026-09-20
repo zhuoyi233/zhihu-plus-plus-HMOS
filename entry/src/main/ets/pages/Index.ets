@@ -70,6 +70,7 @@ import { ImageProbe } from './ImageProbe';
 import { TechnicalLabPage } from './TechnicalLabPage';
 import { HomeFeedPage } from './HomeFeedPage';
 import { SearchPage } from './SearchPage';
+import { CommentPage } from './CommentLayer';
 import { AnswerDetailPage, ArticleDetailPage, QuestionDetailPage } from './ContentDetailPages';
 import { VideoPlaybackPage } from './VideoPlaybackPage';
 import {
@@ -232,6 +233,9 @@ struct Index {
             this.dailyStoryContent(id, navigate),
           searchContent: (query: string, navigate: (destination: P1Destination) => void, onBack: () => void): void =>
             this.searchContent(query, navigate, onBack),
+          commentContent: (contentType: string, contentId: string,
+            navigate: (destination: P1Destination) => void, onBack: () => void): void =>
+            this.commentContent(contentType, contentId, navigate, onBack),
           questionContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void): void =>
             this.questionContent(id, navigate, onBack),
           answerContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void): void =>
@@ -359,6 +363,19 @@ struct Index {
       preferences: this.preferencesStore,
       navigate: navigate,
       onBack: onBack
+    });
+  }
+
+  @Builder
+  commentContent(contentType: string, contentId: string,
+    navigate: (destination: P1Destination) => void, onBack: () => void) {
+    CommentPage({
+      contentType: contentType,
+      contentId: contentId,
+      repository: this.commentRepository,
+      session: this.session,
+      navigate: navigate,
+      onDismiss: onBack
     });
   }
 

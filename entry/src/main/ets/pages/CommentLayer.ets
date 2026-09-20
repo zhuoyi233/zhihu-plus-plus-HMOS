@@ -15,27 +15,17 @@ import {
 import { CommentLikeButton } from './CommentLikeButton';
 import { CommentLikeState, CommentLikeStateStore } from './CommentLikeState';
 import { EmojiText } from './EmojiText';
-/**
- * 评论弹层组件：常驻详情页组合树内（以 visibility 切换显隐），
- * 避免关闭弹层时销毁内部状态——与上游 CommentScreenComponent
- * 「不要在 if 条件中使用，否则内部状态丢失」的约定一致。
- * 草稿由弹层外的页面持有（跨关闭保留），本组件只读草稿并回调修改。
- */
+/** 全屏评论页：根评论与子评论共用一个页面实例，返回操作按层级逐级退出。 */
 @Component
-export struct CommentLayer {
+export struct CommentPage {
   contentType: string = 'answer';
   contentId: string = '';
   repository: CommentRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
-  @Prop @Watch('onShowCommentsChange') showComments: boolean = false;
-  @Prop rootDraft: string = '';
-  @Prop replyDraft: string = '';
-  onRootDraftChange: (value: string) => void = (_value: string): void => {
-  };
-  onReplyDraftChange: (value: string) => void = (_value: string): void => {
-  };
+  @State private rootDraft: string = '';
+  @State private replyDraft: string = '';
   onDismiss: () => void = (): void => {
   };
   @State private phase: CommentPhase = CommentPhase.IDLE;
@@ -53,6 +43,8 @@ export struct CommentLayer {
   @State private actionRequiresLogin: boolean = false;
   @State private likeStates: Record<string, CommentLikeState> = {};
   @StorageProp('emojiCatalogVersion') @Watch('onEmojiCatalogChanged') emojiCatalogVersion: number = 0;
+  @StorageProp('commentPageBackTick') @Watch('onCommentPageBack') commentPageBackTick: number = 0;
+  @StorageProp('statusBarHeight') private statusBarHeightVp: number = 0;
   @State private emojiTick: number = 0;
   @State private showEmojiPicker: boolean = false;
   @State private pickerColumns: number = 7;
@@ -86,17 +78,12 @@ export struct CommentLayer {
       (state: CommentViewState): void => this.applyState(state)
     );
     this.controller.activate();
+    this.controller.loadInitial();
   }
 
   aboutToDisappear(): void {
     this.controller?.deactivate();
     this.controller = undefined;
-  }
-
-  onShowCommentsChange(): void {
-    if (this.showComments && this.phase === CommentPhase.IDLE) {
-      this.controller?.loadInitial();
-    }
   }
 
   /** 表情表懒加载，加载完成后经 emojiCatalogVersion 广播刷新选择面板与行内渲染。 */
@@ -112,88 +99,76 @@ export struct CommentLayer {
     this.emojiTick = this.emojiCatalogVersion;
   }
 
-  build() {
-    Column()
-      .bindSheet(this.showComments, this.commentSheet(), {
-        height: SheetSize.LARGE,
-        dragBar: false,
-        showClose: false,
-        maskColor: '#66000000',
-        backgroundColor: $r('app.color.surface_background'),
-        onDisappear: (): void => {
-          if (this.showComments) {
-            this.onDismiss();
-          }
-        }
-      })
+  onCommentPageBack(): void {
+    const contentType = AppStorage.get<string>('commentPageBackContentType') ?? '';
+    const contentId = AppStorage.get<string>('commentPageBackContentId') ?? '';
+    if (contentType !== this.contentType || contentId !== this.contentId) {
+      return;
+    }
+    this.handleBack();
   }
 
-  @Builder
-  private commentSheet() {
-    Column() {
-      this.sheetHeader()
-      this.sheetBody()
-      if (this.phase === CommentPhase.READY || this.phase === CommentPhase.EMPTY) {
-        this.inputBar()
+  private handleBack(): void {
+    if (this.activeRoot !== undefined) {
+      this.controller?.closeChildComments();
+      return;
+    }
+    this.onDismiss();
+  }
+
+  build() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      Column() {
+        this.sheetBody()
+        if (this.phase === CommentPhase.READY || this.phase === CommentPhase.EMPTY) {
+          this.inputBar()
+        }
       }
+      .width('100%')
+      .height('100%')
+      .padding({ top: Math.max(this.statusBarHeightVp, 0) + 56 })
+      this.pageHeader()
     }
     .width('100%')
     .height('100%')
+    .backgroundColor($r('app.color.page_background'))
   }
 
   @Builder
-  private sheetHeader() {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
+  private pageHeader() {
+    Column() {
+      Blank()
+        .height(Math.max(this.statusBarHeightVp, 0))
       Row({ space: $r('app.float.p1_spacing_small') }) {
-        if (this.activeRoot !== undefined) {
-          Button({ type: ButtonType.Normal, stateEffect: true }) {
-            SymbolGlyph($r('sys.symbol.chevron_left'))
-              .fontSize(20)
-              .fontColor([$r('app.color.primary_text')])
-          }
-            .id('p3_comments_back')
-            .width(40)
-            .height(40)
-            .padding(0)
-            .backgroundColor(Color.Transparent)
-            .accessibilityText('返回评论')
-            .onClick((): void => {
-              this.controller?.closeChildComments();
-            })
-          Text('回复')
-            .textAlign(TextAlign.Center)
-            .fontSize(18)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.primary_text'))
-            .layoutWeight(1)
-        } else {
-          Blank().width(40)
-          Text('评论')
-            .textAlign(TextAlign.Center)
-            .fontSize(18)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.primary_text'))
-            .layoutWeight(1)
-        }
-        Button({ type: ButtonType.Normal, stateEffect: true }) {
-          SymbolGlyph($r('sys.symbol.xmark'))
-            .fontSize(18)
+        Button({ type: ButtonType.Circle, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.chevron_left'))
+            .fontSize(20)
             .fontColor([$r('app.color.primary_text')])
         }
-          .id('p3_comments_close')
+          .id('p3_comments_back')
           .width(40)
           .height(40)
           .padding(0)
-          .backgroundColor(Color.Transparent)
-          .accessibilityText('关闭评论')
+          .backgroundColor($r('app.color.surface_background'))
+          .accessibilityText(this.activeRoot === undefined ? '返回详情' : '返回评论')
           .onClick((): void => {
-            this.onDismiss();
+            this.handleBack();
           })
+        Text(this.activeRoot === undefined ? '评论' : '回复')
+          .textAlign(TextAlign.Center)
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.primary_text'))
+          .layoutWeight(1)
+        Blank().width(40)
       }
       .width('100%')
+      .height(56)
+      .padding({ left: 16, right: 16 })
     }
     .width('100%')
-    .padding({ left: 16, right: 16, top: 8, bottom: 4 })
+    .height(Math.max(this.statusBarHeightVp, 0) + 56)
+    .backgroundColor($r('app.color.page_background'))
   }
 
   @Builder
@@ -265,15 +240,17 @@ export struct CommentLayer {
                   this.commentCard(comment, false)
                 }
               }, (comment: CommentItem): string => `child_${comment.id}`)
-              if (this.loadingMore || this.canLoadMore) {
+              if (this.loadingMore) {
                 ListItem() {
-                  Button(this.loadingMore ? '正在加载更多…' : '加载更多')
+                  // 上拉加载更多：与首页一致的圆形加载动画（onReachEnd 自动触发）
+                  LoadingProgress()
                     .id('p3_comments_children_load_more')
-                    .width('100%')
-                    .fontSize($r('app.float.p1_secondary_font_size'))
-                    .enabled(!this.loadingMore && !this.submitting && !this.deleting)
-                    .onClick(() => this.controller?.loadMore())
+                    .width(40)
+                    .height(40)
+                    .color($r('app.color.brand_primary'))
                 }
+                .width('100%')
+                .padding({ top: 12, bottom: 12 })
               }
             }
             .id('p3_comments_children_list')
@@ -297,15 +274,17 @@ export struct CommentLayer {
                   this.commentCard(comment, true)
                 }
               }, (comment: CommentItem): string => `root_${comment.id}`)
-              if (this.loadingMore || this.canLoadMore) {
+              if (this.loadingMore) {
                 ListItem() {
-                  Button(this.loadingMore ? '正在加载更多…' : '加载更多')
+                  // 上拉加载更多：与首页一致的圆形加载动画（onReachEnd 自动触发）
+                  LoadingProgress()
                     .id('p3_comments_root_load_more')
-                    .width('100%')
-                    .fontSize($r('app.float.p1_secondary_font_size'))
-                    .enabled(!this.loadingMore && !this.submitting && !this.deleting)
-                    .onClick(() => this.controller?.loadMore())
+                    .width(40)
+                    .height(40)
+                    .color($r('app.color.brand_primary'))
                 }
+                .width('100%')
+                .padding({ top: 12, bottom: 12 })
               }
             }
             .id('p3_comments_root_list')
@@ -407,7 +386,7 @@ export struct CommentLayer {
             .accessibilityText('查看评论图片')
             .onClick((): void => {
               AppStorage.setOrCreate('p2ImagePreviewUrl', commentImageUrl(comment.contentHtml));
-              // 预览叠层挂在页面根 Stack，位于 bindSheet 图层之下，必须先收起评论面板才能露出。
+              // 预览叠层仍由详情页持有，退出评论页后展示。
               this.onDismiss();
             })
         }
@@ -674,9 +653,9 @@ export struct CommentLayer {
       ? this.caretPosition : current.length;
     const next = current.slice(0, index) + placeholder + current.slice(index);
     if (this.activeRoot !== undefined) {
-      this.onReplyDraftChange(next);
+      this.replyDraft = next;
     } else {
-      this.onRootDraftChange(next);
+      this.rootDraft = next;
     }
     const caret = index + placeholder.length;
     setTimeout((): void => this.inputController.caretPosition(caret), 0);
@@ -774,9 +753,9 @@ export struct CommentLayer {
           })
           .onChange((value: string): void => {
             if (this.activeRoot !== undefined) {
-              this.onReplyDraftChange(value);
+              this.replyDraft = value;
             } else {
-              this.onRootDraftChange(value);
+              this.rootDraft = value;
             }
           })
         Button({ type: ButtonType.Normal }) {
@@ -822,9 +801,9 @@ export struct CommentLayer {
     this.controller?.submitComment(this.currentDraft()).then((submitted: boolean): void => {
       if (submitted) {
         if (this.activeRoot !== undefined) {
-          this.onReplyDraftChange('');
+          this.replyDraft = '';
         } else {
-          this.onRootDraftChange('');
+          this.rootDraft = '';
         }
       }
     });

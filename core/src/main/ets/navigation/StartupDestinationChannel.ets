@@ -114,7 +114,7 @@ export function p1DestinationIdentity(destination: P1Destination): string {
     case P1DestinationName.WRITE_PIN:
       return `${destination.name}:${encodeURIComponent(destination.draftId)}`;
     case P1DestinationName.COMMENT:
-      return `${destination.name}:${encodeURIComponent(destination.contentId)}:` +
+      return `${destination.name}:${destination.contentType}:${encodeURIComponent(destination.contentId)}:` +
         encodeURIComponent(destination.commentId ?? '');
     case P1DestinationName.SEARCH:
       return `${destination.name}:${encodeURIComponent(destination.query)}`;

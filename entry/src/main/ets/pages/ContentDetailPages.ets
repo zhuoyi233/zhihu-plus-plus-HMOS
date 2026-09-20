@@ -65,7 +65,6 @@ import {
   FollowViewState
 } from './ContentInteractionState';
 import { CollectionDialogComponent } from './CollectionDialogComponent';
-import { CommentLayer } from './CommentLayer';
 import { NativeContentDocument } from './NativeContentDocument';
 import { stageVideoPlaybackContext } from './VideoPlaybackHandoff';
 import { stageAnswerEditSeed } from './AnswerEditSeedStore';
@@ -195,9 +194,6 @@ struct ContentDetailPage {
   private lastContentScrollOffset: number = 0;
   /** 双击动作询问面板（Ask 动作）可见性。 */
   @State private doubleTapAskSheetShown: boolean = false;
-  @State private showComments: boolean = false;
-  @State private commentRootDraft: string = '';
-  @State private commentReplyDraft: string = '';
   /** 问题页回答信息流（P1）：状态由 QuestionAnswersController 推送。 */
   @State private answersState: QuestionAnswersViewState = {
     phase: QuestionAnswersPhase.IDLE,
@@ -325,9 +321,6 @@ struct ContentDetailPage {
     this.pendingUserBlock = undefined;
     this.keywordBlockVisible = false;
     this.keywordBlockInput = '';
-    this.showComments = false;
-    this.commentRootDraft = '';
-    this.commentReplyDraft = '';
     this.immersiveReading = false;
     AppStorage.setOrCreate('detailImmersiveActive', false);
     AppStorage.setOrCreate('detailTitleHiddenByScroll', false);
@@ -560,31 +553,6 @@ struct ContentDetailPage {
             }
           }
         })
-      // 切换回答期间卸载旧内容的弹层，避免普通入参 contentId 留在前一答。
-      if (this.phase === ContentDetailPhase.READY && (this.kind === ContentDetailKind.ANSWER ||
-        this.kind === ContentDetailKind.ARTICLE || this.kind === ContentDetailKind.QUESTION)) {
-        CommentLayer({
-          contentType: this.kind === ContentDetailKind.ARTICLE ? 'article'
-            : this.kind === ContentDetailKind.QUESTION ? 'question' : 'answer',
-          contentId: this.activeContentId,
-          repository: this.commentRepository,
-          session: this.session,
-          navigate: this.navigate,
-          showComments: this.showComments,
-          rootDraft: this.commentRootDraft,
-          replyDraft: this.commentReplyDraft,
-          onRootDraftChange: (value: string): void => {
-            this.commentRootDraft = value;
-          },
-          onReplyDraftChange: (value: string): void => {
-            this.commentReplyDraft = value;
-          },
-          onDismiss: (): void => {
-            this.showComments = false;
-          }
-        })
-      }
-
       // 全屏图片查看器叠层：置于根 Stack 最后一个子节点，盖住正文/底部操作栏；
       // 标题栏由 P1Shell 监听同一 AppStorage 键隐藏（hideTitleBar）。
       if (this.imagePreviewUrl.length > 0) {
@@ -1818,7 +1786,7 @@ struct ContentDetailPage {
     .backgroundColor(Color.Transparent)
     .onClick((): void => {
       if (this.commentRepository !== undefined && this.session !== undefined) {
-        this.showComments = true;
+        this.openComments();
       } else {
         this.navigate({ name: P1DestinationName.LOGIN });
       }
@@ -1859,7 +1827,7 @@ struct ContentDetailPage {
     .accessibilityText('问题评论')
     .onClick((): void => {
       if (this.commentRepository !== undefined && this.session !== undefined) {
-        this.showComments = true;
+        this.openComments();
       } else {
         this.navigate({ name: P1DestinationName.LOGIN });
       }
@@ -1952,7 +1920,7 @@ struct ContentDetailPage {
 
   // SegmentButton 的 options 是 @ObjectLink，须放观察状态（内联对象在真机上会丢点击回调）。
   // 默认配色走 ohos_id_color_button_normal（浅色固定值，深色模式下不切换导致文字不可读），
-  // 显式指定与评论区排序芯片（CommentLayer.sortChip）一致的自适应色。
+  // 显式指定与评论页排序芯片一致的自适应色。
   @State private answersSortOptions: SegmentButtonOptions = SegmentButtonOptions.tab({
     buttons: [{ text: '默认' }, { text: '最新' }],
     backgroundColor: $r('app.color.control_background'),
@@ -1986,6 +1954,17 @@ struct ContentDetailPage {
   private navigatorHasNext(): boolean {
     return this.navigatorRevision >= 0 && (this.answerNavigator?.hasNext() ?? false);
   }
+
+  private openComments(): void {
+    const contentType = this.kind === ContentDetailKind.ARTICLE ? 'article'
+      : this.kind === ContentDetailKind.QUESTION ? 'question' : 'answer';
+    this.navigate({
+      name: P1DestinationName.COMMENT,
+      contentType: contentType,
+      contentId: this.activeContentId
+    });
+  }
+
   /** 双击正文动作分发（对齐上游 performAnswerDoubleTapAction）：仅回答页生效；
    * 震感仅点赞与打开评论区有；Ask 弹询问面板，选择后记住。 */
   private onAnswerDoubleTap(): void {
@@ -1998,7 +1977,7 @@ struct ContentDetailPage {
     }
     if (action === AnswerDoubleTapAction.OPEN_COMMENTS) {
       performConfirmHaptic();
-      this.showComments = true;
+      this.openComments();
       return;
     }
     if (action === AnswerDoubleTapAction.TOGGLE_IMMERSIVE) {
@@ -2066,10 +2045,7 @@ struct ContentDetailPage {
       }
       this.voteController?.deactivate();
       this.voteController = undefined;
-      this.showComments = false;
       this.favoriteDialogShown = false;
-      this.commentRootDraft = '';
-      this.commentReplyDraft = '';
       this.activeContentId = id;
       await this.controller?.load(ContentDetailKind.ANSWER, id);
     } finally { this.navigatorBusy = false; }
@@ -2401,7 +2377,7 @@ struct ContentDetailPage {
           this.doubleTapAskSheetShown = false;
           this.saveAnswerDoubleTapAction(AnswerDoubleTapAction.OPEN_COMMENTS);
           performConfirmHaptic();
-          this.showComments = true;
+          this.openComments();
         })
       Button('设为开关沉浸式', { type: ButtonType.Normal, stateEffect: true })
         .id('p3_answer_double_tap_toggle_immersive')
