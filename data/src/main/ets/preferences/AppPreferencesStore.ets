@@ -131,6 +131,9 @@ export interface ExperiencePreferences {
   shareActionMode: ShareActionMode;
   showSearchHotSearch: boolean;
   showSearchHistory: boolean;
+  /** 操作跟随智感握姿：按近期触点分布推断握持手，回答页"下一个回答"按钮与
+   * 收藏/评论/更多胶囊吸附握持侧，赞同/反对胶囊留在另一侧。 */
+  gripFollowActions: boolean;
 }
 
 export function defaultExperiencePreferences(): ExperiencePreferences {
@@ -154,7 +157,8 @@ export function defaultExperiencePreferences(): ExperiencePreferences {
     showContentEndMarker: false,
     shareActionMode: ShareActionMode.ASK,
     showSearchHotSearch: true,
-    showSearchHistory: true
+    showSearchHistory: true,
+    gripFollowActions: false
   };
 }
 
@@ -187,7 +191,8 @@ export function normalizeExperiencePreferences(value: ExperiencePreferences): Ex
     showContentEndMarker: value.showContentEndMarker,
     shareActionMode: shareActionMode,
     showSearchHotSearch: value.showSearchHotSearch,
-    showSearchHistory: value.showSearchHistory
+    showSearchHistory: value.showSearchHistory,
+    gripFollowActions: value.gripFollowActions === true
   };
 }
 
@@ -1060,7 +1065,8 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
         showContentEndMarker: await readBoolean('showContentEndMarker', defaults.showContentEndMarker),
         shareActionMode: await readString('shareActionMode', defaults.shareActionMode) as ShareActionMode,
         showSearchHotSearch: await readBoolean('showSearchHotSearch', defaults.showSearchHotSearch),
-        showSearchHistory: await readBoolean('showSearchHistory', defaults.showSearchHistory)
+        showSearchHistory: await readBoolean('showSearchHistory', defaults.showSearchHistory),
+        gripFollowActions: await readBoolean('gripFollowActions', defaults.gripFollowActions)
       });
     } catch (error) {
       if (error instanceof Error) {
@@ -1103,6 +1109,7 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
       await store.put('shareActionMode', value.shareActionMode);
       await store.put('showSearchHotSearch', value.showSearchHotSearch);
       await store.put('showSearchHistory', value.showSearchHistory);
+      await store.put('gripFollowActions', value.gripFollowActions);
       await store.flush();
     } catch (error) {
       if (error instanceof Error) {
