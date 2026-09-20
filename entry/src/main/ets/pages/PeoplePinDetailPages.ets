@@ -26,7 +26,6 @@ import {
 } from './PeoplePinDetailState';
 import { FollowController, FollowViewState } from './ContentInteractionState';
 import { PeopleContentController, PeopleContentPhase, PeopleContentViewState } from './PeopleContentState';
-import { CommentLayer } from './CommentLayer';
 import { NativeContentDocument } from './NativeContentDocument';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { createSystemShareService } from '../platform/SystemShareService';
@@ -756,9 +755,6 @@ export struct PinDetailPage {
   @State private keywordBlockVisible: boolean = false;
   @State private keywordBlockInput: string = '';
   @State private pinActionsSheetShown: boolean = false;
-  @State private showComments: boolean = false;
-  @State private commentRootDraft: string = '';
-  @State private commentReplyDraft: string = '';
   @State private shareStatus: string = '';
   @State private blockingMessage: string = '';
   @State private blockingBusy: boolean = false;
@@ -796,9 +792,6 @@ export struct PinDetailPage {
     this.keywordBlockVisible = false;
     this.keywordBlockInput = '';
     this.pinActionsSheetShown = false;
-    this.showComments = false;
-    this.commentRootDraft = '';
-    this.commentReplyDraft = '';
     this.shareStatus = '';
   }
 
@@ -855,27 +848,6 @@ export struct PinDetailPage {
             }
           }
         })
-      if (this.commentRepository !== undefined && this.session !== undefined) {
-        CommentLayer({
-          contentType: 'pin',
-          contentId: this.contentId,
-          repository: this.commentRepository,
-          session: this.session,
-          navigate: this.navigate,
-          showComments: this.showComments,
-          rootDraft: this.commentRootDraft,
-          replyDraft: this.commentReplyDraft,
-          onRootDraftChange: (value: string): void => {
-            this.commentRootDraft = value;
-          },
-          onReplyDraftChange: (value: string): void => {
-            this.commentReplyDraft = value;
-          },
-          onDismiss: (): void => {
-            this.showComments = false;
-          }
-        })
-      }
     }
     .id('p2_pin_detail_page')
     .width('100%')
@@ -1079,7 +1051,11 @@ export struct PinDetailPage {
       .accessibilityText(`查看 ${pin.commentCount} 条评论`)
       .enabled(this.commentRepository !== undefined && this.session !== undefined)
       .onClick((): void => {
-        this.showComments = true;
+        this.navigate({
+          name: P1DestinationName.COMMENT,
+          contentType: 'pin',
+          contentId: this.contentId
+        });
       })
     }
     .id('p3_pin_detail_bottom_actions')

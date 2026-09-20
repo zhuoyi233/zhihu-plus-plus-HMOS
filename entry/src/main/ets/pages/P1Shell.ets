@@ -87,6 +87,9 @@ export struct P1Shell {
   @BuilderParam searchContent: (query: string, navigate: (destination: P1Destination) => void,
     onBack: () => void) => void =
     this.emptySearch;
+  @BuilderParam commentContent: (contentType: string, contentId: string,
+    navigate: (destination: P1Destination) => void, onBack: () => void) => void =
+    this.emptyComment;
   @BuilderParam questionContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void) => void =
     this.emptyDetailContent;
   @BuilderParam answerContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void) => void =
@@ -255,6 +258,12 @@ export struct P1Shell {
 
   @Builder
   emptySearch(_query: string, _navigate: (destination: P1Destination) => void, _onBack: () => void) {
+    Blank();
+  }
+
+  @Builder
+  emptyComment(_contentType: string, _contentId: string,
+    _navigate: (destination: P1Destination) => void, _onBack: () => void) {
     Blank();
   }
 
@@ -484,6 +493,26 @@ export struct P1Shell {
           backIcon: { action: (): void => { this.pathStack.pop(); } },
           divider: { showType: DividerShowType.OFF }
         }
+      })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.COMMENT) {
+      HdsNavDestination() {
+        this.commentContent(
+          destination.contentType,
+          destination.contentId,
+          (nextDestination: P1Destination): void => this.navigate(nextDestination),
+          (): void => { this.pathStack.pop(); }
+        );
+      }
+      // 页面自行绘制唯一的返回入口；系统返回交给页面决定退子评论还是退详情。
+      .hideTitleBar(true)
+      .onBackPressed((): boolean => {
+        AppStorage.setOrCreate('commentPageBackContentType', destination.contentType);
+        AppStorage.setOrCreate('commentPageBackContentId', destination.contentId);
+        AppStorage.setOrCreate('commentPageBackTick',
+          (AppStorage.get<number>('commentPageBackTick') ?? 0) + 1);
+        return true;
       })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))

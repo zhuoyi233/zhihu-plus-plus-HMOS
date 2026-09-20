@@ -24,6 +24,7 @@ interface TestDestinationParam {
   name: string;
   id?: string;
   contentId?: string;
+  contentType?: string;
   commentId?: string;
   query?: string;
   questionId?: string;
@@ -196,8 +197,14 @@ export default function p1NavigationTest(): void {
       };
       const emptyCommentIdParam: TestDestinationParam = {
         name: P1DestinationName.COMMENT,
+        contentType: 'answer',
         contentId: 'answer-1',
         commentId: ''
+      };
+      const commentParam: TestDestinationParam = {
+        name: P1DestinationName.COMMENT,
+        contentType: 'article',
+        contentId: '123'
       };
       const answer = decodeP1Destination(P1DestinationName.ANSWER, answerParam);
       const probe = decodeP1Destination(P1DestinationName.READER_PROBE, probeParam);
@@ -210,6 +217,7 @@ export default function p1NavigationTest(): void {
       const writePin = decodeP1Destination(P1DestinationName.WRITE_PIN, writePinParam);
       const pinDrafts = decodeP1Destination(P1DestinationName.PIN_DRAFTS, pinDraftsParam);
       const dailyStory = decodeP1Destination(P1DestinationName.DAILY_STORY, dailyStoryParam);
+      const comment = decodeP1Destination(P1DestinationName.COMMENT, commentParam);
       const search: SearchDestination = { name: P1DestinationName.SEARCH, query: 'ArkTS' };
       const following: StatelessDestination = { name: P1DestinationName.FOLLOWING };
       const hot: StatelessDestination = { name: P1DestinationName.HOT };
@@ -257,6 +265,11 @@ export default function p1NavigationTest(): void {
       }
       expect(decodeP1Destination(P1DestinationName.SEARCH, unexpectedSearchParam)).assertUndefined();
       expect(decodeP1Destination(P1DestinationName.COMMENT, emptyCommentIdParam)).assertUndefined();
+      expect(comment?.name).assertEqual(P1DestinationName.COMMENT);
+      if (comment?.name === P1DestinationName.COMMENT) {
+        expect(comment.contentType).assertEqual('article');
+        expect(comment.contentId).assertEqual('123');
+      }
     });
 
     it('rejectsUnsafeSearchAndDetailRuntimeParameters', 0, () => {
