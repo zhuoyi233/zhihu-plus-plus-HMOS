@@ -207,6 +207,18 @@ $hdc = "hdc"
   `WebCookieManager.clearAllCookiesSync()`；登录/风控页用默认移动 UA（桌面 UA 会让页面
   按桌面视口渲染、字体过小）。
 
+- **控件必须跟随主题色**（新建任何带强调色的控件时强制执行，否则默认系统蓝与主题脱节）：
+  - 生效色只读 `@StorageProp('resolvedThemeColor')`（P1Shell 广播的深浅色解析结果），
+    **禁止**直接读 `themeColor` seed（未按主题模式解析，深色下会刺眼/失真）；
+    页面原本没有该属性时要自行补声明。
+  - `Button`：主操作必须 `.backgroundColor(resolvedThemeColor)` +
+    `.fontColor(onThemeColor(resolvedThemeColor))`（`onThemeColor` 从 `data` 导入，
+    按亮度自动选白/深字色；禁用态系统自动淡化，无需额外处理）。**不写
+    `backgroundColor` 的 Button 默认系统蓝，是已知 bug 来源**。
+  - `Toggle`（Switch）与 `Checkbox`：必须 `.selectedColor(resolvedThemeColor)`。
+  - 取消/撤销/次要破坏性操作等**不用**主题色（用中性灰背景），避免误导为主操作；
+    页面间保持同一判断口径。
+
 ## 并行开发
 
 - **新建分支必须验证非 unborn**：本会话环境实测（Git for Windows 2.54）`git checkout -b`
