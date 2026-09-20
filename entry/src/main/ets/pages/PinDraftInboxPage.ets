@@ -1,4 +1,4 @@
-import { LoginSessionGateway, SessionStatus } from 'data';
+import { DEFAULT_THEME_COLOR, onThemeColor, LoginSessionGateway, SessionStatus } from 'data';
 import { PinDraftResumeItem, PinDraftResumeListGateway } from './PinPublishPage';
 
 export type PinDraftOpenCallback = (draftId: string) => void;
@@ -17,6 +17,8 @@ enum PinDraftInboxPhase {
  */
 @Component
 export struct PinDraftInboxPage {
+  /** 当前生效主题色（P1Shell 广播），驱动强调色控件。 */
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   gateway: PinDraftResumeListGateway | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
   onOpen: PinDraftOpenCallback = (_draftId: string): void => {};
@@ -45,6 +47,8 @@ export struct PinDraftInboxPage {
 
       if (this.phase === PinDraftInboxPhase.LOGIN_REQUIRED) {
         Button('去登录')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p4_pin_drafts_login')
           .width('100%')
           .onClick((): void => this.onGoLogin())
@@ -71,6 +75,8 @@ export struct PinDraftInboxPage {
           ForEach(this.items, (item: PinDraftResumeItem) => {
             ListItem() {
               Button(item.title)
+                .backgroundColor(this.resolvedThemeColor)
+                .fontColor(onThemeColor(this.resolvedThemeColor))
                 .id(`p4_pin_draft_open_${item.draftId}`)
                 .width('100%')
                 .fontSize($r('app.float.p1_body_font_size'))

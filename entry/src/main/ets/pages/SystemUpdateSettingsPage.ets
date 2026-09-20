@@ -1,5 +1,8 @@
+import { DEFAULT_THEME_COLOR, onThemeColor } from 'data';
+
 @Component
 export struct SystemUpdateSettingsPage {
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   @Prop installedVersionLabel: string = '';
   @Prop updateCheckBusy: boolean = false;
   @Prop updateCheckMessage: string = '';
@@ -22,12 +25,14 @@ export struct SystemUpdateSettingsPage {
                 .fontSize($r('app.float.p1_secondary_font_size')).fontColor($r('app.color.secondary_text'))
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
             if (this.updateCheckBusy) {
-              LoadingProgress().width(24).height(24).color($r('app.color.brand_primary'))
+              LoadingProgress().width(24).height(24).color(this.resolvedThemeColor)
             }
           }.width('100%').alignItems(VerticalAlign.Center)
 
           Button(this.updateCheckBusy ? '正在检查…' : '检查更新')
             .id('p5_system_check_update').width('100%').enabled(!this.updateCheckBusy)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
+            .backgroundColor(this.resolvedThemeColor)
             .onClick((): void => this.onCheckUpdate())
 
           if (this.updateCheckMessage.length > 0) {
@@ -37,6 +42,8 @@ export struct SystemUpdateSettingsPage {
           }
           if (this.availableVersion.length > 0) {
             Button(`前往下载 ${this.availableVersion}`).id('p5_system_update_download').width('100%')
+              .fontColor(onThemeColor(this.resolvedThemeColor))
+              .backgroundColor(this.resolvedThemeColor)
               .onClick((): void => this.onOpenDownload())
           }
         }.width('100%').padding($r('app.float.p1_card_padding'))

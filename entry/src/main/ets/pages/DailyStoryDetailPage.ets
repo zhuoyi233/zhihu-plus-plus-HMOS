@@ -1,4 +1,4 @@
-import { DailyStoryRepository, DefaultDailyStoryRepository } from 'data';
+import { onThemeColor, DailyStoryRepository, DEFAULT_THEME_COLOR, DefaultDailyStoryRepository } from 'data';
 import { P1Destination } from 'core';
 import {
   DailyStoryDetailController,
@@ -12,6 +12,7 @@ export struct DailyStoryDetailPage {
   repository: DailyStoryRepository | undefined = new DefaultDailyStoryRepository();
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   @State private phase: DailyStoryDetailPhase = DailyStoryDetailPhase.IDLE;
   @State private errorMessage: string = '';
   private destination?: P1Destination;
@@ -50,7 +51,7 @@ export struct DailyStoryDetailPage {
           .id('p2_daily_story_loading_progress')
           .width(40)
           .height(40)
-          .color($r('app.color.brand_primary'))
+          .color(this.resolvedThemeColor)
         Text('正在打开日报原文…')
           .id('p2_daily_story_loading_status')
           .fontSize($r('app.float.p1_body_font_size'))
@@ -67,6 +68,8 @@ export struct DailyStoryDetailPage {
           .fontColor($r('app.color.secondary_text'))
           .textAlign(TextAlign.Center)
         Button('重新加载')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p2_daily_story_retry')
           .onClick((): void => {
             this.controller?.load(this.storyId);

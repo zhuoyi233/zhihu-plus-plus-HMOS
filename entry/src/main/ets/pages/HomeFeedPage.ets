@@ -1,7 +1,9 @@
 import { P1Destination, P1DestinationName } from 'core';
 import {
+  onThemeColor,
   BlockedFeedHistoryGateway,
   BlockingRuleGateway,
+  DEFAULT_THEME_COLOR,
   DefaultFeedRepository,
   feedItemIdentity,
   FeedItem,
@@ -54,6 +56,7 @@ export struct HomeFeedPage {
   @StorageProp('showRefreshFab') private showRefreshFab: boolean = true;
   @StorageProp('feedCardStyle') private feedCardStyle: string = 'divider';
   @StorageProp('fabOpacity') private fabOpacity: number = 100;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   // 首页更新卡片（对齐上游 HomeScreen 顶部 AnnouncementCard）：P1Shell 启动检查到新版本后经
   // AppStorage 广播（HdsTabs 树下跨页面信号唯一可靠通道）。“以后”仅本次会话内忽略，对齐上游。
   @StorageProp('homeUpdateAnnouncementVersion') private pendingUpdateVersion: string = '';
@@ -173,6 +176,8 @@ export struct HomeFeedPage {
                 .fontColor($r('app.color.secondary_text'))
                 .layoutWeight(1)
               Button('重试')
+                .backgroundColor(this.resolvedThemeColor)
+                .fontColor(onThemeColor(this.resolvedThemeColor))
                 .id('p2_home_recoverable_error_retry')
                 .onClick(() => this.controller?.retry())
             }
@@ -210,7 +215,7 @@ export struct HomeFeedPage {
                     .id('p2_home_load_more')
                     .width(40)
                     .height(40)
-                    .color($r('app.color.brand_primary'))
+                    .color(this.resolvedThemeColor)
                 }
                 .width('100%')
                 .padding({ top: 12, bottom: 12 })
@@ -325,7 +330,7 @@ export struct HomeFeedPage {
         Button('查看更新', { type: ButtonType.ROUNDED_RECTANGLE, stateEffect: true })
           .id('p2_home_update_card_open')
           .fontSize($r('app.float.p1_body_font_size'))
-          .fontColor($r('app.color.brand_primary'))
+          .fontColor(this.resolvedThemeColor)
           .backgroundColor(Color.White)
           .borderRadius(12)
           .onClick((): void => this.openUpdateReleasePage())
@@ -336,7 +341,7 @@ export struct HomeFeedPage {
       .width('100%')
       .padding($r('app.float.p1_card_padding'))
       .borderRadius($r('app.float.p1_card_radius'))
-      .backgroundColor($r('app.color.brand_primary'))
+      .backgroundColor(this.resolvedThemeColor)
       .accessibilityText('发现新版本，可查看更新或稍后忽略')
   }
 
@@ -395,7 +400,7 @@ export struct HomeFeedPage {
             .layoutWeight(1)
           Text(feedKindLabel(item.target.kind))
             .fontSize($r('app.float.p1_secondary_font_size'))
-            .fontColor($r('app.color.brand_primary'))
+            .fontColor(this.resolvedThemeColor)
 
           // 对齐上游 FeedCardMenuBox：右上角紧凑“更多”符号图标，屏蔽等操作收进菜单。
           Button({ type: ButtonType.Normal, stateEffect: true }) {
@@ -427,7 +432,7 @@ export struct HomeFeedPage {
           Text(`质量屏蔽规则：${item.target.qualityFilterReason}`)
             .id(`p3_home_quality_rule_${item.target.kind}_${item.target.id}`)
             .fontSize($r('app.float.p1_secondary_font_size'))
-            .fontColor($r('app.color.brand_primary'))
+            .fontColor(this.resolvedThemeColor)
             .width('100%')
         }
 
@@ -576,12 +581,16 @@ export struct HomeFeedPage {
         .width('100%')
       Row({ space: $r('app.float.p1_spacing_small') }) {
         Button('取消')
+          .backgroundColor($r('app.color.control_background'))
+          .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
           .enabled(!this.blockingBusy)
           .onClick((): void => {
             this.pendingUserBlock = undefined;
           })
         Button('确定屏蔽')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p3_home_confirm_block_user')
           .layoutWeight(1)
           .enabled(!this.blockingBusy)
@@ -609,6 +618,8 @@ export struct HomeFeedPage {
         })
       Row({ space: $r('app.float.p1_spacing_small') }) {
         Button('取消')
+          .backgroundColor($r('app.color.control_background'))
+          .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
           .enabled(!this.blockingBusy)
           .onClick((): void => {
@@ -616,6 +627,8 @@ export struct HomeFeedPage {
             this.keywordBlockInput = '';
           })
         Button('确认屏蔽')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p3_home_confirm_block_keyword')
           .layoutWeight(1)
           .enabled(!this.blockingBusy && this.keywordBlockInput.trim().length > 0)

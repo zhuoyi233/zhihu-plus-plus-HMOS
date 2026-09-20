@@ -1,5 +1,7 @@
 import { webview } from '@kit.ArkWeb';
 import {
+  onThemeColor,
+  DEFAULT_THEME_COLOR,
   getAppSessionOwner,
   parseWebCookieHeader,
   SessionCookie,
@@ -40,6 +42,7 @@ export struct RiskControlWebPage {
   };
   onDismiss: () => void = (): void => {
   };
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   @State private ready: boolean = false;
   @State private loadFailed: boolean = false;
   @State private status: string = '正在打开验证页面…';
@@ -101,7 +104,7 @@ export struct RiskControlWebPage {
             LoadingProgress()
               .width(40)
               .height(40)
-              .color($r('app.color.brand_primary'))
+              .color(this.resolvedThemeColor)
           }
           Text(this.status)
             .fontSize($r('app.float.p1_body_font_size'))
@@ -110,6 +113,8 @@ export struct RiskControlWebPage {
             .width('100%')
           if (this.loadFailed) {
             Button('重试')
+              .backgroundColor(this.resolvedThemeColor)
+              .fontColor(onThemeColor(this.resolvedThemeColor))
               .id('p3_risk_control_retry')
               .onClick((): void => {
                 this.loadFailed = false;
@@ -127,6 +132,8 @@ export struct RiskControlWebPage {
       }
 
       Button('取消验证')
+        .backgroundColor($r('app.color.control_background'))
+        .fontColor($r('app.color.primary_text'))
         .id('p3_risk_control_dismiss')
         .margin({ left: $r('app.float.p1_spacing_medium'), top: $r('app.float.p1_spacing_medium') })
         .opacity(0.9)

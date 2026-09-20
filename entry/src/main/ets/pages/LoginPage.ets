@@ -1,5 +1,7 @@
 import { ApplicationStateChangeCallback, common, Want } from '@kit.AbilityKit';
 import {
+  onThemeColor,
+  DEFAULT_THEME_COLOR,
   getAppSessionOwner,
   SessionCookie,
   ZhihuQrLoginClient
@@ -82,6 +84,7 @@ export struct LoginPage {
     retainedSessionRetryEnabled: false
   };
   @State private selectedMode: number = LOGIN_MODE_PHONE;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   @State private noticeStep: number = 0;
   @State private riskCookies: Array<SessionCookie> = [];
   private controller?: LoginController;
@@ -168,6 +171,8 @@ export struct LoginPage {
 
         if (this.viewState.retainedSessionRetryEnabled) {
           Button('重试验证已保留会话')
+            .backgroundColor(this.resolvedThemeColor)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
             .id('p2_login_retry_retained_session')
             .width('100%')
             .onClick(() => this.controller?.retryRetainedSession())
@@ -224,6 +229,8 @@ export struct LoginPage {
                     .fontColor($r('app.color.secondary_text'))
 
                   Button('扫描电脑端登录二维码')
+                    .backgroundColor(this.resolvedThemeColor)
+                    .fontColor(onThemeColor(this.resolvedThemeColor))
                     .id('p4_login_desktop_scan_open')
                     .width('100%')
                     .onClick((): void => {
@@ -242,11 +249,15 @@ export struct LoginPage {
 
                   if (this.viewState.qrCancelable) {
                     Button('取消二维码登录')
+                      .backgroundColor($r('app.color.control_background'))
+                      .fontColor($r('app.color.primary_text'))
                       .id('p2_login_qr_cancel')
                       .width('100%')
                       .onClick(() => this.controller?.cancelQrLogin())
                   } else {
                     Button(this.viewState.phase === LoginPhase.QR_EXPIRED ? '刷新二维码' : '获取登录二维码')
+                      .backgroundColor(this.resolvedThemeColor)
+                      .fontColor(onThemeColor(this.resolvedThemeColor))
                       .id('p2_login_qr_start')
                       .width('100%')
                       .enabled(this.viewState.qrStartEnabled)
@@ -262,6 +273,8 @@ export struct LoginPage {
 
               if (this.viewState.logoutEnabled) {
                 Button('退出登录')
+                  .backgroundColor($r('app.color.control_background'))
+                  .fontColor($r('app.color.primary_text'))
                   .id('p2_login_logout')
                   .width('100%')
                   .onClick(() => this.controller?.logout())
@@ -299,12 +312,16 @@ export struct LoginPage {
 
           Row({ space: $r('app.float.p1_spacing_medium') }) {
             Button('完成验证后继续扫码')
+              .backgroundColor(this.resolvedThemeColor)
+              .fontColor(onThemeColor(this.resolvedThemeColor))
               .id('p3_risk_continue')
               .layoutWeight(1)
               .onClick((): void => {
                 this.controller?.continueQrAfterRiskControl(this.riskCookies);
               })
             Button('取消')
+              .backgroundColor($r('app.color.control_background'))
+              .fontColor($r('app.color.primary_text'))
               .id('p3_risk_abort')
               .onClick((): void => {
                 this.controller?.cancelQrLogin();
@@ -355,15 +372,17 @@ export struct LoginPage {
             .id('p2_login_notice_secondary')
             .width('100%')
             .fontSize($r('app.float.p1_body_font_size'))
-            .fontColor($r('app.color.brand_primary'))
+            .fontColor(this.resolvedThemeColor)
             .backgroundColor(Color.Transparent)
-            .border({ width: 1, color: $r('app.color.brand_primary'), radius: $r('app.float.p1_card_radius') })
+            .border({ width: 1, color: this.resolvedThemeColor, radius: $r('app.float.p1_card_radius') })
             .onClick((): void => {
               this.openExternalLogin(LOGIN_NOTICES[this.noticeStep].secondaryUrl);
             })
         }
 
         Button('确认')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p2_login_notice_confirm')
           .width('100%')
           .fontSize($r('app.float.p1_body_font_size'))
@@ -387,12 +406,12 @@ export struct LoginPage {
     Column({ space: 4 }) {
       Text(label)
         .fontSize($r('app.float.p1_body_font_size'))
-        .fontColor(this.selectedMode === index ? $r('app.color.brand_primary') : $r('app.color.secondary_text'))
+        .fontColor(this.selectedMode === index ? this.resolvedThemeColor : $r('app.color.secondary_text'))
         .fontWeight(this.selectedMode === index ? FontWeight.Medium : FontWeight.Regular)
       Blank()
         .height(2)
         .width('100%')
-        .backgroundColor(this.selectedMode === index ? $r('app.color.brand_primary') : Color.Transparent)
+        .backgroundColor(this.selectedMode === index ? this.resolvedThemeColor : Color.Transparent)
     }
       .width(72)
       .id(index === LOGIN_MODE_PHONE ? 'p3_login_mode_phone' :

@@ -1,4 +1,4 @@
-import { SearchSortOption, SearchTimeRange } from 'data';
+import { DEFAULT_THEME_COLOR, SearchSortOption, SearchTimeRange } from 'data';
 
 /**
  * 搜索页 HDS 标题栏注入内容：返回键 + 搜索框 + 排序方式菜单。
@@ -57,6 +57,7 @@ export struct SearchTitleBar {
   @State private menuVisible: boolean = false;
   @StorageProp('searchSortOption') private sortOption: string = SearchSortOption.DEFAULT;
   @StorageProp('searchTimeRange') private timeRange: string = SearchTimeRange.ALL;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private lastEntryTick: number = -1;
 
   private onEntryTick(): void {
@@ -102,7 +103,7 @@ export struct SearchTitleBar {
       Row({ space: 8 }) {
         SymbolGlyph($r('sys.symbol.checkmark'))
           .fontSize(16)
-          .fontColor([$r('app.color.brand_primary')])
+          .fontColor([this.resolvedThemeColor])
           .opacity(option.value === selected ? 1 : 0)
         Text(option.label)
           .fontSize(14)

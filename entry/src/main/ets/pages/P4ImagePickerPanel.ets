@@ -1,5 +1,5 @@
 import { fileUri } from '@kit.CoreFileKit';
-import { ImageUploadFailureKind, LocalDraftImageReference } from 'data';
+import { DEFAULT_THEME_COLOR, ImageUploadFailureKind, LocalDraftImageReference, onThemeColor } from 'data';
 import {
   MediaPickerCoordinator,
   MediaPickerPhase,
@@ -20,6 +20,8 @@ export type P4ImagePickerSelectionCallback = (images: Array<PreparedPickedImage>
  */
 @Component
 export struct P4ImagePickerPanel {
+  /** 当前生效主题色（P1Shell 广播），驱动面板按钮强调色。 */
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   onPreparedImagesChanged: P4ImagePickerSelectionCallback = (_images: Array<PreparedPickedImage>): void => {};
   /**
    * 编辑器在 DraftRepository 确认保存受控引用后设为 true，所有权随之移交给草稿；
@@ -68,10 +70,14 @@ export struct P4ImagePickerPanel {
           .layoutWeight(1)
         Button('从相册选择')
           .id('p4_image_picker_select')
+          .fontColor(onThemeColor(this.resolvedThemeColor))
+          .backgroundColor(this.resolvedThemeColor)
           .enabled(this.canSelect())
           .onClick((): void => this.pickExplicitly())
         if (this.viewState.images.length > 0) {
           Button('清空')
+            .backgroundColor($r('app.color.control_background'))
+            .fontColor($r('app.color.primary_text'))
             .id('p4_image_picker_clear')
             .enabled(this.canClear())
             .onClick((): void => this.clear())
@@ -122,6 +128,8 @@ export struct P4ImagePickerPanel {
         .fontColor($r('app.color.secondary_text'))
         .layoutWeight(1)
       Button('移除')
+        .backgroundColor($r('app.color.control_background'))
+        .fontColor($r('app.color.primary_text'))
         .id(`p4_image_picker_remove_${index}`)
         .enabled(this.canClear())
         .onClick((): void => this.remove(index))

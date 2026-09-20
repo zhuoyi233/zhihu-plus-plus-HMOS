@@ -1,7 +1,9 @@
 import { P1Destination, P1DestinationName } from 'core';
 import {
+  onThemeColor,
   CollectionRepository,
   CollectionSummary,
+  DEFAULT_THEME_COLOR,
   LoginSessionGateway
 } from 'data';
 import {
@@ -29,6 +31,7 @@ export struct CollectionDialogComponent {
   @State private createTitle: string = '';
   @State private createDescription: string = '';
   @State private createIsPublic: boolean = false;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: CollectionFavoriteController;
 
   aboutToAppear(): void {
@@ -81,7 +84,7 @@ export struct CollectionDialogComponent {
           .id('p3_favorite_dialog_loading')
           .width(40)
           .height(40)
-          .color($r('app.color.brand_primary'))
+          .color(this.resolvedThemeColor)
       } else if (this.phase === CollectionFavoritePhase.ERROR) {
         Column({ space: $r('app.float.p1_spacing_small') }) {
           Text(this.message)
@@ -91,10 +94,14 @@ export struct CollectionDialogComponent {
             .width('100%')
           if (this.requiresLogin) {
             Button('去登录')
+              .backgroundColor(this.resolvedThemeColor)
+              .fontColor(onThemeColor(this.resolvedThemeColor))
               .id('p3_favorite_dialog_login')
               .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
           } else {
             Button('重试')
+              .backgroundColor(this.resolvedThemeColor)
+              .fontColor(onThemeColor(this.resolvedThemeColor))
               .id('p3_favorite_dialog_retry')
               .onClick((): void => {
                 this.controller?.load(this.contentType, this.contentId);
@@ -105,6 +112,8 @@ export struct CollectionDialogComponent {
       } else {
         if (!this.showCreate) {
           Button('新建收藏夹')
+            .backgroundColor(this.resolvedThemeColor)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
             .id('p3_favorite_dialog_create')
             .width('100%')
             .fontSize($r('app.float.p1_body_font_size'))
@@ -166,7 +175,7 @@ export struct CollectionDialogComponent {
         Text(collection.isFavorited ? '已收藏' : '未收藏')
           .id(`p3_favorite_dialog_item_${collection.id}`)
           .fontSize($r('app.float.p1_secondary_font_size'))
-          .fontColor(collection.isFavorited ? $r('app.color.brand_primary') : $r('app.color.secondary_text'))
+          .fontColor(collection.isFavorited ? this.resolvedThemeColor : $r('app.color.secondary_text'))
       }
       .width('100%')
     }
@@ -209,6 +218,7 @@ export struct CollectionDialogComponent {
           .layoutWeight(1)
         Toggle({ type: ToggleType.Switch, isOn: this.createIsPublic })
           .id('p3_favorite_dialog_create_public')
+          .selectedColor(this.resolvedThemeColor)
           .onChange((value: boolean): void => {
             this.createIsPublic = value;
           })
@@ -216,12 +226,16 @@ export struct CollectionDialogComponent {
       .width('100%')
       Row({ space: $r('app.float.p1_spacing_small') }) {
         Button('取消')
+          .backgroundColor($r('app.color.control_background'))
+          .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
           .enabled(this.busyCollectionId === undefined)
           .onClick((): void => {
             this.showCreate = false;
           })
         Button(this.busyCollectionId === 'creating' ? '创建中…' : '创建并收藏')
+          .fontColor(onThemeColor(this.resolvedThemeColor))
+          .backgroundColor(this.resolvedThemeColor)
           .id('p3_favorite_dialog_create_submit')
           .layoutWeight(1)
           .enabled(this.busyCollectionId === undefined && this.createTitle.trim().length > 0)

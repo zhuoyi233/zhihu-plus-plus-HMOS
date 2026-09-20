@@ -23,6 +23,7 @@ export enum P1DestinationName {
   LOGIN = 'Login',
   SETTINGS = 'Settings',
   APPEARANCE_SETTINGS = 'AppearanceSettings',
+  THEME_COLOR_SETTINGS = 'ThemeColorSettings',
   IDENTITY_MANAGEMENT = 'IdentityManagement',
   READING_SETTINGS = 'ReadingSettings',
   SYSTEM_UPDATE_SETTINGS = 'SystemUpdateSettings',
@@ -52,6 +53,7 @@ export interface StatelessDestination {
 
 export interface InfrastructureDestination {
   readonly name: P1DestinationName.LOGIN | P1DestinationName.SETTINGS | P1DestinationName.APPEARANCE_SETTINGS |
+    P1DestinationName.THEME_COLOR_SETTINGS |
     P1DestinationName.IDENTITY_MANAGEMENT | P1DestinationName.READING_SETTINGS |
     P1DestinationName.SYSTEM_UPDATE_SETTINGS |
     P1DestinationName.RECOMMENDATION_FILTER_SETTINGS |
@@ -169,6 +171,7 @@ export function isP1DestinationName(name: string): boolean {
     case P1DestinationName.LOGIN:
     case P1DestinationName.SETTINGS:
     case P1DestinationName.APPEARANCE_SETTINGS:
+    case P1DestinationName.THEME_COLOR_SETTINGS:
     case P1DestinationName.IDENTITY_MANAGEMENT:
     case P1DestinationName.READING_SETTINGS:
     case P1DestinationName.SYSTEM_UPDATE_SETTINGS:
@@ -235,6 +238,8 @@ export function decodeP1Destination(name: string, param: Object): P1Destination 
       return hasNoParameters(wire) ? { name: P1DestinationName.NOTIFICATION_SETTINGS } : undefined;
     case P1DestinationName.APPEARANCE_SETTINGS:
       return hasNoParameters(wire) ? { name: P1DestinationName.APPEARANCE_SETTINGS } : undefined;
+    case P1DestinationName.THEME_COLOR_SETTINGS:
+      return hasNoParameters(wire) ? { name: P1DestinationName.THEME_COLOR_SETTINGS } : undefined;
     case P1DestinationName.IDENTITY_MANAGEMENT:
       return hasNoParameters(wire) ? { name: P1DestinationName.IDENTITY_MANAGEMENT } : undefined;
     case P1DestinationName.READING_SETTINGS:
@@ -331,6 +336,7 @@ export function isInfrastructureDestination(destination: P1Destination): boolean
     case P1DestinationName.LOGIN:
     case P1DestinationName.SETTINGS:
     case P1DestinationName.APPEARANCE_SETTINGS:
+    case P1DestinationName.THEME_COLOR_SETTINGS:
     case P1DestinationName.IDENTITY_MANAGEMENT:
     case P1DestinationName.READING_SETTINGS:
     case P1DestinationName.SYSTEM_UPDATE_SETTINGS:

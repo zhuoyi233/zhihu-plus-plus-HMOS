@@ -3,9 +3,11 @@ import {
   BlockedFeedHistoryGateway,
   BlockingRuleGateway,
   CommentRepository,
+  DEFAULT_THEME_COLOR,
   FollowMutationResult,
   FollowRepository,
   LoginSessionGateway,
+  onThemeColor,
   OpenedContentStore,
   PeopleContentItem,
   PeopleContentKind,
@@ -15,7 +17,8 @@ import {
   PeopleProfile,
   PinDetail,
   PinRepository,
-  PinTopic
+  PinTopic,
+  themeColorContainerColor
 } from 'data';
 import {
   PeopleDetailController,
@@ -47,6 +50,7 @@ struct ReadOnlyDetailStatusPanel {
   };
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
   };
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
 
   build() {
     Column({ space: $r('app.float.p1_spacing_medium') }) {
@@ -55,7 +59,7 @@ struct ReadOnlyDetailStatusPanel {
           .id(`p2_${this.kind}_detail_loading_progress`)
           .width(40)
           .height(40)
-          .color($r('app.color.brand_primary'))
+          .color(this.resolvedThemeColor)
       }
       Text(this.message)
         .id(`p2_${this.kind}_detail_status`)
@@ -66,10 +70,14 @@ struct ReadOnlyDetailStatusPanel {
       if (!this.loading) {
         if (this.requiresLogin) {
           Button('去登录')
+            .backgroundColor(this.resolvedThemeColor)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
             .id(`p2_${this.kind}_detail_login`)
             .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
         } else {
           Button('重新加载')
+            .backgroundColor(this.resolvedThemeColor)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
             .id(`p2_${this.kind}_detail_retry`)
             .onClick((): void => this.onRetry())
         }
@@ -116,6 +124,7 @@ export struct PeopleDetailPage {
   @State private followPending: boolean = false;
   @State private followErrorMessage: string = '';
   @State private followRequiresLogin: boolean = false;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: PeopleDetailController;
   private contentController?: PeopleContentController;
   private blockingAction?: BlockingActionController;
@@ -289,7 +298,7 @@ export struct PeopleDetailPage {
             .borderRadius(44)
             .backgroundColor($r('app.color.surface_background'))
             .fontSize($r('app.float.p1_display_font_size'))
-            .fontColor($r('app.color.brand_primary'))
+            .fontColor(this.resolvedThemeColor)
             .textAlign(TextAlign.Center)
         }
 
@@ -304,7 +313,7 @@ export struct PeopleDetailPage {
             Text('机构账号')
               .id('p2_people_detail_organization')
               .fontSize($r('app.float.p1_secondary_font_size'))
-              .fontColor($r('app.color.brand_primary'))
+              .fontColor(this.resolvedThemeColor)
           }
           if (profile.headline.length > 0) {
             Text(profile.headline)
@@ -337,10 +346,10 @@ export struct PeopleDetailPage {
               .id('p3_people_follow')
               .width('100%')
               .fontSize($r('app.float.p1_body_font_size'))
-              .fontColor(this.following ? $r('app.color.brand_primary') : $r('app.color.on_brand'))
+              .fontColor(this.following ? this.resolvedThemeColor : onThemeColor(this.resolvedThemeColor))
               .backgroundColor(this.following
-                ? $r('app.color.brand_primary_container')
-                : $r('app.color.brand_primary'))
+                ? themeColorContainerColor(this.resolvedThemeColor)
+                : this.resolvedThemeColor)
               .enabled(!this.followPending)
               .onClick((): void => {
                 this.followController?.toggleFollow();
@@ -359,6 +368,8 @@ export struct PeopleDetailPage {
               .layoutWeight(1)
             if (this.followRequiresLogin) {
               Button('去登录')
+                .backgroundColor(this.resolvedThemeColor)
+                .fontColor(onThemeColor(this.resolvedThemeColor))
                 .id('p3_people_follow_login')
                 .fontSize($r('app.float.p1_secondary_font_size'))
                 .onClick((): void => {
@@ -469,11 +480,11 @@ export struct PeopleDetailPage {
       .padding({ left: $r('app.float.p1_spacing_medium'), right: $r('app.float.p1_spacing_medium') })
       .fontSize($r('app.float.p1_body_font_size'))
       .fontWeight(this.selectedSection === section ? FontWeight.Medium : FontWeight.Regular)
-      .fontColor(this.selectedSection === section ? $r('app.color.brand_primary') : $r('app.color.primary_text'))
+      .fontColor(this.selectedSection === section ? this.resolvedThemeColor : $r('app.color.primary_text'))
       .backgroundColor(Color.Transparent)
       .border({
         width: { bottom: this.selectedSection === section ? 2 : 0 },
-        color: $r('app.color.brand_primary')
+        color: this.resolvedThemeColor
       })
       .onClick((): void => this.selectSection(section))
   }
@@ -502,6 +513,8 @@ export struct PeopleDetailPage {
         }
         if (this.contentLoadingMore || this.contentCanLoadMore) {
           Button(this.contentLoadingMore ? '正在加载更多…' : '加载更多')
+            .backgroundColor(this.resolvedThemeColor)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
             .id('p2_people_content_load_more')
             .width('100%')
             .enabled(!this.contentLoadingMore)
@@ -526,10 +539,14 @@ export struct PeopleDetailPage {
         .width('100%')
       if (this.contentRequiresLogin) {
         Button('去登录')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p2_people_content_login')
           .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
       } else {
         Button(initial ? '重新加载' : '重试加载更多')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p2_people_content_retry')
           .onClick((): void => {
             this.contentController?.retry();
@@ -545,7 +562,7 @@ export struct PeopleDetailPage {
       Column({ space: $r('app.float.p1_spacing_small') }) {
         Text(peopleContentKindLabel(item.kind))
           .fontSize($r('app.float.p1_secondary_font_size'))
-          .fontColor($r('app.color.brand_primary'))
+          .fontColor(this.resolvedThemeColor)
         Text(item.title)
           .fontSize($r('app.float.p1_heading_font_size'))
           .fontWeight(FontWeight.Medium)
@@ -639,6 +656,8 @@ export struct PeopleDetailPage {
       .width('100%')
       Button('查看收藏夹')
         .id('p3_people_detail_collections')
+        .fontColor(onThemeColor(this.resolvedThemeColor))
+        .backgroundColor(this.resolvedThemeColor)
         .width('100%')
         .enabled(this.profile !== undefined)
         .onClick((): void => {
@@ -677,6 +696,8 @@ export struct PeopleDetailPage {
         .width('100%')
       Row({ space: $r('app.float.p1_spacing_small') }) {
         Button('取消')
+          .backgroundColor($r('app.color.control_background'))
+          .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
           .enabled(!this.blockingBusy)
           .onClick((): void => {
@@ -684,6 +705,8 @@ export struct PeopleDetailPage {
             this.pendingUserBlock = undefined;
           })
         Button('确定屏蔽')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p3_people_detail_confirm_block_user')
           .layoutWeight(1)
           .enabled(!this.blockingBusy)
@@ -758,6 +781,7 @@ export struct PinDetailPage {
   @State private shareStatus: string = '';
   @State private blockingMessage: string = '';
   @State private blockingBusy: boolean = false;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: PinDetailController;
   private blockingAction?: BlockingActionController;
 
@@ -911,7 +935,7 @@ export struct PinDetailPage {
         Text(pin.author.headline.length > 0 ? `${pin.author.name} · ${pin.author.headline}` : pin.author.name)
           .id('p2_pin_detail_author')
           .fontSize($r('app.float.p1_body_font_size'))
-          .fontColor($r('app.color.brand_primary'))
+          .fontColor(this.resolvedThemeColor)
           .width('100%')
           .onClick((): void => {
             this.navigate({
@@ -937,7 +961,7 @@ export struct PinDetailPage {
               Text(`# ${topic.name}`)
                 .id(`p2_pin_detail_topic_${topic.id}`)
                 .fontSize($r('app.float.p1_secondary_font_size'))
-                .fontColor($r('app.color.brand_primary'))
+                .fontColor(this.resolvedThemeColor)
             }, (topic: PinTopic): string => topic.id)
           }
           .width('100%')
@@ -1096,6 +1120,8 @@ export struct PinDetailPage {
       }
       .width('100%')
       Button('分享')
+        .backgroundColor($r('app.color.control_background'))
+        .fontColor($r('app.color.primary_text'))
         .id('p3_pin_detail_share')
         .width('100%')
         .enabled(this.pin !== undefined)
@@ -1117,6 +1143,8 @@ export struct PinDetailPage {
           }
         })
       Button('屏蔽关键词')
+        .backgroundColor($r('app.color.control_background'))
+        .fontColor($r('app.color.primary_text'))
         .id('p3_pin_detail_block_keyword')
         .width('100%')
         .enabled(!this.blockingBusy && this.blockingAction !== undefined)
@@ -1128,6 +1156,8 @@ export struct PinDetailPage {
       if (this.pin !== undefined) {
         ForEach(this.pin.topics, (topic: PinTopic) => {
           Button(`屏蔽话题：${topic.name}`)
+            .backgroundColor($r('app.color.control_background'))
+            .fontColor($r('app.color.primary_text'))
             .id(`p3_pin_detail_block_topic_${topic.id}`)
             .width('100%')
             .enabled(!this.blockingBusy && this.blockingAction !== undefined)
@@ -1162,12 +1192,16 @@ export struct PinDetailPage {
         .width('100%')
       Row({ space: $r('app.float.p1_spacing_small') }) {
         Button('取消')
+          .backgroundColor($r('app.color.control_background'))
+          .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
           .enabled(!this.blockingBusy)
           .onClick((): void => {
             this.pendingUserBlock = undefined;
           })
         Button('确定屏蔽')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p3_pin_detail_confirm_block_user')
           .layoutWeight(1)
           .enabled(!this.blockingBusy)
@@ -1195,6 +1229,8 @@ export struct PinDetailPage {
         })
       Row({ space: $r('app.float.p1_spacing_small') }) {
         Button('取消')
+          .backgroundColor($r('app.color.control_background'))
+          .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
           .enabled(!this.blockingBusy)
           .onClick((): void => {
@@ -1202,6 +1238,8 @@ export struct PinDetailPage {
             this.keywordBlockInput = '';
           })
         Button('确认屏蔽')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p3_pin_detail_confirm_block_keyword')
           .layoutWeight(1)
           .enabled(!this.blockingBusy && this.keywordBlockInput.trim().length > 0)

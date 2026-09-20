@@ -1,8 +1,10 @@
 import {
+  onThemeColor,
   AppPreferencesStore,
   BlockingPreferences,
   ContentFilterRuntimeGateway,
   ContentFilterStats,
+  DEFAULT_THEME_COLOR,
   defaultBlockingPreferences,
   defaultRecommendationFilterPreferences,
   normalizeRecommendationFilterPreferences,
@@ -65,6 +67,7 @@ export struct ContentFilterSettingsPage {
   @State private thresholdInput: string = '';
   @State private resetConfirmation: boolean = false;
   @State private stats: ContentFilterStats = { totalSeen: 0, totalFiltered: 0, filterRate: 0, lastFilteredAt: 0 };
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
 
   aboutToAppear(): void {
     void this.restore();
@@ -279,6 +282,7 @@ export struct ContentFilterSettingsPage {
           .fontColor($r('app.color.secondary_text')).width('100%')
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: checked }).id(testId).enabled(enabled)
+        .selectedColor(this.resolvedThemeColor)
         .onChange((value: boolean): void => onChange(value))
     }.width('100%').padding($r('app.float.p1_card_padding')).alignItems(VerticalAlign.Center)
       .opacity(enabled ? 1 : 0.45)
@@ -349,7 +353,11 @@ export struct ContentFilterSettingsPage {
         .type(InputType.Number).maxLength(9).onChange((value: string): void => { this.thresholdInput = value; })
       Row({ space: $r('app.float.p1_spacing_small') }) {
         Button('取消').layoutWeight(1).onClick((): void => { this.settingsSheetShown = false; })
+          .backgroundColor($r('app.color.control_background'))
+          .fontColor($r('app.color.primary_text'))
         Button('确定').id('p3_filter_threshold_confirm').layoutWeight(1)
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .enabled(this.validThresholdInput()).onClick((): void => this.confirmThreshold())
       }.width('100%')
     }.width('100%').padding($r('app.float.p1_spacing_large'))
@@ -367,17 +375,25 @@ export struct ContentFilterSettingsPage {
       Text(`过滤率：${(this.stats.filterRate * 100).toFixed(1)}%`)
         .fontSize($r('app.float.p1_body_font_size')).width('100%')
       Button('清理 7 天前数据').id('p3_filter_cleanup_old').width('100%')
+        .backgroundColor($r('app.color.control_background'))
+        .fontColor($r('app.color.primary_text'))
         .onClick((): void => this.cleanupOldData())
       if (this.resetConfirmation) {
         Text('再次点击将重置所有曝光统计和屏蔽记录，此操作不可撤销。')
           .fontSize($r('app.float.p1_secondary_font_size')).fontColor($r('app.color.error_text')).width('100%')
         Button('确认重置所有数据').id('p3_filter_reset_confirm').width('100%')
-          .fontColor($r('app.color.error_text')).onClick((): void => this.clearAllData())
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor)).onClick((): void => this.clearAllData())
       } else {
         Button('重置所有数据').id('p3_filter_reset_all').width('100%')
+          .backgroundColor($r('app.color.control_background'))
+          .fontColor($r('app.color.primary_text'))
           .fontColor($r('app.color.error_text')).onClick((): void => { this.resetConfirmation = true; })
       }
-      Button('关闭').id('p3_filter_stats_close').width('100%').onClick((): void => {
+      Button('关闭').id('p3_filter_stats_close').width('100%')
+        .fontColor($r('app.color.primary_text'))
+        .backgroundColor($r('app.color.control_background'))
+        .onClick((): void => {
         this.settingsSheetShown = false;
         this.resetConfirmation = false;
       })

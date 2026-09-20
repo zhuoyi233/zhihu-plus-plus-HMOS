@@ -1,7 +1,10 @@
 import { P1Destination, P1DestinationName } from 'core';
 import {
+  onThemeColor,
+  DEFAULT_THEME_COLOR,
   LoginSessionGateway,
   MobileNotificationRepository,
+  themeColorContainerColor,
   ZhihuPrivateMessage,
   privateMessageStableId
 } from 'data';
@@ -55,6 +58,7 @@ export struct PrivateMessagePage {
   @State private sendError: string = '';
   @State private draft: string = '';
   @State private peerDisplayName: string = '';
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: PrivateMessageController;
   private scroller: Scroller = new Scroller();
   private lastStableId: string = '';
@@ -103,7 +107,7 @@ export struct PrivateMessagePage {
                 LoadingProgress()
                   .width(20)
                   .height(20)
-                  .color($r('app.color.brand_primary'))
+                  .color(this.resolvedThemeColor)
                 Text('正在加载更早的消息…')
                   .fontSize($r('app.float.p1_secondary_font_size'))
                   .fontColor($r('app.color.secondary_text'))
@@ -171,7 +175,7 @@ export struct PrivateMessagePage {
             .borderRadius(20)
             .padding(0)
             .backgroundColor(this.draft.trim().length > 0 && !this.sending
-              ? $r('app.color.brand_primary') : $r('app.color.surface_background'))
+              ? this.resolvedThemeColor : $r('app.color.surface_background'))
             .enabled(this.draft.trim().length > 0 && !this.sending)
             .onClick((): void => this.sendDraft())
         }
@@ -207,7 +211,7 @@ export struct PrivateMessagePage {
           ForEach(parsePrivateMessageSegments(privateMessageDisplaySource(message)),
             (segment: PrivateMessageSegment) => {
               Span(segment.text)
-                .fontColor(segment.url ? $r('app.color.brand_primary') : $r('app.color.primary_text'))
+                .fontColor(segment.url ? this.resolvedThemeColor : $r('app.color.primary_text'))
                 .onClick((): void => this.openSegmentLink(segment))
             }, (segment: PrivateMessageSegment): string => `${segment.url}:${segment.text}`)
         }
@@ -221,7 +225,7 @@ export struct PrivateMessagePage {
             bottomRight: this.isIncoming(message) ? 16 : 4
           })
           .backgroundColor(this.isIncoming(message)
-            ? $r('app.color.surface_background') : $r('app.color.brand_primary_container'))
+            ? $r('app.color.surface_background') : themeColorContainerColor(this.resolvedThemeColor))
 
         if (relativeTime(message.createdTime).length > 0) {
           Text(relativeTime(message.createdTime))
@@ -247,7 +251,7 @@ export struct PrivateMessagePage {
           .id('p3_private_message_loading_progress')
           .width(40)
           .height(40)
-          .color($r('app.color.brand_primary'))
+          .color(this.resolvedThemeColor)
       }
       Text(message)
         .fontSize($r('app.float.p1_body_font_size'))
@@ -257,11 +261,15 @@ export struct PrivateMessagePage {
       if (retry) {
         if (this.requiresLogin) {
           Button('去登录')
+            .backgroundColor(this.resolvedThemeColor)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
             .id('p3_private_message_status_login')
             .fontSize($r('app.float.p1_body_font_size'))
             .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
         } else {
           Button('重新加载')
+            .backgroundColor(this.resolvedThemeColor)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
             .id(`${testId}_retry`)
             .fontSize($r('app.float.p1_body_font_size'))
             .onClick(() => this.controller?.retry())

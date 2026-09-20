@@ -1,9 +1,11 @@
+import { DEFAULT_THEME_COLOR } from 'data';
 import { CommentLikeState } from './CommentLikeState';
 
 @Component
 export struct CommentLikeButton {
   @ObjectLink state: CommentLikeState;
   @Prop interactionEnabled: boolean = true;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   onToggle: () => void = (): void => {};
 
   build() {
@@ -11,11 +13,11 @@ export struct CommentLikeButton {
       Row({ space: 4 }) {
         SymbolGlyph(this.state.liked ? $r('sys.symbol.hand_thumbsup_fill') : $r('sys.symbol.hand_thumbsup'))
           .fontSize(16)
-          .fontColor([this.state.liked ? $r('app.color.brand_primary') : $r('app.color.secondary_text')])
+          .fontColor([this.state.liked ? this.resolvedThemeColor : $r('app.color.secondary_text')])
         Text(`${this.state.count}`)
           .id(`p3_comments_like_count_${this.state.id}`)
           .fontSize(12)
-          .fontColor(this.state.liked ? $r('app.color.brand_primary') : $r('app.color.secondary_text'))
+          .fontColor(this.state.liked ? this.resolvedThemeColor : $r('app.color.secondary_text'))
       }
     }
     .id(`p3_comments_like_button_${this.state.id}`)

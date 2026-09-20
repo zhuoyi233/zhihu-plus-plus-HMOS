@@ -1,4 +1,6 @@
 import {
+  onThemeColor,
+  DEFAULT_THEME_COLOR,
   defaultPhoneLoginDeviceInfo,
   PhoneDigitsResultKind,
   PhoneLoginError,
@@ -31,6 +33,7 @@ function friendlyPhoneLoginMessage(raw: string, fallback: string): string {
 export struct PhoneLoginPage {
   onCookiesCaptured: (cookies: Array<SessionCookie>) => void = (): void => {
   };
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   @State private phone: string = '';
   @State private digits: string = '';
   @State private captchaInput: string = '';
@@ -102,14 +105,16 @@ export struct PhoneLoginPage {
               .id('p3_phone_captcha_refresh')
               .layoutWeight(1)
               .fontSize($r('app.float.p1_body_font_size'))
-              .fontColor($r('app.color.brand_primary'))
+              .fontColor(this.resolvedThemeColor)
               .backgroundColor(Color.Transparent)
-              .border({ width: 1, color: $r('app.color.brand_primary'), radius: $r('app.float.p1_card_radius') })
+              .border({ width: 1, color: this.resolvedThemeColor, radius: $r('app.float.p1_card_radius') })
               .enabled(!this.isSendingDigits)
               .onClick((): void => {
                 this.refreshCaptchaImage();
               })
             Button('验证并发送')
+              .backgroundColor(this.resolvedThemeColor)
+              .fontColor(onThemeColor(this.resolvedThemeColor))
               .id('p3_phone_captcha_submit')
               .layoutWeight(1)
               .fontSize($r('app.float.p1_body_font_size'))
@@ -151,6 +156,8 @@ export struct PhoneLoginPage {
         .width(112)
         .height(40)
         .padding({ left: 8, right: 8 })
+        .fontColor(onThemeColor(this.resolvedThemeColor))
+        .backgroundColor(this.resolvedThemeColor)
         .enabled(this.canSendDigits())
         .onClick((): void => {
           this.sendDigits();
@@ -164,7 +171,7 @@ export struct PhoneLoginPage {
         Checkbox()
           .id('p3_phone_agreement')
           .select(this.agreementChecked)
-          .selectedColor($r('app.color.brand_primary'))
+          .selectedColor(this.resolvedThemeColor)
           .onChange((checked: boolean): void => {
             this.agreementChecked = checked;
           })
@@ -181,6 +188,8 @@ export struct PhoneLoginPage {
       })
 
       Button(this.isLoggingIn ? '正在登录…' : '登录')
+        .backgroundColor(this.resolvedThemeColor)
+        .fontColor(onThemeColor(this.resolvedThemeColor))
         .id('p3_phone_signin')
         .width('100%')
         .enabled(this.canSignIn())

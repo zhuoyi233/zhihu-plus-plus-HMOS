@@ -6,10 +6,12 @@ import {
   BlockingPreferencesGateway,
   BlockingRuleGateway,
   BlockingRuleKind,
+  DEFAULT_THEME_COLOR,
   defaultBlockingPreferences,
   MAX_BLOCKING_ID_LENGTH,
   MAX_BLOCKING_KEYWORD_LENGTH,
-  MAX_BLOCKING_NAME_LENGTH
+  MAX_BLOCKING_NAME_LENGTH,
+  onThemeColor
 } from 'data';
 import {
   BlockingRulesController,
@@ -45,6 +47,7 @@ export struct BlockingRulesPage {
   @State private backupInput: string = '';
   @State private exportedText: string = '';
   @State private backupStatus: string = '';
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: BlockingRulesController;
 
   aboutToAppear(): void {
@@ -96,7 +99,7 @@ export struct BlockingRulesPage {
             .id('p2_blocking_rules_loading')
             .width(40)
             .height(40)
-            .color($r('app.color.brand_primary'))
+            .color(this.resolvedThemeColor)
         } else {
           Text(this.viewState.message)
             .id('p2_blocking_rules_status')
@@ -124,7 +127,7 @@ export struct BlockingRulesPage {
         .height(56)
         .padding(0)
         .borderRadius(28)
-        .backgroundColor($r('app.color.brand_primary'))
+        .backgroundColor(this.resolvedThemeColor)
         .margin({
           right: $r('app.float.p1_page_padding'),
           bottom: $r('app.float.p1_page_padding')
@@ -271,6 +274,8 @@ export struct BlockingRulesPage {
       }
       .width('100%')
       Button('导入或导出屏蔽规则')
+        .backgroundColor($r('app.color.control_background'))
+        .fontColor($r('app.color.primary_text'))
         .id('p3_blocking_backup_actions')
         .width('100%')
         .fontSize($r('app.float.p1_body_font_size'))
@@ -397,12 +402,16 @@ export struct BlockingRulesPage {
             .fontSize($r('app.float.p1_body_font_size'))
             .layoutWeight(1)
           Button('−')
+            .backgroundColor($r('app.color.control_background'))
+            .fontColor($r('app.color.primary_text'))
             .id('p2_blocking_topic_threshold_decrease')
             .enabled(!this.viewState.busy && this.viewState.preferences.topicBlockingThreshold > 1)
             .onClick((): void => this.changeTopicThreshold(-1))
           Text(`${this.viewState.preferences.topicBlockingThreshold}`)
             .fontSize($r('app.float.p1_body_font_size'))
           Button('+')
+            .backgroundColor($r('app.color.control_background'))
+            .fontColor($r('app.color.primary_text'))
             .id('p2_blocking_topic_threshold_increase')
             .enabled(!this.viewState.busy && this.viewState.preferences.topicBlockingThreshold < 100)
             .onClick((): void => this.changeTopicThreshold(1))
@@ -425,6 +434,7 @@ export struct BlockingRulesPage {
         .layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: enabled })
         .id(id)
+        .selectedColor(this.resolvedThemeColor)
         .enabled(!this.viewState.busy)
         .onChange(onChange)
     }
@@ -449,7 +459,7 @@ export struct BlockingRulesPage {
       .layoutWeight(1)
       .enabled(!this.viewState.busy)
       .backgroundColor(this.viewState.selectedKind === kind ?
-        $r('app.color.brand_primary') : $r('app.color.card_background'))
+        this.resolvedThemeColor : $r('app.color.card_background'))
       .fontColor(this.viewState.selectedKind === kind ? Color.White : $r('app.color.primary_text'))
       .onClick((): void => {
         this.confirmClear = false;
@@ -471,12 +481,14 @@ export struct BlockingRulesPage {
           Text('区分大小写').layoutWeight(1)
           Toggle({ type: ToggleType.Switch, isOn: this.caseSensitive })
             .id('p2_blocking_case_sensitive')
+            .selectedColor(this.resolvedThemeColor)
             .onChange((value: boolean): void => {
               this.caseSensitive = value;
             })
           Text('正则').margin({ left: $r('app.float.p1_spacing_medium') })
           Toggle({ type: ToggleType.Switch, isOn: this.regex })
             .id('p2_blocking_regex')
+            .selectedColor(this.resolvedThemeColor)
             .onChange((value: boolean): void => {
               this.regex = value;
             })
@@ -486,6 +498,8 @@ export struct BlockingRulesPage {
           .id('p2_blocking_add_keyword')
           .enabled(!this.viewState.busy && this.keywordInput.trim().length > 0)
           .width('100%')
+          .fontColor(onThemeColor(this.resolvedThemeColor))
+          .backgroundColor(this.resolvedThemeColor)
           .onClick((): void => {
             const keyword = this.keywordInput;
             this.keywordInput = '';
@@ -511,6 +525,8 @@ export struct BlockingRulesPage {
           .enabled(!this.viewState.busy && this.identifierInput.trim().length > 0 &&
             this.nameInput.trim().length > 0)
           .width('100%')
+          .fontColor(onThemeColor(this.resolvedThemeColor))
+          .backgroundColor(this.resolvedThemeColor)
           .onClick((): void => this.addNamedRule())
       }
     }
@@ -592,6 +608,8 @@ export struct BlockingRulesPage {
       }
       .layoutWeight(1)
       Button('删除')
+        .backgroundColor($r('app.color.control_background'))
+        .fontColor($r('app.color.primary_text'))
         .enabled(!this.viewState.busy)
         .onClick((): void => {
           this.controller?.deleteKeyword(rule.id);
@@ -615,6 +633,8 @@ export struct BlockingRulesPage {
       }
       .layoutWeight(1)
       Button('删除')
+        .backgroundColor($r('app.color.control_background'))
+        .fontColor($r('app.color.primary_text'))
         .enabled(!this.viewState.busy)
         .onClick(onDelete)
     }
@@ -632,11 +652,15 @@ export struct BlockingRulesPage {
         .width('100%')
       Row({ space: $r('app.float.p1_spacing_small') }) {
         Button('取消')
+          .backgroundColor($r('app.color.control_background'))
+          .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
           .onClick((): void => {
             this.confirmClear = false;
           })
         Button('确认清空')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p2_blocking_clear_confirm')
           .layoutWeight(1)
           .enabled(!this.viewState.busy)
@@ -669,11 +693,15 @@ export struct BlockingRulesPage {
         })
       Row({ space: $r('app.float.p1_spacing_small') }) {
         Button('导入')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p3_blocking_import')
           .layoutWeight(1)
           .enabled(!this.viewState.busy && this.backupInput.trim().length > 0)
           .onClick((): void => this.importBackup())
         Button('导出')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p3_blocking_export')
           .layoutWeight(1)
           .enabled(!this.viewState.busy)
@@ -706,12 +734,16 @@ export struct BlockingRulesPage {
         .height(160)
       Row({ space: $r('app.float.p1_spacing_small') }) {
         Button('关闭')
+          .backgroundColor($r('app.color.control_background'))
+          .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
           .onClick((): void => {
             this.exportedText = '';
             this.exportSheetShown = false;
           })
         Button('复制到剪贴板')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p3_blocking_export_copy')
           .layoutWeight(1)
           .onClick((): void => this.copyExportedText())

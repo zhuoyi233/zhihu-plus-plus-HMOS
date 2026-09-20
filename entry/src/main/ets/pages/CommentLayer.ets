@@ -3,8 +3,11 @@ import {
   CommentItem,
   CommentRepository,
   CommentSortOrder,
+  DEFAULT_THEME_COLOR,
   emojiStore,
-  LoginSessionGateway
+  LoginSessionGateway,
+  onThemeColor,
+  themeColorContainerColor
 } from 'data';
 import {
   CommentController,
@@ -45,6 +48,7 @@ export struct CommentPage {
   @StorageProp('emojiCatalogVersion') @Watch('onEmojiCatalogChanged') emojiCatalogVersion: number = 0;
   @StorageProp('commentPageBackTick') @Watch('onCommentPageBack') commentPageBackTick: number = 0;
   @StorageProp('statusBarHeight') private statusBarHeightVp: number = 0;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   @State private emojiTick: number = 0;
   @State private showEmojiPicker: boolean = false;
   @State private pickerColumns: number = 7;
@@ -176,12 +180,12 @@ export struct CommentPage {
     Button(label, { type: ButtonType.ROUNDED_RECTANGLE })
       .id(testId)
       .fontSize($r('app.float.p1_secondary_font_size'))
-      .fontColor(this.sortOrder === order ? $r('app.color.brand_primary') : $r('app.color.secondary_text'))
+      .fontColor(this.sortOrder === order ? this.resolvedThemeColor : $r('app.color.secondary_text'))
       .fontWeight(this.sortOrder === order ? FontWeight.Medium : FontWeight.Normal)
       .height(32)
       .padding({ left: 16, right: 16 })
       .backgroundColor(this.sortOrder === order
-        ? $r('app.color.brand_primary_container') : $r('app.color.control_background'))
+        ? themeColorContainerColor(this.resolvedThemeColor) : $r('app.color.control_background'))
       .onClick((): void => {
         this.controller?.changeSortOrder(order);
       })
@@ -203,11 +207,15 @@ export struct CommentPage {
               .layoutWeight(1)
             if (this.requiresLogin) {
               Button('去登录')
+                .backgroundColor(this.resolvedThemeColor)
+                .fontColor(onThemeColor(this.resolvedThemeColor))
                 .id('p3_comments_login')
                 .fontSize($r('app.float.p1_secondary_font_size'))
                 .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
             } else {
               Button('重试')
+                .backgroundColor(this.resolvedThemeColor)
+                .fontColor(onThemeColor(this.resolvedThemeColor))
                 .id('p3_comments_retry_more')
                 .fontSize($r('app.float.p1_secondary_font_size'))
                 .onClick(() => this.controller?.retry())
@@ -247,7 +255,7 @@ export struct CommentPage {
                     .id('p3_comments_children_load_more')
                     .width(40)
                     .height(40)
-                    .color($r('app.color.brand_primary'))
+                    .color(this.resolvedThemeColor)
                 }
                 .width('100%')
                 .padding({ top: 12, bottom: 12 })
@@ -281,7 +289,7 @@ export struct CommentPage {
                     .id('p3_comments_root_load_more')
                     .width(40)
                     .height(40)
-                    .color($r('app.color.brand_primary'))
+                    .color(this.resolvedThemeColor)
                 }
                 .width('100%')
                 .padding({ top: 12, bottom: 12 })
@@ -310,7 +318,7 @@ export struct CommentPage {
           .id('p3_comments_loading_progress')
           .width(40)
           .height(40)
-          .color($r('app.color.brand_primary'))
+          .color(this.resolvedThemeColor)
       }
       Text(message)
         .id('p3_comments_status')
@@ -321,11 +329,15 @@ export struct CommentPage {
       if (retry) {
         if (this.requiresLogin) {
           Button('去登录')
+            .backgroundColor(this.resolvedThemeColor)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
             .id('p3_comments_status_login')
             .fontSize($r('app.float.p1_body_font_size'))
             .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
         } else {
           Button('重新加载')
+            .backgroundColor(this.resolvedThemeColor)
+            .fontColor(onThemeColor(this.resolvedThemeColor))
             .id('p3_comments_status_retry')
             .fontSize($r('app.float.p1_body_font_size'))
             .onClick(() => this.controller?.retry())
@@ -408,11 +420,11 @@ export struct CommentPage {
     Stack({ alignContent: Alignment.Center }) {
       Text(authorInitial(comment.author.name))
         .fontSize(16)
-        .fontColor($r('app.color.on_brand'))
+        .fontColor(onThemeColor(this.resolvedThemeColor))
         .textAlign(TextAlign.Center)
         .width(36)
         .height(36)
-        .backgroundColor($r('app.color.brand_primary'))
+        .backgroundColor(this.resolvedThemeColor)
       if (commentAvatarUrl(comment.author.avatarUrl).length > 0) {
         Image(commentAvatarUrl(comment.author.avatarUrl))
           .id(`p3_comments_avatar_${comment.id}`)
@@ -700,6 +712,8 @@ export struct CommentPage {
             .layoutWeight(1)
           if (this.actionRequiresLogin) {
             Button('去登录')
+              .backgroundColor(this.resolvedThemeColor)
+              .fontColor(onThemeColor(this.resolvedThemeColor))
               .id('p3_comments_action_login')
               .fontSize($r('app.float.p1_secondary_font_size'))
               .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
@@ -714,7 +728,7 @@ export struct CommentPage {
             ? $r('sys.symbol.keyboard') : $r('sys.symbol.face_smiling'))
             .fontSize(22)
             .fontColor([this.showEmojiPicker
-              ? $r('app.color.brand_primary') : $r('app.color.secondary_text')])
+              ? this.resolvedThemeColor : $r('app.color.secondary_text')])
         }
           .id('p3_comments_emoji_button')
           .width(40)
@@ -765,7 +779,7 @@ export struct CommentPage {
             SymbolGlyph($r('sys.symbol.paperplane'))
               .fontSize(24)
               .fontColor([this.currentDraft().trim().length > 0
-                ? $r('app.color.brand_primary') : $r('app.color.secondary_text')])
+                ? this.resolvedThemeColor : $r('app.color.secondary_text')])
           }
         }
           .id('p3_comments_send_button')

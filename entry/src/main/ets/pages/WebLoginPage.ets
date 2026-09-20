@@ -1,5 +1,5 @@
 import { webview } from '@kit.ArkWeb';
-import { parseWebCookieHeader, SessionCookie } from 'data';
+import { onThemeColor, DEFAULT_THEME_COLOR, parseWebCookieHeader, SessionCookie } from 'data';
 
 const WEB_LOGIN_HOSTS: Array<string> = ['www.zhihu.com', 'zhuanlan.zhihu.com'];
 
@@ -43,6 +43,7 @@ export struct WebLoginPage {
   };
   onExternalUrl: (url: string) => void = (_url: string): void => {
   };
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   @State private ready: boolean = false;
   @State private loadFailed: boolean = false;
   @State private status: string = '正在打开知乎登录页…';
@@ -107,7 +108,7 @@ export struct WebLoginPage {
             LoadingProgress()
               .width(40)
               .height(40)
-              .color($r('app.color.brand_primary'))
+              .color(this.resolvedThemeColor)
           }
           Text(this.status)
             .fontSize($r('app.float.p1_body_font_size'))
@@ -116,6 +117,8 @@ export struct WebLoginPage {
             .width('100%')
           if (this.loadFailed) {
             Button('重试')
+              .backgroundColor(this.resolvedThemeColor)
+              .fontColor(onThemeColor(this.resolvedThemeColor))
               .id('p3_web_login_retry')
               .onClick((): void => {
                 this.loadFailed = false;

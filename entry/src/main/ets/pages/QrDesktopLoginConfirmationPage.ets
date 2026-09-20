@@ -90,6 +90,8 @@ export struct QrDesktopLoginConfirmationPage {
       }
 
       Button('取消电脑登录')
+        .backgroundColor($r('app.color.control_background'))
+        .fontColor($r('app.color.primary_text'))
         .id('p4_qr_desktop_login_confirmation_cancel')
         .margin({ left: $r('app.float.p1_spacing_medium'), top: $r('app.float.p1_spacing_medium') })
         .opacity(0.9)

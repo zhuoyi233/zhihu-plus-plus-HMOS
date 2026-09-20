@@ -1,5 +1,12 @@
 import { ComponentContent } from '@kit.ArkUI';
-import { LoginSessionGateway, OnlineHistoryRepository, ReadHistoryGateway, SessionStatus } from 'data';
+import {
+  onThemeColor,
+  DEFAULT_THEME_COLOR,
+  LoginSessionGateway,
+  OnlineHistoryRepository,
+  ReadHistoryGateway,
+  SessionStatus
+} from 'data';
 import { FLOATING_TITLE_BAR_OFFSET, FeedPullDownIndicatorOptions, feedPullDownIndicator } from './AppPageChrome';
 import {
   ReadHistoryController,
@@ -37,6 +44,7 @@ export struct ReadHistoryPage {
   // @StorageProp 键用字面量（装饰器要求编译期常量），值与 HistoryTitleBar.ets 导出常量一一对应。
   @StorageProp('readHistoryOpenLocalTick') @Watch('onOpenLocalTick') private openLocalTick: number = 0;
   @StorageProp('readHistoryClearTick') @Watch('onClearTick') private clearTick: number = 0;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: ReadHistoryController;
   // 下拉刷新自定义加载圆圈（refreshingContent 需 ComponentContent，随页面销毁释放）
   private refreshContent?: ComponentContent<FeedPullDownIndicatorOptions> = undefined;
@@ -109,7 +117,7 @@ export struct ReadHistoryPage {
             .id('p2_read_history_loading')
             .width(40)
             .height(40)
-            .color($r('app.color.brand_primary'))
+            .color(this.resolvedThemeColor)
         } else if (this.viewState.items.length === 0) {
           Column({ space: $r('app.float.p1_spacing_medium') }) {
             Text(this.viewState.message)
@@ -120,6 +128,8 @@ export struct ReadHistoryPage {
               .width('100%')
             if (this.viewState.phase === ReadHistoryPhase.ERROR) {
               Button('重新加载')
+                .backgroundColor(this.resolvedThemeColor)
+                .fontColor(onThemeColor(this.resolvedThemeColor))
                 .id('p2_read_history_retry')
                 .enabled(!this.viewState.busy)
                 .onClick((): void => {
@@ -151,7 +161,7 @@ export struct ReadHistoryPage {
                     .id('p3_read_history_load_more')
                     .width(40)
                     .height(40)
-                    .color($r('app.color.brand_primary'))
+                    .color(this.resolvedThemeColor)
                 }
                 .width('100%')
                 .padding({ top: 12, bottom: 12 })
@@ -295,6 +305,8 @@ export struct ReadHistoryPage {
         .fontColor($r('app.color.secondary_text'))
         .layoutWeight(1)
       Button('去登录')
+        .backgroundColor(this.resolvedThemeColor)
+        .fontColor(onThemeColor(this.resolvedThemeColor))
         .id('p3_read_history_go_login')
         .fontSize($r('app.float.p1_secondary_font_size'))
         .onClick((): void => this.onGoLogin())
@@ -319,12 +331,16 @@ export struct ReadHistoryPage {
         .width('100%')
       Row({ space: $r('app.float.p1_spacing_small') }) {
         Button('我再想想')
+          .backgroundColor($r('app.color.control_background'))
+          .fontColor($r('app.color.primary_text'))
           .id('p3_read_history_clear_cancel')
           .layoutWeight(1)
           .onClick((): void => {
             this.confirmClear = false;
           })
         Button('确认')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
           .id('p2_read_history_clear_confirm')
           .layoutWeight(1)
           .enabled(!this.viewState.busy)

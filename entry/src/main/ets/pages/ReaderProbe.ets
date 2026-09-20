@@ -310,6 +310,8 @@ export struct ReaderProbe {
       Column() {
         Row({ space: 12 }) {
           Button('返回')
+            .backgroundColor($r('app.color.control_background'))
+            .fontColor($r('app.color.primary_text'))
             .id('reader_back')
             .onClick(() => this.onBack())
 
@@ -360,6 +362,8 @@ export struct ReaderProbe {
             .height('100%')
             .objectFit(ImageFit.Contain)
           Button('关闭预览')
+            .backgroundColor($r('app.color.control_background'))
+            .fontColor($r('app.color.primary_text'))
             .id('reader_image_preview_close')
             .margin(20)
             .onClick(() => {

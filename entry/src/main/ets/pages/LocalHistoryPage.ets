@@ -1,4 +1,4 @@
-import { ReadHistoryGateway } from 'data';
+import { onThemeColor, DEFAULT_THEME_COLOR, ReadHistoryGateway } from 'data';
 import { FLOATING_TITLE_BAR_OFFSET, feedPullDownIndicator, FeedPullDownIndicatorOptions } from './AppPageChrome';
 import { ComponentContent } from '@kit.ArkUI';
 import {
@@ -26,6 +26,7 @@ export struct LocalHistoryPage {
     canLoadMore: false
   };
   @State private refreshing: boolean = false;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: LocalHistoryController;
   private refreshContent?: ComponentContent<FeedPullDownIndicatorOptions> = undefined;
 
@@ -78,7 +79,7 @@ export struct LocalHistoryPage {
             .id('p2_local_history_loading')
             .width(40)
             .height(40)
-            .color($r('app.color.brand_primary'))
+            .color(this.resolvedThemeColor)
         } else if (this.viewState.items.length === 0) {
           Column({ space: $r('app.float.p1_spacing_medium') }) {
             Text(this.viewState.message)
@@ -89,6 +90,8 @@ export struct LocalHistoryPage {
               .width('100%')
             if (this.viewState.phase === ReadHistoryPhase.ERROR) {
               Button('重新读取')
+                .backgroundColor(this.resolvedThemeColor)
+                .fontColor(onThemeColor(this.resolvedThemeColor))
                 .id('p2_local_history_retry')
                 .enabled(!this.viewState.busy)
                 .onClick((): void => {

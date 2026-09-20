@@ -1,8 +1,10 @@
 import { common } from '@kit.AbilityKit';
-import { DatabaseProbe, DatabaseProbeResult } from 'data';
+import { DEFAULT_THEME_COLOR, onThemeColor, DatabaseProbe, DatabaseProbeResult } from 'data';
 
 @Component
 export struct DatabaseProbePage {
+  /** 当前生效主题色（P1Shell 广播），驱动强调色控件。 */
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   onBack: () => void = () => {};
   @State private status: string = '等待验证建库、升级和失败回滚';
   @State private running: boolean = false;
@@ -10,6 +12,8 @@ export struct DatabaseProbePage {
   build() {
     Column({ space: 20 }) {
       Button('返回')
+        .backgroundColor($r('app.color.control_background'))
+        .fontColor($r('app.color.primary_text'))
         .id('database_back')
         .onClick(() => this.onBack())
 
@@ -32,6 +36,8 @@ export struct DatabaseProbePage {
         .textAlign(TextAlign.Center)
 
       Button('运行数据库迁移验证')
+        .backgroundColor(this.resolvedThemeColor)
+        .fontColor(onThemeColor(this.resolvedThemeColor))
         .id('run_database_probe')
         .enabled(!this.running)
         .onClick(() => this.runProbe())

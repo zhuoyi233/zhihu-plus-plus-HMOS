@@ -13,7 +13,7 @@ import {
   ShareOutcome,
   SharePayloadKind
 } from '../platform/ShareContracts';
-import { getAppSessionOwner, getGuestDeviceCookieManager, toCookieHeader } from 'data';
+import { DEFAULT_THEME_COLOR, getAppSessionOwner, getGuestDeviceCookieManager, toCookieHeader } from 'data';
 import {
   blockFormulaDisplayAspectRatio,
   clearFormulaByteCache,
@@ -651,6 +651,7 @@ export struct NativeContentDocument {
   @StorageProp('pageTurnPercent') private pageTurnPercent: number = 90;
   @StorageProp('showPageTurnGuide') private showPageTurnGuide: boolean = false;
   @StorageProp('showContentEndMarker') private showContentEndMarker: boolean = false;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   /**
    * 主题切换 tick（EntryAbility 系统深浅色联动 / 设置页切换主题时递增）：
    * readerBlock 里按其奇偶用 if/else 分支翻转强制重建公式组件。
@@ -732,10 +733,10 @@ export struct NativeContentDocument {
         Row({ space: 4 }) {
           SymbolGlyph(this.detailExpanded ? $r('sys.symbol.chevron_up') : $r('sys.symbol.chevron_down'))
             .fontSize(16)
-            .fontColor([$r('app.color.brand_primary')])
+            .fontColor([this.resolvedThemeColor])
           Text(this.detailExpanded ? '收起详情' : '展开详情')
             .fontSize($r('app.float.p1_secondary_font_size'))
-            .fontColor($r('app.color.brand_primary'))
+            .fontColor(this.resolvedThemeColor)
         }
         .padding({ left: 16, right: 16 }).height(40)
         .borderRadius(20)
@@ -926,7 +927,7 @@ export struct NativeContentDocument {
       if (this.pageTurnGuideVisible && this.showPageTurnGuide) {
         Divider()
           .id('p3_page_turn_guide')
-          .color($r('app.color.brand_primary'))
+          .color(this.resolvedThemeColor)
           .strokeWidth(1)
           .opacity(0.55)
           .width('100%')
