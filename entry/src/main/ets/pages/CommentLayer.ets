@@ -240,15 +240,17 @@ export struct CommentPage {
                   this.commentCard(comment, false)
                 }
               }, (comment: CommentItem): string => `child_${comment.id}`)
-              if (this.loadingMore || this.canLoadMore) {
+              if (this.loadingMore) {
                 ListItem() {
-                  Button(this.loadingMore ? '正在加载更多…' : '加载更多')
+                  // 上拉加载更多：与首页一致的圆形加载动画（onReachEnd 自动触发）
+                  LoadingProgress()
                     .id('p3_comments_children_load_more')
-                    .width('100%')
-                    .fontSize($r('app.float.p1_secondary_font_size'))
-                    .enabled(!this.loadingMore && !this.submitting && !this.deleting)
-                    .onClick(() => this.controller?.loadMore())
+                    .width(40)
+                    .height(40)
+                    .color($r('app.color.brand_primary'))
                 }
+                .width('100%')
+                .padding({ top: 12, bottom: 12 })
               }
             }
             .id('p3_comments_children_list')
@@ -272,15 +274,17 @@ export struct CommentPage {
                   this.commentCard(comment, true)
                 }
               }, (comment: CommentItem): string => `root_${comment.id}`)
-              if (this.loadingMore || this.canLoadMore) {
+              if (this.loadingMore) {
                 ListItem() {
-                  Button(this.loadingMore ? '正在加载更多…' : '加载更多')
+                  // 上拉加载更多：与首页一致的圆形加载动画（onReachEnd 自动触发）
+                  LoadingProgress()
                     .id('p3_comments_root_load_more')
-                    .width('100%')
-                    .fontSize($r('app.float.p1_secondary_font_size'))
-                    .enabled(!this.loadingMore && !this.submitting && !this.deleting)
-                    .onClick(() => this.controller?.loadMore())
+                    .width(40)
+                    .height(40)
+                    .color($r('app.color.brand_primary'))
                 }
+                .width('100%')
+                .padding({ top: 12, bottom: 12 })
               }
             }
             .id('p3_comments_root_list')
