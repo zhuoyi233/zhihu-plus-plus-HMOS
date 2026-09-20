@@ -10,12 +10,15 @@ import {
   decodeContentBlockSpacing,
   decodeContentFontSize,
   decodeContentLineHeight,
+  DEFAULT_THEME_COLOR,
   FeedCardStyle,
   ExperiencePreferences,
   normalizeBottomBarItems,
   normalizeExperiencePreferences,
   normalizeAppearancePreferences,
   normalizeReaderTypography,
+  normalizeThemeColor,
+  onThemeColor,
   ReaderTypography,
   ShareActionMode
 } from 'data';
@@ -42,6 +45,10 @@ interface SliderSettingOptions {
 export struct AppearanceSettingsPage {
   @Prop themeMode: AppThemeMode = AppThemeMode.SYSTEM;
   onThemeModeChange: (mode: AppThemeMode) => void = (_mode: AppThemeMode): void => {};
+  onOpenThemeColorSettings: () => void = (): void => {};
+  /** 主题色 seed 与当前生效色（P1Shell 启动时广播），驱动主题块入口行与强调色。 */
+  @StorageProp('themeColor') private themeColorSeed: string = DEFAULT_THEME_COLOR;
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   @StorageProp('contentFontSize') private contentFontSize: number = 100;
   @StorageProp('contentLineHeight') private contentLineHeight: number = 160;
   @StorageProp('contentBlockSpacing') private contentBlockSpacing: number = 100;
@@ -97,6 +104,8 @@ export struct AppearanceSettingsPage {
         this.sectionTitle('主题')
         Column() {
           this.themeModeSetting()
+          Divider().color($r('app.color.divider_color'))
+          this.themeColorSetting()
           Divider().color($r('app.color.divider_color'))
           this.sliderSetting({
             title: '悬浮按钮透明度',
@@ -352,9 +361,44 @@ export struct AppearanceSettingsPage {
       .id(testId)
       .layoutWeight(1)
       .fontSize($r('app.float.p1_secondary_font_size'))
-      .fontColor(this.themeMode === mode ? $r('app.color.on_brand') : $r('app.color.primary_text'))
-      .backgroundColor(this.themeMode === mode ? $r('app.color.brand_primary') : $r('app.color.control_background'))
+      .fontColor(this.themeMode === mode ? onThemeColor(this.resolvedThemeColor) : $r('app.color.primary_text'))
+      .backgroundColor(this.themeMode === mode ? this.resolvedThemeColor : $r('app.color.control_background'))
       .onClick((): void => this.onThemeModeChange(mode))
+  }
+
+  /** 主题颜色入口行：当前色圆点 + 名称 + hex，点击进入主题颜色配置页。 */
+  @Builder
+  private themeColorSetting() {
+    Row({ space: $r('app.float.p1_spacing_medium') }) {
+      Column({ space: $r('app.float.p1_spacing_xsmall') }) {
+        Text('主题颜色')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor($r('app.color.primary_text'))
+          .width('100%')
+        Text('信息流、正文与按钮等强调元素使用的颜色')
+          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .width('100%')
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+      Text(normalizeThemeColor(this.themeColorSeed))
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+      Row()
+        .width(24)
+        .height(24)
+        .borderRadius(12)
+        .backgroundColor(this.resolvedThemeColor)
+      SymbolGlyph($r('sys.symbol.chevron_right'))
+        .fontSize(16)
+        .fontColor([$r('app.color.secondary_text')])
+    }
+    .id('p3_appearance_theme_color')
+    .width('100%')
+    .padding($r('app.float.p1_card_padding'))
+    .alignItems(VerticalAlign.Center)
+    .onClick((): void => this.onOpenThemeColorSettings())
   }
 
   @Builder
@@ -419,7 +463,7 @@ export struct AppearanceSettingsPage {
         Row()
           .width(`${this.sliderProgressPercent($$.value, $$.min, $$.max)}%`)
           .height('100%')
-          .backgroundColor($r('app.color.brand_primary'))
+          .backgroundColor(this.resolvedThemeColor)
         Row()
           .width(`${100 - this.sliderProgressPercent($$.value, $$.min, $$.max)}%`)
           .height('100%')
@@ -442,7 +486,7 @@ export struct AppearanceSettingsPage {
             .width($r('app.float.p3_settings_slider_thumb_width'))
             .height($r('app.float.p3_settings_slider_thumb_height'))
             .borderRadius($r('app.float.p3_settings_slider_thumb_radius'))
-            .backgroundColor($r('app.color.brand_primary'))
+            .backgroundColor(this.resolvedThemeColor)
         }
         .width($r('app.float.p3_settings_slider_thumb_gap_width'))
         .height($r('app.float.p3_settings_slider_height'))
@@ -496,6 +540,7 @@ export struct AppearanceSettingsPage {
       .layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: checked })
         .id(testId)
+        .selectedColor(this.resolvedThemeColor)
         .onChange((value: boolean): void => onChange(value))
     }
     .width('100%')
@@ -542,7 +587,7 @@ export struct AppearanceSettingsPage {
         SymbolGlyph(this.bottomBarKeys().includes(key) ? $r('sys.symbol.checkmark_circle_fill')
           : $r('sys.symbol.circle'))
             .fontSize(22)
-            .fontColor([this.bottomBarKeys().includes(key) ? $r('app.color.brand_primary')
+            .fontColor([this.bottomBarKeys().includes(key) ? this.resolvedThemeColor
               : $r('app.color.secondary_text')])
             .id(`p3_appearance_bottom_item_${key}`)
         Text(this.bottomBarItemLabel(key))

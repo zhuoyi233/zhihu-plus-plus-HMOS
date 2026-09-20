@@ -1,8 +1,8 @@
 import { AbilityConstant, Configuration, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { display, window } from '@kit.ArkUI';
 import { resourceManager } from '@kit.LocalizationKit';
-import { AppSessionOwner, AppThemeMode, closeAppDatabase, formulaForegroundColorForColorMode,
-  getAppDatabase, getAppSessionOwner } from 'data';
+import { AppSessionOwner, AppThemeMode, closeAppDatabase, DEFAULT_THEME_COLOR, formulaForegroundColorForColorMode,
+  getAppDatabase, getAppSessionOwner, normalizeThemeColor, resolveThemeColorForDark } from 'data';
 import { clearAbilityContext, setAbilityContext } from './AbilityContextHolder';
 import {
   AppLogEvent,
@@ -100,6 +100,10 @@ export default class EntryAbility extends UIAbility {
       return;
     }
     AppStorage.setOrCreate('formulaForegroundColor', formulaForegroundColorForColorMode(isDark));
+    // 跟随系统时，系统深浅色切换联动主题色生效值（seed 不变，仅重算解析色）。
+    const themeColorSeed = normalizeThemeColor(AppStorage.get<string>('themeColor') ?? DEFAULT_THEME_COLOR);
+    AppStorage.setOrCreate('resolvedThemeColor',
+      isDark ? resolveThemeColorForDark(themeColorSeed) : themeColorSeed);
     AppStorage.setOrCreate('appearanceThemeTick',
       (AppStorage.get<number>('appearanceThemeTick') ?? 0) + 1);
   }

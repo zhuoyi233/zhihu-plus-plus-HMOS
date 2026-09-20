@@ -5,16 +5,21 @@ import { AnswerTitleBar } from './AnswerTitleBar';
 import { ArticleTitleBar } from './ArticleTitleBar';
 import { NotificationTitleBar } from './NotificationTitleBar';
 import {
+  onThemeColor,
   AppearancePreferences,
   AnswerDoubleTapAction,
   AppPreferencesStore,
   BlockedFeedHistoryStore,
   ContentFilterRuntimeStore,
   AppThemeMode,
+  DEFAULT_THEME_COLOR,
   FORMULA_FOREGROUND_DARK,
   FORMULA_FOREGROUND_LIGHT,
   ExperiencePreferences,
   normalizeBottomBarItems,
+  normalizeThemeColor,
+  resolveThemeColorForDark,
+  themeColorContainerColor,
   AppUpdateCheckResult,
   AppUpdateCheckStatus,
   AppUpdateClient,
@@ -57,6 +62,7 @@ import { DividerShowType, hdsMaterial, HdsNavDestination, HdsNavigation, HdsNavi
 import { getImmersiveTitleBarStyle } from '../common/style/NavStyles';
 import { ZhihuHdsTabs } from './components/ZhihuHdsTabs';
 import { AppearanceSettingsPage } from './AppearanceSettingsPage';
+import { ThemeColorSettingsPage } from './ThemeColorSettingsPage';
 import { ContentFilterSettingsPage } from './ContentFilterSettingsPage';
 import { IdentityManagementPage } from './IdentityManagementPage';
 import { ReadingSettingsPage } from './ReadingSettingsPage';
@@ -182,6 +188,11 @@ export struct P1Shell {
   @StorageProp('bottomBarItems') @Watch('onBottomBarItemsChanged') private bottomBarItems: string =
     'Home,Following,Hot,Daily,Settings';
   @StorageProp('tapToRefresh') private tapToRefresh: boolean = true;
+  /** 当前生效主题色（启动时广播，深浅色已解析），驱动全壳强调色。 */
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  /** 主题色 seed：设置页选择/拖动时写入，@Watch 重新解析生效色并广播（否则换色不生效）。 */
+  @StorageProp('themeColor') @Watch('onThemeColorSeedChanged') private themeColorSeed: string =
+    DEFAULT_THEME_COLOR;
   private startDestinationApplied: boolean = false;
   private readonly tabsController: HdsTabsController = new HdsTabsController();
   @Provide('p1PathStack') pathStack: NavPathStack = new NavPathStack();
@@ -197,8 +208,12 @@ export struct P1Shell {
     AppStorage.setOrCreate('appThemeMode', AppThemeMode.SYSTEM);
     AppStorage.setOrCreate('formulaForegroundColor', this.resolveFormulaForegroundColor(AppThemeMode.SYSTEM));
     AppStorage.setOrCreate('appearanceThemeTick', AppStorage.get<number>('appearanceThemeTick') ?? 0);
+    // 主题色恢复前先广播默认 seed 与按当前模式解析的生效色，保证组件挂载即有值。
+    AppStorage.setOrCreate('themeColor', DEFAULT_THEME_COLOR);
+    AppStorage.setOrCreate('resolvedThemeColor', this.resolveThemeColorForMode(AppThemeMode.SYSTEM, DEFAULT_THEME_COLOR));
     this.sessionSnapshot = this.session?.getState();
     this.restoreThemeMode();
+    void this.restoreThemeColor();
     void this.restoreAnswerDoubleTapAction();
     void this.restoreReaderTypography();
     void this.restoreAppearancePreferences();
@@ -355,10 +370,18 @@ export struct P1Shell {
           themeMode: this.themeMode,
           onThemeModeChange: (mode: AppThemeMode): void => {
             void this.selectThemeMode(mode);
-          }
+          },
+          onOpenThemeColorSettings: (): void => this.navigate({ name: P1DestinationName.THEME_COLOR_SETTINGS })
         });
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '外观与阅读体验' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.THEME_COLOR_SETTINGS) {
+      HdsNavDestination() {
+        ThemeColorSettingsPage();
+      }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '主题颜色' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.IDENTITY_MANAGEMENT) {
@@ -967,6 +990,8 @@ export struct P1Shell {
           .fontSize($r('app.float.p1_heading_font_size'))
           .fontColor($r('app.color.primary_text'))
         Button('去登录').onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
       }
       .width('100%').height('100%').justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
     }
@@ -994,10 +1019,10 @@ export struct P1Shell {
       .fontColor([$r('app.color.secondary_text')]);
     const selected: SymbolGlyphModifier = new SymbolGlyphModifier(icon)
       .renderingStrategy(SymbolRenderingStrategy.SINGLE)
-      .fontColor([$r('app.color.zhihu_blue')]);
+      .fontColor([this.resolvedThemeColor]);
     return BottomTabBarStyle.of({ normal, selected }, this.tabLabel(tab))
       .labelStyle({
-        selectedColor: $r('app.color.zhihu_blue'),
+        selectedColor: this.resolvedThemeColor,
         unselectedColor: $r('app.color.secondary_text')
       });
   }
@@ -1273,7 +1298,7 @@ export struct P1Shell {
         .width(this.followingTitleSelectedIndex === index ? 24 : 0)
         .height(3)
         .borderRadius(1.5)
-        .backgroundColor($r('app.color.zhihu_blue'))
+        .backgroundColor(this.resolvedThemeColor)
         .animation({ duration: 250, curve: Curve.EaseInOut })
     }
       .id(`p2_following_titlebar_tab_${index}`)
@@ -1532,10 +1557,10 @@ export struct P1Shell {
                 .width(56)
                 .height(56)
                 .borderRadius(28)
-                .backgroundColor($r('app.color.brand_primary_container'))
+                .backgroundColor(themeColorContainerColor(this.resolvedThemeColor))
                 .fontSize($r('app.float.p1_heading_font_size'))
                 .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.brand_primary'))
+                .fontColor(this.resolvedThemeColor)
                 .textAlign(TextAlign.Center)
               // 有头像地址时叠加真实头像；加载失败露出首字占位。
               if (this.accountAvatarUrl().length > 0) {
@@ -1569,13 +1594,13 @@ export struct P1Shell {
         Button({ type: ButtonType.Circle, stateEffect: true }) {
           SymbolGlyph($r('sys.symbol.barcode_viewfinder'))
             .fontSize(22)
-            .fontColor([$r('app.color.brand_primary')])
+            .fontColor([this.resolvedThemeColor])
         }
           .id('p4_account_scan_desktop_login')
           .width(44)
           .height(44)
           .padding(0)
-          .backgroundColor($r('app.color.brand_primary_container'))
+          .backgroundColor(themeColorContainerColor(this.resolvedThemeColor))
           .accessibilityText('扫描电脑端登录二维码')
           .onClick((): void => this.navigate({ name: P1DestinationName.QR_DESKTOP_LOGIN_SCAN }))
 
@@ -1610,7 +1635,7 @@ export struct P1Shell {
         Column({ space: $r('app.float.p1_spacing_xsmall') }) {
           SymbolGlyph($r('sys.symbol.bookmark'))
             .fontSize(20)
-            .fontColor([$r('app.color.brand_primary')])
+            .fontColor([this.resolvedThemeColor])
           Text('收藏夹')
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.primary_text'))
@@ -1630,7 +1655,7 @@ export struct P1Shell {
         Column({ space: $r('app.float.p1_spacing_xsmall') }) {
           SymbolGlyph($r('sys.symbol.arrow_counterclockwise_clock'))
             .fontSize(20)
-            .fontColor([$r('app.color.brand_primary')])
+            .fontColor([this.resolvedThemeColor])
           Text('历史')
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.primary_text'))
@@ -1650,7 +1675,7 @@ export struct P1Shell {
         Column({ space: $r('app.float.p1_spacing_xsmall') }) {
           SymbolGlyph($r('sys.symbol.bell'))
             .fontSize(20)
-            .fontColor([$r('app.color.brand_primary')])
+            .fontColor([this.resolvedThemeColor])
           Text('通知')
             .fontSize($r('app.float.p1_secondary_font_size'))
             .fontColor($r('app.color.primary_text'))
@@ -2676,11 +2701,64 @@ export struct P1Shell {
       // 广播当前主题模式：EntryAbility.onConfigurationUpdate 仅在跟随系统时联动公式换色。
       AppStorage.setOrCreate('appThemeMode', mode);
       AppStorage.setOrCreate('formulaForegroundColor', this.resolveFormulaForegroundColor(mode));
+      AppStorage.setOrCreate('resolvedThemeColor', this.resolveThemeColorForMode(mode, this.currentThemeColorSeed()));
       AppStorage.setOrCreate('appearanceThemeTick',
         (AppStorage.get<number>('appearanceThemeTick') ?? 0) + 1);
       return true;
     } catch (_error) {
       return false;
+    }
+  }
+
+  /** 设置页改动主题色 seed（选择预设/拖动色盘/亮度条）后重新解析生效色并广播。 */
+  private onThemeColorSeedChanged(): void {
+    if (!this.themeMounted) {
+      return;
+    }
+    AppStorage.setOrCreate('resolvedThemeColor',
+      this.resolveThemeColorForMode(this.themeMode, this.currentThemeColorSeed()));
+  }
+
+  private currentThemeColorSeed(): string {
+    return normalizeThemeColor(AppStorage.get<string>('themeColor') ?? DEFAULT_THEME_COLOR);
+  }
+
+  /** 解析主题色 seed 在指定模式下的生效色：深色提亮（对齐原深色品牌色观感），其余原样。 */
+  private resolveThemeColorForMode(mode: AppThemeMode, seed: string): string {
+    const normalized = normalizeThemeColor(seed);
+    if (mode === AppThemeMode.DARK) {
+      return resolveThemeColorForDark(normalized);
+    }
+    if (mode === AppThemeMode.LIGHT) {
+      return normalized;
+    }
+    const context = getAbilityContext();
+    if (context === undefined) {
+      return normalized;
+    }
+    try {
+      return context.resourceManager.getConfigurationSync().colorMode ===
+        resourceManager.ColorMode.DARK ? resolveThemeColorForDark(normalized) : normalized;
+    } catch (_error) {
+      return normalized;
+    }
+  }
+
+  private async restoreThemeColor(): Promise<void> {
+    const generation = this.themeOperationGuard.next();
+    try {
+      const context = this.getUIContext().getHostContext();
+      if (context === undefined) {
+        return;
+      }
+      const seed = await new AppPreferencesStore(context).loadThemeColor();
+      if (!this.themeMounted || !this.themeOperationGuard.isCurrent(generation)) {
+        return;
+      }
+      AppStorage.setOrCreate('themeColor', seed);
+      AppStorage.setOrCreate('resolvedThemeColor', this.resolveThemeColorForMode(this.themeMode, seed));
+    } catch (_error) {
+      // 读取失败保留启动时广播的默认主题色。
     }
   }
 

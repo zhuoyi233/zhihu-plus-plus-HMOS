@@ -29,9 +29,12 @@ import {
   normalizeSpeechPreferences,
   SpeechPreferences
 } from './SpeechPreferences';
+import { DEFAULT_THEME_COLOR, normalizeThemeColor } from './ThemeColors';
 
 const PREFERENCES_NAME = 'app_preferences';
 const THEME_MODE_KEY = 'theme_mode';
+// 主题色 seed（#RRGGBB），语义对齐上游 customThemeColor；深色模式生效色由 UI 层解析派生。
+const THEME_COLOR_KEY = 'themeColor';
 const KEYWORD_BLOCKING_KEY = 'enableKeywordBlocking';
 const USER_BLOCKING_KEY = 'enableUserBlocking';
 const TOPIC_BLOCKING_KEY = 'enableTopicBlocking';
@@ -601,6 +604,30 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
     return operation;
   }
 
+  async loadThemeColor(): Promise<string> {
+    await this.saveQueue;
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      const value = await store.get(THEME_COLOR_KEY, DEFAULT_THEME_COLOR);
+      return normalizeThemeColor(typeof value === 'string' ? value : undefined);
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('Theme color load', error));
+      }
+      throw new Error(appPreferencesFailureMessage('Theme color load', undefined));
+    }
+  }
+
+  saveThemeColor(value: string): Promise<void> {
+    const normalized = normalizeThemeColor(value);
+    const operation = this.saveQueue.then(
+      (): Promise<void> => this.writeThemeColor(normalized),
+      (): Promise<void> => this.writeThemeColor(normalized)
+    );
+    this.saveQueue = operation.then((): void => {}, (): void => {});
+    return operation;
+  }
+
   async loadAnswerDoubleTapAction(): Promise<AnswerDoubleTapAction> {
     await this.saveQueue;
     try {
@@ -828,6 +855,19 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
         throw new Error(appPreferencesFailureMessage('Theme mode save', error));
       }
       throw new Error(appPreferencesFailureMessage('Theme mode save', undefined));
+    }
+  }
+
+  private async writeThemeColor(value: string): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      await store.put(THEME_COLOR_KEY, value);
+      await store.flush();
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('Theme color save', error));
+      }
+      throw new Error(appPreferencesFailureMessage('Theme color save', undefined));
     }
   }
 
