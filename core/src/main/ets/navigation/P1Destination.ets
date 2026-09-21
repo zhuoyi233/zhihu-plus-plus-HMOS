@@ -1,4 +1,4 @@
-import { JsonObjectValue, JsonStringValue, parseStrictJson } from './StrictJson';
+import { JsonObjectValue, JsonNumberValue, JsonStringValue, parseStrictJson } from './StrictJson';
 
 export enum P1DestinationName {
   HOME = 'Home',
@@ -82,6 +82,12 @@ export interface CommentDestination {
   readonly contentType: 'answer' | 'article' | 'question' | 'pin';
   readonly contentId: string;
   readonly commentId?: string;
+  /** 划线句评论（seg_id 维度，对齐上游 SegmentCommentHolder）：携带后评论页改为划线评论数据源。 */
+  readonly segmentId?: string;
+  readonly segmentContent?: string;
+  readonly segmentParagraphId?: string;
+  readonly segmentStartOffset?: number;
+  readonly segmentEndOffset?: number;
 }
 
 export interface SearchDestination {
@@ -304,11 +310,35 @@ export function decodeP1Destination(name: string, param: Object): P1Destination 
       const contentType = readString(wire, 'contentType');
       const contentId = readString(wire, 'contentId');
       const commentId = readString(wire, 'commentId');
+      const segmentId = readString(wire, 'segmentId');
+      const segmentContent = readString(wire, 'segmentContent');
+      const segmentParagraphId = readString(wire, 'segmentParagraphId');
+      const segmentStartOffset = readNonNegativeInt(wire, 'segmentStartOffset');
+      const segmentEndOffset = readNonNegativeInt(wire, 'segmentEndOffset');
+      const hasSegment = segmentId !== undefined || segmentContent !== undefined ||
+        segmentParagraphId !== undefined || segmentStartOffset !== undefined || segmentEndOffset !== undefined;
       if ((contentType !== 'answer' && contentType !== 'article' && contentType !== 'question' && contentType !== 'pin') ||
         contentId === undefined || !hasText(contentId) || readString(wire, 'id') !== undefined || readString(wire, 'query') !== undefined ||
         (commentId !== undefined && !hasText(commentId)) ||
-        !hasOnlyFields(wire, ['name', 'contentType', 'contentId', 'commentId'])) {
+        (hasSegment && (segmentId === undefined || !isSafeSegmentId(segmentId) ||
+          segmentContent === undefined || !hasText(segmentContent) ||
+          segmentParagraphId === undefined || !hasText(segmentParagraphId) ||
+          segmentStartOffset === undefined || segmentEndOffset === undefined || segmentEndOffset < segmentStartOffset)) ||
+        !hasOnlyFields(wire, ['name', 'contentType', 'contentId', 'commentId', 'segmentId', 'segmentContent',
+          'segmentParagraphId', 'segmentStartOffset', 'segmentEndOffset'])) {
         return undefined;
+      }
+      if (hasSegment) {
+        return {
+          name: P1DestinationName.COMMENT,
+          contentType: contentType,
+          contentId: contentId,
+          segmentId: segmentId,
+          segmentContent: segmentContent,
+          segmentParagraphId: segmentParagraphId,
+          segmentStartOffset: segmentStartOffset,
+          segmentEndOffset: segmentEndOffset
+        };
       }
       return commentId === undefined
         ? { name: P1DestinationName.COMMENT, contentType: contentType, contentId: contentId }
@@ -513,4 +543,17 @@ function hasOnlyFields(wire: JsonObjectValue, allowed: Array<string>): boolean {
 function readString(wire: JsonObjectValue, name: string): string | undefined {
   const value = wire.get(name);
   return value instanceof JsonStringValue ? value.value : undefined;
+}
+
+function readNonNegativeInt(wire: JsonObjectValue, name: string): number | undefined {
+  const value = wire.get(name);
+  if (value instanceof JsonNumberValue && Number.isSafeInteger(value.value) && value.value >= 0) {
+    return value.value;
+  }
+  return undefined;
+}
+
+/** 划线 seg id：正整数（可逗号分隔多个，对齐上游 segIds joinToString(",")）。 */
+function isSafeSegmentId(value: string): boolean {
+  return /^[1-9][0-9]{0,29}(,[1-9][0-9]{0,29})*$/.test(value);
 }

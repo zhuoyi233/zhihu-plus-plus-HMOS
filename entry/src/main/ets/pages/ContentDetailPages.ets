@@ -40,11 +40,19 @@ import {
   QuestionTopicSummary,
   SessionStatus,
   VoteRepository,
+  SegmentReactionRepository,
+  SegmentInfoParagraph,
+  SegmentInfoMeta,
+  SegmentInfoMark,
+  effectiveSegmentMeta,
+  Answer,
+  Article,
   DEFAULT_THEME_COLOR,
   onThemeColor,
   themeColorContainerColor
 } from 'data';
-import { parseZhihuHtml, ReaderBlock } from 'reader';
+import { parseZhihuHtml, ReaderBlock, ReaderBlockKind } from 'reader';
+import { ANNOTATION_HIGHLIGHT_COLOR, AnnotationBlockSentences, AnnotationTarget, ContentAnnotation, ContentAnnotationStore, createContentAnnotationStore, splitIntoSentences } from './ContentAnnotations';
 import {
   BlockingActionContext,
   BlockingActionController,
@@ -153,6 +161,8 @@ struct ContentDetailPage {
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
   voteRepository: VoteRepository | undefined = undefined;
+  /** 他人划线点赞/取消点赞仓库（对接知乎 segment_reaction 接口）。 */
+  segmentReactionRepository: SegmentReactionRepository | undefined = undefined;
   followRepository: FollowRepository | undefined = undefined;
   collectionRepository: CollectionRepository | undefined = undefined;
   commentRepository: CommentRepository | undefined = undefined;
@@ -223,6 +233,33 @@ struct ContentDetailPage {
   private answersController?: QuestionAnswersController;
   /** P3-9-C：底部菜单弹窗可见性。 */
   @State private actionMenuShown: boolean = false;
+  /** 正文划线评论：当前内容的全部批注（已加载）。 */
+  @State private annotations: ContentAnnotation[] = [];
+  /** 他人划线（segment_infos）：由服务端返回，按段落 pid 对齐渲染蓝色高亮。 */
+  @State private segmentInfos: SegmentInfoParagraph[] = [];
+  /** 划线点赞/评论面板可见性。 */
+  @State private segmentSheetShown: boolean = false;
+  /** 面板当前展示的划线段落 pid 与 mark 下标（用 pid 而非对象引用，避免乐观更新后引用失效）。 */
+  @State private segmentSheetPid: string = '';
+  @State private segmentSheetMarkIndex: number = -1;
+  /** 划线点赞请求进行中（防重复点击）。 */
+  @State private segmentLikeBusy: boolean = false;
+  /** 划线评论本地存储（按 contentId 维度）。 */
+  annotationRepo: ContentAnnotationStore | undefined = undefined;
+  /** 划线评论管理面板可见性。 */
+  @State private annotationSheetShown: boolean = false;
+  /** 撰写批注子视图可见性（annotationTarget 是普通字段，不驱动渲染）。 */
+  @State private annotationComposeShown: boolean = false;
+  /** 管理面板中的正文文本块列表（blockId + 预览 + 句子拆分）。 */
+  @State private annotationBlocks: Array<AnnotationBlockSentences> = [];
+  /** 正在添加批注的目标句子（blockId + 引用文本）。 */
+  private annotationTarget: AnnotationTarget | undefined = undefined;
+  /** 添加批注时的评论草稿。 */
+  @State private annotationDraft: string = '';
+  /** 点击高亮片段后查看的批注（含删除）。 */
+  @State private viewingAnnotation: ContentAnnotation | undefined = undefined;
+  /** 查看/删除批注面板可见性（bindSheet 由布尔状态驱动）。 */
+  @State private annotationViewShown: boolean = false;
   /** P3-9-C：菜单操作反馈（复制链接结果等）。 */
   @State private menuStatus: string = '';
   /** 沉浸式阅读仅收起页面 Chrome，不改变正文、互动或滚动状态。
@@ -244,6 +281,7 @@ struct ContentDetailPage {
   aboutToAppear(): void {
     this.pageActive = true;
     if (this.activeContentId.length === 0) { this.activeContentId = this.contentId; }
+    this.loadAnnotations();
     this.authenticated = this.session?.getState().status === SessionStatus.AUTHENTICATED;
     // 双击动作偏好全局生效，返回栈重显时也刷新（可能刚在设置页改过）。
     void this.restoreAnswerDoubleTapAction();
@@ -345,6 +383,306 @@ struct ContentDetailPage {
     AppStorage.setOrCreate('p2ImagePreviewUrl', '');
     // 对齐上游 LeaveImmersiveModeCleanup：页面销毁时确保状态栏恢复。
     setStatusBarHidden(false);
+  }
+
+  /** 划线评论：确保本地存储实例存在（首用时按当前 Ability 上下文惰性创建）。 */
+  private ensureAnnotationRepo(): ContentAnnotationStore | undefined {
+    if (this.annotationRepo === undefined) {
+      const context = getAbilityContext();
+      if (context === undefined) {
+        return undefined;
+      }
+      this.annotationRepo = createContentAnnotationStore(context);
+    }
+    return this.annotationRepo;
+  }
+
+  /** 划线评论：加载当前内容的全部批注，刷新正文高亮。 */
+  private loadAnnotations(): void {
+    const repo = this.ensureAnnotationRepo();
+    if (repo === undefined) {
+      return;
+    }
+    void repo.load(this.activeContentId).then((items: ContentAnnotation[]): void => {
+      this.annotations = items;
+    });
+  }
+
+  /** 打开划线评论管理面板：按正文块拆分句子供选择。 */
+  private openAnnotationSheet(): void {
+    const content = this.content;
+    if (content === undefined) {
+      return;
+    }
+    const blocks = parseZhihuHtml(contentHtml(content));
+    const result: Array<AnnotationBlockSentences> = [];
+    blocks.forEach((block: ReaderBlock): void => {
+      if (block.kind === ReaderBlockKind.HEADING ||
+        block.kind === ReaderBlockKind.PARAGRAPH ||
+        block.kind === ReaderBlockKind.LIST_ITEM) {
+        const text = block.text.trim();
+        if (text.length === 0) {
+          return;
+        }
+        const sentences = splitIntoSentences(text);
+        if (sentences.length === 0) {
+          return;
+        }
+        const preview = text.length > 40 ? `${text.substring(0, 40)}…` : text;
+        result.push({ blockId: block.id, preview: preview, sentences: sentences });
+      }
+    });
+    this.annotationBlocks = result;
+    this.annotationTarget = undefined;
+    this.annotationDraft = '';
+    this.annotationComposeShown = false;
+    this.annotationSheetShown = true;
+  }
+
+  /** 点击正文高亮片段：打开批注查看/删除面板。 */
+  private openAnnotation(annotationId: string): void {
+    const found = this.annotations.find((annotation: ContentAnnotation): boolean => annotation.id === annotationId);
+    if (found !== undefined) {
+      this.viewingAnnotation = found;
+      this.annotationViewShown = true;
+    }
+  }
+
+  /** 点击他人划线高亮：打开点赞/评论面板（仅当该划线带元信息）。 */
+  private openSegmentSheet(paragraph: SegmentInfoParagraph, markIndex: number): void {
+    const mark = paragraph.marks[markIndex];
+    if (mark === undefined || effectiveSegmentMeta(mark) === undefined) {
+      return;
+    }
+    this.segmentSheetPid = paragraph.pid;
+    this.segmentSheetMarkIndex = markIndex;
+    this.segmentSheetShown = true;
+  }
+
+  /** 当前面板展示划线的元信息（从最新 segmentInfos 实时读取，避免乐观更新后引用失效）。 */
+  private currentSegmentMeta(): SegmentInfoMeta | undefined {
+    const paragraph = this.segmentInfos.find((p: SegmentInfoParagraph): boolean => p.pid === this.segmentSheetPid);
+    if (paragraph === undefined) {
+      return undefined;
+    }
+    const mark = paragraph.marks[this.segmentSheetMarkIndex];
+    return mark === undefined ? undefined : effectiveSegmentMeta(mark);
+  }
+
+  /** 当前面板展示划线的引用文本。 */
+  private currentSegmentQuote(): string {
+    const paragraph = this.segmentInfos.find((p: SegmentInfoParagraph): boolean => p.pid === this.segmentSheetPid);
+    if (paragraph === undefined) {
+      return '';
+    }
+    const mark = paragraph.marks[this.segmentSheetMarkIndex];
+    if (mark === undefined) {
+      return '';
+    }
+    const start = Math.max(0, Math.min(paragraph.text.length, mark.startIndex));
+    const end = Math.max(0, Math.min(paragraph.text.length, mark.endIndex));
+    return end > start ? paragraph.text.substring(start, end) : '';
+  }
+
+  /** 乐观更新某条划线的元信息（点赞数/是否已赞）。 */
+  private applySegmentMeta(pid: string, markIndex: number, meta: SegmentInfoMeta): void {
+    const next: Array<SegmentInfoParagraph> = [];
+    this.segmentInfos.forEach((p: SegmentInfoParagraph): void => {
+      if (p.pid !== pid) {
+        next.push(p);
+        return;
+      }
+      const marks: Array<SegmentInfoMark> = [];
+      p.marks.forEach((m: SegmentInfoMark, index: number): void => {
+        if (index !== markIndex) {
+          marks.push(m);
+          return;
+        }
+        const updated: SegmentInfoMark = {
+          startIndex: m.startIndex,
+          endIndex: m.endIndex,
+          segInfo: m.segInfo !== undefined ? meta : m.segInfo,
+          masterSegInfo: m.masterSegInfo !== undefined ? meta : m.masterSegInfo
+        };
+        marks.push(updated);
+      });
+      next.push({ pid: p.pid, text: p.text, marks: marks });
+    });
+    this.segmentInfos = next;
+  }
+
+  /** 切换划线点赞（乐观更新 + 真实请求，失败回滚）。 */
+  private async onSegmentLike(): Promise<void> {
+    if (this.segmentLikeBusy || this.segmentReactionRepository === undefined ||
+      this.session === undefined || this.segmentSheetMarkIndex < 0) {
+      return;
+    }
+    if (this.kind !== ContentDetailKind.ANSWER && this.kind !== ContentDetailKind.ARTICLE) {
+      return;
+    }
+    const paragraph = this.segmentInfos.find((p: SegmentInfoParagraph): boolean => p.pid === this.segmentSheetPid);
+    if (paragraph === undefined) {
+      return;
+    }
+    const mark = paragraph.marks[this.segmentSheetMarkIndex];
+    const before = mark === undefined ? undefined : effectiveSegmentMeta(mark);
+    if (before === undefined) {
+      return;
+    }
+    const contentType: 'answer' | 'article' = this.kind === ContentDetailKind.ANSWER ? 'answer' : 'article';
+    // 乐观更新：先翻转点赞态与计数，失败再回滚。
+    this.segmentLikeBusy = true;
+    const optimistic: SegmentInfoMeta = {
+      segIds: before.segIds,
+      isLike: !before.isLike,
+      likeCount: before.isLike ? Math.max(0, before.likeCount - 1) : before.likeCount + 1,
+      commentCount: before.commentCount,
+      myCommentCount: before.myCommentCount,
+      isSpan: before.isSpan
+    };
+    this.applySegmentMeta(this.segmentSheetPid, this.segmentSheetMarkIndex, optimistic);
+    try {
+      const result = await this.segmentReactionRepository.toggleSegmentLike(contentType, this.activeContentId, paragraph, this.segmentSheetMarkIndex);
+      this.applySegmentMeta(this.segmentSheetPid, this.segmentSheetMarkIndex, result);
+    } catch (_error) {
+      this.applySegmentMeta(this.segmentSheetPid, this.segmentSheetMarkIndex, before);
+      this.getUIContext().getPromptAction().showToast({ message: '操作失败，请稍后重试' });
+    } finally {
+      this.segmentLikeBusy = false;
+    }
+  }
+
+  /** 从详情内容提取他人划线（问题页无 segment_infos）。 */
+  private extractSegmentInfos(content: LoadedContentDetail | undefined): SegmentInfoParagraph[] {
+    if (content === undefined || content.kind === ContentDetailKind.QUESTION) {
+      return [];
+    }
+    const value = content.value as Answer | Article;
+    return mergeSameRangeMarks(value.segmentInfos ?? []);
+  }
+
+  /** 他人划线点赞/评论/复制操作面板。 */
+  @Builder
+  private segmentActionSheet() {
+    Column({ space: 16 }) {
+      Text(this.currentSegmentQuote())
+        .id('p3_segment_sheet_quote')
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontColor($r('app.color.primary_text'))
+        .copyOption(CopyOptions.LocalDevice)
+        .width('100%')
+      if (this.currentSegmentMeta() !== undefined) {
+        Row({ space: 28 }) {
+          Row({ space: 6 }) {
+            SymbolGlyph(this.currentSegmentMeta()!.isLike ? $r('sys.symbol.hand_thumbsup_fill') : $r('sys.symbol.hand_thumbsup'))
+              .fontSize(20)
+              .fontColor([this.currentSegmentMeta()!.isLike ? this.resolvedThemeColor : $r('app.color.secondary_text')])
+            Text(`${this.currentSegmentMeta()!.likeCount}`)
+              .fontSize(15)
+              .fontColor($r('app.color.secondary_text'))
+          }
+          .id('p3_segment_sheet_like')
+          .onClick((): void => { void this.onSegmentLike(); })
+
+          Row({ space: 6 }) {
+            SymbolGlyph($r('sys.symbol.message'))
+              .fontSize(20)
+              .fontColor([$r('app.color.secondary_text')])
+            Text(`${this.currentSegmentMeta()!.commentCount}`)
+              .fontSize(15)
+              .fontColor($r('app.color.secondary_text'))
+          }
+          .id('p3_segment_sheet_comment')
+          .onClick((): void => {
+            this.segmentSheetShown = false;
+            this.openSegmentComments();
+          })
+
+          Row({ space: 6 }) {
+            Text('复制')
+              .fontSize(15)
+              .fontColor($r('app.color.secondary_text'))
+          }
+          .id('p3_segment_sheet_copy')
+          .onClick((): void => {
+            const quote = this.currentSegmentQuote();
+            if (quote.length > 0) {
+              const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, quote);
+              pasteboard.getSystemPasteboard().setData(pasteData).then((): void => {
+                this.getUIContext().getPromptAction().showToast({ message: '已复制划线内容' });
+              }).catch((): void => {
+                this.getUIContext().getPromptAction().showToast({ message: '复制失败' });
+              });
+            }
+          })
+        }
+        .width('100%')
+      }
+    }
+    .id('p3_segment_action_sheet')
+    .width('100%')
+    .padding(20)
+  }
+
+  /** 为选中的句子保存一条批注（本地持久化后刷新高亮）。 */
+  private async addAnnotation(): Promise<void> {
+    const target = this.annotationTarget;
+    const repo = this.ensureAnnotationRepo();
+    if (target === undefined || repo === undefined) {
+      return;
+    }
+    const annotation: ContentAnnotation = {
+      id: `a_${this.activeContentId}_${Date.now()}`,
+      contentId: this.activeContentId,
+      blockId: target.blockId,
+      quote: target.quote,
+      comment: this.annotationDraft.trim(),
+      createdAt: Date.now()
+    };
+    const items = await repo.add(this.activeContentId, annotation);
+    this.annotations = items;
+    this.annotationTarget = undefined;
+    this.annotationDraft = '';
+    this.annotationComposeShown = false;
+    this.annotationSheetShown = false;
+  }
+
+  /** 删除指定批注（本地持久化后刷新高亮）。 */
+  private async deleteAnnotation(annotation: ContentAnnotation): Promise<void> {
+    const repo = this.ensureAnnotationRepo();
+    if (repo === undefined) {
+      return;
+    }
+    const items = await repo.remove(this.activeContentId, annotation.id);
+    this.annotations = items;
+    this.annotationViewShown = false;
+    this.viewingAnnotation = undefined;
+  }
+
+  /** 撰写批注面板展示的引用文本。@Builder 体内禁止非 UI 语句，取值一律提为方法。 */
+  private annotationTargetQuote(): string {
+    return this.annotationTarget === undefined ? '' : this.annotationTarget.quote;
+  }
+
+  /** 查看面板展示的引用文本。 */
+  private viewingAnnotationQuote(): string {
+    return this.viewingAnnotation === undefined ? '' : this.viewingAnnotation.quote;
+  }
+
+  /** 查看面板展示的评论文本（无内容时给占位）。 */
+  private viewingAnnotationComment(): string {
+    if (this.viewingAnnotation === undefined) {
+      return '';
+    }
+    return this.viewingAnnotation.comment.length > 0 ? this.viewingAnnotation.comment : '（无评论内容）';
+  }
+
+  /** 删除当前正在查看的批注（面板内按钮入口）。 */
+  private deleteViewingAnnotation(): void {
+    const annotation = this.viewingAnnotation;
+    if (annotation !== undefined) {
+      void this.deleteAnnotation(annotation);
+    }
   }
 
   private onImmersiveReadingChanged(): void {
@@ -571,6 +909,51 @@ struct ContentDetailPage {
             }
           }
         })
+      Column()
+        .bindSheet(this.annotationSheetShown, this.annotationSheet(), {
+          height: SheetSize.LARGE,
+          dragBar: true,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.annotationSheetShown) {
+              this.annotationSheetShown = false;
+              this.annotationTarget = undefined;
+              this.annotationDraft = '';
+              this.annotationComposeShown = false;
+            }
+          }
+        })
+      Column()
+        .bindSheet(this.annotationViewShown, this.annotationViewSheet(), {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.annotationViewShown) {
+              this.annotationViewShown = false;
+              this.viewingAnnotation = undefined;
+            }
+          }
+        })
+      Column()
+        .bindSheet(this.segmentSheetShown, this.segmentActionSheet(), {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.segmentSheetShown) {
+              this.segmentSheetShown = false;
+              this.segmentSheetPid = '';
+              this.segmentSheetMarkIndex = -1;
+            }
+          }
+        })
       // 全屏图片查看器叠层：置于根 Stack 最后一个子节点，盖住正文/底部操作栏；
       // 标题栏由 P1Shell 监听同一 AppStorage 键隐藏（hideTitleBar）。
       if (this.imagePreviewUrl.length > 0) {
@@ -703,7 +1086,12 @@ struct ContentDetailPage {
           },
           onPageTurnPastEnd: (): void => {
             if (this.pageTurnSwitchAnswer && this.kind === ContentDetailKind.ANSWER) void this.moveAnswer(1);
-          }
+          },
+          contentId: this.activeContentId,
+          annotations: this.annotations,
+          onAnnotationClick: (annotationId: string): void => this.openAnnotation(annotationId),
+          segmentInfos: this.segmentInfos,
+          onSegmentClick: (paragraph: SegmentInfoParagraph, markIndex: number): void => this.openSegmentSheet(paragraph, markIndex)
         })
           .layoutWeight(1)
       }
@@ -1620,6 +2008,9 @@ struct ContentDetailPage {
         documentItems: (): void => { this.questionAnswerItems() },
         documentFooter: (): void => { this.questionAnswersFooter() },
         onListReachEnd: (): void => { this.answersController?.loadMore(); },
+        contentId: this.activeContentId,
+        annotations: this.annotations,
+        onAnnotationClick: (annotationId: string): void => this.openAnnotation(annotationId),
         onScrollOffset: (offset: number): void => {
           const scrolled = offset > 160;
           if (scrolled !== this.questionScrolled) {
@@ -2138,6 +2529,28 @@ struct ContentDetailPage {
     });
   }
 
+  /** 打开划线句专属评论页（seg_id 维度，对齐上游 SegmentCommentHolder）。 */
+  private openSegmentComments(): void {
+    const meta = this.currentSegmentMeta();
+    if (meta === undefined || meta.segIds.length === 0 ||
+      (this.kind !== ContentDetailKind.ANSWER && this.kind !== ContentDetailKind.ARTICLE)) {
+      this.openComments();
+      return;
+    }
+    const mark = this.segmentInfos.find((p: SegmentInfoParagraph): boolean => p.pid === this.segmentSheetPid)
+      ?.marks[this.segmentSheetMarkIndex];
+    this.navigate({
+      name: P1DestinationName.COMMENT,
+      contentType: this.kind === ContentDetailKind.ARTICLE ? 'article' : 'answer',
+      contentId: this.activeContentId,
+      segmentId: meta.segIds.join(','),
+      segmentContent: this.currentSegmentQuote(),
+      segmentParagraphId: this.segmentSheetPid,
+      segmentStartOffset: mark === undefined ? 0 : mark.startIndex,
+      segmentEndOffset: mark === undefined ? 0 : mark.endIndex
+    });
+  }
+
   /** 双击正文动作分发（对齐上游 performAnswerDoubleTapAction）：仅回答页生效；
    * 震感仅点赞与打开评论区有；Ask 弹询问面板，选择后记住。 */
   private onAnswerDoubleTap(): void {
@@ -2410,6 +2823,18 @@ struct ContentDetailPage {
           })
       }
 
+      Button('划线评论', { type: ButtonType.Normal, stateEffect: true })
+        .id('p3_detail_menu_annotate')
+        .width('100%')
+        .fontSize($r('app.float.p1_body_font_size'))
+        .fontColor($r('app.color.primary_text'))
+        .backgroundColor($r('app.color.control_background'))
+        .borderRadius($r('app.float.p1_card_radius'))
+        .onClick((): void => {
+          this.actionMenuShown = false;
+          this.openAnnotationSheet();
+        })
+
       Button('分享', { type: ButtonType.Normal, stateEffect: true })
         .id('p3_detail_menu_share')
         .width('100%')
@@ -2646,6 +3071,150 @@ struct ContentDetailPage {
     });
   }
 
+  /** 划线评论管理面板：选择正文句子并撰写批注（两步式：列表 → 撰写）。 */
+  @Builder
+  private annotationSheet() {
+    Column() {
+      Text('划线评论')
+        .id('p3_annotation_sheet_title')
+        .fontSize($r('app.float.p1_heading_font_size'))
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.primary_text'))
+        .margin({ top: 16, bottom: 8 })
+      if (!this.annotationComposeShown) {
+        Scroll() {
+          Column() {
+            ForEach(this.annotationBlocks,
+              (block: AnnotationBlockSentences): void => {
+                Column() {
+                  Text(block.preview)
+                    .id(`p3_annotation_block_${block.blockId}`)
+                    .fontSize($r('app.float.p1_caption_font_size'))
+                    .fontColor($r('app.color.secondary_text'))
+                    .maxLines(1)
+                    .width('100%')
+                    .margin({ top: 8, bottom: 4 })
+                  ForEach(block.sentences, (sentence: string, index: number): void => {
+                    Button(sentence, { type: ButtonType.Normal, stateEffect: true })
+                      .id(`p3_annotation_sentence_${block.blockId}_${index}`)
+                      .width('100%')
+                      .align(Alignment.Start)
+                      .fontSize($r('app.float.p1_body_font_size'))
+                      .fontColor($r('app.color.primary_text'))
+                      .backgroundColor($r('app.color.control_background'))
+                      .borderRadius($r('app.float.p1_card_radius'))
+                      .margin({ bottom: 6 })
+                      .onClick((): void => {
+                        this.annotationTarget = { blockId: block.blockId, quote: sentence };
+                        this.annotationDraft = '';
+                        this.annotationComposeShown = true;
+                      })
+                  }, (sentence: string, index: number): string => `${block.blockId}:${index}`)
+                }
+                .width('100%')
+              }, (block: AnnotationBlockSentences): string => block.blockId)
+          }
+          .padding({ left: 16, right: 16, bottom: 16 })
+        }
+        .layoutWeight(1)
+        .width('100%')
+      } else {
+        Column() {
+          Text(this.annotationTargetQuote())
+            .id('p3_annotation_quote')
+            .fontSize($r('app.float.p1_body_font_size'))
+            .fontColor($r('app.color.primary_text'))
+            .backgroundColor(ANNOTATION_HIGHLIGHT_COLOR)
+            .borderRadius(4)
+            .width('100%')
+            .padding(8)
+            .margin({ bottom: 12 })
+          TextArea({ text: this.annotationDraft, placeholder: '写下你的评论…' })
+            .id('p3_annotation_input')
+            .width('100%')
+            .height(120)
+            .fontSize($r('app.float.p1_body_font_size'))
+            .onChange((value: string): void => {
+              this.annotationDraft = value;
+            })
+          Row({ space: 12 }) {
+            Button('返回', { type: ButtonType.Normal, stateEffect: true })
+              .id('p3_annotation_back')
+              .layoutWeight(1)
+              .fontSize($r('app.float.p1_body_font_size'))
+              .fontColor($r('app.color.secondary_text'))
+              .backgroundColor($r('app.color.control_background'))
+              .borderRadius($r('app.float.p1_card_radius'))
+              .onClick((): void => {
+                this.annotationComposeShown = false;
+                this.annotationTarget = undefined;
+                this.annotationDraft = '';
+              })
+            Button('保存', { type: ButtonType.Normal, stateEffect: true })
+              .id('p3_annotation_save')
+              .layoutWeight(1)
+              .fontSize($r('app.float.p1_body_font_size'))
+              .fontColor($r('app.color.on_brand'))
+              .backgroundColor($r('app.color.brand_primary'))
+              .borderRadius($r('app.float.p1_card_radius'))
+              .onClick((): void => {
+                void this.addAnnotation();
+              })
+          }
+          .margin({ top: 12 })
+          .width('100%')
+        }
+        .padding({ left: 16, right: 16, bottom: 16 })
+        .width('100%')
+      }
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  /** 划线评论查看/删除面板：展示引用与评论，支持删除。 */
+  @Builder
+  private annotationViewSheet() {
+    Column() {
+      if (this.viewingAnnotation !== undefined) {
+        Text('划线评论')
+          .id('p3_annotation_view_title')
+          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.primary_text'))
+          .margin({ top: 16, bottom: 8 })
+        Text(this.viewingAnnotationQuote())
+          .id('p3_annotation_view_quote')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor($r('app.color.primary_text'))
+          .backgroundColor(ANNOTATION_HIGHLIGHT_COLOR)
+          .borderRadius(4)
+          .width('100%')
+          .padding(8)
+          .margin({ bottom: 12 })
+        Text(this.viewingAnnotationComment())
+          .id('p3_annotation_view_comment')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .width('100%')
+          .margin({ bottom: 16 })
+        Button('删除批注', { type: ButtonType.Normal, stateEffect: true })
+          .id('p3_annotation_delete')
+          .width('100%')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor($r('app.color.on_brand'))
+          .backgroundColor($r('app.color.error_text'))
+          .borderRadius($r('app.float.p1_card_radius'))
+          .onClick((): void => {
+            void this.deleteViewingAnnotation();
+          })
+      }
+    }
+    .padding({ left: 16, right: 16, bottom: 16 })
+    .width('100%')
+    .height('100%')
+  }
+
   /** 文章话题胶囊流（对齐上游 "# 名称" FilterChip；点击经搜索页进入话题，与问题页话题一致）。 */
   @Builder
   private articleTopicsFlow(topics: Array<QuestionTopicSummary>) {
@@ -2812,6 +3381,7 @@ struct ContentDetailPage {
   private applyState(state: ContentDetailViewState): void {
     this.phase = state.phase;
     this.content = state.content;
+    this.segmentInfos = this.extractSegmentInfos(state.content);
     this.errorMessage = state.errorMessage ?? '';
     this.requiresLogin = state.requiresLogin;
     this.openedRecordPhase = state.openedRecordPhase;
@@ -2921,6 +3491,8 @@ export struct QuestionDetailPage {
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
   voteRepository: VoteRepository | undefined = undefined;
+  /** 他人划线点赞/取消点赞仓库（对接知乎 segment_reaction 接口）。 */
+  segmentReactionRepository: SegmentReactionRepository | undefined = undefined;
   followRepository: FollowRepository | undefined = undefined;
   collectionRepository: CollectionRepository | undefined = undefined;
   commentRepository: CommentRepository | undefined = undefined;
@@ -2945,7 +3517,8 @@ export struct QuestionDetailPage {
       commentRepository: this.commentRepository,
       session: this.session,
       navigate: this.navigate,
-      onBack: this.onBack
+      onBack: this.onBack,
+      segmentReactionRepository: this.segmentReactionRepository
     })
   }
 }
@@ -2959,6 +3532,8 @@ export struct AnswerDetailPage {
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
   voteRepository: VoteRepository | undefined = undefined;
+  /** 他人划线点赞/取消点赞仓库（对接知乎 segment_reaction 接口）。 */
+  segmentReactionRepository: SegmentReactionRepository | undefined = undefined;
   followRepository: FollowRepository | undefined = undefined;
   collectionRepository: CollectionRepository | undefined = undefined;
   commentRepository: CommentRepository | undefined = undefined;
@@ -2983,7 +3558,8 @@ export struct AnswerDetailPage {
       commentRepository: this.commentRepository,
       session: this.session,
       navigate: this.navigate,
-      onBack: this.onBack
+      onBack: this.onBack,
+      segmentReactionRepository: this.segmentReactionRepository
     })
   }
 }
@@ -2996,6 +3572,8 @@ export struct ArticleDetailPage {
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
   voteRepository: VoteRepository | undefined = undefined;
+  /** 他人划线点赞/取消点赞仓库（对接知乎 segment_reaction 接口）。 */
+  segmentReactionRepository: SegmentReactionRepository | undefined = undefined;
   followRepository: FollowRepository | undefined = undefined;
   collectionRepository: CollectionRepository | undefined = undefined;
   commentRepository: CommentRepository | undefined = undefined;
@@ -3019,9 +3597,81 @@ export struct ArticleDetailPage {
       commentRepository: this.commentRepository,
       session: this.session,
       navigate: this.navigate,
-      onBack: this.onBack
+      onBack: this.onBack,
+      segmentReactionRepository: this.segmentReactionRepository
     })
   }
+}
+
+/**
+ * 合并同区间的划线 mark（对齐上游 SegmentHighlightUtils.mergeSameRangeMarks）：
+ * 点赞会给同一文本位置创建属于自己的 seg，detail 重载后该段落会有多个同区间 mark。
+ * 合并规则：segIds 按 master 优先顺序去重拼接；isLike/isSpan 取任一为真；
+ * likeCount/commentCount/myCommentCount 取最大值。
+ */
+function mergeSameRangeMarks(paragraphs: SegmentInfoParagraph[]): SegmentInfoParagraph[] {
+  return paragraphs.map((paragraph: SegmentInfoParagraph): SegmentInfoParagraph => {
+    if (paragraph.marks.length <= 1) {
+      return paragraph;
+    }
+    const groups = new Map<string, SegmentInfoMark[]>();
+    paragraph.marks.forEach((mark: SegmentInfoMark): void => {
+      const key = `${mark.startIndex}:${mark.endIndex}`;
+      const bucket = groups.get(key);
+      if (bucket === undefined) {
+        groups.set(key, [mark]);
+      } else {
+        bucket.push(mark);
+      }
+    });
+    const merged: SegmentInfoMark[] = [];
+    groups.forEach((bucket: SegmentInfoMark[]): void => {
+      const ordered: SegmentInfoMark[] = bucket.filter((mark: SegmentInfoMark): boolean => mark.masterSegInfo !== undefined)
+        .concat(bucket.filter((mark: SegmentInfoMark): boolean => mark.masterSegInfo === undefined));
+      const segIds: string[] = [];
+      ordered.forEach((mark: SegmentInfoMark): void => {
+        const meta = effectiveSegmentMeta(mark);
+        if (meta === undefined) {
+          return;
+        }
+        meta.segIds.forEach((segId: string): void => {
+          if (!segIds.includes(segId)) {
+            segIds.push(segId);
+          }
+        });
+      });
+      let likeCount = 0;
+      let commentCount = 0;
+      let myCommentCount = 0;
+      let isLike = false;
+      let isSpan = false;
+      ordered.forEach((mark: SegmentInfoMark): void => {
+        const meta = effectiveSegmentMeta(mark);
+        if (meta === undefined) {
+          return;
+        }
+        likeCount = Math.max(likeCount, meta.likeCount);
+        commentCount = Math.max(commentCount, meta.commentCount);
+        myCommentCount = Math.max(myCommentCount, meta.myCommentCount);
+        isLike = isLike || meta.isLike;
+        isSpan = isSpan || meta.isSpan;
+      });
+      merged.push({
+        startIndex: bucket[0].startIndex,
+        endIndex: bucket[0].endIndex,
+        segInfo: {
+          segIds: segIds,
+          isLike: isLike,
+          likeCount: likeCount,
+          commentCount: commentCount,
+          myCommentCount: myCommentCount,
+          isSpan: isSpan
+        }
+      });
+    });
+    merged.sort((a: SegmentInfoMark, b: SegmentInfoMark): number => a.startIndex - b.startIndex);
+    return { pid: paragraph.pid, text: paragraph.text, marks: merged };
+  });
 }
 
 export function contentTitle(content: LoadedContentDetail): string {

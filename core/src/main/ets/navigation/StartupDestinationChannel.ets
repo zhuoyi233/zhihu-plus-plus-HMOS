@@ -115,7 +115,8 @@ export function p1DestinationIdentity(destination: P1Destination): string {
       return `${destination.name}:${encodeURIComponent(destination.draftId)}`;
     case P1DestinationName.COMMENT:
       return `${destination.name}:${destination.contentType}:${encodeURIComponent(destination.contentId)}:` +
-        encodeURIComponent(destination.commentId ?? '');
+        encodeURIComponent(destination.commentId ?? '') + ':' +
+        encodeURIComponent(destination.segmentId ?? '');
     case P1DestinationName.SEARCH:
       return `${destination.name}:${encodeURIComponent(destination.query)}`;
     default:

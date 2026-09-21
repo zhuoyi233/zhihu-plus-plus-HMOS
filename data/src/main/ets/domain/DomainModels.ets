@@ -108,6 +108,10 @@ export interface Answer {
   endorsements?: Array<AnswerEndorsementDisplay>;
   /** IP 属地（如「广东」）；接口未返回时缺省。 */
   ipInfo?: string;
+  /** 正文他人划线（segment_infos）：渲染高亮与点赞。接口未返回时缺省。 */
+  segmentInfos?: SegmentInfoParagraph[];
+  /** 是否允许划线互动（0/1 兼容布尔）；接口未返回时缺省。 */
+  allowSegmentInteraction?: boolean;
 }
 
 export interface Article {
@@ -133,6 +137,49 @@ export interface Article {
   topics?: QuestionTopicSummary[];
   /** IP 属地（如「广东」）；接口未返回时缺省。 */
   ipInfo?: string;
+  /** 正文他人划线（segment_infos）：渲染高亮与点赞。接口未返回时缺省。 */
+  segmentInfos?: SegmentInfoParagraph[];
+  /** 是否允许划线互动（0/1 兼容布尔）；接口未返回时缺省。 */
+  allowSegmentInteraction?: boolean;
+}
+
+/** 正文划线（segment_infos）的元信息：他人在句子上留下的高亮与点赞数据。 */
+export interface SegmentInfoMeta {
+  /** 划线唯一标识列表（点赞/评论时作为 seg_id 传参）。 */
+  segIds: Array<string>;
+  /** 当前用户是否已点赞该划线。 */
+  isLike: boolean;
+  /** 点赞总数。 */
+  likeCount: number;
+  /** 评论总数。 */
+  commentCount: number;
+  /** 当前用户自己的评论数。 */
+  myCommentCount: number;
+  /** 是否为整句跨段划线。 */
+  isSpan: boolean;
+}
+
+/** 单段内的一个高亮区间。 */
+export interface SegmentInfoMark {
+  startIndex: number;
+  endIndex: number;
+  segInfo?: SegmentInfoMeta;
+  masterSegInfo?: SegmentInfoMeta;
+}
+
+/** 一段正文（对应 HTML 的 p[data-pid] / li[data-pid]）的全部划线。 */
+export interface SegmentInfoParagraph {
+  pid: string;
+  text: string;
+  marks: Array<SegmentInfoMark>;
+}
+
+/**
+ * 取划线的有效元信息：优先 segInfo，回退 masterSegInfo。
+ * 对齐上游 SegmentInfoMark.effectiveSegInfo。
+ */
+export function effectiveSegmentMeta(mark: SegmentInfoMark): SegmentInfoMeta | undefined {
+  return mark.segInfo !== undefined ? mark.segInfo : mark.masterSegInfo;
 }
 
 export enum FeedTargetKind {

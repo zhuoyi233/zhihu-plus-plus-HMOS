@@ -13,7 +13,15 @@ import {
   ShareOutcome,
   SharePayloadKind
 } from '../platform/ShareContracts';
-import { DEFAULT_THEME_COLOR, getAppSessionOwner, getGuestDeviceCookieManager, toCookieHeader } from 'data';
+import {
+  DEFAULT_THEME_COLOR,
+  effectiveSegmentMeta,
+  getAppSessionOwner,
+  getGuestDeviceCookieManager,
+  SegmentInfoMark,
+  SegmentInfoParagraph,
+  toCookieHeader
+} from 'data';
 import {
   blockFormulaDisplayAspectRatio,
   clearFormulaByteCache,
@@ -27,6 +35,15 @@ import {
   ReaderInlineKind,
   ReaderInlineRun
 } from 'reader';
+import {
+  ANNOTATION_HIGHLIGHT_COLOR,
+  AnnotationSegment,
+  ContentAnnotation,
+  HighlightSegment,
+  SegmentHighlightRef,
+  splitTextByAnnotations,
+  splitTextByHighlights
+} from './ContentAnnotations';
 import {
   READING_PROGRESS_BAR_HIT_WIDTH_VP,
   READING_PROGRESS_BAR_RIGHT_INSET_VP,
@@ -389,6 +406,10 @@ struct ContentInlineFormula {
     sourceUrl: '',
     inlineRuns: []
   };
+  /** 本块已存在的划线评论（按 blockId 预筛选），用于渲染高亮片段。@Prop 保证增删批注后行内段落同步刷新。 */
+  @Prop blockAnnotations: ContentAnnotation[] = [];
+  /** 点击高亮片段时回调（查看/删除评论）。 */
+  onAnnotationClick?: (annotationId: string) => void;
   /** 排版偏好与宿主同源（AppStorage 广播），行内公式所在段落随字号/行高联动。 */
   @StorageProp('contentFontSize') private fontSizePercent: number = 100;
   @StorageProp('contentLineHeight') private lineHeightPercent: number = 160;
@@ -428,10 +449,21 @@ struct ContentInlineFormula {
       ForEach(this.item.inlineRuns, (run: ReaderInlineRun) => {
         if (run.kind === ReaderInlineKind.TEXT || !this.loadedRunIds.includes(run.id) ||
           this.pixelMaps.get(run.id) === undefined) {
-          Span(run.kind === ReaderInlineKind.TEXT ? run.text : `「${run.text}」`)
-            .fontColor(run.kind === ReaderInlineKind.TEXT
-              ? $r('app.color.primary_text')
-              : $r('app.color.secondary_text'))
+          if (run.kind === ReaderInlineKind.TEXT) {
+            ForEach(splitTextByAnnotations(run.text, this.blockAnnotations), (seg: AnnotationSegment) => {
+              Span(seg.text)
+                .fontColor($r('app.color.primary_text'))
+                .textBackgroundStyle({ color: seg.annotationId !== undefined ? ANNOTATION_HIGHLIGHT_COLOR : Color.Transparent, radius: 2 })
+                .onClick((): void => {
+                  if (seg.annotationId !== undefined && this.onAnnotationClick !== undefined) {
+                    this.onAnnotationClick(seg.annotationId);
+                  }
+                })
+            }, (seg: AnnotationSegment): string => `${seg.annotationId ?? 'n'}:${seg.text}`)
+          } else {
+            Span(`「${run.text}」`)
+              .fontColor($r('app.color.secondary_text'))
+          }
         } else {
           ImageSpan(this.pixelMaps.get(run.id) ?? run.text)
             .id(`p2_content_inline_formula_${run.id}`)
@@ -448,6 +480,8 @@ struct ContentInlineFormula {
     .fontSize(readerBodyFontSize(this.fontSizePercent))
     .lineHeight(readerBodyLineHeight(this.fontSizePercent, this.lineHeightPercent))
     .fontColor($r('app.color.primary_text'))
+    // 鸿蒙原生长按选字：启用系统文本选择菜单（复制 / 全选 / 翻译 / 分享等"更多操作"）。
+    .copyOption(CopyOptions.LocalDevice)
     .width('100%')
   }
 
@@ -544,6 +578,7 @@ struct ContentBlockFormula {
           .id(`p2_content_formula_fallback_${this.item.id}`)
           .fontSize($r('app.float.p1_secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
+          .copyOption(CopyOptions.LocalDevice)
           .textAlign(TextAlign.Center)
           .width('100%')
       }
@@ -603,6 +638,16 @@ struct ContentBlockFormula {
 export struct NativeContentDocument {
   html: string = '';
   emptyMessage: string = '正文为空';
+  /** 内容标识：划线评论按 contentId 维度持久化。 */
+  contentId: string = '';
+  /** 当前内容的全部划线评论（已按内容加载），渲染时按 blockId 预筛。@Prop 同步父级刷新，增删后高亮立即更新。 */
+  @Prop annotations: ContentAnnotation[] = [];
+  /** 点击正文高亮片段回调（查看/删除评论）。 */
+  onAnnotationClick?: (annotationId: string) => void;
+  /** 服务端返回的他人划线（segment_infos），按段落 pid 对齐渲染蓝色高亮。 */
+  @Prop segmentInfos: SegmentInfoParagraph[] = [];
+  /** 点击他人划线高亮片段回调（打开点赞/评论面板）。 */
+  onSegmentClick?: (paragraph: SegmentInfoParagraph, markIndex: number) => void;
   /** P3-9-B：正文滚动像素偏移回调（用于详情页顶栏折叠联动）。 */
   onScrollOffset?: (offset: number) => void;
   /** 正文视频卡片点击回调；播放上下文由详情页补齐。 */
@@ -1120,11 +1165,32 @@ export struct NativeContentDocument {
   @Builder
   private readerBlock(item: ReaderBlock) {
     if (item.kind === ReaderBlockKind.HEADING) {
-      Text(item.text)
-        .fontSize(this.headingFontSize())
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.primary_text'))
-        .width('100%')
+      Text() {
+        ForEach(splitTextByHighlights(item.text, this.blockAnnotations(item), this.blockSegments(item)), (seg: HighlightSegment) => {
+          Span(seg.text)
+            .fontColor($r('app.color.primary_text'))
+            .textBackgroundStyle({
+              color: seg.annotationId !== undefined && seg.segmentRef === undefined ? ANNOTATION_HIGHLIGHT_COLOR : Color.Transparent,
+              radius: 2
+            })
+            .decoration({
+              type: seg.segmentRef !== undefined ? TextDecorationType.Underline : TextDecorationType.None,
+              style: seg.segmentRef !== undefined ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
+              color: seg.segmentRef !== undefined ? this.resolvedThemeColor : Color.Transparent
+            })
+            .onClick((): void => {
+              if (seg.segmentRef !== undefined && this.onSegmentClick !== undefined) {
+                this.onSegmentClick(seg.segmentRef.paragraph, seg.segmentRef.markIndex);
+              } else if (seg.annotationId !== undefined && this.onAnnotationClick !== undefined) {
+                this.onAnnotationClick(seg.annotationId);
+              }
+            })
+        }, (seg: HighlightSegment): string => `h:${seg.annotationId ?? 'x'}:${seg.segmentRef !== undefined ? 's' : 'n'}:${seg.text}`)
+      }
+      .fontSize(this.headingFontSize())
+      .fontWeight(FontWeight.Bold)
+      .copyOption(CopyOptions.LocalDevice)
+      .width('100%')
     } else if (item.kind === ReaderBlockKind.DIVIDER) {
       Divider().margin({ top: 8, bottom: 8 })
     } else if (item.kind === ReaderBlockKind.FORMULA) {
@@ -1179,16 +1245,63 @@ export struct NativeContentDocument {
     } else if (item.inlineRuns.length > 0) {
       // 按主题 tick 奇偶翻转分支强制销毁重建（见 formulaRecreateTick 注释）。
       if (this.formulaRecreateTick % 2 === 0) {
-        ContentInlineFormula({ item: item })
+        ContentInlineFormula({ item: item, blockAnnotations: this.blockAnnotations(item), onAnnotationClick: this.onAnnotationClick })
       } else {
-        ContentInlineFormula({ item: item })
+        ContentInlineFormula({ item: item, blockAnnotations: this.blockAnnotations(item), onAnnotationClick: this.onAnnotationClick })
       }
     } else {
-      Text(item.kind === ReaderBlockKind.LIST_ITEM ? `• ${item.text}` : item.text)
-        .fontSize(this.bodyFontSize())
-        .lineHeight(this.bodyLineHeight())
-        .fontColor($r('app.color.primary_text'))
-        .width('100%')
+      Text() {
+        if (item.kind === ReaderBlockKind.LIST_ITEM) {
+          Span('• ')
+        }
+        ForEach(splitTextByHighlights(item.text, this.blockAnnotations(item), this.blockSegments(item)), (seg: HighlightSegment) => {
+          Span(seg.text)
+            .fontColor($r('app.color.primary_text'))
+            .textBackgroundStyle({
+              color: seg.annotationId !== undefined && seg.segmentRef === undefined ? ANNOTATION_HIGHLIGHT_COLOR : Color.Transparent,
+              radius: 2
+            })
+            .decoration({
+              type: seg.segmentRef !== undefined ? TextDecorationType.Underline : TextDecorationType.None,
+              style: seg.segmentRef !== undefined ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
+              color: seg.segmentRef !== undefined ? this.resolvedThemeColor : Color.Transparent
+            })
+            .onClick((): void => {
+              if (seg.segmentRef !== undefined && this.onSegmentClick !== undefined) {
+                this.onSegmentClick(seg.segmentRef.paragraph, seg.segmentRef.markIndex);
+              } else if (seg.annotationId !== undefined && this.onAnnotationClick !== undefined) {
+                this.onAnnotationClick(seg.annotationId);
+              }
+            })
+        }, (seg: HighlightSegment): string => `p:${seg.annotationId ?? 'x'}:${seg.segmentRef !== undefined ? 's' : 'n'}:${seg.text}`)
+      }
+      .fontSize(this.bodyFontSize())
+      .lineHeight(this.bodyLineHeight())
+      .copyOption(CopyOptions.LocalDevice)
+      .width('100%')
     }
+  }
+
+  /** 本块的划线评论（按 blockId 预筛选）。@Builder 体内禁止非 UI 语句，故提为方法。 */
+  private blockAnnotations(item: ReaderBlock): ContentAnnotation[] {
+    return this.annotations.filter((annotation: ContentAnnotation): boolean => annotation.blockId === item.id);
+  }
+
+  /** 本块对应的他人划线引用（按 data-pid 对齐 segment_infos）。@Builder 体内禁止非 UI 语句，故提为方法。 */
+  private blockSegments(item: ReaderBlock): Array<SegmentHighlightRef> {
+    if (item.pid === undefined || item.pid.length === 0 || this.segmentInfos.length === 0) {
+      return [];
+    }
+    const paragraph = this.segmentInfos.find((p: SegmentInfoParagraph): boolean => p.pid === item.pid);
+    if (paragraph === undefined) {
+      return [];
+    }
+    const refs: Array<SegmentHighlightRef> = [];
+    paragraph.marks.forEach((mark: SegmentInfoMark, index: number): void => {
+      if (effectiveSegmentMeta(mark) !== undefined) {
+        refs.push({ paragraph: paragraph, markIndex: index });
+      }
+    });
+    return refs;
   }
 }

@@ -133,6 +133,43 @@ export default function contentDetailRepositoryTest(): void {
       expect(article.url).assertEqual('https://zhuanlan.zhihu.com/p/789');
     });
 
+    it('decodesSegmentInfosFromRealWireShape', 0, () => {
+      // 结构对齐真实接口抓包：数组元素直接是 {marks,pid,text}，无 segment_info 包装层。
+      const answer: Answer = decodeAnswerDetail(
+        '{"id":"2064240280673506874","question":{"id":"1966485593459516014"},"content":"正文","excerpt":"摘要",' +
+        '"voteup_count":2677,"comment_count":361,"created_time":1700000000,"updated_time":1700000001,' +
+        '"author":{"id":"author-a","name":"回答者"},' +
+        '"segment_infos":[' +
+        '{"marks":[{"end_index":31,"seg_info":{"comment_count":13,"is_like":false,"is_span":false,' +
+        '"like_count":44,"my_comment_count":0,"seg_ids":["2064751632102043740"]},"start_index":2}],' +
+        '"pid":"QD6n8D4D","text":"因为中国多了一套实名制啊，让本来就很方便的esim变的不方便了"},' +
+        '{"marks":[{"end_index":170,"seg_info":{"comment_count":4,"is_like":true,"is_span":false,' +
+        '"like_count":33,"my_comment_count":1,"seg_ids":["2065056906662744143"]},"start_index":130},' +
+        '{"end_index":218,"seg_info":{"comment_count":9,"is_like":false,"is_span":true,' +
+        '"like_count":194,"my_comment_count":0,"seg_ids":["2065401252356298646"]},"start_index":130}],' +
+        '"pid":"JwO1Lsbw","text":"第二段文本"}],' +
+        '"allow_segment_interaction":1}',
+        '2064240280673506874'
+      );
+      expect(answer.segmentInfos?.length).assertEqual(2);
+      expect(answer.allowSegmentInteraction).assertTrue();
+      const first = answer.segmentInfos![0];
+      expect(first.pid).assertEqual('QD6n8D4D');
+      expect(first.marks.length).assertEqual(1);
+      expect(first.marks[0].startIndex).assertEqual(2);
+      expect(first.marks[0].endIndex).assertEqual(31);
+      expect(first.marks[0].segInfo?.likeCount).assertEqual(44);
+      expect(first.marks[0].segInfo?.commentCount).assertEqual(13);
+      expect(first.marks[0].segInfo?.isLike).assertFalse();
+      expect(first.marks[0].segInfo?.segIds.length).assertEqual(1);
+      const second = answer.segmentInfos![1];
+      expect(second.pid).assertEqual('JwO1Lsbw');
+      expect(second.marks.length).assertEqual(2);
+      expect(second.marks[0].segInfo?.isLike).assertTrue();
+      expect(second.marks[1].segInfo?.isSpan).assertTrue();
+      expect(second.marks[1].segInfo?.likeCount).assertEqual(194);
+    });
+
     it('decodesEndorsementsAndIpInfoSafely', 0, () => {
       const answer: Answer = decodeAnswerDetail(
         '{"id":"9007199254740993","question":{"id":"456"},"content":"正文","excerpt":"摘要",' +

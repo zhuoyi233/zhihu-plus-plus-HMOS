@@ -11,7 +11,19 @@ import {
   parseStrictJson,
   StrictJsonError
 } from 'core';
-import { Answer, AnswerEndorsementDisplay, Article, AuthorBadge, ContentVoteState, Question, QuestionTopicSummary, UserProfile } from './DomainModels';
+import {
+  Answer,
+  AnswerEndorsementDisplay,
+  Article,
+  AuthorBadge,
+  ContentVoteState,
+  Question,
+  QuestionTopicSummary,
+  SegmentInfoMark,
+  SegmentInfoMeta,
+  SegmentInfoParagraph,
+  UserProfile
+} from './DomainModels';
 import { DomainDecodeError, DomainDecodeFailureKind } from './ZhihuDomainDecoder';
 
 function parseRoot(json: string, contentName: string): JsonObjectValue {
@@ -355,6 +367,108 @@ function authorFromWire(wire: JsonObjectValue | undefined): UserProfile | undefi
   };
 }
 
+/**
+ * 解码正文他人划线（segment_infos）：按 pid 对齐各段，逐段解析 marks 高亮区间与元信息。
+ * 字段名为蛇形（对齐真实接口与上游 segment_infos.md）：pid/text/marks、marks 的
+ * start_index/end_index、seg_info/master_seg_info 的 seg_ids/is_like/like_count/
+ * comment_count/my_comment_count/is_span。兼容 0/1 → 布尔（对应上游 BooleanCompatSerializer）。
+ */
+function segmentInfosFromWire(value: JsonValue | undefined): Array<SegmentInfoParagraph> {
+  if (value === undefined || value instanceof JsonNullValue) {
+    return [];
+  }
+  if (!(value instanceof JsonArrayValue)) {
+    return [];
+  }
+  const result: Array<SegmentInfoParagraph> = [];
+  value.items.forEach((paragraphValue: JsonValue): void => {
+    // 真实接口的数组元素直接就是段落对象（{pid,text,marks}），没有包装层。
+    if (!(paragraphValue instanceof JsonObjectValue)) {
+      return;
+    }
+    const paragraph = paragraphValue;
+    const pid = optionalText(paragraph.get('pid'));
+    if (pid === undefined) {
+      return;
+    }
+    const text = textOrEmpty(paragraph.get('text'), 'segment_info.text');
+    result.push({ pid: pid, text: text, marks: segmentMarksFromWire(paragraph.get('marks')) });
+  });
+  return result;
+}
+
+function segmentMarksFromWire(value: JsonValue | undefined): Array<SegmentInfoMark> {
+  if (value === undefined || value instanceof JsonNullValue) {
+    return [];
+  }
+  if (!(value instanceof JsonArrayValue)) {
+    return [];
+  }
+  const result: Array<SegmentInfoMark> = [];
+  value.items.forEach((markValue: JsonValue): void => {
+    // 真实接口的 marks 元素直接就是 {start_index,end_index,seg_info,...}，没有包装层。
+    if (!(markValue instanceof JsonObjectValue)) {
+      return;
+    }
+    const mark = markValue;
+    const start = nonNegativeInteger(mark.get('start_index'), 'segment_mark.start_index');
+    const end = nonNegativeInteger(mark.get('end_index'), 'segment_mark.end_index');
+    if (end <= start) {
+      return;
+    }
+    result.push({
+      startIndex: start,
+      endIndex: end,
+      segInfo: segmentMetaFromWire(mark.get('seg_info')),
+      masterSegInfo: segmentMetaFromWire(mark.get('master_seg_info'))
+    });
+  });
+  return result;
+}
+
+function segmentMetaFromWire(value: JsonValue | undefined): SegmentInfoMeta | undefined {
+  if (value === undefined || value instanceof JsonNullValue) {
+    return undefined;
+  }
+  if (!(value instanceof JsonObjectValue)) {
+    return undefined;
+  }
+  const segIdsValue = value.get('seg_ids');
+  const segIds: Array<string> = [];
+  if (segIdsValue instanceof JsonArrayValue) {
+    segIdsValue.items.forEach((idValue: JsonValue): void => {
+      if (idValue instanceof JsonStringValue) {
+        segIds.push(idValue.value);
+      }
+    });
+  }
+  return {
+    segIds: segIds,
+    isLike: compatBoolean(value.get('is_like'), 'segment_meta.is_like'),
+    likeCount: nonNegativeInteger(value.get('like_count'), 'segment_meta.like_count'),
+    commentCount: nonNegativeInteger(value.get('comment_count'), 'segment_meta.comment_count'),
+    myCommentCount: nonNegativeInteger(value.get('my_comment_count'), 'segment_meta.my_comment_count'),
+    isSpan: compatBoolean(value.get('is_span'), 'segment_meta.is_span')
+  };
+}
+
+/** 兼容 0/1/字符串/布尔 → 布尔（对应上游 BooleanCompatSerializer）。 */
+function compatBoolean(value: JsonValue | undefined, _field: string): boolean {
+  if (value === undefined || value instanceof JsonNullValue) {
+    return false;
+  }
+  if (value instanceof JsonBooleanValue) {
+    return value.value;
+  }
+  if (value instanceof JsonNumberValue) {
+    return value.value !== 0;
+  }
+  if (value instanceof JsonStringValue) {
+    return value.value === 'true' || value.value === '1';
+  }
+  return false;
+}
+
 export function decodeQuestionDetail(json: string, expectedId: string): Question {
   const wire = parseRoot(json, '问题');
   rejectUpstreamError(wire.get('error'), '问题');
@@ -431,7 +545,9 @@ export function decodeAnswerDetail(json: string, expectedId: string): Answer {
     thanksCount: nonNegativeInteger(wire.get('thanks_count'), 'answer.thanks_count'),
     isThanked: optionalBoolean(wire.get('is_thanked'), 'answer.is_thanked'),
     endorsements: endorsementsFromWire(wire.get('endorsements')),
-    ipInfo: optionalText(wire.get('ip_info'))
+    ipInfo: optionalText(wire.get('ip_info')),
+    segmentInfos: segmentInfosFromWire(wire.get('segment_infos')),
+    allowSegmentInteraction: compatBoolean(wire.get('allow_segment_interaction'), 'answer.allow_segment_interaction')
   };
 }
 
@@ -455,7 +571,9 @@ export function decodeArticleDetail(json: string, expectedId: string): Article {
     isThanked: optionalBoolean(wire.get('is_thanked'), 'article.is_thanked'),
     endorsements: endorsementsFromWire(wire.get('endorsements')),
     topics: questionTopicsFromWire(wire.get('topics')),
-    ipInfo: optionalText(wire.get('ip_info'))
+    ipInfo: optionalText(wire.get('ip_info')),
+    segmentInfos: segmentInfosFromWire(wire.get('segment_infos')),
+    allowSegmentInteraction: compatBoolean(wire.get('allow_segment_interaction'), 'article.allow_segment_interaction')
   };
 }
 
