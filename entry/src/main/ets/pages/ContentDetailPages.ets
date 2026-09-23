@@ -40,11 +40,18 @@ import {
   QuestionTopicSummary,
   SessionStatus,
   VoteRepository,
+  SegmentReactionRepository,
+  SegmentInfoParagraph,
+  SegmentInfoMeta,
+  SegmentInfoMark,
+  effectiveSegmentMeta,
+  Answer,
+  Article,
   DEFAULT_THEME_COLOR,
   onThemeColor,
   themeColorContainerColor
 } from 'data';
-import { parseZhihuHtml, ReaderBlock } from 'reader';
+import { parseZhihuHtml, ReaderBlock, ReaderBlockKind } from 'reader';
 import {
   BlockingActionContext,
   BlockingActionController,
@@ -153,6 +160,8 @@ struct ContentDetailPage {
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
   voteRepository: VoteRepository | undefined = undefined;
+  /** 他人划线点赞/取消点赞仓库（对接知乎 segment_reaction 接口）。 */
+  segmentReactionRepository: SegmentReactionRepository | undefined = undefined;
   followRepository: FollowRepository | undefined = undefined;
   collectionRepository: CollectionRepository | undefined = undefined;
   commentRepository: CommentRepository | undefined = undefined;
@@ -223,6 +232,15 @@ struct ContentDetailPage {
   private answersController?: QuestionAnswersController;
   /** P3-9-C：底部菜单弹窗可见性。 */
   @State private actionMenuShown: boolean = false;
+  /** 他人划线（segment_infos）：由服务端返回，按段落 pid 对齐渲染蓝色高亮。 */
+  @State private segmentInfos: SegmentInfoParagraph[] = [];
+  /** 划线点赞/评论面板可见性。 */
+  @State private segmentSheetShown: boolean = false;
+  /** 面板当前展示的划线段落 pid 与 mark 下标（用 pid 而非对象引用，避免乐观更新后引用失效）。 */
+  @State private segmentSheetPid: string = '';
+  @State private segmentSheetMarkIndex: number = -1;
+  /** 划线点赞请求进行中（防重复点击）。 */
+  @State private segmentLikeBusy: boolean = false;
   /** P3-9-C：菜单操作反馈（复制链接结果等）。 */
   @State private menuStatus: string = '';
   /** 沉浸式阅读仅收起页面 Chrome，不改变正文、互动或滚动状态。
@@ -345,6 +363,224 @@ struct ContentDetailPage {
     AppStorage.setOrCreate('p2ImagePreviewUrl', '');
     // 对齐上游 LeaveImmersiveModeCleanup：页面销毁时确保状态栏恢复。
     setStatusBarHidden(false);
+  }
+
+  /** 点击他人划线高亮：打开点赞/评论面板（仅当该划线带元信息）。 */
+  private openSegmentSheet(paragraph: SegmentInfoParagraph, markIndex: number): void {
+    const mark = paragraph.marks[markIndex];
+    if (mark === undefined || effectiveSegmentMeta(mark) === undefined) {
+      return;
+    }
+    this.segmentSheetPid = paragraph.pid;
+    this.segmentSheetMarkIndex = markIndex;
+    this.segmentSheetShown = true;
+  }
+
+  /** 当前面板展示划线的元信息（从最新 segmentInfos 实时读取，避免乐观更新后引用失效）。 */
+  private currentSegmentMeta(): SegmentInfoMeta | undefined {
+    const paragraph = this.segmentInfos.find((p: SegmentInfoParagraph): boolean => p.pid === this.segmentSheetPid);
+    if (paragraph === undefined) {
+      return undefined;
+    }
+    const mark = paragraph.marks[this.segmentSheetMarkIndex];
+    return mark === undefined ? undefined : effectiveSegmentMeta(mark);
+  }
+
+  /** 当前面板展示划线的引用文本。 */
+  private currentSegmentQuote(): string {
+    const paragraph = this.segmentInfos.find((p: SegmentInfoParagraph): boolean => p.pid === this.segmentSheetPid);
+    if (paragraph === undefined) {
+      return '';
+    }
+    const mark = paragraph.marks[this.segmentSheetMarkIndex];
+    if (mark === undefined) {
+      return '';
+    }
+    const start = Math.max(0, Math.min(paragraph.text.length, mark.startIndex));
+    const end = Math.max(0, Math.min(paragraph.text.length, mark.endIndex));
+    return end > start ? paragraph.text.substring(start, end) : '';
+  }
+
+  /** 乐观更新某条划线的元信息（点赞数/是否已赞）。 */
+  private applySegmentMeta(pid: string, markIndex: number, meta: SegmentInfoMeta): void {
+    const next: Array<SegmentInfoParagraph> = [];
+    this.segmentInfos.forEach((p: SegmentInfoParagraph): void => {
+      if (p.pid !== pid) {
+        next.push(p);
+        return;
+      }
+      const marks: Array<SegmentInfoMark> = [];
+      p.marks.forEach((m: SegmentInfoMark, index: number): void => {
+        if (index !== markIndex) {
+          marks.push(m);
+          return;
+        }
+        const updated: SegmentInfoMark = {
+          startIndex: m.startIndex,
+          endIndex: m.endIndex,
+          segInfo: m.segInfo !== undefined ? meta : m.segInfo,
+          masterSegInfo: m.masterSegInfo !== undefined ? meta : m.masterSegInfo
+        };
+        marks.push(updated);
+      });
+      next.push({ pid: p.pid, text: p.text, marks: marks });
+    });
+    this.segmentInfos = next;
+  }
+
+  /** 切换划线点赞（乐观更新 + 真实请求，失败回滚）。 */
+  private async onSegmentLike(): Promise<void> {
+    if (this.segmentLikeBusy || this.segmentReactionRepository === undefined ||
+      this.session === undefined || this.segmentSheetMarkIndex < 0) {
+      return;
+    }
+    if (this.kind !== ContentDetailKind.ANSWER && this.kind !== ContentDetailKind.ARTICLE) {
+      return;
+    }
+    const paragraph = this.segmentInfos.find((p: SegmentInfoParagraph): boolean => p.pid === this.segmentSheetPid);
+    if (paragraph === undefined) {
+      return;
+    }
+    const mark = paragraph.marks[this.segmentSheetMarkIndex];
+    const before = mark === undefined ? undefined : effectiveSegmentMeta(mark);
+    if (before === undefined) {
+      return;
+    }
+    const contentType: 'answer' | 'article' = this.kind === ContentDetailKind.ANSWER ? 'answer' : 'article';
+    // 乐观更新：先翻转点赞态与计数，失败再回滚。
+    this.segmentLikeBusy = true;
+    const optimistic: SegmentInfoMeta = {
+      segIds: before.segIds,
+      isLike: !before.isLike,
+      likeCount: before.isLike ? Math.max(0, before.likeCount - 1) : before.likeCount + 1,
+      commentCount: before.commentCount,
+      myCommentCount: before.myCommentCount,
+      isSpan: before.isSpan
+    };
+    this.applySegmentMeta(this.segmentSheetPid, this.segmentSheetMarkIndex, optimistic);
+    try {
+      const result = await this.segmentReactionRepository.toggleSegmentLike(contentType, this.activeContentId, paragraph, this.segmentSheetMarkIndex);
+      this.applySegmentMeta(this.segmentSheetPid, this.segmentSheetMarkIndex, result);
+    } catch (_error) {
+      this.applySegmentMeta(this.segmentSheetPid, this.segmentSheetMarkIndex, before);
+      this.getUIContext().getPromptAction().showToast({ message: '操作失败，请稍后重试' });
+    } finally {
+      this.segmentLikeBusy = false;
+    }
+  }
+
+  /** 从详情内容提取他人划线（问题页无 segment_infos）。 */
+  private extractSegmentInfos(content: LoadedContentDetail | undefined): SegmentInfoParagraph[] {
+    if (content === undefined || content.kind === ContentDetailKind.QUESTION) {
+      return [];
+    }
+    const value = content.value as Answer | Article;
+    return mergeSameRangeMarks(value.segmentInfos ?? []);
+  }
+
+  /** 复制划线片段到系统剪贴板（面板复制按钮与长按引用文本共用）。 */
+  private copySegmentQuote(): void {
+    const quote = this.currentSegmentQuote();
+    if (quote.length === 0) {
+      return;
+    }
+    const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, quote);
+    pasteboard.getSystemPasteboard().setData(pasteData).then((): void => {
+      this.getUIContext().getPromptAction().showToast({ message: '已复制划线内容' });
+    }).catch((): void => {
+      this.getUIContext().getPromptAction().showToast({ message: '复制失败' });
+    });
+  }
+
+  /**
+   * 他人划线点赞/评论/复制操作面板。
+   * 版式对齐上游段评弹层：小字标题"划线片段" + 放大并加引号的划线原文 + 胶囊化互动按钮，
+   * 按钮统一使用 HarmonyOS 原生符号图标（点赞/评论带计数，复制为纯图标按钮）。
+   */
+  @Builder
+  private segmentActionSheet() {
+    Column({ space: $r('app.float.p1_spacing_medium') }) {
+      Text('划线片段')
+        .id('p3_segment_sheet_title')
+        .fontSize($r('app.float.p3_segment_sheet_title_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
+      Text(`“${this.currentSegmentQuote()}”`)
+        .id('p3_segment_sheet_quote')
+        .fontSize($r('app.float.p3_segment_quote_font_size'))
+        .lineHeight($r('app.float.p3_segment_quote_line_height'))
+        .fontColor($r('app.color.primary_text'))
+        .copyOption(CopyOptions.LocalDevice)
+        .width('100%')
+      if (this.currentSegmentMeta() !== undefined) {
+        Row({ space: $r('app.float.p1_spacing_small') }) {
+          // 点赞胶囊：图标 + 计数，已赞时图标与计数切到主题色（对齐上游段评点赞态）。
+          Button({ type: ButtonType.Normal, stateEffect: true }) {
+            Row({ space: 6 }) {
+              SymbolGlyph(this.currentSegmentMeta()!.isLike ? $r('sys.symbol.hand_thumbsup_fill') : $r('sys.symbol.hand_thumbsup'))
+                .fontSize(18)
+                .fontColor([this.currentSegmentMeta()!.isLike ? this.resolvedThemeColor : $r('app.color.primary_text')])
+              Text(`${this.currentSegmentMeta()!.likeCount}`)
+                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontColor(this.currentSegmentMeta()!.isLike ? this.resolvedThemeColor : $r('app.color.primary_text'))
+            }
+            .justifyContent(FlexAlign.Center)
+            .width('100%')
+          }
+          .id('p3_segment_sheet_like')
+          .layoutWeight(1)
+          .height($r('app.float.p3_segment_action_button_height'))
+          .padding(0)
+          .backgroundColor($r('app.color.brand_primary_container'))
+          .borderRadius($r('app.float.p3_segment_action_button_radius'))
+          .accessibilityText(this.currentSegmentMeta()!.isLike ? '取消点赞该划线' : '点赞该划线')
+          .onClick((): void => { void this.onSegmentLike(); })
+
+          // 评论胶囊：进入该划线的段评列表。
+          Button({ type: ButtonType.Normal, stateEffect: true }) {
+            Row({ space: 6 }) {
+              SymbolGlyph($r('sys.symbol.text_bubble_left_2'))
+                .fontSize(18)
+                .fontColor([$r('app.color.primary_text')])
+              Text(`${this.currentSegmentMeta()!.commentCount}`)
+                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontColor($r('app.color.primary_text'))
+            }
+            .justifyContent(FlexAlign.Center)
+            .width('100%')
+          }
+          .id('p3_segment_sheet_comment')
+          .layoutWeight(1)
+          .height($r('app.float.p3_segment_action_button_height'))
+          .padding(0)
+          .backgroundColor($r('app.color.brand_primary_container'))
+          .borderRadius($r('app.float.p3_segment_action_button_radius'))
+          .accessibilityText('查看该划线的评论')
+          .onClick((): void => {
+            this.segmentSheetShown = false;
+            this.openSegmentComments();
+          })
+
+          // 复制：纯图标按钮（无胶囊底），使用鸿蒙原生复制符号。
+          Button({ type: ButtonType.Normal, stateEffect: true }) {
+            SymbolGlyph($r('sys.symbol.doc_filled_on_doc'))
+              .fontSize(20)
+              .fontColor([$r('app.color.secondary_text')])
+          }
+          .id('p3_segment_sheet_copy')
+          .width($r('app.float.p3_segment_action_button_height'))
+          .height($r('app.float.p3_segment_action_button_height'))
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('复制划线内容')
+          .onClick((): void => { this.copySegmentQuote(); })
+        }
+        .width('100%')
+      }
+    }
+    .id('p3_segment_action_sheet')
+    .width('100%')
+    .padding(20)
   }
 
   private onImmersiveReadingChanged(): void {
@@ -571,6 +807,21 @@ struct ContentDetailPage {
             }
           }
         })
+      Column()
+        .bindSheet(this.segmentSheetShown, this.segmentActionSheet(), {
+          height: SheetSize.FIT_CONTENT,
+          dragBar: true,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.segmentSheetShown) {
+              this.segmentSheetShown = false;
+              this.segmentSheetPid = '';
+              this.segmentSheetMarkIndex = -1;
+            }
+          }
+        })
       // 全屏图片查看器叠层：置于根 Stack 最后一个子节点，盖住正文/底部操作栏；
       // 标题栏由 P1Shell 监听同一 AppStorage 键隐藏（hideTitleBar）。
       if (this.imagePreviewUrl.length > 0) {
@@ -703,7 +954,9 @@ struct ContentDetailPage {
           },
           onPageTurnPastEnd: (): void => {
             if (this.pageTurnSwitchAnswer && this.kind === ContentDetailKind.ANSWER) void this.moveAnswer(1);
-          }
+          },
+          segmentInfos: this.segmentInfos,
+          onSegmentClick: (paragraph: SegmentInfoParagraph, markIndex: number): void => this.openSegmentSheet(paragraph, markIndex)
         })
           .layoutWeight(1)
       }
@@ -2138,6 +2391,28 @@ struct ContentDetailPage {
     });
   }
 
+  /** 打开划线句专属评论页（seg_id 维度，对齐上游 SegmentCommentHolder）。 */
+  private openSegmentComments(): void {
+    const meta = this.currentSegmentMeta();
+    if (meta === undefined || meta.segIds.length === 0 ||
+      (this.kind !== ContentDetailKind.ANSWER && this.kind !== ContentDetailKind.ARTICLE)) {
+      this.openComments();
+      return;
+    }
+    const mark = this.segmentInfos.find((p: SegmentInfoParagraph): boolean => p.pid === this.segmentSheetPid)
+      ?.marks[this.segmentSheetMarkIndex];
+    this.navigate({
+      name: P1DestinationName.COMMENT,
+      contentType: this.kind === ContentDetailKind.ARTICLE ? 'article' : 'answer',
+      contentId: this.activeContentId,
+      segmentId: meta.segIds.join(','),
+      segmentContent: this.currentSegmentQuote(),
+      segmentParagraphId: this.segmentSheetPid,
+      segmentStartOffset: mark === undefined ? 0 : mark.startIndex,
+      segmentEndOffset: mark === undefined ? 0 : mark.endIndex
+    });
+  }
+
   /** 双击正文动作分发（对齐上游 performAnswerDoubleTapAction）：仅回答页生效；
    * 震感仅点赞与打开评论区有；Ask 弹询问面板，选择后记住。 */
   private onAnswerDoubleTap(): void {
@@ -2812,6 +3087,7 @@ struct ContentDetailPage {
   private applyState(state: ContentDetailViewState): void {
     this.phase = state.phase;
     this.content = state.content;
+    this.segmentInfos = this.extractSegmentInfos(state.content);
     this.errorMessage = state.errorMessage ?? '';
     this.requiresLogin = state.requiresLogin;
     this.openedRecordPhase = state.openedRecordPhase;
@@ -2921,6 +3197,8 @@ export struct QuestionDetailPage {
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
   voteRepository: VoteRepository | undefined = undefined;
+  /** 他人划线点赞/取消点赞仓库（对接知乎 segment_reaction 接口）。 */
+  segmentReactionRepository: SegmentReactionRepository | undefined = undefined;
   followRepository: FollowRepository | undefined = undefined;
   collectionRepository: CollectionRepository | undefined = undefined;
   commentRepository: CommentRepository | undefined = undefined;
@@ -2945,7 +3223,8 @@ export struct QuestionDetailPage {
       commentRepository: this.commentRepository,
       session: this.session,
       navigate: this.navigate,
-      onBack: this.onBack
+      onBack: this.onBack,
+      segmentReactionRepository: this.segmentReactionRepository
     })
   }
 }
@@ -2959,6 +3238,8 @@ export struct AnswerDetailPage {
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
   voteRepository: VoteRepository | undefined = undefined;
+  /** 他人划线点赞/取消点赞仓库（对接知乎 segment_reaction 接口）。 */
+  segmentReactionRepository: SegmentReactionRepository | undefined = undefined;
   followRepository: FollowRepository | undefined = undefined;
   collectionRepository: CollectionRepository | undefined = undefined;
   commentRepository: CommentRepository | undefined = undefined;
@@ -2983,7 +3264,8 @@ export struct AnswerDetailPage {
       commentRepository: this.commentRepository,
       session: this.session,
       navigate: this.navigate,
-      onBack: this.onBack
+      onBack: this.onBack,
+      segmentReactionRepository: this.segmentReactionRepository
     })
   }
 }
@@ -2996,6 +3278,8 @@ export struct ArticleDetailPage {
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
   voteRepository: VoteRepository | undefined = undefined;
+  /** 他人划线点赞/取消点赞仓库（对接知乎 segment_reaction 接口）。 */
+  segmentReactionRepository: SegmentReactionRepository | undefined = undefined;
   followRepository: FollowRepository | undefined = undefined;
   collectionRepository: CollectionRepository | undefined = undefined;
   commentRepository: CommentRepository | undefined = undefined;
@@ -3019,9 +3303,81 @@ export struct ArticleDetailPage {
       commentRepository: this.commentRepository,
       session: this.session,
       navigate: this.navigate,
-      onBack: this.onBack
+      onBack: this.onBack,
+      segmentReactionRepository: this.segmentReactionRepository
     })
   }
+}
+
+/**
+ * 合并同区间的划线 mark（对齐上游 SegmentHighlightUtils.mergeSameRangeMarks）：
+ * 点赞会给同一文本位置创建属于自己的 seg，detail 重载后该段落会有多个同区间 mark。
+ * 合并规则：segIds 按 master 优先顺序去重拼接；isLike/isSpan 取任一为真；
+ * likeCount/commentCount/myCommentCount 取最大值。
+ */
+function mergeSameRangeMarks(paragraphs: SegmentInfoParagraph[]): SegmentInfoParagraph[] {
+  return paragraphs.map((paragraph: SegmentInfoParagraph): SegmentInfoParagraph => {
+    if (paragraph.marks.length <= 1) {
+      return paragraph;
+    }
+    const groups = new Map<string, SegmentInfoMark[]>();
+    paragraph.marks.forEach((mark: SegmentInfoMark): void => {
+      const key = `${mark.startIndex}:${mark.endIndex}`;
+      const bucket = groups.get(key);
+      if (bucket === undefined) {
+        groups.set(key, [mark]);
+      } else {
+        bucket.push(mark);
+      }
+    });
+    const merged: SegmentInfoMark[] = [];
+    groups.forEach((bucket: SegmentInfoMark[]): void => {
+      const ordered: SegmentInfoMark[] = bucket.filter((mark: SegmentInfoMark): boolean => mark.masterSegInfo !== undefined)
+        .concat(bucket.filter((mark: SegmentInfoMark): boolean => mark.masterSegInfo === undefined));
+      const segIds: string[] = [];
+      ordered.forEach((mark: SegmentInfoMark): void => {
+        const meta = effectiveSegmentMeta(mark);
+        if (meta === undefined) {
+          return;
+        }
+        meta.segIds.forEach((segId: string): void => {
+          if (!segIds.includes(segId)) {
+            segIds.push(segId);
+          }
+        });
+      });
+      let likeCount = 0;
+      let commentCount = 0;
+      let myCommentCount = 0;
+      let isLike = false;
+      let isSpan = false;
+      ordered.forEach((mark: SegmentInfoMark): void => {
+        const meta = effectiveSegmentMeta(mark);
+        if (meta === undefined) {
+          return;
+        }
+        likeCount = Math.max(likeCount, meta.likeCount);
+        commentCount = Math.max(commentCount, meta.commentCount);
+        myCommentCount = Math.max(myCommentCount, meta.myCommentCount);
+        isLike = isLike || meta.isLike;
+        isSpan = isSpan || meta.isSpan;
+      });
+      merged.push({
+        startIndex: bucket[0].startIndex,
+        endIndex: bucket[0].endIndex,
+        segInfo: {
+          segIds: segIds,
+          isLike: isLike,
+          likeCount: likeCount,
+          commentCount: commentCount,
+          myCommentCount: myCommentCount,
+          isSpan: isSpan
+        }
+      });
+    });
+    merged.sort((a: SegmentInfoMark, b: SegmentInfoMark): number => a.startIndex - b.startIndex);
+    return { pid: paragraph.pid, text: paragraph.text, marks: merged };
+  });
 }
 
 export function contentTitle(content: LoadedContentDetail): string {

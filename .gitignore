@@ -46,3 +46,6 @@ oh_modules/
 *.hsp
 *.har
 .preview/
+
+# WorkBuddy local data
+.workbuddy/

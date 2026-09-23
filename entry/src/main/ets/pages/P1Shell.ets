@@ -93,7 +93,7 @@ export struct P1Shell {
   @BuilderParam searchContent: (query: string, navigate: (destination: P1Destination) => void,
     onBack: () => void) => void =
     this.emptySearch;
-  @BuilderParam commentContent: (contentType: string, contentId: string,
+  @BuilderParam commentContent: (destination: P1Destination,
     navigate: (destination: P1Destination) => void, onBack: () => void) => void =
     this.emptyComment;
   @BuilderParam questionContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void) => void =
@@ -277,7 +277,7 @@ export struct P1Shell {
   }
 
   @Builder
-  emptyComment(_contentType: string, _contentId: string,
+  emptyComment(_destination: P1Destination,
     _navigate: (destination: P1Destination) => void, _onBack: () => void) {
     Blank();
   }
@@ -522,8 +522,7 @@ export struct P1Shell {
     } else if (destination.name === P1DestinationName.COMMENT) {
       HdsNavDestination() {
         this.commentContent(
-          destination.contentType,
-          destination.contentId,
+          destination,
           (nextDestination: P1Destination): void => this.navigate(nextDestination),
           (): void => { this.pathStack.pop(); }
         );

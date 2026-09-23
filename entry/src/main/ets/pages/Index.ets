@@ -30,6 +30,8 @@ import {
   DefaultOnlineHistoryRepository,
   DefaultMobileNotificationRepository,
   DefaultVoteRepository,
+  DefaultSegmentReactionRepository,
+  DefaultSegmentCommentRepository,
   FeedRepository,
   FollowRepository,
   getAppDatabase,
@@ -53,6 +55,7 @@ import {
   PinPublishRepository,
   QuestionAnswerFeedRepository,
   VoteRepository,
+  SegmentReactionRepository,
   VideoRepository,
   DefaultVideoRepository,
   ZhihuHttpClient,
@@ -133,6 +136,8 @@ struct Index {
   @State private pinRepository?: PinRepository = undefined;
   @State private onlineHistoryRepository?: OnlineHistoryRepository = undefined;
   @State private voteRepository?: VoteRepository = undefined;
+  @State private segmentReactionRepository?: SegmentReactionRepository = undefined;
+  private segmentCommentRepositoryHttpClient: ZhihuHttpClient = new ZhihuHttpClient();
   private videoRepository?: VideoRepository = undefined;
   @State private followRepository?: FollowRepository = undefined;
   @State private collectionRepository?: CollectionRepository = undefined;
@@ -194,6 +199,8 @@ struct Index {
       this.pinRepository = new DefaultPinRepository(new ZhihuHttpClient(session));
       this.onlineHistoryRepository = new DefaultOnlineHistoryRepository(new ZhihuHttpClient(session));
       this.voteRepository = new DefaultVoteRepository(new ZhihuHttpClient(session));
+      this.segmentReactionRepository = new DefaultSegmentReactionRepository(new ZhihuHttpClient(session));
+      this.segmentCommentRepositoryHttpClient = new ZhihuHttpClient(session);
       this.followRepository = new DefaultFollowRepository(new ZhihuHttpClient(session));
       this.collectionRepository = new DefaultCollectionRepository(new ZhihuHttpClient(session));
       this.commentRepository = new DefaultCommentRepository(new ZhihuHttpClient(session));
@@ -233,9 +240,9 @@ struct Index {
             this.dailyStoryContent(id, navigate),
           searchContent: (query: string, navigate: (destination: P1Destination) => void, onBack: () => void): void =>
             this.searchContent(query, navigate, onBack),
-          commentContent: (contentType: string, contentId: string,
+          commentContent: (destination: P1Destination,
             navigate: (destination: P1Destination) => void, onBack: () => void): void =>
-            this.commentContent(contentType, contentId, navigate, onBack),
+            this.commentContent(destination, navigate, onBack),
           questionContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void): void =>
             this.questionContent(id, navigate, onBack),
           answerContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void): void =>
@@ -367,16 +374,29 @@ struct Index {
   }
 
   @Builder
-  commentContent(contentType: string, contentId: string,
+  commentContent(destination: P1Destination,
     navigate: (destination: P1Destination) => void, onBack: () => void) {
-    CommentPage({
-      contentType: contentType,
-      contentId: contentId,
-      repository: this.commentRepository,
-      session: this.session,
-      navigate: navigate,
-      onDismiss: onBack
-    });
+    if (destination.name === P1DestinationName.COMMENT) {
+      CommentPage({
+        contentType: destination.contentType,
+        contentId: destination.contentId,
+        repository: destination.segmentId === undefined ? this.commentRepository
+          : new DefaultSegmentCommentRepository({
+            contentType: destination.contentType,
+            contentId: destination.contentId,
+            segmentId: destination.segmentId,
+            segmentContent: destination.segmentContent ?? '',
+            paragraphId: destination.segmentParagraphId ?? '',
+            startOffset: destination.segmentStartOffset ?? 0,
+            endOffset: destination.segmentEndOffset ?? 0
+          }, this.segmentCommentRepositoryHttpClient),
+        session: this.session,
+        navigate: navigate,
+        onDismiss: onBack
+      });
+    } else {
+      Blank();
+    }
   }
 
   @Builder
@@ -389,6 +409,7 @@ struct Index {
       rules: this.blockingRuleStore,
       history: this.blockedFeedHistoryStore,
       voteRepository: this.voteRepository,
+      segmentReactionRepository: this.segmentReactionRepository,
       followRepository: this.followRepository,
       collectionRepository: this.collectionRepository,
       commentRepository: this.commentRepository,
@@ -408,6 +429,7 @@ struct Index {
       rules: this.blockingRuleStore,
       history: this.blockedFeedHistoryStore,
       voteRepository: this.voteRepository,
+      segmentReactionRepository: this.segmentReactionRepository,
       followRepository: this.followRepository,
       collectionRepository: this.collectionRepository,
       commentRepository: this.commentRepository,
@@ -427,6 +449,7 @@ struct Index {
       rules: this.blockingRuleStore,
       history: this.blockedFeedHistoryStore,
       voteRepository: this.voteRepository,
+      segmentReactionRepository: this.segmentReactionRepository,
       followRepository: this.followRepository,
       collectionRepository: this.collectionRepository,
       commentRepository: this.commentRepository,

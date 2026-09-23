@@ -49,6 +49,26 @@
       "value": "4vp"
     },
     {
+      "name": "p3_segment_sheet_title_font_size",
+      "value": "14fp"
+    },
+    {
+      "name": "p3_segment_quote_font_size",
+      "value": "18fp"
+    },
+    {
+      "name": "p3_segment_quote_line_height",
+      "value": "26fp"
+    },
+    {
+      "name": "p3_segment_action_button_height",
+      "value": "40vp"
+    },
+    {
+      "name": "p3_segment_action_button_radius",
+      "value": "20vp"
+    },
+    {
       "name": "p3_settings_slider_height",
       "value": "48vp"
     },

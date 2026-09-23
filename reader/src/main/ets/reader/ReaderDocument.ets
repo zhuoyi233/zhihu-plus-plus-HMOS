@@ -29,6 +29,8 @@ export interface ReaderBlock {
   sourceUrl: string;
   /** 视频块的 data-lens-id；其他块不设置。 */
   targetId?: string;
+  /** 正文段落的知乎段落 id（p/li 的 data-pid），用于对齐服务端 segment_infos 的他人划线。 */
+  pid?: string;
   inlineRuns: Array<ReaderInlineRun>;
 }
 
@@ -235,6 +237,7 @@ export function parseZhihuHtml(html: string): Array<ReaderBlock> {
       kind: kind,
       text: text,
       sourceUrl: '',
+      pid: attributeValue(normalized, 'data-pid'),
       inlineRuns: inlineRuns(content, blockId)
     });
   });

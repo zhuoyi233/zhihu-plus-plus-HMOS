@@ -11,6 +11,9 @@ import {
   OpenedContentStore,
   Question,
   QuestionTopicSummary,
+  SegmentInfoMark,
+  SegmentInfoMeta,
+  SegmentInfoParagraph,
   UserProfile
 } from 'data';
 
@@ -313,7 +316,9 @@ function cloneLoadedContent(content: LoadedContentDetail): LoadedContentDetail {
           thanksCount: content.value.thanksCount,
           isThanked: content.value.isThanked,
           endorsements: content.value.endorsements,
-          ipInfo: content.value.ipInfo
+          ipInfo: content.value.ipInfo,
+          segmentInfos: cloneSegmentInfos(content.value.segmentInfos),
+          allowSegmentInteraction: content.value.allowSegmentInteraction
         }
       };
     case ContentDetailKind.ARTICLE:
@@ -335,8 +340,45 @@ function cloneLoadedContent(content: LoadedContentDetail): LoadedContentDetail {
           isThanked: content.value.isThanked,
           endorsements: content.value.endorsements,
           topics: cloneQuestionTopics(content.value.topics),
-          ipInfo: content.value.ipInfo
+          ipInfo: content.value.ipInfo,
+          segmentInfos: cloneSegmentInfos(content.value.segmentInfos),
+          allowSegmentInteraction: content.value.allowSegmentInteraction
         }
       };
   }
+}
+
+/** 深克隆他人划线（segment_infos），与既有防御性克隆口径一致。 */
+function cloneSegmentInfos(value: SegmentInfoParagraph[] | undefined): SegmentInfoParagraph[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  return value.map((paragraph: SegmentInfoParagraph): SegmentInfoParagraph => {
+    return {
+      pid: paragraph.pid,
+      text: paragraph.text,
+      marks: paragraph.marks.map((mark: SegmentInfoMark): SegmentInfoMark => {
+        return {
+          startIndex: mark.startIndex,
+          endIndex: mark.endIndex,
+          segInfo: cloneSegmentMeta(mark.segInfo),
+          masterSegInfo: cloneSegmentMeta(mark.masterSegInfo)
+        };
+      })
+    };
+  });
+}
+
+function cloneSegmentMeta(value: SegmentInfoMeta | undefined): SegmentInfoMeta | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  return {
+    segIds: value.segIds.slice(),
+    isLike: value.isLike,
+    likeCount: value.likeCount,
+    commentCount: value.commentCount,
+    myCommentCount: value.myCommentCount,
+    isSpan: value.isSpan
+  };
 }

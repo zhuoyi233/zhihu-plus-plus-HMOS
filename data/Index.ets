@@ -60,6 +60,8 @@ export * from './src/main/ets/repository/DefaultPinRepository';
 export * from './src/main/ets/repository/DefaultSearchRepository';
 export * from './src/main/ets/repository/DefaultOnlineHistoryRepository';
 export * from './src/main/ets/repository/DefaultVoteRepository';
+export * from './src/main/ets/repository/SegmentReactionRepository';
+export * from './src/main/ets/repository/SegmentCommentRepository';
 export * from './src/main/ets/repository/CreationPublishRepository';
 export * from './src/main/ets/repository/DefaultCreationPublishRepository';
 export * from './src/main/ets/repository/ImageUploadContracts';

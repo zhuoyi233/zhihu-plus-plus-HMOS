@@ -233,7 +233,7 @@ export class DefaultCommentRepository implements CommentRepository {
   }
 
   /** 去重并更新游标集合；fresh 加载（cursor 缺省）时重置已投递集合，分页时累积。 */
-  private deduplicate(page: CommentPage, cursor: string | undefined, requestUrl: string,
+  protected deduplicate(page: CommentPage, cursor: string | undefined, requestUrl: string,
     delivered: Set<string>): CommentPage {
     const requested = cursor === undefined ? new Set<string>() : cloneStringSet(this.requestedCursors);
     const retained = cursor === undefined ? new Set<string>() : delivered;
@@ -296,7 +296,7 @@ export class DefaultCommentRepository implements CommentRepository {
     }
   }
 
-  private async execute(url: string, method: ZhihuHttpMethod, body?: string): Promise<ZhihuHttpResponse> {
+  protected async execute(url: string, method: ZhihuHttpMethod, body?: string): Promise<ZhihuHttpResponse> {
     return this.httpClient.execute({
       url: url,
       method: method,
