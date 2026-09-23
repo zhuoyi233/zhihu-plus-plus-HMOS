@@ -561,60 +561,102 @@ struct ContentDetailPage {
     return mergeSameRangeMarks(value.segmentInfos ?? []);
   }
 
-  /** 他人划线点赞/评论/复制操作面板。 */
+  /** 复制划线片段到系统剪贴板（面板复制按钮与长按引用文本共用）。 */
+  private copySegmentQuote(): void {
+    const quote = this.currentSegmentQuote();
+    if (quote.length === 0) {
+      return;
+    }
+    const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, quote);
+    pasteboard.getSystemPasteboard().setData(pasteData).then((): void => {
+      this.getUIContext().getPromptAction().showToast({ message: '已复制划线内容' });
+    }).catch((): void => {
+      this.getUIContext().getPromptAction().showToast({ message: '复制失败' });
+    });
+  }
+
+  /**
+   * 他人划线点赞/评论/复制操作面板。
+   * 版式对齐上游段评弹层：小字标题"划线片段" + 放大并加引号的划线原文 + 胶囊化互动按钮，
+   * 按钮统一使用 HarmonyOS 原生符号图标（点赞/评论带计数，复制为纯图标按钮）。
+   */
   @Builder
   private segmentActionSheet() {
-    Column({ space: 16 }) {
-      Text(this.currentSegmentQuote())
+    Column({ space: $r('app.float.p1_spacing_medium') }) {
+      Text('划线片段')
+        .id('p3_segment_sheet_title')
+        .fontSize($r('app.float.p3_segment_sheet_title_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
+      Text(`“${this.currentSegmentQuote()}”`)
         .id('p3_segment_sheet_quote')
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontSize($r('app.float.p3_segment_quote_font_size'))
+        .lineHeight($r('app.float.p3_segment_quote_line_height'))
         .fontColor($r('app.color.primary_text'))
         .copyOption(CopyOptions.LocalDevice)
         .width('100%')
       if (this.currentSegmentMeta() !== undefined) {
-        Row({ space: 28 }) {
-          Row({ space: 6 }) {
-            SymbolGlyph(this.currentSegmentMeta()!.isLike ? $r('sys.symbol.hand_thumbsup_fill') : $r('sys.symbol.hand_thumbsup'))
-              .fontSize(20)
-              .fontColor([this.currentSegmentMeta()!.isLike ? this.resolvedThemeColor : $r('app.color.secondary_text')])
-            Text(`${this.currentSegmentMeta()!.likeCount}`)
-              .fontSize(15)
-              .fontColor($r('app.color.secondary_text'))
+        Row({ space: $r('app.float.p1_spacing_small') }) {
+          // 点赞胶囊：图标 + 计数，已赞时图标与计数切到主题色（对齐上游段评点赞态）。
+          Button({ type: ButtonType.Normal, stateEffect: true }) {
+            Row({ space: 6 }) {
+              SymbolGlyph(this.currentSegmentMeta()!.isLike ? $r('sys.symbol.hand_thumbsup_fill') : $r('sys.symbol.hand_thumbsup'))
+                .fontSize(18)
+                .fontColor([this.currentSegmentMeta()!.isLike ? this.resolvedThemeColor : $r('app.color.primary_text')])
+              Text(`${this.currentSegmentMeta()!.likeCount}`)
+                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontColor(this.currentSegmentMeta()!.isLike ? this.resolvedThemeColor : $r('app.color.primary_text'))
+            }
+            .justifyContent(FlexAlign.Center)
+            .width('100%')
           }
           .id('p3_segment_sheet_like')
+          .layoutWeight(1)
+          .height($r('app.float.p3_segment_action_button_height'))
+          .padding(0)
+          .backgroundColor($r('app.color.brand_primary_container'))
+          .borderRadius($r('app.float.p3_segment_action_button_radius'))
+          .accessibilityText(this.currentSegmentMeta()!.isLike ? '取消点赞该划线' : '点赞该划线')
           .onClick((): void => { void this.onSegmentLike(); })
 
-          Row({ space: 6 }) {
-            SymbolGlyph($r('sys.symbol.message'))
-              .fontSize(20)
-              .fontColor([$r('app.color.secondary_text')])
-            Text(`${this.currentSegmentMeta()!.commentCount}`)
-              .fontSize(15)
-              .fontColor($r('app.color.secondary_text'))
+          // 评论胶囊：进入该划线的段评列表。
+          Button({ type: ButtonType.Normal, stateEffect: true }) {
+            Row({ space: 6 }) {
+              SymbolGlyph($r('sys.symbol.text_bubble_left_2'))
+                .fontSize(18)
+                .fontColor([$r('app.color.primary_text')])
+              Text(`${this.currentSegmentMeta()!.commentCount}`)
+                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontColor($r('app.color.primary_text'))
+            }
+            .justifyContent(FlexAlign.Center)
+            .width('100%')
           }
           .id('p3_segment_sheet_comment')
+          .layoutWeight(1)
+          .height($r('app.float.p3_segment_action_button_height'))
+          .padding(0)
+          .backgroundColor($r('app.color.brand_primary_container'))
+          .borderRadius($r('app.float.p3_segment_action_button_radius'))
+          .accessibilityText('查看该划线的评论')
           .onClick((): void => {
             this.segmentSheetShown = false;
             this.openSegmentComments();
           })
 
-          Row({ space: 6 }) {
-            Text('复制')
-              .fontSize(15)
-              .fontColor($r('app.color.secondary_text'))
+          // 复制：纯图标按钮（无胶囊底），使用鸿蒙原生复制符号。
+          Button({ type: ButtonType.Normal, stateEffect: true }) {
+            SymbolGlyph($r('sys.symbol.doc_filled_on_doc'))
+              .fontSize(20)
+              .fontColor([$r('app.color.secondary_text')])
           }
           .id('p3_segment_sheet_copy')
-          .onClick((): void => {
-            const quote = this.currentSegmentQuote();
-            if (quote.length > 0) {
-              const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, quote);
-              pasteboard.getSystemPasteboard().setData(pasteData).then((): void => {
-                this.getUIContext().getPromptAction().showToast({ message: '已复制划线内容' });
-              }).catch((): void => {
-                this.getUIContext().getPromptAction().showToast({ message: '复制失败' });
-              });
-            }
-          })
+          .width($r('app.float.p3_segment_action_button_height'))
+          .height($r('app.float.p3_segment_action_button_height'))
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('复制划线内容')
+          .onClick((): void => { this.copySegmentQuote(); })
         }
         .width('100%')
       }
