@@ -184,8 +184,14 @@ export struct AppNavigationRow {
   }
 }
 
-/** 下拉刷新自定义区域的构造参数（无字段，仅用于 ComponentContent 类型标注）。 */
+/** 下拉刷新自定义区域的构造参数（ComponentContent 传参用）。 */
 export class FeedPullDownIndicatorOptions {
+  /**
+   * 圆圈额外的绘制下移量（vp）。覆盖式顶栏页面传 FLOATING_TITLE_BAR_OFFSET：
+   * Refresh 头部区域从页面顶端展开，圆圈会贴着状态栏出现，需要把它挪到悬浮
+   * 标题栏下沿；占位式页面 Refresh 组件本身已在标题栏下方，保持 0。
+   */
+  topInset: number = 0;
 }
 
 /**
@@ -194,12 +200,13 @@ export class FeedPullDownIndicatorOptions {
  * 间隙底部、跟随下拉距离移动（等价上游 Material3 指示器随拖拽平移的行为）。
  * 注意：不要给容器设固定高度——固定高度会让内容锚定位置失控（圆圈曾因此
  * 钉在状态栏一栏，见 2026-09-15 修复）。
- * 覆盖式顶栏下（2026-09-23 起）Refresh 头部区域从页面顶端展开，圆圈贴着页面顶边出现；
- * 此时列表位于顶部、标题栏是 originalStyle 的透明底，圆圈清晰可见，无需再为它让位
- * （Refresh 的 offset 上限 64vp，也够不到 94vp 的标题栏下沿）。
+ * 覆盖式顶栏下（2026-09-23 起）Refresh 头部区域从页面顶端展开，圆圈会贴着状态栏
+ * 出现；覆盖式页面经 options.topInset 传 FLOATING_TITLE_BAR_OFFSET，用绘制偏移
+ * （translate，不占布局、不影响下拉触发距离）把圆圈挪到悬浮标题栏下沿；占位式
+ * 页面 Refresh 本身已在标题栏下方，topInset 保持 0。
  */
 @Builder
-export function feedPullDownIndicator(_options: FeedPullDownIndicatorOptions) {
+export function feedPullDownIndicator(options: FeedPullDownIndicatorOptions) {
   Column() {
     LoadingProgress()
       .width(40)
@@ -212,4 +219,5 @@ export function feedPullDownIndicator(_options: FeedPullDownIndicatorOptions) {
   .constraintSize({ minHeight: 48 })
   .justifyContent(FlexAlign.End)
   .padding({ bottom: 12 })
+  .translate({ y: options.topInset })
 }
