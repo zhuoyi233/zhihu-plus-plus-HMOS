@@ -52,7 +52,6 @@ import {
   themeColorContainerColor
 } from 'data';
 import { parseZhihuHtml, ReaderBlock, ReaderBlockKind } from 'reader';
-import { ANNOTATION_HIGHLIGHT_COLOR, AnnotationBlockSentences, AnnotationTarget, ContentAnnotation, ContentAnnotationStore, createContentAnnotationStore, splitIntoSentences } from './ContentAnnotations';
 import {
   BlockingActionContext,
   BlockingActionController,
@@ -233,8 +232,6 @@ struct ContentDetailPage {
   private answersController?: QuestionAnswersController;
   /** P3-9-C：底部菜单弹窗可见性。 */
   @State private actionMenuShown: boolean = false;
-  /** 正文划线评论：当前内容的全部批注（已加载）。 */
-  @State private annotations: ContentAnnotation[] = [];
   /** 他人划线（segment_infos）：由服务端返回，按段落 pid 对齐渲染蓝色高亮。 */
   @State private segmentInfos: SegmentInfoParagraph[] = [];
   /** 划线点赞/评论面板可见性。 */
@@ -244,22 +241,6 @@ struct ContentDetailPage {
   @State private segmentSheetMarkIndex: number = -1;
   /** 划线点赞请求进行中（防重复点击）。 */
   @State private segmentLikeBusy: boolean = false;
-  /** 划线评论本地存储（按 contentId 维度）。 */
-  annotationRepo: ContentAnnotationStore | undefined = undefined;
-  /** 划线评论管理面板可见性。 */
-  @State private annotationSheetShown: boolean = false;
-  /** 撰写批注子视图可见性（annotationTarget 是普通字段，不驱动渲染）。 */
-  @State private annotationComposeShown: boolean = false;
-  /** 管理面板中的正文文本块列表（blockId + 预览 + 句子拆分）。 */
-  @State private annotationBlocks: Array<AnnotationBlockSentences> = [];
-  /** 正在添加批注的目标句子（blockId + 引用文本）。 */
-  private annotationTarget: AnnotationTarget | undefined = undefined;
-  /** 添加批注时的评论草稿。 */
-  @State private annotationDraft: string = '';
-  /** 点击高亮片段后查看的批注（含删除）。 */
-  @State private viewingAnnotation: ContentAnnotation | undefined = undefined;
-  /** 查看/删除批注面板可见性（bindSheet 由布尔状态驱动）。 */
-  @State private annotationViewShown: boolean = false;
   /** P3-9-C：菜单操作反馈（复制链接结果等）。 */
   @State private menuStatus: string = '';
   /** 沉浸式阅读仅收起页面 Chrome，不改变正文、互动或滚动状态。
@@ -281,7 +262,6 @@ struct ContentDetailPage {
   aboutToAppear(): void {
     this.pageActive = true;
     if (this.activeContentId.length === 0) { this.activeContentId = this.contentId; }
-    this.loadAnnotations();
     this.authenticated = this.session?.getState().status === SessionStatus.AUTHENTICATED;
     // 双击动作偏好全局生效，返回栈重显时也刷新（可能刚在设置页改过）。
     void this.restoreAnswerDoubleTapAction();
@@ -383,69 +363,6 @@ struct ContentDetailPage {
     AppStorage.setOrCreate('p2ImagePreviewUrl', '');
     // 对齐上游 LeaveImmersiveModeCleanup：页面销毁时确保状态栏恢复。
     setStatusBarHidden(false);
-  }
-
-  /** 划线评论：确保本地存储实例存在（首用时按当前 Ability 上下文惰性创建）。 */
-  private ensureAnnotationRepo(): ContentAnnotationStore | undefined {
-    if (this.annotationRepo === undefined) {
-      const context = getAbilityContext();
-      if (context === undefined) {
-        return undefined;
-      }
-      this.annotationRepo = createContentAnnotationStore(context);
-    }
-    return this.annotationRepo;
-  }
-
-  /** 划线评论：加载当前内容的全部批注，刷新正文高亮。 */
-  private loadAnnotations(): void {
-    const repo = this.ensureAnnotationRepo();
-    if (repo === undefined) {
-      return;
-    }
-    void repo.load(this.activeContentId).then((items: ContentAnnotation[]): void => {
-      this.annotations = items;
-    });
-  }
-
-  /** 打开划线评论管理面板：按正文块拆分句子供选择。 */
-  private openAnnotationSheet(): void {
-    const content = this.content;
-    if (content === undefined) {
-      return;
-    }
-    const blocks = parseZhihuHtml(contentHtml(content));
-    const result: Array<AnnotationBlockSentences> = [];
-    blocks.forEach((block: ReaderBlock): void => {
-      if (block.kind === ReaderBlockKind.HEADING ||
-        block.kind === ReaderBlockKind.PARAGRAPH ||
-        block.kind === ReaderBlockKind.LIST_ITEM) {
-        const text = block.text.trim();
-        if (text.length === 0) {
-          return;
-        }
-        const sentences = splitIntoSentences(text);
-        if (sentences.length === 0) {
-          return;
-        }
-        const preview = text.length > 40 ? `${text.substring(0, 40)}…` : text;
-        result.push({ blockId: block.id, preview: preview, sentences: sentences });
-      }
-    });
-    this.annotationBlocks = result;
-    this.annotationTarget = undefined;
-    this.annotationDraft = '';
-    this.annotationComposeShown = false;
-    this.annotationSheetShown = true;
-  }
-
-  /** 点击正文高亮片段：打开批注查看/删除面板。 */
-  private openAnnotation(annotationId: string): void {
-    const found = this.annotations.find((annotation: ContentAnnotation): boolean => annotation.id === annotationId);
-    if (found !== undefined) {
-      this.viewingAnnotation = found;
-      this.annotationViewShown = true;
-    }
   }
 
   /** 点击他人划线高亮：打开点赞/评论面板（仅当该划线带元信息）。 */
@@ -664,67 +581,6 @@ struct ContentDetailPage {
     .id('p3_segment_action_sheet')
     .width('100%')
     .padding(20)
-  }
-
-  /** 为选中的句子保存一条批注（本地持久化后刷新高亮）。 */
-  private async addAnnotation(): Promise<void> {
-    const target = this.annotationTarget;
-    const repo = this.ensureAnnotationRepo();
-    if (target === undefined || repo === undefined) {
-      return;
-    }
-    const annotation: ContentAnnotation = {
-      id: `a_${this.activeContentId}_${Date.now()}`,
-      contentId: this.activeContentId,
-      blockId: target.blockId,
-      quote: target.quote,
-      comment: this.annotationDraft.trim(),
-      createdAt: Date.now()
-    };
-    const items = await repo.add(this.activeContentId, annotation);
-    this.annotations = items;
-    this.annotationTarget = undefined;
-    this.annotationDraft = '';
-    this.annotationComposeShown = false;
-    this.annotationSheetShown = false;
-  }
-
-  /** 删除指定批注（本地持久化后刷新高亮）。 */
-  private async deleteAnnotation(annotation: ContentAnnotation): Promise<void> {
-    const repo = this.ensureAnnotationRepo();
-    if (repo === undefined) {
-      return;
-    }
-    const items = await repo.remove(this.activeContentId, annotation.id);
-    this.annotations = items;
-    this.annotationViewShown = false;
-    this.viewingAnnotation = undefined;
-  }
-
-  /** 撰写批注面板展示的引用文本。@Builder 体内禁止非 UI 语句，取值一律提为方法。 */
-  private annotationTargetQuote(): string {
-    return this.annotationTarget === undefined ? '' : this.annotationTarget.quote;
-  }
-
-  /** 查看面板展示的引用文本。 */
-  private viewingAnnotationQuote(): string {
-    return this.viewingAnnotation === undefined ? '' : this.viewingAnnotation.quote;
-  }
-
-  /** 查看面板展示的评论文本（无内容时给占位）。 */
-  private viewingAnnotationComment(): string {
-    if (this.viewingAnnotation === undefined) {
-      return '';
-    }
-    return this.viewingAnnotation.comment.length > 0 ? this.viewingAnnotation.comment : '（无评论内容）';
-  }
-
-  /** 删除当前正在查看的批注（面板内按钮入口）。 */
-  private deleteViewingAnnotation(): void {
-    const annotation = this.viewingAnnotation;
-    if (annotation !== undefined) {
-      void this.deleteAnnotation(annotation);
-    }
   }
 
   private onImmersiveReadingChanged(): void {
@@ -952,36 +808,6 @@ struct ContentDetailPage {
           }
         })
       Column()
-        .bindSheet(this.annotationSheetShown, this.annotationSheet(), {
-          height: SheetSize.LARGE,
-          dragBar: true,
-          showClose: false,
-          maskColor: '#66000000',
-          backgroundColor: $r('app.color.surface_background'),
-          onDisappear: (): void => {
-            if (this.annotationSheetShown) {
-              this.annotationSheetShown = false;
-              this.annotationTarget = undefined;
-              this.annotationDraft = '';
-              this.annotationComposeShown = false;
-            }
-          }
-        })
-      Column()
-        .bindSheet(this.annotationViewShown, this.annotationViewSheet(), {
-          height: SheetSize.FIT_CONTENT,
-          dragBar: true,
-          showClose: false,
-          maskColor: '#66000000',
-          backgroundColor: $r('app.color.surface_background'),
-          onDisappear: (): void => {
-            if (this.annotationViewShown) {
-              this.annotationViewShown = false;
-              this.viewingAnnotation = undefined;
-            }
-          }
-        })
-      Column()
         .bindSheet(this.segmentSheetShown, this.segmentActionSheet(), {
           height: SheetSize.FIT_CONTENT,
           dragBar: true,
@@ -1129,9 +955,6 @@ struct ContentDetailPage {
           onPageTurnPastEnd: (): void => {
             if (this.pageTurnSwitchAnswer && this.kind === ContentDetailKind.ANSWER) void this.moveAnswer(1);
           },
-          contentId: this.activeContentId,
-          annotations: this.annotations,
-          onAnnotationClick: (annotationId: string): void => this.openAnnotation(annotationId),
           segmentInfos: this.segmentInfos,
           onSegmentClick: (paragraph: SegmentInfoParagraph, markIndex: number): void => this.openSegmentSheet(paragraph, markIndex)
         })
@@ -2050,9 +1873,6 @@ struct ContentDetailPage {
         documentItems: (): void => { this.questionAnswerItems() },
         documentFooter: (): void => { this.questionAnswersFooter() },
         onListReachEnd: (): void => { this.answersController?.loadMore(); },
-        contentId: this.activeContentId,
-        annotations: this.annotations,
-        onAnnotationClick: (annotationId: string): void => this.openAnnotation(annotationId),
         onScrollOffset: (offset: number): void => {
           const scrolled = offset > 160;
           if (scrolled !== this.questionScrolled) {
@@ -2865,18 +2685,6 @@ struct ContentDetailPage {
           })
       }
 
-      Button('划线评论', { type: ButtonType.Normal, stateEffect: true })
-        .id('p3_detail_menu_annotate')
-        .width('100%')
-        .fontSize($r('app.float.p1_body_font_size'))
-        .fontColor($r('app.color.primary_text'))
-        .backgroundColor($r('app.color.control_background'))
-        .borderRadius($r('app.float.p1_card_radius'))
-        .onClick((): void => {
-          this.actionMenuShown = false;
-          this.openAnnotationSheet();
-        })
-
       Button('分享', { type: ButtonType.Normal, stateEffect: true })
         .id('p3_detail_menu_share')
         .width('100%')
@@ -3111,150 +2919,6 @@ struct ContentDetailPage {
     }).catch((): void => {
       this.menuStatus = '暂时无法打开分享面板';
     });
-  }
-
-  /** 划线评论管理面板：选择正文句子并撰写批注（两步式：列表 → 撰写）。 */
-  @Builder
-  private annotationSheet() {
-    Column() {
-      Text('划线评论')
-        .id('p3_annotation_sheet_title')
-        .fontSize($r('app.float.p1_heading_font_size'))
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.primary_text'))
-        .margin({ top: 16, bottom: 8 })
-      if (!this.annotationComposeShown) {
-        Scroll() {
-          Column() {
-            ForEach(this.annotationBlocks,
-              (block: AnnotationBlockSentences): void => {
-                Column() {
-                  Text(block.preview)
-                    .id(`p3_annotation_block_${block.blockId}`)
-                    .fontSize($r('app.float.p1_caption_font_size'))
-                    .fontColor($r('app.color.secondary_text'))
-                    .maxLines(1)
-                    .width('100%')
-                    .margin({ top: 8, bottom: 4 })
-                  ForEach(block.sentences, (sentence: string, index: number): void => {
-                    Button(sentence, { type: ButtonType.Normal, stateEffect: true })
-                      .id(`p3_annotation_sentence_${block.blockId}_${index}`)
-                      .width('100%')
-                      .align(Alignment.Start)
-                      .fontSize($r('app.float.p1_body_font_size'))
-                      .fontColor($r('app.color.primary_text'))
-                      .backgroundColor($r('app.color.control_background'))
-                      .borderRadius($r('app.float.p1_card_radius'))
-                      .margin({ bottom: 6 })
-                      .onClick((): void => {
-                        this.annotationTarget = { blockId: block.blockId, quote: sentence };
-                        this.annotationDraft = '';
-                        this.annotationComposeShown = true;
-                      })
-                  }, (sentence: string, index: number): string => `${block.blockId}:${index}`)
-                }
-                .width('100%')
-              }, (block: AnnotationBlockSentences): string => block.blockId)
-          }
-          .padding({ left: 16, right: 16, bottom: 16 })
-        }
-        .layoutWeight(1)
-        .width('100%')
-      } else {
-        Column() {
-          Text(this.annotationTargetQuote())
-            .id('p3_annotation_quote')
-            .fontSize($r('app.float.p1_body_font_size'))
-            .fontColor($r('app.color.primary_text'))
-            .backgroundColor(ANNOTATION_HIGHLIGHT_COLOR)
-            .borderRadius(4)
-            .width('100%')
-            .padding(8)
-            .margin({ bottom: 12 })
-          TextArea({ text: this.annotationDraft, placeholder: '写下你的评论…' })
-            .id('p3_annotation_input')
-            .width('100%')
-            .height(120)
-            .fontSize($r('app.float.p1_body_font_size'))
-            .onChange((value: string): void => {
-              this.annotationDraft = value;
-            })
-          Row({ space: 12 }) {
-            Button('返回', { type: ButtonType.Normal, stateEffect: true })
-              .id('p3_annotation_back')
-              .layoutWeight(1)
-              .fontSize($r('app.float.p1_body_font_size'))
-              .fontColor($r('app.color.secondary_text'))
-              .backgroundColor($r('app.color.control_background'))
-              .borderRadius($r('app.float.p1_card_radius'))
-              .onClick((): void => {
-                this.annotationComposeShown = false;
-                this.annotationTarget = undefined;
-                this.annotationDraft = '';
-              })
-            Button('保存', { type: ButtonType.Normal, stateEffect: true })
-              .id('p3_annotation_save')
-              .layoutWeight(1)
-              .fontSize($r('app.float.p1_body_font_size'))
-              .fontColor($r('app.color.on_brand'))
-              .backgroundColor($r('app.color.brand_primary'))
-              .borderRadius($r('app.float.p1_card_radius'))
-              .onClick((): void => {
-                void this.addAnnotation();
-              })
-          }
-          .margin({ top: 12 })
-          .width('100%')
-        }
-        .padding({ left: 16, right: 16, bottom: 16 })
-        .width('100%')
-      }
-    }
-    .width('100%')
-    .height('100%')
-  }
-
-  /** 划线评论查看/删除面板：展示引用与评论，支持删除。 */
-  @Builder
-  private annotationViewSheet() {
-    Column() {
-      if (this.viewingAnnotation !== undefined) {
-        Text('划线评论')
-          .id('p3_annotation_view_title')
-          .fontSize($r('app.float.p1_heading_font_size'))
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.primary_text'))
-          .margin({ top: 16, bottom: 8 })
-        Text(this.viewingAnnotationQuote())
-          .id('p3_annotation_view_quote')
-          .fontSize($r('app.float.p1_body_font_size'))
-          .fontColor($r('app.color.primary_text'))
-          .backgroundColor(ANNOTATION_HIGHLIGHT_COLOR)
-          .borderRadius(4)
-          .width('100%')
-          .padding(8)
-          .margin({ bottom: 12 })
-        Text(this.viewingAnnotationComment())
-          .id('p3_annotation_view_comment')
-          .fontSize($r('app.float.p1_body_font_size'))
-          .fontColor($r('app.color.secondary_text'))
-          .width('100%')
-          .margin({ bottom: 16 })
-        Button('删除批注', { type: ButtonType.Normal, stateEffect: true })
-          .id('p3_annotation_delete')
-          .width('100%')
-          .fontSize($r('app.float.p1_body_font_size'))
-          .fontColor($r('app.color.on_brand'))
-          .backgroundColor($r('app.color.error_text'))
-          .borderRadius($r('app.float.p1_card_radius'))
-          .onClick((): void => {
-            void this.deleteViewingAnnotation();
-          })
-      }
-    }
-    .padding({ left: 16, right: 16, bottom: 16 })
-    .width('100%')
-    .height('100%')
   }
 
   /** 文章话题胶囊流（对齐上游 "# 名称" FilterChip；点击经搜索页进入话题，与问题页话题一致）。 */

@@ -36,12 +36,8 @@ import {
   ReaderInlineRun
 } from 'reader';
 import {
-  ANNOTATION_HIGHLIGHT_COLOR,
-  AnnotationSegment,
-  ContentAnnotation,
   HighlightSegment,
   SegmentHighlightRef,
-  splitTextByAnnotations,
   splitTextByHighlights
 } from './ContentAnnotations';
 import {
@@ -406,10 +402,6 @@ struct ContentInlineFormula {
     sourceUrl: '',
     inlineRuns: []
   };
-  /** 本块已存在的划线评论（按 blockId 预筛选），用于渲染高亮片段。@Prop 保证增删批注后行内段落同步刷新。 */
-  @Prop blockAnnotations: ContentAnnotation[] = [];
-  /** 点击高亮片段时回调（查看/删除评论）。 */
-  onAnnotationClick?: (annotationId: string) => void;
   /** 排版偏好与宿主同源（AppStorage 广播），行内公式所在段落随字号/行高联动。 */
   @StorageProp('contentFontSize') private fontSizePercent: number = 100;
   @StorageProp('contentLineHeight') private lineHeightPercent: number = 160;
@@ -450,16 +442,8 @@ struct ContentInlineFormula {
         if (run.kind === ReaderInlineKind.TEXT || !this.loadedRunIds.includes(run.id) ||
           this.pixelMaps.get(run.id) === undefined) {
           if (run.kind === ReaderInlineKind.TEXT) {
-            ForEach(splitTextByAnnotations(run.text, this.blockAnnotations), (seg: AnnotationSegment) => {
-              Span(seg.text)
-                .fontColor($r('app.color.primary_text'))
-                .textBackgroundStyle({ color: seg.annotationId !== undefined ? ANNOTATION_HIGHLIGHT_COLOR : Color.Transparent, radius: 2 })
-                .onClick((): void => {
-                  if (seg.annotationId !== undefined && this.onAnnotationClick !== undefined) {
-                    this.onAnnotationClick(seg.annotationId);
-                  }
-                })
-            }, (seg: AnnotationSegment): string => `${seg.annotationId ?? 'n'}:${seg.text}`)
+            Span(run.text)
+              .fontColor($r('app.color.primary_text'))
           } else {
             Span(`「${run.text}」`)
               .fontColor($r('app.color.secondary_text'))
@@ -638,12 +622,6 @@ struct ContentBlockFormula {
 export struct NativeContentDocument {
   html: string = '';
   emptyMessage: string = '正文为空';
-  /** 内容标识：划线评论按 contentId 维度持久化。 */
-  contentId: string = '';
-  /** 当前内容的全部划线评论（已按内容加载），渲染时按 blockId 预筛。@Prop 同步父级刷新，增删后高亮立即更新。 */
-  @Prop annotations: ContentAnnotation[] = [];
-  /** 点击正文高亮片段回调（查看/删除评论）。 */
-  onAnnotationClick?: (annotationId: string) => void;
   /** 服务端返回的他人划线（segment_infos），按段落 pid 对齐渲染蓝色高亮。 */
   @Prop segmentInfos: SegmentInfoParagraph[] = [];
   /** 点击他人划线高亮片段回调（打开点赞/评论面板）。 */
@@ -1166,13 +1144,9 @@ export struct NativeContentDocument {
   private readerBlock(item: ReaderBlock) {
     if (item.kind === ReaderBlockKind.HEADING) {
       Text() {
-        ForEach(splitTextByHighlights(item.text, this.blockAnnotations(item), this.blockSegments(item)), (seg: HighlightSegment) => {
+        ForEach(splitTextByHighlights(item.text, this.blockSegments(item)), (seg: HighlightSegment) => {
           Span(seg.text)
             .fontColor($r('app.color.primary_text'))
-            .textBackgroundStyle({
-              color: seg.annotationId !== undefined && seg.segmentRef === undefined ? ANNOTATION_HIGHLIGHT_COLOR : Color.Transparent,
-              radius: 2
-            })
             .decoration({
               type: seg.segmentRef !== undefined ? TextDecorationType.Underline : TextDecorationType.None,
               style: seg.segmentRef !== undefined ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
@@ -1181,11 +1155,9 @@ export struct NativeContentDocument {
             .onClick((): void => {
               if (seg.segmentRef !== undefined && this.onSegmentClick !== undefined) {
                 this.onSegmentClick(seg.segmentRef.paragraph, seg.segmentRef.markIndex);
-              } else if (seg.annotationId !== undefined && this.onAnnotationClick !== undefined) {
-                this.onAnnotationClick(seg.annotationId);
               }
             })
-        }, (seg: HighlightSegment): string => `h:${seg.annotationId ?? 'x'}:${seg.segmentRef !== undefined ? 's' : 'n'}:${seg.text}`)
+        }, (seg: HighlightSegment): string => `h:${seg.segmentRef !== undefined ? 's' : 'n'}:${seg.text}`)
       }
       .fontSize(this.headingFontSize())
       .fontWeight(FontWeight.Bold)
@@ -1245,22 +1217,18 @@ export struct NativeContentDocument {
     } else if (item.inlineRuns.length > 0) {
       // 按主题 tick 奇偶翻转分支强制销毁重建（见 formulaRecreateTick 注释）。
       if (this.formulaRecreateTick % 2 === 0) {
-        ContentInlineFormula({ item: item, blockAnnotations: this.blockAnnotations(item), onAnnotationClick: this.onAnnotationClick })
+        ContentInlineFormula({ item: item })
       } else {
-        ContentInlineFormula({ item: item, blockAnnotations: this.blockAnnotations(item), onAnnotationClick: this.onAnnotationClick })
+        ContentInlineFormula({ item: item })
       }
     } else {
       Text() {
         if (item.kind === ReaderBlockKind.LIST_ITEM) {
           Span('• ')
         }
-        ForEach(splitTextByHighlights(item.text, this.blockAnnotations(item), this.blockSegments(item)), (seg: HighlightSegment) => {
+        ForEach(splitTextByHighlights(item.text, this.blockSegments(item)), (seg: HighlightSegment) => {
           Span(seg.text)
             .fontColor($r('app.color.primary_text'))
-            .textBackgroundStyle({
-              color: seg.annotationId !== undefined && seg.segmentRef === undefined ? ANNOTATION_HIGHLIGHT_COLOR : Color.Transparent,
-              radius: 2
-            })
             .decoration({
               type: seg.segmentRef !== undefined ? TextDecorationType.Underline : TextDecorationType.None,
               style: seg.segmentRef !== undefined ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
@@ -1269,22 +1237,15 @@ export struct NativeContentDocument {
             .onClick((): void => {
               if (seg.segmentRef !== undefined && this.onSegmentClick !== undefined) {
                 this.onSegmentClick(seg.segmentRef.paragraph, seg.segmentRef.markIndex);
-              } else if (seg.annotationId !== undefined && this.onAnnotationClick !== undefined) {
-                this.onAnnotationClick(seg.annotationId);
               }
             })
-        }, (seg: HighlightSegment): string => `p:${seg.annotationId ?? 'x'}:${seg.segmentRef !== undefined ? 's' : 'n'}:${seg.text}`)
+        }, (seg: HighlightSegment): string => `p:${seg.segmentRef !== undefined ? 's' : 'n'}:${seg.text}`)
       }
       .fontSize(this.bodyFontSize())
       .lineHeight(this.bodyLineHeight())
       .copyOption(CopyOptions.LocalDevice)
       .width('100%')
     }
-  }
-
-  /** 本块的划线评论（按 blockId 预筛选）。@Builder 体内禁止非 UI 语句，故提为方法。 */
-  private blockAnnotations(item: ReaderBlock): ContentAnnotation[] {
-    return this.annotations.filter((annotation: ContentAnnotation): boolean => annotation.blockId === item.id);
   }
 
   /** 本块对应的他人划线引用（按 data-pid 对齐 segment_infos）。@Builder 体内禁止非 UI 语句，故提为方法。 */
