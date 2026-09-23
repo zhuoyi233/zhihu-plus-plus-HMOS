@@ -51,7 +51,8 @@ export struct GlassCapsule {
   @BuilderParam content: () => void = this.emptyContent;
   @Prop useMaterial: boolean = true;
   @State private canvasWidth: number = 240;
-  private readonly canvasHeight: number = 36;
+  // 酷安式加高胶囊：36vp 上游标准 → 48vp 大胶囊（圆角同步 18 → 24），内容在玻璃内垂直居中
+  private readonly canvasHeight: number = 48;
 
   @Builder
   private emptyContent(): void {
@@ -69,22 +70,24 @@ export struct GlassCapsule {
         }
         .onAreaChange((_: Area, newValue: Area): void => {
           const width = Number(newValue.width);
-          const padded = width + 8;
+          // 对齐酷安观感：内容与胶囊两端留 12vp 呼吸空隙（+24 平摊两侧），
+          // 圆弧端部不被内容顶着，胶囊显得更圆润
+          const padded = width + 24;
           if (padded > 1 && Math.abs(padded - this.canvasWidth) > 1) {
             this.canvasWidth = padded;
           }
         })
       }
       .width(this.canvasWidth)
-      .borderRadius(18)
+      .borderRadius(24)
       .clip(true)
     } else {
       // 降级：组件模糊（不支持的设备上沉浸材质不可用）
       Row() {
         this.content()
       }
-      .padding({ left: 6, right: 6, top: 4, bottom: 4 })
-      .borderRadius(18)
+      .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+      .borderRadius(24)
       .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
     }
   }

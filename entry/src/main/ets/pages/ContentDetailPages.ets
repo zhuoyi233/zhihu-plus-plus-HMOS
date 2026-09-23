@@ -1170,7 +1170,8 @@ struct ContentDetailPage {
       .padding({
         left: $r('app.float.p1_page_padding'),
         right: $r('app.float.p1_page_padding'),
-        bottom: 12
+        // 与标准底栏/主页导航栏同口径，保证横向切换预览与常规页悬浮高度一致
+        bottom: Math.max(this.bottomRectHeightVp, 0)
       })
     }
     .width('100%')
@@ -2137,7 +2138,9 @@ struct ContentDetailPage {
       .padding({
         left: $r('app.float.p1_page_padding'),
         right: $r('app.float.p1_page_padding'),
-        bottom: 12
+        // 与主页导航栏同口径：ZhihuHdsTabs 的 barBottomMargin 取 bottomRectHeight，
+        // 底栏离物理底边的高度随手势条避让区（0 时贴底）
+        bottom: Math.max(this.bottomRectHeightVp, 0)
       })
     }
     .width('100%')
