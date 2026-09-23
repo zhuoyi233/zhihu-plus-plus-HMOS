@@ -232,6 +232,8 @@ export struct HomeFeedPage {
             })
             .id('p2_home_feed_list')
             .width('100%')
+            // 顶栏让位：内缩滚动内容起点，未滚动时首条卡片仍从标题栏下沿开始
+            .contentStartOffset(FLOATING_TITLE_BAR_OFFSET)
             .scrollBar(BarState.Off)
             .height('100%')
             .edgeEffect(EdgeEffect.Spring)
@@ -260,13 +262,11 @@ export struct HomeFeedPage {
       .alignItems(HorizontalAlign.Start)
       .width('100%')
       .height('100%')
-      // 让位统一约定：内容容器 padding top = FLOATING_TITLE_BAR_OFFSET，Refresh 指示
-      // 区域从悬浮标题栏下沿开始（对齐上游 FeedPullToRefresh 的 indicator padding）；
-      // 列表不设顶 padding，滚动内容仍可穿越玻璃标题栏（List 默认不裁剪）
+      // 覆盖式顶栏：容器不设 top padding，滚动视口一直延伸到屏幕顶，卡片滚起来后
+      // 穿过玻璃标题栏形成沉浸光感；首屏起始位置由列表的 contentStartOffset 内缩。
       .padding({
         left: $r('app.float.p1_page_padding'),
         right: $r('app.float.p1_page_padding'),
-        top: FLOATING_TITLE_BAR_OFFSET,
         bottom: $r('app.float.p1_page_padding')
       })
 

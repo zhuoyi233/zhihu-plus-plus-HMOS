@@ -18,6 +18,7 @@ import { EmojiText } from './EmojiText';
 import { contentLinkDestination, timelineItemDestination } from './NotificationLinkResolver';
 import { notificationPlainText } from './PrivateMessageContent';
 import { NotificationTimelineController, NotificationTimelinePhase, NotificationTimelineViewState } from './NotificationTimelineState';
+import { FLOATING_TITLE_BAR_OFFSET } from './AppPageChrome';
 
 function relativeTime(created: number): string {
   if (created <= 0) {
@@ -143,6 +144,8 @@ export struct NotificationTimelinePage {
         }
         .id('p3_notification_timeline_list')
         .width('100%')
+        // 顶栏让位：内缩滚动内容起点，未滚动时首屏内容仍从标题栏下沿开始
+        .contentStartOffset(FLOATING_TITLE_BAR_OFFSET)
         .layoutWeight(1)
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
@@ -152,7 +155,8 @@ export struct NotificationTimelinePage {
     .id('p3_notification_timeline_page')
     .width('100%')
     .height('100%')
-    .padding({ top: 94 })
+    // 覆盖式顶栏：容器不设 top padding，滚动视口延伸到屏幕顶；
+    // 首屏起始位置由列表的 contentStartOffset 内缩（见 AppPageChrome 约定）
     .backgroundColor($r('app.color.page_background'))
   }
 
