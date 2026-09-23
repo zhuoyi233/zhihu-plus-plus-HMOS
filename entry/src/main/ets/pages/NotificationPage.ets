@@ -21,6 +21,7 @@ import { NotificationController, NotificationPhase, NotificationViewState } from
 import { NOTIFICATION_HUB_BUSY_KEY, NOTIFICATION_HUB_MARK_READ_TICK_KEY,
   NOTIFICATION_HUB_UNREAD_TOTAL_KEY } from './NotificationTitleBar';
 import { timelineItemDestination } from './NotificationLinkResolver';
+import { FLOATING_TITLE_BAR_OFFSET } from './AppPageChrome';
 
 /** 会话行右侧日期（对齐上游 `notificationListDate`：MM-dd）。 */
 function conversationDate(item: MobileNotificationTimelineItem): string {
@@ -179,6 +180,8 @@ export struct NotificationPage {
         }
         .id('p3_notifications_list')
         .width('100%')
+        // 顶栏让位：内缩滚动内容起点，未滚动时首屏内容仍从标题栏下沿开始
+        .contentStartOffset(FLOATING_TITLE_BAR_OFFSET)
         .layoutWeight(1)
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
@@ -199,7 +202,8 @@ export struct NotificationPage {
     .id('p3_notifications_page')
     .width('100%')
     .height('100%')
-    .padding({ top: 94 })
+    // 覆盖式顶栏：容器不设 top padding，滚动视口延伸到屏幕顶；
+    // 首屏起始位置由列表的 contentStartOffset 内缩（见 AppPageChrome 约定）
     .backgroundColor($r('app.color.page_background'))
   }
 

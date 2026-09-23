@@ -646,6 +646,13 @@ export struct NativeContentDocument {
   onPageTurnPastEnd?: () => void;
   /** 回答详情页关闭 Spring 边缘效果：自定义 overscroll 需要独占边界拖动量。 */
   disableEdgeSpring: boolean = false;
+
+  /**
+   * 滚动内容起始内缩（vp）：让视口延伸到悬浮标题栏之下、由内容自身让位，
+   * 滚动时正文才会从玻璃顶栏下穿过（顶栏占位式布局下内容到不了顶栏后面，无透光）。
+   * 0 表示不额外让位（沉浸阅读隐藏顶栏 / 非详情页场景）。
+   */
+  topInsetVp: number = 0;
   /** 问题页正文折叠预览：正文超阈值（纯文本≥100 字或含图）时收起为 180vp 视口。 */
   collapsible: boolean = false;
   @State private detailExpanded: boolean = false;
@@ -879,6 +886,9 @@ export struct NativeContentDocument {
         })
         // 末尾避让随正文滚动，避免底部 padding 压缩视口、在悬浮操作栏下方形成固定留白。
         .contentEndOffset(100)
+        // 起始内缩随正文滚动（同 contentEndOffset 思路）：视口可延伸到悬浮顶栏之下，
+        // 未滚动时正文仍从顶栏下方开始，滚动后正文从玻璃顶栏背后穿过。
+        .contentStartOffset(this.topInsetVp)
         .cachedCount(6)
         .edgeEffect(this.disableEdgeSpring ? EdgeEffect.None : EdgeEffect.Spring)
         .onAreaChange((_oldArea: Area, newArea: Area): void => {

@@ -651,9 +651,11 @@ struct ContentDetailPage {
       .id(`p2_${this.kind}_detail_page`)
       .width('100%')
       .height('100%')
-      // 让位统一约定：内容容器 padding top = FLOATING_TITLE_BAR_OFFSET；沉浸式隐藏
-      // 顶栏后仅保留状态栏高度（对齐上游 topBar={}）
-      .padding({ top: this.immersiveReading ? Math.max(this.statusBarHeightVp, 0) : FLOATING_TITLE_BAR_OFFSET })
+      // 覆盖式顶栏：视口不再为悬浮顶栏让位（padding 0），正文由 List 的
+      // contentStartOffset 内缩让位——未滚动时正文仍从顶栏下方开始，滚动后正文穿过
+      // 玻璃顶栏（占位式布局下列表视口被顶栏截断，正文永远到不了顶栏后面，无透光观感）。
+      // 沉浸阅读隐藏顶栏后仅保留状态栏高度（对齐上游 topBar={}）。
+      .padding({ top: this.immersiveReading ? Math.max(this.statusBarHeightVp, 0) : 0 })
       .backgroundColor($r('app.color.page_background'))
 
       // 整页级过滑预览：纵向模式固定在顶/底缘；横向模式按上游
@@ -919,6 +921,7 @@ struct ContentDetailPage {
           html: contentHtml(content),
           emptyMessage: contentEmptyMessage(content),
           disableEdgeSpring: this.kind === ContentDetailKind.ANSWER,
+          topInsetVp: this.immersiveReading ? 0 : FLOATING_TITLE_BAR_OFFSET,
           onVideoOpen: (videoId: string): void => this.openVideo(videoId),
           documentHeader: (): void => { this.contentHeader(content) },
           documentFooter: (): void => { this.contentDateFooter(content) },
@@ -1170,7 +1173,8 @@ struct ContentDetailPage {
       .padding({
         left: $r('app.float.p1_page_padding'),
         right: $r('app.float.p1_page_padding'),
-        bottom: 12
+        // 与标准底栏/主页导航栏同口径，保证横向切换预览与常规页悬浮高度一致
+        bottom: Math.max(this.bottomRectHeightVp, 0)
       })
     }
     .width('100%')
@@ -1867,6 +1871,7 @@ struct ContentDetailPage {
     Refresh({ refreshing: $$this.refreshingAnswers, refreshingContent: this.refreshContent }) {
       NativeContentDocument({
         html: contentHtml(content), emptyMessage: contentEmptyMessage(content), collapsible: true,
+        topInsetVp: this.immersiveReading ? 0 : FLOATING_TITLE_BAR_OFFSET,
         onVideoOpen: (videoId: string): void => this.openVideo(videoId),
         documentHeader: (): void => { this.contentHeader(content) },
         documentBodyFooter: (): void => { this.questionBodyFooter(content) },
@@ -2137,7 +2142,9 @@ struct ContentDetailPage {
       .padding({
         left: $r('app.float.p1_page_padding'),
         right: $r('app.float.p1_page_padding'),
-        bottom: 12
+        // 与主页导航栏同口径：ZhihuHdsTabs 的 barBottomMargin 取 bottomRectHeight，
+        // 底栏离物理底边的高度随手势条避让区（0 时贴底）
+        bottom: Math.max(this.bottomRectHeightVp, 0)
       })
     }
     .width('100%')

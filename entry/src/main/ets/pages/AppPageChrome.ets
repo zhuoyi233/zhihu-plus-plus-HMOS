@@ -15,11 +15,17 @@ export enum AppPageStatusKind {
 /**
  * 悬浮标题栏让位高度（状态栏 + 标题栏占位）。
  *
- * 统一约定：所有带下拉刷新/滚动区域的页面，由页面内容容器统一
- * `.padding({ top: FLOATING_TITLE_BAR_OFFSET })` 下移到悬浮标题栏下方，
- * 使 Refresh 指示区域从标题栏下沿开始（对齐上游 FeedPullToRefresh 的
- * indicator padding）。不要把让位写进列表自身的 padding——那会让刷新
- * 指示区域仍从页面顶端开始，圆圈越过顶栏盖住状态栏。
+ * 统一约定（覆盖式顶栏，2026-09-23 起）：页面内容容器**不设** top padding，滚动视口
+ * 一直延伸到屏幕顶端，滚动内容因此能穿过玻璃标题栏形成沉浸光感；首屏内容的起始
+ * 位置改由滚动容器的 `.contentStartOffset(FLOATING_TITLE_BAR_OFFSET)` 内缩——未滚动
+ * 时内容仍从标题栏下沿开始，滚起来后才从标题栏后面穿过。
+ *
+ * 不要把让位写回内容容器的 top padding：那会把整个滚动视口压到标题栏下方，内容
+ * 永远到不了标题栏后面（详情页改造前的表现，dumpLayout 实测 List top ≈ 标题栏底）。
+ *
+ * 带下拉刷新的页面同样适用：下拉只发生在列表处于顶部（未滚动）时，此刻标题栏走
+ * originalStyle 的透明底，Refresh 指示圆圈不会被滚动态白纱遮住，因此 Refresh 的
+ * offset/friction 无需为让位做补偿。
  */
 export const FLOATING_TITLE_BAR_OFFSET: number = 94;
 
@@ -178,8 +184,14 @@ export struct AppNavigationRow {
   }
 }
 
-/** 下拉刷新自定义区域的构造参数（无字段，仅用于 ComponentContent 类型标注）。 */
+/** 下拉刷新自定义区域的构造参数（ComponentContent 传参用）。 */
 export class FeedPullDownIndicatorOptions {
+  /**
+   * 圆圈额外的绘制下移量（vp）。覆盖式顶栏页面传 FLOATING_TITLE_BAR_OFFSET：
+   * Refresh 头部区域从页面顶端展开，圆圈会贴着状态栏出现，需要把它挪到悬浮
+   * 标题栏下沿；占位式页面 Refresh 组件本身已在标题栏下方，保持 0。
+   */
+  topInset: number = 0;
 }
 
 /**
@@ -187,11 +199,14 @@ export class FeedPullDownIndicatorOptions {
  * 容器高度自适应 Refresh 指示区域（下拉间隙），justifyContent End 让圆圈贴着
  * 间隙底部、跟随下拉距离移动（等价上游 Material3 指示器随拖拽平移的行为）。
  * 注意：不要给容器设固定高度——固定高度会让内容锚定位置失控（圆圈曾因此
- * 钉在状态栏一栏，见 2026-09-15 修复）；指示区域的整体下移由各页面把
- * Refresh 组件 margin 到悬浮标题栏下方完成。
+ * 钉在状态栏一栏，见 2026-09-15 修复）。
+ * 覆盖式顶栏下（2026-09-23 起）Refresh 头部区域从页面顶端展开，圆圈会贴着状态栏
+ * 出现；覆盖式页面经 options.topInset 传 FLOATING_TITLE_BAR_OFFSET，用绘制偏移
+ * （translate，不占布局、不影响下拉触发距离）把圆圈挪到悬浮标题栏下沿；占位式
+ * 页面 Refresh 本身已在标题栏下方，topInset 保持 0。
  */
 @Builder
-export function feedPullDownIndicator(_options: FeedPullDownIndicatorOptions) {
+export function feedPullDownIndicator(options: FeedPullDownIndicatorOptions) {
   Column() {
     LoadingProgress()
       .width(40)
@@ -204,4 +219,5 @@ export function feedPullDownIndicator(_options: FeedPullDownIndicatorOptions) {
   .constraintSize({ minHeight: 48 })
   .justifyContent(FlexAlign.End)
   .padding({ bottom: 12 })
+  .translate({ y: options.topInset })
 }

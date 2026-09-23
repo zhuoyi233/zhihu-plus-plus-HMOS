@@ -11,6 +11,7 @@ import {
 import { PrivateMessageController, PrivateMessagePhase, PrivateMessageViewState } from './PrivateMessageState';
 import { parsePrivateMessageSegments, PrivateMessageSegment, privateMessageDisplaySource } from './PrivateMessageContent';
 import { contentLinkDestination } from './NotificationLinkResolver';
+import { FLOATING_TITLE_BAR_OFFSET } from './AppPageChrome';
 
 function relativeTime(createdTime: number): string {
   if (createdTime <= 0) {
@@ -133,6 +134,8 @@ export struct PrivateMessagePage {
         }
         .id('p3_private_message_list')
         .width('100%')
+        // 顶栏让位：内缩滚动内容起点，未滚动时首屏内容仍从标题栏下沿开始
+        .contentStartOffset(FLOATING_TITLE_BAR_OFFSET)
         .layoutWeight(1)
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
@@ -187,7 +190,8 @@ export struct PrivateMessagePage {
     .id('p3_private_message_page')
     .width('100%')
     .height('100%')
-    .padding({ top: 94 })
+    // 覆盖式顶栏：容器不设 top padding，滚动视口延伸到屏幕顶；
+    // 首屏起始位置由列表的 contentStartOffset 内缩（见 AppPageChrome 约定）
     .backgroundColor($r('app.color.page_background'))
     .alignItems(HorizontalAlign.Start)
   }
