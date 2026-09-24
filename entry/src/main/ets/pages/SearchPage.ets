@@ -224,6 +224,19 @@ export struct SearchPage {
     });
   }
 
+  private isTabActive(tab: SearchTab): boolean {
+    return SEARCH_TABS[this.activeTabIndex] === tab;
+  }
+
+  private selectResultTab(tab: SearchTab): void {
+    const index = SEARCH_TABS.indexOf(tab);
+    if (index < 0 || index === this.activeTabIndex) {
+      return;
+    }
+    this.activeTabIndex = index;
+    void this.controller?.selectTab(tab);
+  }
+
   private applyState(state: SearchViewState): void {
     this.phase = state.phase;
     this.query = state.query;
@@ -404,28 +417,38 @@ export struct SearchPage {
 
   @Builder
   private resultTabs() {
-    Tabs({ barPosition: BarPosition.Start, index: this.activeTabIndex }) {
-      ForEach(SEARCH_TABS, (tab: SearchTab) => {
-        TabContent() {
-          Column() {
-            Blank();
-          }
-        }
-        .tabBar(searchTabLabel(tab))
-      }, (tab: SearchTab): string => tab)
+    // 用户主页那条选项栏是通栏 Scroll，靠 Row 内边距对齐内容；这里已在页面 12vp 内边距之内，
+    // 再加就把第五个选项顶出可视区（360vp > 353vp）并让选项栏变成可横向拖动。
+    Scroll() {
+      Row({ space: $r('app.float.p1_spacing_small') }) {
+        ForEach(SEARCH_TABS, (tab: SearchTab) => {
+          this.resultTab(tab)
+        }, (tab: SearchTab): string => tab)
+      }
     }
     .id('p2_search_result_tabs')
+    .scrollable(ScrollDirection.Horizontal)
+    .scrollBar(BarState.Off)
     .width('100%')
     .height(44)
-    .barHeight(44)
-    .barMode(BarMode.Scrollable)
-    .scrollable(false)
-    .onChange((index: number): void => {
-      if (index >= 0 && index < SEARCH_TABS.length) {
-        this.activeTabIndex = index;
-        void this.controller?.selectTab(SEARCH_TABS[index]);
-      }
-    })
+  }
+
+  @Builder
+  private resultTab(tab: SearchTab) {
+    // 系统 Tabs 的选中色固定取系统强调色，不随应用主题色；这里改用与用户主页一致的自绘下划线选项栏。
+    Button(searchTabLabel(tab), { type: ButtonType.Normal, stateEffect: true })
+      .id(`p2_search_tab_${tab}`)
+      .height(44)
+      .padding({ left: $r('app.float.p1_spacing_medium'), right: $r('app.float.p1_spacing_medium') })
+      .fontSize($r('app.float.p1_body_font_size'))
+      .fontWeight(this.isTabActive(tab) ? FontWeight.Medium : FontWeight.Regular)
+      .fontColor(this.isTabActive(tab) ? this.resolvedThemeColor : $r('app.color.primary_text'))
+      .backgroundColor(Color.Transparent)
+      .border({
+        width: { bottom: this.isTabActive(tab) ? 2 : 0 },
+        color: this.resolvedThemeColor
+      })
+      .onClick((): void => this.selectResultTab(tab))
   }
 
   @Builder
