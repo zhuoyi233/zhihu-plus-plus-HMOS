@@ -12,7 +12,9 @@ import { PeopleContentRepository } from './PeopleContentRepository';
 
 const PEOPLE_CONTENT_LIMIT = 20;
 const PEOPLE_CONTENT_CURSOR_MAX_LENGTH = 4096;
-const ANSWERS_INCLUDE = 'data[*].question,excerpt,voteup_count,comment_count,created_time';
+// reaction_instruction 不带数据但必须保留：缺它时 members/answers 响应不含
+// voteup_count（赞同数恒为 0，issue #24）；文章端点无此约束。
+const ANSWERS_INCLUDE = 'data[*].question,excerpt,voteup_count,comment_count,created_time,reaction_instruction';
 const ARTICLES_INCLUDE = 'data[*].title,excerpt,voteup_count,comment_count,created,updated';
 const ACTIVITIES_INCLUDE = 'data[*].target.question,excerpt,voteup_count,comment_count,created_time,like_count';
 

@@ -3,6 +3,7 @@ import {
   buildPeopleDetailUrl,
   buildPeopleContentUrl,
   buildPinDetailUrl,
+  decodePeopleContentPage,
   decodePeopleDetail,
   decodePinDetail,
   DefaultPeopleRepository,
@@ -12,6 +13,7 @@ import {
   HttpFailure,
   HttpFailureKind,
   isPeopleContentCursorUrl,
+  PeopleContentKind,
   PeopleRepositoryFailure,
   PeopleRepositoryFailureKind,
   PeopleContentRepositoryFailure,
@@ -231,9 +233,12 @@ export default function peoplePinDetailRepositoryTest(): void {
     });
 
     it('buildsSignedPeopleContentEndpointsAndRejectsForeignCursors', 0, () => {
+      // reaction_instruction 自身无展示需求，但知乎缺它时不返回 voteup_count（issue #24），
+      // 因此该 token 必须留在 answers include 中。
       expect(buildPeopleContentUrl('alice-token', PeopleContentSection.ANSWERS)).assertEqual(
         'https://www.zhihu.com/api/v4/members/alice-token/answers?sort_by=voteups&limit=20&' +
-          'include=data%5B%2A%5D.question%2Cexcerpt%2Cvoteup_count%2Ccomment_count%2Ccreated_time'
+          'include=data%5B%2A%5D.question%2Cexcerpt%2Cvoteup_count%2Ccomment_count%2Ccreated_time%2C' +
+          'reaction_instruction'
       );
       expect(buildPeopleContentUrl('alice-token', PeopleContentSection.ARTICLES)).assertEqual(
         'https://www.zhihu.com/api/v4/members/alice-token/articles?sort_by=created&limit=20&' +
@@ -273,10 +278,28 @@ export default function peoplePinDetailRepositoryTest(): void {
       const second = await repository.getContentPage('alice-token', PeopleContentSection.ANSWERS, next);
       expect(first.items.length).assertEqual(1);
       expect(first.items[0].title).assertEqual('用户回答的问题');
+      expect(first.items[0].voteupCount).assertEqual(3);
+      expect(first.items[0].commentCount).assertEqual(2);
       expect(second.items.length).assertEqual(1);
       expect(second.items[0].id).assertEqual('103');
+      expect(second.items[0].voteupCount).assertEqual(4);
       expect(factory.requests[0].headers.Cookie?.includes('people-pin-session')).assertTrue();
       expect(JSON.stringify(factory.requests[0].headers).includes('x-zse-96')).assertTrue();
+    });
+
+    it('decodesPeopleActivitiesPinsFromSegmentContent', 0, () => {
+      // 想法 target 的 content 是分段对象数组，按文本读会整页解码失败（动态 tab 报错）。
+      const page = decodePeopleContentPage(PEOPLE_ACTIVITIES_JSON, PeopleContentSection.ACTIVITIES);
+      expect(page.items.length).assertEqual(2);
+      expect(page.items[0].kind).assertEqual(PeopleContentKind.PIN);
+      expect(page.items[0].title).assertEqual('想法');
+      expect(page.items[0].excerpt).assertEqual('想法摘要 第二段 正文 & 结束');
+      expect(page.items[0].voteupCount).assertEqual(546);
+      expect(page.items[0].commentCount).assertEqual(165);
+      expect(page.items[1].kind).assertEqual(PeopleContentKind.ANSWER);
+      expect(page.items[1].excerpt).assertEqual('回答 重点 摘要');
+      expect(page.items[1].voteupCount).assertEqual(14);
+      expect(page.cursor.isEnd).assertTrue();
     });
   });
 }
@@ -299,3 +322,15 @@ const PEOPLE_ANSWERS_NEXT_JSON = '{"data":[{"id":101,"question":{"id":1,"title":
   '"excerpt":"重复","voteup_count":3,"comment_count":2,"created_time":1},' +
   '{"id":103,"question":{"id":2,"title":"第二个问题"},"excerpt":"第二条",' +
   '"voteup_count":4,"comment_count":1,"created_time":2}],"paging":{"is_end":true}}';
+// 动态 tab 实测结构（api/v3/moments/{token}/activities）：想法 target 的 content 为分段数组，
+// 摘要在 excerpt_title；未知 target 类型（zvideo）应跳过而非整页失败。
+const PEOPLE_ACTIVITIES_JSON = '{"data":[{"id":"1790160100368","type":"feed","created_time":5,' +
+  '"target":{"id":"2040302545831212191","type":"pin",' +
+  '"excerpt_title":"想法摘要<br><p>第二段&nbsp;正文 &amp; 结束</p>",' +
+  '"content":[{"type":"text","content":"停更，以及退休。"}],' +
+  '"like_count":546,"comment_count":165,"created":7}},' +
+  '{"id":"1790160100369","type":"feed","created_time":9,"target":{"id":"2071015680305001289",' +
+  '"type":"answer","question":{"id":"2071015680305","title":"如何评价 DeepSeek V4"},' +
+  '"excerpt":"回答<b>重点</b>摘要","voteup_count":14,"comment_count":3,"created_time":11}},' +
+  '{"id":"1790160100370","type":"feed","created_time":12,"target":{"id":"2071015680305001290",' +
+  '"type":"zvideo"}}],"paging":{"is_end":true}}';

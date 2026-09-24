@@ -610,7 +610,9 @@ export struct PeopleDetailPage {
       return;
     }
     this.contentController = new PeopleContentController(
-      this.identifier,
+      // 内容接口按 url_token 定位（上游 person.userTokenOrId）：搜索进入时路由是哈希 id，
+      // members/{哈希 id}/articles 会 404。
+      this.profile?.urlToken ?? this.identifier,
       this.selectedSection,
       this.contentRepository,
       (state: PeopleContentViewState): void => this.applyContentState(state)
