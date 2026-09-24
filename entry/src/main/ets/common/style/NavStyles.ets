@@ -70,3 +70,47 @@ export function getImmersiveTitleBarStyle(): TitleBarStyleOptions {
     }
   };
 }
+
+/**
+ * 详情页与评论页使用的常驻沉浸标题栏：正文从首帧起就在材质层下方滚动，
+ * 因此不等待滚动阈值，直接让 originalStyle 使用与滚动态相同的半透明白纱。
+ */
+export function getPersistentImmersiveTitleBarStyle(): TitleBarStyleOptions {
+  if (HarmonyOSCapabilities.supportsImmersiveTitleBarStyle()) {
+    return {
+      scrollEffectOpts: {
+        enableScrollEffect: false,
+        scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
+      },
+      originalStyle: {
+        backgroundStyle: {
+          backgroundColor: '#D9FFFFFF'
+        },
+        contentStyle: {
+          titleStyle: {
+            mainTitleColor: $r('app.color.primary_text'),
+            subTitleColor: $r('app.color.secondary_text')
+          },
+          backIconStyle: { iconColor: $r('app.color.primary_text') },
+          subIconStyle: { iconColor: $r('app.color.primary_text') },
+          menuStyle: { iconColor: $r('app.color.primary_text') }
+        }
+      },
+      systemMaterialEffect: {
+        materialType: hdsMaterial.MaterialType.ADAPTIVE,
+        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+      }
+    };
+  }
+  return {
+    scrollEffectOpts: {
+      enableScrollEffect: false,
+      scrollEffectType: ScrollEffectType.COMMON_BLUR
+    },
+    originalStyle: {
+      backgroundStyle: {
+        backgroundColor: $r('sys.color.ohos_id_color_navigation_background_blur')
+      }
+    }
+  };
+}

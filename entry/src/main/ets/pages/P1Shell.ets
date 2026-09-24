@@ -3,6 +3,7 @@ import { SearchTitleBar } from './SearchTitleBar';
 import { HistoryTitleBar } from './HistoryTitleBar';
 import { AnswerTitleBar } from './AnswerTitleBar';
 import { ArticleTitleBar } from './ArticleTitleBar';
+import { CommentTitleBar, commentTitleStateId } from './CommentTitleBar';
 import { NotificationTitleBar } from './NotificationTitleBar';
 import {
   onThemeColor,
@@ -59,7 +60,7 @@ import {
   p1TopLevelTabForDestination
 } from './P1TopLevelTabs';
 import { DividerShowType, hdsMaterial, HdsNavDestination, HdsNavigation, HdsNavigationAttribute, HdsNavigationTitleMode, HdsTabsController } from '@kit.UIDesignKit';
-import { getImmersiveTitleBarStyle } from '../common/style/NavStyles';
+import { getImmersiveTitleBarStyle, getPersistentImmersiveTitleBarStyle } from '../common/style/NavStyles';
 import { ZhihuHdsTabs } from './components/ZhihuHdsTabs';
 import { AppearanceSettingsPage } from './AppearanceSettingsPage';
 import { ThemeColorSettingsPage } from './ThemeColorSettingsPage';
@@ -527,13 +528,18 @@ export struct P1Shell {
           (): void => { this.pathStack.pop(); }
         );
       }
-      // 页面自行绘制唯一的返回入口；系统返回交给页面决定退子评论还是退详情。
-      .hideTitleBar(true)
+      .titleBar({
+        style: getPersistentImmersiveTitleBarStyle(),
+        avoidLayoutSafeArea: true,
+        content: {
+          stackBuilder: (): void => this.commentTitleBar(destination.contentType, destination.contentId),
+          divider: { showType: DividerShowType.OFF }
+        }
+      })
+      .hideBackButton(true)
+      .hideTitleBar(false)
       .onBackPressed((): boolean => {
-        AppStorage.setOrCreate('commentPageBackContentType', destination.contentType);
-        AppStorage.setOrCreate('commentPageBackContentId', destination.contentId);
-        AppStorage.setOrCreate('commentPageBackTick',
-          (AppStorage.get<number>('commentPageBackTick') ?? 0) + 1);
+        this.requestCommentPageBack(destination.contentType, destination.contentId);
         return true;
       })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
@@ -584,7 +590,7 @@ export struct P1Shell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.questionTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getPersistentImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.questionTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
       // 问题页正文图片同样可打开全屏查看器：隐藏顶栏，返回键优先关查看器。
       .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll || this.imagePreviewUrl.length > 0)
@@ -607,7 +613,7 @@ export struct P1Shell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.answerTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getPersistentImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.answerTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
       // 沉浸式/图片查看器中隐藏顶栏（对齐上游 topBar={}）；返回键优先关查看器、再退沉浸式。
       .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll || this.imagePreviewUrl.length > 0)
@@ -635,7 +641,7 @@ export struct P1Shell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.articleTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getPersistentImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.articleTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
       // 与回答页一致：沉浸式/图片查看器中隐藏顶栏，返回键优先关查看器。
       .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll || this.imagePreviewUrl.length > 0)
@@ -1081,6 +1087,21 @@ export struct P1Shell {
   @Builder
   private questionTitleBar(id: string) {
     QuestionTitleBar({ questionId: id, onBack: (): void => { this.pathStack.pop(); } })
+  }
+
+  @Builder
+  private commentTitleBar(contentType: string, contentId: string) {
+    CommentTitleBar({
+      stateId: commentTitleStateId(contentType, contentId),
+      onBack: (): void => this.requestCommentPageBack(contentType, contentId)
+    })
+  }
+
+  private requestCommentPageBack(contentType: string, contentId: string): void {
+    AppStorage.setOrCreate('commentPageBackContentType', contentType);
+    AppStorage.setOrCreate('commentPageBackContentId', contentId);
+    AppStorage.setOrCreate('commentPageBackTick',
+      (AppStorage.get<number>('commentPageBackTick') ?? 0) + 1);
   }
 
   /** 搜索页 HDS 标题栏内容：返回键 + 搜索框 + 排序方式菜单（对齐上游搜索顶栏）。 */
