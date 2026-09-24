@@ -70,6 +70,23 @@ function requiredText(value: JsonValue | undefined, field: string): string {
   return result;
 }
 
+// 列表摘要按纯文本渲染：想法的 excerpt_title 是整段 HTML（<br>/<p>/<a>，上游即
+// Ksoup.parse(..).text()），动态里的回答/文章 excerpt 也带 <b>/<em> 内联标签，
+// 统一去标签 + 实体解码 + 空白折叠。
+function htmlToText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&quot;|&#34;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&amp;/gi, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function number(value: JsonValue | undefined, field: string): number {
   if (value === undefined || value instanceof JsonNullValue) {
     return 0;
@@ -108,7 +125,7 @@ function answer(object: JsonObjectValue): PeopleContentItem {
     kind: PeopleContentKind.ANSWER,
     id: id(object.get('id'), 'answer.id'),
     title: requiredText(question.get('title') ?? question.get('name'), 'answer.question.title'),
-    excerpt: text(object.get('excerpt') ?? object.get('content'), 'answer.excerpt'),
+    excerpt: htmlToText(text(object.get('excerpt') ?? object.get('content'), 'answer.excerpt')),
     voteupCount: number(object.get('voteup_count'), 'answer.voteup_count'),
     commentCount: number(object.get('comment_count'), 'answer.comment_count'),
     createdAt: number(object.get('created_time'), 'answer.created_time')
@@ -120,7 +137,7 @@ function article(object: JsonObjectValue): PeopleContentItem {
     kind: PeopleContentKind.ARTICLE,
     id: id(object.get('id'), 'article.id'),
     title: requiredText(object.get('title'), 'article.title'),
-    excerpt: text(object.get('excerpt') ?? object.get('content'), 'article.excerpt'),
+    excerpt: htmlToText(text(object.get('excerpt') ?? object.get('content'), 'article.excerpt')),
     voteupCount: number(object.get('voteup_count'), 'article.voteup_count'),
     commentCount: number(object.get('comment_count'), 'article.comment_count'),
     createdAt: number(object.get('created') ?? object.get('created_time'), 'article.created')
@@ -132,7 +149,9 @@ function pin(object: JsonObjectValue): PeopleContentItem {
     kind: PeopleContentKind.PIN,
     id: id(object.get('id'), 'pin.id'),
     title: '想法',
-    excerpt: text(object.get('content') ?? object.get('excerpt'), 'pin.content'),
+    // 想法的 content 是分段对象数组（上游 Feed.PinTarget.content: List<ContentItem>），
+    // 不能按文本读；列表摘要对齐上游 excerptTitle.ifEmpty { null } 取 excerpt_title。
+    excerpt: htmlToText(text(object.get('excerpt_title'), 'pin.excerpt_title')),
     voteupCount: number(object.get('like_count'), 'pin.like_count'),
     commentCount: number(object.get('comment_count'), 'pin.comment_count'),
     createdAt: number(object.get('created') ?? object.get('created_time'), 'pin.created')

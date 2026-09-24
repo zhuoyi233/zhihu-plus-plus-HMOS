@@ -29,6 +29,7 @@ import {
 } from './PeoplePinDetailState';
 import { FollowController, FollowViewState } from './ContentInteractionState';
 import { PeopleContentController, PeopleContentPhase, PeopleContentViewState } from './PeopleContentState';
+import { publishPeopleTitle, removePeopleTitle } from './PeopleTitleBar';
 import { NativeContentDocument } from './NativeContentDocument';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { createSystemShareService } from '../platform/SystemShareService';
@@ -127,6 +128,12 @@ export struct PeopleDetailPage {
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: PeopleDetailController;
   private contentController?: PeopleContentController;
+  private readonly contentScroller: Scroller = new Scroller();
+  private titleAnchorVp: number = 0;
+  private titleScrolled: boolean = false;
+  private headerHeightVp: number = 0;
+  private listViewportVp: number = 0;
+  @State private tabsPinned: boolean = false;
   private blockingAction?: BlockingActionController;
   private followController?: FollowController;
 
@@ -153,6 +160,7 @@ export struct PeopleDetailPage {
   }
 
   aboutToDisappear(): void {
+    removePeopleTitle(this.identifier);
     this.controller?.deactivate();
     this.contentController?.deactivate();
     this.followController?.deactivate();
@@ -197,7 +205,22 @@ export struct PeopleDetailPage {
           navigate: this.navigate
         })
       } else if (this.profile !== undefined) {
-        this.loadedProfile(this.profile)
+        Stack({ alignContent: Alignment.Top }) {
+          this.loadedProfile(this.profile)
+          if (this.tabsPinned) {
+            // 吸顶后的选项卡条：贴在覆盖式顶栏下沿，列表卡片从其下方透明穿过
+            Column() {
+              this.contentSectionTabs()
+              if (this.contentPhase === PeopleContentPhase.IDLE || this.contentPhase === PeopleContentPhase.LOADING) {
+                this.pinnedContentLoading()
+              }
+            }
+            .margin({ top: 94 })
+            .width('100%')
+          }
+        }
+        .width('100%')
+        .layoutWeight(1)
       }
       Column()
         .bindSheet(this.profileActionsSheetShown, this.profileActionsSheet(), {
@@ -281,124 +304,200 @@ export struct PeopleDetailPage {
 
   @Builder
   private loadedProfile(profile: PeopleProfile) {
-    Scroll() {
-      Column({ space: $r('app.float.p1_spacing_large') }) {
-        if (profile.avatarUrl !== undefined) {
-          Image(profile.avatarUrl)
-            .id('p2_people_detail_avatar')
-            .width(88)
-            .height(88)
-            .borderRadius(44)
-            .objectFit(ImageFit.Cover)
-        } else {
-          Text(profile.name.charAt(0))
-            .id('p2_people_detail_avatar_fallback')
-            .width(88)
-            .height(88)
-            .borderRadius(44)
-            .backgroundColor($r('app.color.surface_background'))
-            .fontSize($r('app.float.p1_display_font_size'))
-            .fontColor(this.resolvedThemeColor)
-            .textAlign(TextAlign.Center)
-        }
-
-        Column({ space: $r('app.float.p1_spacing_small') }) {
-          Text(profile.name)
-            .id('p2_people_detail_name')
-            .fontSize($r('app.float.p1_display_font_size'))
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.primary_text'))
-            .textAlign(TextAlign.Center)
-          if (profile.isOrganization) {
-            Text('机构账号')
-              .id('p2_people_detail_organization')
-              .fontSize($r('app.float.p1_secondary_font_size'))
+    List({ scroller: this.contentScroller }) {
+      ListItem() {
+        Column({ space: $r('app.float.p1_spacing_large') }) {
+          if (profile.avatarUrl !== undefined) {
+            Image(profile.avatarUrl)
+              .id('p2_people_detail_avatar')
+              .width(88)
+              .height(88)
+              .borderRadius(44)
+              .objectFit(ImageFit.Cover)
+          } else {
+            Text(profile.name.charAt(0))
+              .id('p2_people_detail_avatar_fallback')
+              .width(88)
+              .height(88)
+              .borderRadius(44)
+              .backgroundColor($r('app.color.surface_background'))
+              .fontSize($r('app.float.p1_display_font_size'))
               .fontColor(this.resolvedThemeColor)
-          }
-          if (profile.headline.length > 0) {
-            Text(profile.headline)
-              .id('p2_people_detail_headline')
-              .fontSize($r('app.float.p1_body_font_size'))
-              .fontColor($r('app.color.secondary_text'))
               .textAlign(TextAlign.Center)
+          }
+
+          Column({ space: $r('app.float.p1_spacing_small') }) {
+            Text(profile.name)
+              .id('p2_people_detail_name')
+              .fontSize($r('app.float.p1_display_font_size'))
+              .fontWeight(FontWeight.Bold)
+              .fontColor($r('app.color.primary_text'))
+              .textAlign(TextAlign.Center)
+            if (profile.isOrganization) {
+              Text('机构账号')
+                .id('p2_people_detail_organization')
+                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontColor(this.resolvedThemeColor)
+            }
+            if (profile.headline.length > 0) {
+              Text(profile.headline)
+                .id('p2_people_detail_headline')
+                .fontSize($r('app.float.p1_body_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+                .textAlign(TextAlign.Center)
+                .width('100%')
+            }
+          }
+          .alignItems(HorizontalAlign.Center)
+          .width('100%')
+          // 顶栏联动阈值：昵称块相对资料列的 y+height 即其底边滚到顶栏下沿所需的偏移（vp）
+          .onAreaChange((_oldArea: Area, newArea: Area): void => {
+            const bottom = Number(newArea.position.y) + Number(newArea.height);
+            if (bottom > 0 && Math.abs(bottom - this.titleAnchorVp) > 1) {
+              this.titleAnchorVp = bottom;
+            }
+          })
+
+          Row() {
+            this.profileStatistic('回答', profile.answerCount, 'answers')
+            this.profileStatistic('文章', profile.articleCount, 'articles')
+            this.profileStatistic('关注', profile.followingCount, 'following')
+            this.profileStatistic('粉丝', this.followerCount, 'followers')
+          }
+          .id('p2_people_detail_statistics')
+          .width('100%')
+          .justifyContent(FlexAlign.SpaceEvenly)
+          .padding($r('app.float.p1_spacing_medium'))
+          .backgroundColor($r('app.color.surface_background'))
+          .borderRadius(16)
+
+          if (this.followController !== undefined) {
+            Row({ space: $r('app.float.p1_spacing_small') }) {
+              Button(this.following ? '已关注' : '关注', { type: ButtonType.Capsule })
+                .id('p3_people_follow')
+                .width('100%')
+                .fontSize($r('app.float.p1_body_font_size'))
+                .fontColor(this.following ? this.resolvedThemeColor : onThemeColor(this.resolvedThemeColor))
+                .backgroundColor(this.following
+                  ? themeColorContainerColor(this.resolvedThemeColor)
+                  : this.resolvedThemeColor)
+                .enabled(!this.followPending)
+                .onClick((): void => {
+                  this.followController?.toggleFollow();
+                })
+            }
+            .id('p3_people_action_row')
+            .width('100%')
+          }
+
+          if (this.followErrorMessage.length > 0) {
+            Row({ space: $r('app.float.p1_spacing_small') }) {
+              Text(this.followErrorMessage)
+                .id('p3_people_follow_status')
+                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontColor($r('app.color.error_text'))
+                .layoutWeight(1)
+              if (this.followRequiresLogin) {
+                Button('去登录')
+                  .backgroundColor(this.resolvedThemeColor)
+                  .fontColor(onThemeColor(this.resolvedThemeColor))
+                  .id('p3_people_follow_login')
+                  .fontSize($r('app.float.p1_secondary_font_size'))
+                  .onClick((): void => {
+                    this.navigate({ name: P1DestinationName.LOGIN });
+                  })
+              }
+            }
+            .width('100%')
+          }
+
+          if (this.blockingMessage.length > 0) {
+            Text(this.blockingMessage)
+              .id('p3_people_detail_blocking_status')
+              .fontSize($r('app.float.p1_secondary_font_size'))
+              .fontColor($r('app.color.secondary_text'))
               .width('100%')
           }
         }
         .alignItems(HorizontalAlign.Center)
         .width('100%')
-
-        Row() {
-          this.profileStatistic('回答', profile.answerCount, 'answers')
-          this.profileStatistic('文章', profile.articleCount, 'articles')
-          this.profileStatistic('关注', profile.followingCount, 'following')
-          this.profileStatistic('粉丝', this.followerCount, 'followers')
-        }
-        .id('p2_people_detail_statistics')
-        .width('100%')
-        .justifyContent(FlexAlign.SpaceEvenly)
-        .padding($r('app.float.p1_spacing_medium'))
-        .backgroundColor($r('app.color.surface_background'))
-        .borderRadius(16)
-
-        if (this.followController !== undefined) {
-          Row({ space: $r('app.float.p1_spacing_small') }) {
-            Button(this.following ? '已关注' : '关注', { type: ButtonType.Capsule })
-              .id('p3_people_follow')
-              .width('100%')
-              .fontSize($r('app.float.p1_body_font_size'))
-              .fontColor(this.following ? this.resolvedThemeColor : onThemeColor(this.resolvedThemeColor))
-              .backgroundColor(this.following
-                ? themeColorContainerColor(this.resolvedThemeColor)
-                : this.resolvedThemeColor)
-              .enabled(!this.followPending)
-              .onClick((): void => {
-                this.followController?.toggleFollow();
-              })
+        // 顶栏覆盖式透明：静止时资料区从顶栏下方起排，滚动时整块内容从其下穿过
+        .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
+          top: 94, bottom: $r('app.float.p1_page_padding') })
+        // 选项卡条吸顶阈值：资料块高度即其内容起始位置，滚到顶栏下沿时改由覆盖层承载
+        .onAreaChange((_oldArea: Area, newArea: Area): void => {
+          const height = Number(newArea.height);
+          if (height > 0 && Math.abs(height - this.headerHeightVp) > 1) {
+            this.headerHeightVp = height;
           }
-          .id('p3_people_action_row')
-          .width('100%')
-        }
+        })
+      }
 
-        if (this.followErrorMessage.length > 0) {
-          Row({ space: $r('app.float.p1_spacing_small') }) {
-            Text(this.followErrorMessage)
-              .id('p3_people_follow_status')
-              .fontSize($r('app.float.p1_secondary_font_size'))
-              .fontColor($r('app.color.error_text'))
-              .layoutWeight(1)
-            if (this.followRequiresLogin) {
-              Button('去登录')
-                .backgroundColor(this.resolvedThemeColor)
-                .fontColor(onThemeColor(this.resolvedThemeColor))
-                .id('p3_people_follow_login')
-                .fontSize($r('app.float.p1_secondary_font_size'))
-                .onClick((): void => {
-                  this.navigate({ name: P1DestinationName.LOGIN });
-                })
-            }
-          }
-          .width('100%')
+      ListItem() {
+        if (this.tabsPinned) {
+          Column().width('100%').height(44)
+        } else {
+          this.contentSectionTabs()
         }
+      }
 
-        if (this.blockingMessage.length > 0) {
-          Text(this.blockingMessage)
-            .id('p3_people_detail_blocking_status')
-            .fontSize($r('app.float.p1_secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .width('100%')
-        }
-
-        this.contentSectionTabs()
+      ListItem() {
         this.contentList()
       }
-      .alignItems(HorizontalAlign.Center)
-      .width('100%')
-      .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
-        top: 94, bottom: $r('app.float.p1_page_padding') })
     }
     .scrollBar(BarState.Off)
     .width('100%')
-    .layoutWeight(1)
+    .height('100%')
+    .onAreaChange((_oldArea: Area, newArea: Area): void => {
+      const height = Number(newArea.height);
+      if (height > 0 && Math.abs(height - this.listViewportVp) > 1) {
+        this.listViewportVp = height;
+      }
+    })
+    .onDidScroll((): void => {
+      this.updateChromeByScroll(this.contentScroller.currentOffset().yOffset);
+    })
+    // 左右滑动切换栏目：必须用 priorityGesture——parallelGesture 下卡片的 tap 仍会命中，
+    // 横滑会顺带打开卡片；限定向为 Horizontal，不影响列表纵向滚动。
+    .priorityGesture(
+      PanGesture({ fingers: 1, direction: PanDirection.Horizontal, distance: 60 })
+        .onActionEnd((event: GestureEvent): void => {
+          this.switchSectionBySwipe(event.offsetX);
+        })
+    )
+  }
+
+  /** 左右滑动切换回答/文章/动态：offsetX 为负（左滑）向后，为正（右滑）向前。 */
+  private switchSectionBySwipe(offsetX: number): void {
+    const order: Array<PeopleContentSection> = [PeopleContentSection.ANSWERS, PeopleContentSection.ARTICLES,
+      PeopleContentSection.ACTIVITIES];
+    const step = offsetX < 0 ? 1 : -1;
+    const next = order.indexOf(this.selectedSection) + step;
+    if (next < 0 || next >= order.length) {
+      return;
+    }
+    this.selectSection(order[next]);
+  }
+
+  /** 顶栏文案与选项卡吸顶联动：昵称滚出顶栏后改显昵称；资料块滚过时选项卡条改由覆盖层承载。 */
+  private updateChromeByScroll(offset: number): void {
+    const profile = this.profile;
+    const pinned = this.headerHeightVp > 0 ? offset >= this.headerHeightVp - 94 : false;
+    if (pinned !== this.tabsPinned) {
+      this.tabsPinned = pinned;
+    }
+    if (profile === undefined) {
+      return;
+    }
+    const threshold = this.titleAnchorVp > 0 ? this.titleAnchorVp : 260;
+    const scrolled = offset > threshold;
+    if (scrolled === this.titleScrolled) {
+      return;
+    }
+    this.titleScrolled = scrolled;
+    this.getUIContext().animateTo({ duration: 220, curve: Curve.EaseInOut }, (): void => {
+      publishPeopleTitle({ id: this.identifier, name: profile.name, scrolled: scrolled });
+    });
   }
 
   @Builder
@@ -426,6 +525,11 @@ export struct PeopleDetailPage {
     }
     if (state.phase === ReadOnlyDetailPhase.READY && state.profile !== undefined) {
       this.activateFollow(state.profile);
+      publishPeopleTitle({
+        id: this.identifier,
+        name: state.profile.name,
+        scrolled: this.titleScrolled
+      });
     }
   }
 
@@ -468,6 +572,12 @@ export struct PeopleDetailPage {
     .id('p2_people_content_tabs')
     .scrollable(ScrollDirection.Horizontal)
     .scrollBar(BarState.Off)
+    // 吸顶后不铺色、也不用 COMPONENT_* 材质（自带白纱会把穿过的卡片糊成一条白带）：
+    // backgroundEffect 的蒙版色默认透明，只留纯高斯模糊，卡片从选项卡下方透光穿过。
+    // uiMaterial 为 API 26 专属，禁止引入。
+    .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding') })
+    .backgroundColor(Color.Transparent)
+    .backgroundEffect({ radius: this.tabsPinned ? 24 : 0 })
     .width('100%')
     .height(44)
   }
@@ -493,10 +603,14 @@ export struct PeopleDetailPage {
   private contentList() {
     Column({ space: $r('app.float.p1_spacing_small') }) {
       if (this.contentPhase === PeopleContentPhase.IDLE || this.contentPhase === PeopleContentPhase.LOADING) {
-        Text('正在加载用户内容…')
-          .id('p2_people_content_loading')
-          .fontSize($r('app.float.p1_body_font_size'))
-          .fontColor($r('app.color.secondary_text'))
+        if (this.tabsPinned) {
+          // 转圈改挂到选项卡条覆盖层下方；这里只占位，避免列表塌缩把滚动偏移钳回顶部
+          Column()
+            .width('100%')
+            .height(this.listViewportVp > 0 ? this.listViewportVp : 360)
+        } else {
+          this.contentLoadingIndicator()
+        }
       } else if (this.contentPhase === PeopleContentPhase.ERROR) {
         this.contentStatus(true)
       } else if (this.contentPhase === PeopleContentPhase.EMPTY) {
@@ -526,7 +640,43 @@ export struct PeopleDetailPage {
     }
     .id('p2_people_content_list')
     .alignItems(HorizontalAlign.Start)
+    .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding') })
     .width('100%')
+  }
+
+  @Builder
+  private contentLoadingIndicator() {
+    Row() {
+      this.contentLoadingSpinner()
+    }
+    .justifyContent(FlexAlign.Center)
+    .alignItems(VerticalAlign.Top)
+    .width('100%')
+    // 占满一屏：切换栏目时列表内容不会塌缩，滚动偏移不被钳位，吸顶位置保持不变
+    .height(this.listViewportVp > 0 ? this.listViewportVp : 360)
+    .padding({ top: 12, bottom: 12 })
+  }
+
+  // 吸顶时列表内容塌缩会把流内转圈顶到屏幕最上沿，故挂在选项卡条覆盖层下方固定位置
+  @Builder
+  private pinnedContentLoading() {
+    Row() {
+      this.contentLoadingSpinner()
+    }
+    .justifyContent(FlexAlign.Center)
+    .width('100%')
+    .padding({ top: 12 })
+    // 只做指示，不能挡住下方卡片的点击
+    .hitTestBehavior(HitTestMode.None)
+  }
+
+  @Builder
+  private contentLoadingSpinner() {
+    LoadingProgress()
+      .id('p2_people_content_loading')
+      .width(40)
+      .height(40)
+      .color(this.resolvedThemeColor)
   }
 
   @Builder
@@ -610,7 +760,9 @@ export struct PeopleDetailPage {
       return;
     }
     this.contentController = new PeopleContentController(
-      this.identifier,
+      // 内容接口按 url_token 定位（上游 person.userTokenOrId）：搜索进入时路由是哈希 id，
+      // members/{哈希 id}/articles 会 404。
+      this.profile?.urlToken ?? this.identifier,
       this.selectedSection,
       this.contentRepository,
       (state: PeopleContentViewState): void => this.applyContentState(state)
