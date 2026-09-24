@@ -191,7 +191,13 @@ export struct SearchTitleBar {
       .onClick((): void => {
         this.menuVisible = !this.menuVisible;
       })
-      .bindMenu(this.menuVisible, this.filterMenu())
+      // isShow 为单向控制：点菜单外部（或返回键）关闭时不会回写 menuVisible，残留的 true 会让
+      // 图标再点无响应、并在标题栏重绘时自己重新弹出——必须在 onDisappear 里复位。
+      .bindMenu(this.menuVisible, this.filterMenu(), {
+        onDisappear: (): void => {
+          this.menuVisible = false;
+        }
+      })
     }
     .id('p2_search_title_bar')
     .width('100%')
