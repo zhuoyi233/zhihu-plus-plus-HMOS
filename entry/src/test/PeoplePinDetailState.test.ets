@@ -24,6 +24,7 @@ import {
   pinHistoryExcerpt
 } from '../main/ets/pages/PeoplePinDetailState';
 import { PeopleContentController, PeopleContentPhase } from '../main/ets/pages/PeopleContentState';
+import { peopleTitleText, PeopleTitleState } from '../main/ets/pages/PeopleTitleBar';
 import { parseZhihuHtml, ReaderInlineKind } from 'reader';
 
 class UnusedLoginOperation implements SessionLoginOperation {
@@ -294,6 +295,19 @@ export default function peoplePinDetailStateTest(): void {
       await controller.loadInitial();
       controller.deactivate();
       expect(repository.cancelCount).assertEqual(2);
+    });
+
+    it('showsNicknameInTitleBarOnlyAfterNameScrollsOut', 0, () => {
+      const scrolled: PeopleTitleState[] = [{ id: 'alice-token', name: '刘看山', scrolled: true }];
+      expect(peopleTitleText([], 'alice-token')).assertEqual('用户主页');
+      expect(peopleTitleText([{ id: 'alice-token', name: '刘看山', scrolled: false }], 'alice-token'))
+        .assertEqual('用户主页');
+      expect(peopleTitleText(scrolled, 'alice-token')).assertEqual('刘看山');
+      // 栈内多层用户主页按路由 id 取值，互不串台
+      expect(peopleTitleText(scrolled, 'bob-token')).assertEqual('用户主页');
+      // 昵称为空白时不顶替占位标题
+      expect(peopleTitleText([{ id: 'alice-token', name: '  ', scrolled: true }], 'alice-token'))
+        .assertEqual('用户主页');
     });
   });
 }
