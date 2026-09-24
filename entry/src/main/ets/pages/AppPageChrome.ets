@@ -5,6 +5,7 @@
  * 避免各业务页继续复制一套标题行、空态和设置导航行。
  */
 import { DEFAULT_THEME_COLOR, onThemeColor } from 'data';
+import { ComponentContent, UIContext } from '@kit.ArkUI';
 
 export enum AppPageStatusKind {
   LOADING = 'loading',
@@ -192,32 +193,116 @@ export class FeedPullDownIndicatorOptions {
    * 标题栏下沿；占位式页面 Refresh 组件本身已在标题栏下方，保持 0。
    */
   topInset: number = 0;
+  /**
+   * 下拉间隙是否处于展开态。ArkUI 收起头部后不会裁剪 refreshingContent——实测头部
+   * 节点已是 0×0 而圆圈仍按自身尺寸绘制，所以不展开时必须什么都不画，否则刷新结束
+   * 圆圈会常驻页面（2026-09-25 修复）。
+   */
+  active: boolean = false;
 }
 
 /**
- * 下拉刷新区域的蓝色加载圆圈：与上拉加载更多同款同尺寸。
+ * 下拉刷新区域的加载圆圈：与上拉加载更多同款同尺寸，颜色跟随当前生效主题色。
  * 容器高度自适应 Refresh 指示区域（下拉间隙），justifyContent End 让圆圈贴着
  * 间隙底部、跟随下拉距离移动（等价上游 Material3 指示器随拖拽平移的行为）。
  * 注意：不要给容器设固定高度——固定高度会让内容锚定位置失控（圆圈曾因此
  * 钉在状态栏一栏，见 2026-09-15 修复）。
  * 覆盖式顶栏下（2026-09-23 起）Refresh 头部区域从页面顶端展开，圆圈会贴着状态栏
- * 出现；覆盖式页面经 options.topInset 传 FLOATING_TITLE_BAR_OFFSET，用绘制偏移
+ * 出现；覆盖式页面经 topInset 传 FLOATING_TITLE_BAR_OFFSET，用绘制偏移
  * （translate，不占布局、不影响下拉触发距离）把圆圈挪到悬浮标题栏下沿；占位式
  * 页面 Refresh 本身已在标题栏下方，topInset 保持 0。
  */
+@Component
+struct FeedPullDownIndicatorView {
+  /**
+   * 主题色必须经 @StorageProp 订阅，不能在 feedPullDownIndicator 里直读 AppStorage：
+   * 按值传参的 @Builder 只在首次渲染时求值、之后 params 不变就不再重算，而首次渲染时机
+   * 各页签不同——首页是启动那一帧就渲染的（此时 P1Shell 的 restoreThemeColor 仍在异步
+   * 等待，生效色还是默认知乎蓝），圆圈因此永久停在默认色；其余页签首次渲染发生在主题
+   * 恢复之后，看起来才"正常"（2026-09-25 主页下拉刷新不跟随主题色的根因）。
+   */
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  /** 必须用 @Prop：ComponentContent.update() 换新参数实例后，普通成员不会再同步进来。 */
+  @Prop active: boolean = false;
+  @Prop topInset: number = 0;
+
+  build() {
+    Column() {
+      if (this.active) {
+        LoadingProgress()
+          .width(40)
+          .height(40)
+          .color(this.resolvedThemeColor)
+      }
+    }
+    .width('100%')
+    .constraintSize({ minHeight: 48 })
+    .justifyContent(FlexAlign.End)
+    .padding({ bottom: 12 })
+    .translate({ y: this.topInset })
+  }
+}
+
+/**
+ * Refresh 的 refreshingContent 要求 ComponentContent，故经文件级 @Builder 包一层；
+ * 主题色与展开态由 FeedPullDownIndicatorView 自己订阅/接收，不依赖这里的求值时机。
+ */
 @Builder
 export function feedPullDownIndicator(options: FeedPullDownIndicatorOptions) {
-  Column() {
-    LoadingProgress()
-      .width(40)
-      .height(40)
-      // 文件级 @Builder 无组件上下文，直接读 AppStorage 当前生效主题色；
-      // 指示器随每次刷新动作重新构建，主题切换后下一次下拉即生效。
-      .color(AppStorage.get<string>('resolvedThemeColor') ?? DEFAULT_THEME_COLOR)
+  FeedPullDownIndicatorView({ topInset: options.topInset, active: options.active })
+}
+
+/**
+ * 下拉刷新圆圈的生命周期宿主：持有 ComponentContent，并把“间隙是否展开”同步给它。
+ * 展开态有两个来源，缺一不可——onStateChange 覆盖手势下拉（Drag/OverDrag），
+ * setRefreshing 覆盖程序化刷新（双击页签、登录重载等不经过手势的路径）。
+ */
+export class FeedPullDownIndicatorHost {
+  private readonly content: ComponentContent<FeedPullDownIndicatorOptions>;
+  private readonly topInset: number;
+  private dragging: boolean = false;
+  private refreshing: boolean = false;
+  private active: boolean = false;
+
+  constructor(uiContext: UIContext, topInset: number) {
+    this.topInset = topInset;
+    this.content = new ComponentContent(uiContext, wrapBuilder(feedPullDownIndicator),
+      FeedPullDownIndicatorHost.buildOptions(topInset, false));
   }
-  .width('100%')
-  .constraintSize({ minHeight: 48 })
-  .justifyContent(FlexAlign.End)
-  .padding({ bottom: 12 })
-  .translate({ y: options.topInset })
+
+  /** 传给 Refresh 的 refreshingContent。 */
+  view(): ComponentContent<FeedPullDownIndicatorOptions> {
+    return this.content;
+  }
+
+  onStateChange(status: RefreshStatus): void {
+    this.dragging = status === RefreshStatus.Drag || status === RefreshStatus.OverDrag
+      || status === RefreshStatus.Refresh;
+    this.apply();
+  }
+
+  setRefreshing(refreshing: boolean): void {
+    this.refreshing = refreshing;
+    this.apply();
+  }
+
+  dispose(): void {
+    this.content.dispose();
+  }
+
+  private apply(): void {
+    const active = this.dragging || this.refreshing;
+    if (active === this.active) {
+      return;
+    }
+    this.active = active;
+    this.content.update(FeedPullDownIndicatorHost.buildOptions(this.topInset, active));
+  }
+
+  private static buildOptions(topInset: number, active: boolean): FeedPullDownIndicatorOptions {
+    const options = new FeedPullDownIndicatorOptions();
+    options.topInset = topInset;
+    options.active = active;
+    return options;
+  }
 }

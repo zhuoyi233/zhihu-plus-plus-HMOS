@@ -5,11 +5,11 @@ import { publishQuestionTitle } from './QuestionTitleBar';
 import { publishAnswerTitle, AnswerTitleBar } from './AnswerTitleBar';
 import { publishArticleTitle } from './ArticleTitleBar';
 import { FeedContentSummary } from './components/FeedContentSummary';
-import { AppPageStatusKind, AppPageStatusPanel, FLOATING_TITLE_BAR_OFFSET, FeedPullDownIndicatorOptions, feedPullDownIndicator } from './AppPageChrome';
+import { AppPageStatusKind, AppPageStatusPanel, FeedPullDownIndicatorHost, FLOATING_TITLE_BAR_OFFSET } from './AppPageChrome';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { motion } from '@kit.MultimodalAwarenessKit';
-import { ComponentContent, SegmentButton, SegmentButtonOptions, curves } from '@kit.ArkUI';
+import { SegmentButton, SegmentButtonOptions, curves } from '@kit.ArkUI';
 import {
   P1Destination,
   P1DestinationName
@@ -96,7 +96,7 @@ struct ContentDetailPage {
   kind: ContentDetailKind = ContentDetailKind.QUESTION;
   contentId: string = '';
   @State private activeContentId: string = '';
-  @State private refreshingAnswers: boolean = false;
+  @State @Watch('syncAnswerRefreshIndicator') private refreshingAnswers: boolean = false;
   @State private navigatorBusy: boolean = false;
   @State private navigatorRevision: number = 0;
   /** 回答页过滑切换：纵向模式沿 Y 轴、横向模式沿 X 轴平移。 */
@@ -146,7 +146,7 @@ struct ContentDetailPage {
   @State private authenticated: boolean = false;
   private answerNavigator?: QuestionAnswerNavigator;
   private readonly answerDataSource: QuestionAnswerDataSource = new QuestionAnswerDataSource();
-  private refreshContent?: ComponentContent<FeedPullDownIndicatorOptions>;
+  private indicator?: FeedPullDownIndicatorHost = undefined;
   private questionScrolled: boolean = false;
   /** 回答页顶栏折叠：问题标题已滚出视口（经 AppStorage 驱动 HDS 标题栏折叠态）。 */
   private answerQuestionScrolled: boolean = false;
@@ -267,8 +267,7 @@ struct ContentDetailPage {
     void this.restoreAnswerDoubleTapAction();
     // 同步沉浸式初始/保留态给 P1Shell（返回栈重显时实例与状态均保留）。
     AppStorage.setOrCreate('detailImmersiveActive', this.immersiveReading);
-    this.refreshContent = new ComponentContent(this.getUIContext(), wrapBuilder(feedPullDownIndicator),
-      new FeedPullDownIndicatorOptions());
+    this.indicator = new FeedPullDownIndicatorHost(this.getUIContext(), 0);
     if (this.kind === ContentDetailKind.ANSWER && this.answerNavigator === undefined) {
       this.answerNavigator = takeQuestionAnswerNavigator(this.activeContentId);
     }
@@ -343,8 +342,8 @@ struct ContentDetailPage {
   aboutToDisappear(): void {
     this.pageActive = false;
     this.unsubscribeHoldingHand();
-    this.refreshContent?.dispose();
-    this.refreshContent = undefined;
+    this.indicator?.dispose();
+    this.indicator = undefined;
     this.answersController?.deactivate();
     this.controller?.deactivate();
     this.voteController?.deactivate();
@@ -608,6 +607,11 @@ struct ContentDetailPage {
       await Promise.all([this.controller?.load(this.kind, this.activeContentId) ?? Promise.resolve(),
         this.answersController?.refresh() ?? Promise.resolve()]);
     } finally { this.refreshingAnswers = false; }
+  }
+
+  /** 圆圈只在间隙展开时绘制（ArkUI 收起头部后不裁剪自定义内容），程序化刷新不走 onStateChange。 */
+  private syncAnswerRefreshIndicator(): void {
+    this.indicator?.setRefreshing(this.refreshingAnswers);
   }
 
   private createBlockingAction(): void {
@@ -1868,7 +1872,7 @@ struct ContentDetailPage {
 
   @Builder
   private questionDocument(content: LoadedContentDetail) {
-    Refresh({ refreshing: $$this.refreshingAnswers, refreshingContent: this.refreshContent }) {
+    Refresh({ refreshing: $$this.refreshingAnswers, refreshingContent: this.indicator?.view() }) {
       NativeContentDocument({
         html: contentHtml(content), emptyMessage: contentEmptyMessage(content), collapsible: true,
         topInsetVp: this.immersiveReading ? 0 : FLOATING_TITLE_BAR_OFFSET,
@@ -1889,6 +1893,7 @@ struct ContentDetailPage {
         }
       })
     }.height('100%').width('100%').onRefreshing((): void => { void this.refreshQuestion(); })
+      .onStateChange((status: RefreshStatus): void => this.indicator?.onStateChange(status))
   }
 
   private openVideo(videoId: string): void {

@@ -1,4 +1,3 @@
-import { ComponentContent } from '@kit.ArkUI';
 import {
   onThemeColor,
   DEFAULT_THEME_COLOR,
@@ -7,7 +6,7 @@ import {
   ReadHistoryGateway,
   SessionStatus
 } from 'data';
-import { FLOATING_TITLE_BAR_OFFSET, FeedPullDownIndicatorOptions, feedPullDownIndicator } from './AppPageChrome';
+import { FLOATING_TITLE_BAR_OFFSET, FeedPullDownIndicatorHost } from './AppPageChrome';
 import {
   ReadHistoryController,
   ReadHistoryItem,
@@ -38,7 +37,7 @@ export struct ReadHistoryPage {
     loadingMore: false,
     canLoadMore: false
   };
-  @State private refreshing: boolean = false;
+  @State @Watch('syncRefreshIndicator') private refreshing: boolean = false;
   @State private confirmClear: boolean = false;
   // 标题栏溢出菜单在 stackBuilder 子树内，动作经 AppStorage tick 广播到本页（同 loginFeedReloadTick 模式）。
   // @StorageProp 键用字面量（装饰器要求编译期常量），值与 HistoryTitleBar.ets 导出常量一一对应。
@@ -47,7 +46,7 @@ export struct ReadHistoryPage {
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: ReadHistoryController;
   // 下拉刷新自定义加载圆圈（refreshingContent 需 ComponentContent，随页面销毁释放）
-  private refreshContent?: ComponentContent<FeedPullDownIndicatorOptions> = undefined;
+  private indicator?: FeedPullDownIndicatorHost = undefined;
 
   aboutToAppear(): void {
     // 返回栈重显（页面实例与状态保留）时 aboutToAppear 可能再次触发；
@@ -80,18 +79,22 @@ export struct ReadHistoryPage {
         // 单向绑定时手势不回写、这里的赋值因值未变化而不生效，刷新圈会永远卡住。
         this.refreshing = state.busy && state.phase === ReadHistoryPhase.LOADING;
       });
-    this.refreshContent = new ComponentContent(this.getUIContext(), wrapBuilder(feedPullDownIndicator),
-      new FeedPullDownIndicatorOptions());
+    this.indicator = new FeedPullDownIndicatorHost(this.getUIContext(), 0);
     this.controller.activate();
   }
 
   aboutToDisappear(): void {
     this.controller?.deactivate();
     this.controller = undefined;
-    this.refreshContent?.dispose();
-    this.refreshContent = undefined;
+    this.indicator?.dispose();
+    this.indicator = undefined;
     this.refreshing = false;
     this.confirmClear = false;
+  }
+
+  /** 圆圈只在间隙展开时绘制（ArkUI 收起头部后不裁剪自定义内容）。 */
+  private syncRefreshIndicator(): void {
+    this.indicator?.setRefreshing(this.refreshing);
   }
 
   private onOpenLocalTick(): void {
@@ -143,7 +146,7 @@ export struct ReadHistoryPage {
         } else {
           Refresh({
             refreshing: $$this.refreshing,
-            refreshingContent: this.refreshContent,
+            refreshingContent: this.indicator?.view(),
             offset: 80,
             friction: 100
           }) {
@@ -191,6 +194,7 @@ export struct ReadHistoryPage {
           .onRefreshing((): void => {
             void this.controller?.reload();
           })
+          .onStateChange((status: RefreshStatus): void => this.indicator?.onStateChange(status))
         }
       }
       .width('100%')
