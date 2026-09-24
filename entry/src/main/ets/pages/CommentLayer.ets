@@ -18,6 +18,18 @@ import {
 import { CommentLikeButton } from './CommentLikeButton';
 import { CommentLikeState, CommentLikeStateStore } from './CommentLikeState';
 import { EmojiText } from './EmojiText';
+import { HarmonyOSCapabilities } from '../common/platform/HarmonyOSCapabilities';
+import { FLOATING_TITLE_BAR_OFFSET } from './AppPageChrome';
+import {
+  commentTitleStateId,
+  publishCommentTitle,
+  removeCommentTitle
+} from './CommentTitleBar';
+import { materialCanvas } from './components/MaterialCanvas';
+
+/** 评论输入胶囊与 PR #23 详情页底栏使用同一套 48vp 大胶囊规格。 */
+const COMMENT_INPUT_CAPSULE_HEIGHT: number = 48;
+const COMMENT_INPUT_CAPSULE_RADIUS: number = 24;
 /** 全屏评论页：根评论与子评论共用一个页面实例，返回操作按层级逐级退出。 */
 @Component
 export struct CommentPage {
@@ -47,8 +59,10 @@ export struct CommentPage {
   @State private likeStates: Record<string, CommentLikeState> = {};
   @StorageProp('emojiCatalogVersion') @Watch('onEmojiCatalogChanged') emojiCatalogVersion: number = 0;
   @StorageProp('commentPageBackTick') @Watch('onCommentPageBack') commentPageBackTick: number = 0;
-  @StorageProp('statusBarHeight') private statusBarHeightVp: number = 0;
+  @StorageProp('bottomRectHeight') private bottomRectHeightVp: number = 0;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  @State private inputBarWidthVp: number = 0;
+  @State private inputBarHeightVp: number = 0;
   @State private emojiTick: number = 0;
   @State private showEmojiPicker: boolean = false;
   @State private pickerColumns: number = 7;
@@ -61,6 +75,7 @@ export struct CommentPage {
 
   aboutToAppear(): void {
     this.ensureEmojiCatalog();
+    publishCommentTitle({ id: this.titleStateId(), replying: false });
     const repository = this.repository;
     const session = this.session;
     if (repository === undefined || session === undefined) {
@@ -88,6 +103,7 @@ export struct CommentPage {
   aboutToDisappear(): void {
     this.controller?.deactivate();
     this.controller = undefined;
+    removeCommentTitle(this.titleStateId());
   }
 
   /** 表情表懒加载，加载完成后经 emojiCatalogVersion 广播刷新选择面板与行内渲染。 */
@@ -120,58 +136,41 @@ export struct CommentPage {
     this.onDismiss();
   }
 
+  private titleStateId(): string {
+    return commentTitleStateId(this.contentType, this.contentId);
+  }
+
+  private bottomChromeHeight(): number {
+    if (this.inputBarHeightVp > 0) {
+      return this.inputBarHeightVp;
+    }
+    return COMMENT_INPUT_CAPSULE_HEIGHT + Math.max(this.bottomRectHeightVp, 0) +
+      (this.showEmojiPicker ? 248 : 0);
+  }
+
+  private inputBarWidth(): Length {
+    return this.inputBarWidthVp > 0 ? this.inputBarWidthVp : '100%';
+  }
+
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       Column() {
         this.sheetBody()
-        if (this.phase === CommentPhase.READY || this.phase === CommentPhase.EMPTY) {
-          this.inputBar()
-        }
       }
       .width('100%')
       .height('100%')
-      .padding({ top: Math.max(this.statusBarHeightVp, 0) + 56 })
-      this.pageHeader()
+      // HDS 标题栏采用覆盖式布局；列表视口延伸到屏幕顶端，首屏让位交给 contentStartOffset。
+      if (this.phase === CommentPhase.READY || this.phase === CommentPhase.EMPTY) {
+        Stack({ alignContent: Alignment.Bottom }) {
+          this.inputBar()
+        }
+        .width('100%')
+        .height('100%')
+        .hitTestBehavior(HitTestMode.Transparent)
+      }
     }
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.page_background'))
-  }
-
-  @Builder
-  private pageHeader() {
-    Column() {
-      Blank()
-        .height(Math.max(this.statusBarHeightVp, 0))
-      Row({ space: $r('app.float.p1_spacing_small') }) {
-        Button({ type: ButtonType.Circle, stateEffect: true }) {
-          SymbolGlyph($r('sys.symbol.chevron_left'))
-            .fontSize(20)
-            .fontColor([$r('app.color.primary_text')])
-        }
-          .id('p3_comments_back')
-          .width(40)
-          .height(40)
-          .padding(0)
-          .backgroundColor($r('app.color.surface_background'))
-          .accessibilityText(this.activeRoot === undefined ? '返回详情' : '返回评论')
-          .onClick((): void => {
-            this.handleBack();
-          })
-        Text(this.activeRoot === undefined ? '评论' : '回复')
-          .textAlign(TextAlign.Center)
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.primary_text'))
-          .layoutWeight(1)
-        Blank().width(40)
-      }
-      .width('100%')
-      .height(56)
-      .padding({ left: 16, right: 16 })
-    }
-    .width('100%')
-    .height(Math.max(this.statusBarHeightVp, 0) + 56)
     .backgroundColor($r('app.color.page_background'))
   }
 
@@ -262,10 +261,12 @@ export struct CommentPage {
               }
             }
             .id('p3_comments_children_list')
-            .padding({ left: 16, right: 16, top: 8, bottom: 16 })
+            .padding({ left: 16, right: 16, top: 8 })
             .width('100%')
             .layoutWeight(1)
             .edgeEffect(EdgeEffect.Spring)
+            .contentStartOffset(FLOATING_TITLE_BAR_OFFSET)
+            .contentEndOffset(this.bottomChromeHeight() + 16)
             .onReachEnd(() => this.controller?.loadMore())
           } else {
             List({ space: 16, scroller: this.rootScroller }) {
@@ -296,11 +297,13 @@ export struct CommentPage {
               }
             }
             .id('p3_comments_root_list')
-            .padding({ left: 16, right: 16, top: 8, bottom: 16 })
+            .padding({ left: 16, right: 16, top: 8 })
             .width('100%')
             .scrollBar(BarState.Off)
             .layoutWeight(1)
             .edgeEffect(EdgeEffect.Spring)
+            .contentStartOffset(FLOATING_TITLE_BAR_OFFSET)
+            .contentEndOffset(this.bottomChromeHeight() + 16)
             .onReachEnd(() => this.controller?.loadMore())
           }
         }
@@ -348,7 +351,12 @@ export struct CommentPage {
     .alignItems(HorizontalAlign.Center)
     .width('100%')
     .layoutWeight(1)
-    .padding($r('app.float.p1_page_padding'))
+    .padding({
+      left: $r('app.float.p1_page_padding'),
+      right: $r('app.float.p1_page_padding'),
+      top: FLOATING_TITLE_BAR_OFFSET,
+      bottom: this.bottomChromeHeight()
+    })
   }
 
   @Builder
@@ -617,7 +625,6 @@ export struct CommentPage {
     Column() {
       if (emojiStore.placeholders().length === 0) {
         Text('暂无可用表情')
-          .id('p3_comments_emoji_picker')
           .fontSize($r('app.float.p1_secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .textAlign(TextAlign.Center)
@@ -638,7 +645,6 @@ export struct CommentPage {
             .id(`p3_comments_emoji_item_${index}`)
           }, (placeholder: string): string => `${this.emojiTick}_${placeholder}`)
         }
-          .id('p3_comments_emoji_picker')
           .columnsTemplate(this.emojiColumnsTemplate())
           .height('100%')
           .width('100%')
@@ -654,6 +660,7 @@ export struct CommentPage {
           })
       }
     }
+    .id('p3_comments_emoji_picker')
     .width('100%')
     .height(240)
     .backgroundColor($r('app.color.card_background'))
@@ -675,7 +682,7 @@ export struct CommentPage {
 
   @Builder
   private inputBar() {
-    Column() {
+    Column({ space: 8 }) {
       if (this.replyTarget !== undefined) {
         Row({ space: $r('app.float.p1_spacing_small') }) {
           Text(`回复 ${this.replyTarget.author.name}`)
@@ -701,6 +708,7 @@ export struct CommentPage {
         .id('p3_comments_reply_banner')
         .width('100%')
         .padding($r('app.float.p1_spacing_small'))
+        .borderRadius(12)
         .backgroundColor($r('app.color.control_background'))
       }
       if (this.actionMessage.length > 0) {
@@ -721,8 +729,54 @@ export struct CommentPage {
         }
         .width('100%')
         .padding($r('app.float.p1_spacing_small'))
+        .borderRadius(12)
+        .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
       }
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      this.glassInputBar()
+      if (this.showEmojiPicker) {
+        this.emojiPickerPanel()
+      }
+    }
+    .width('100%')
+    .padding({
+      left: $r('app.float.p1_page_padding'),
+      right: $r('app.float.p1_page_padding'),
+      // 与 PR #23 详情页底栏同源：仅按系统手势条避让区抬高，0 时贴物理底边。
+      bottom: Math.max(this.bottomRectHeightVp, 0)
+    })
+    .onAreaChange((_oldValue: Area, newValue: Area): void => {
+      const height = Number(newValue.height);
+      if (height > 0 && Math.abs(height - this.inputBarHeightVp) > 1) {
+        this.inputBarHeightVp = height;
+      }
+    })
+  }
+
+  /** 沉浸光感输入胶囊：复用详情页材质画布，低能力设备降级为组件模糊。 */
+  @Builder
+  private glassInputBar() {
+    Stack({ alignContent: Alignment.Center }) {
+      if (HarmonyOSCapabilities.supportsImmersiveMaterial()) {
+        if (this.inputBarWidthVp > 0) {
+          materialCanvas(this.inputBarWidthVp + 48, COMMENT_INPUT_CAPSULE_HEIGHT)
+        }
+      } else {
+        Row()
+          .width('100%')
+          .height(COMMENT_INPUT_CAPSULE_HEIGHT)
+          .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
+      }
+      this.inputRow()
+    }
+    .width(this.inputBarWidth())
+    .height(COMMENT_INPUT_CAPSULE_HEIGHT)
+    .borderRadius(COMMENT_INPUT_CAPSULE_RADIUS)
+    .clip(true)
+  }
+
+  @Builder
+  private inputRow() {
+    Row({ space: $r('app.float.p1_spacing_small') }) {
         Button({ type: ButtonType.Normal }) {
           SymbolGlyph(this.showEmojiPicker
             ? $r('sys.symbol.keyboard') : $r('sys.symbol.face_smiling'))
@@ -735,6 +789,7 @@ export struct CommentPage {
           .height(40)
           .padding(0)
           .backgroundColor(Color.Transparent)
+          .margin({ left: 12 })
           .focusable(false)
           .accessibilityText(this.showEmojiPicker ? '切换到键盘' : '选择表情')
           .onClick((): void => {
@@ -758,6 +813,7 @@ export struct CommentPage {
           .id('p3_comments_input')
           .layoutWeight(1)
           .maxLength(1000)
+          .backgroundColor(Color.Transparent)
           .onTextSelectionChange((start: number, end: number): void => {
             this.caretPosition = end;
           })
@@ -787,21 +843,22 @@ export struct CommentPage {
           .height(40)
           .padding(0)
           .backgroundColor(Color.Transparent)
+          .margin({ right: 12 })
           .accessibilityText(this.submitting ? '发送中' : '发送')
           .fontSize($r('app.float.p1_body_font_size'))
           .enabled(!this.submitting && this.currentDraft().trim().length > 0)
           .onClick((): void => {
             this.submitCurrentDraft();
           })
-      }
-      .width('100%')
-      .padding($r('app.float.p1_spacing_small'))
-      if (this.showEmojiPicker) {
-        this.emojiPickerPanel()
-      }
     }
     .width('100%')
-    .backgroundColor($r('app.color.card_background'))
+    .height(COMMENT_INPUT_CAPSULE_HEIGHT)
+    .onAreaChange((_oldValue: Area, newValue: Area): void => {
+      const width = Number(newValue.width);
+      if (width > 1 && Math.abs(width - this.inputBarWidthVp) > 1) {
+        this.inputBarWidthVp = width;
+      }
+    })
   }
 
   private currentDraft(): string {
@@ -851,6 +908,7 @@ export struct CommentPage {
     this.deleting = state.deleting;
     this.actionMessage = state.actionMessage ?? '';
     this.actionRequiresLogin = state.actionRequiresLogin;
+    publishCommentTitle({ id: this.titleStateId(), replying: state.activeRoot !== undefined });
   }
 }
 

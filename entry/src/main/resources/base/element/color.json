@@ -21,6 +21,10 @@
       "value": "#F5F6F8"
     },
     {
+      "name": "immersive_title_background",
+      "value": "#D9FFFFFF"
+    },
+    {
       "name": "card_background",
       "value": "#FFFFFF"
     },

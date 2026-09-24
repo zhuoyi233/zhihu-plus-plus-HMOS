@@ -29,10 +29,8 @@ export function getImmersiveTitleBarStyle(): TitleBarStyleOptions {
       },
       scrollEffectStyle: {
         backgroundStyle: {
-          // 滚动态用半透明白纱而非不透明底：HDS 系统材质仅在未设不透明背景色时才接管，
-          // 实心底会让材质失效、正文被实心条挡住；纯透明又会在彩色图片上不可读。
-          // 85% 白既保住磨砂透光，又保证深色标题文字可读（对齐酷安顶栏观感）。
-          backgroundColor: '#D9FFFFFF'
+          // 滚动态使用随深浅模式切换的半透明底，保留材质透光与标题可读性。
+          backgroundColor: $r('app.color.immersive_title_background')
         },
         contentStyle: {
           titleStyle: {
@@ -64,6 +62,50 @@ export function getImmersiveTitleBarStyle(): TitleBarStyleOptions {
       }
     },
     scrollEffectStyle: {
+      backgroundStyle: {
+        backgroundColor: $r('sys.color.ohos_id_color_navigation_background_blur')
+      }
+    }
+  };
+}
+
+/**
+ * 详情页与评论页使用的常驻沉浸标题栏：正文从首帧起就在材质层下方滚动，
+ * 因此不等待滚动阈值，直接让 originalStyle 使用与滚动态相同的半透明主题背景。
+ */
+export function getPersistentImmersiveTitleBarStyle(): TitleBarStyleOptions {
+  if (HarmonyOSCapabilities.supportsImmersiveTitleBarStyle()) {
+    return {
+      scrollEffectOpts: {
+        enableScrollEffect: false,
+        scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
+      },
+      originalStyle: {
+        backgroundStyle: {
+          backgroundColor: $r('app.color.immersive_title_background')
+        },
+        contentStyle: {
+          titleStyle: {
+            mainTitleColor: $r('app.color.primary_text'),
+            subTitleColor: $r('app.color.secondary_text')
+          },
+          backIconStyle: { iconColor: $r('app.color.primary_text') },
+          subIconStyle: { iconColor: $r('app.color.primary_text') },
+          menuStyle: { iconColor: $r('app.color.primary_text') }
+        }
+      },
+      systemMaterialEffect: {
+        materialType: hdsMaterial.MaterialType.ADAPTIVE,
+        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+      }
+    };
+  }
+  return {
+    scrollEffectOpts: {
+      enableScrollEffect: false,
+      scrollEffectType: ScrollEffectType.COMMON_BLUR
+    },
+    originalStyle: {
       backgroundStyle: {
         backgroundColor: $r('sys.color.ohos_id_color_navigation_background_blur')
       }
