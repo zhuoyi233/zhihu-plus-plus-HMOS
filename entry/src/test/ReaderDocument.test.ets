@@ -7,6 +7,7 @@ import {
   parseZhihuHtml,
   ReaderBlockKind,
   ReaderInlineKind,
+  ReaderInlineRun,
   readerDocumentStats
 } from 'reader';
 
@@ -19,6 +20,90 @@ export default function readerDocumentTest(): void {
       expect(blocks[1].text).assertEqual('正文 加粗');
       expect(blocks[2].kind).assertEqual(ReaderBlockKind.DIVIDER);
       expect(blocks[3].kind).assertEqual(ReaderBlockKind.LIST_ITEM);
+    });
+
+    it('parsesBoldRunsFromBAndStrong', 0, () => {
+      const blocks = parseZhihuHtml('<p>前<b>加粗</b>后</p>');
+      expect(blocks[0].text).assertEqual('前加粗后');
+      expect(blocks[0].inlineRuns.length).assertEqual(3);
+      expect(blocks[0].inlineRuns[0].bold === true).assertFalse();
+      expect(blocks[0].inlineRuns[1].bold === true).assertTrue();
+      expect(blocks[0].inlineRuns[1].text).assertEqual('加粗');
+      expect(blocks[0].inlineRuns[2].bold === true).assertFalse();
+
+      const strong = parseZhihuHtml('<p>a<strong>B</strong>c</p>');
+      expect(strong[0].inlineRuns[1].bold === true).assertTrue();
+      expect(strong[0].inlineRuns[1].text).assertEqual('B');
+    });
+
+    it('parsesZhihuBoldParagraphWithEdgeNewlines', 0, () => {
+      // 真实知乎 API 返回的加粗段落形态：p 内首尾换行 + 裸 <b>
+      const blocks = parseZhihuHtml('<p data-pid="CUK7DQg5">\n' +
+        '<b>对于第一次买手机，没有手机号的人，流程如下：</b>\n</p>');
+      expect(blocks.length).assertEqual(1);
+      expect(blocks[0].text).assertEqual('对于第一次买手机，没有手机号的人，流程如下：');
+      expect(blocks[0].inlineRuns.length).assertEqual(1);
+      expect(blocks[0].inlineRuns[0].bold === true).assertTrue();
+      expect(blocks[0].inlineRuns[0].text).assertEqual('对于第一次买手机，没有手机号的人，流程如下：');
+    });
+
+    it('parsesNestedAndMultipleInlineStyles', 0, () => {
+      const blocks = parseZhihuHtml('<p><b>粗<i>斜体</i></b> <em>em</em> <del>删</del></p>');
+      const runs = blocks[0].inlineRuns;
+      expect(runs.length).assertEqual(4);
+      expect(runs[0].bold === true).assertTrue();
+      expect(runs[0].italic === true).assertFalse();
+      expect(runs[1].bold === true).assertTrue();
+      expect(runs[1].italic === true).assertTrue();
+      expect(runs[1].text).assertEqual('斜体');
+      expect(runs[2].italic === true).assertTrue();
+      expect(runs[2].bold === true).assertFalse();
+      expect(runs[3].strikethrough === true).assertTrue();
+      expect(blocks[0].text).assertEqual('粗斜体 em 删');
+    });
+
+    it('parsesCodeSupSubMark', 0, () => {
+      const blocks = parseZhihuHtml('<p>x<code>foo()</code><sup>2</sup><sub>n</sub><mark>亮</mark></p>');
+      const runs = blocks[0].inlineRuns;
+      expect(runs.length).assertEqual(5);
+      expect(runs[1].code === true).assertTrue();
+      expect(runs[1].text).assertEqual('foo()');
+      expect(runs[2].superscript === true).assertTrue();
+      expect(runs[3].subscript === true).assertTrue();
+      expect(runs[4].mark === true).assertTrue();
+      expect(blocks[0].text).assertEqual('xfoo()2n亮');
+    });
+
+    it('parsesInlineLinksWithHrefNormalization', 0, () => {
+      const blocks = parseZhihuHtml('<p>看<a href="//www.zhihu.com/people/foo">某人</a>' +
+        '和<a href="https://zhuanlan.zhihu.com/p/123">文章</a>' +
+        '与<a href="javascript:alert(1)">危险</a></p>');
+      const runs = blocks[0].inlineRuns;
+      expect(runs.length).assertEqual(6);
+      expect(runs[0].linkUrl).assertEqual('');
+      expect(runs[1].linkUrl).assertEqual('https://www.zhihu.com/people/foo');
+      expect(runs[3].linkUrl).assertEqual('https://zhuanlan.zhihu.com/p/123');
+      expect(runs[5].linkUrl).assertEqual('');
+      expect(blocks[0].text).assertEqual('看某人和文章与危险');
+    });
+
+    it('keepsStyledRunTextAlignedWithPlainText', 0, () => {
+      // runs 拼接须与 plainText 逐字一致（划线偏移依赖此前提），含实体与 <br> 也不例外
+      const blocks = parseZhihuHtml('<p>\n前<b>加粗&amp;更多</b>后<br>换行</p>');
+      expect(blocks[0].text).assertEqual('前加粗&更多后\n换行');
+      const joined = blocks[0].inlineRuns.map((run: ReaderInlineRun): string => run.text).join('');
+      expect(joined).assertEqual(blocks[0].text);
+      expect(blocks[0].inlineRuns[1].bold === true).assertTrue();
+      expect(blocks[0].inlineRuns[1].text).assertEqual('加粗&更多');
+    });
+
+    it('keepsFormulaRunsBesideStyledRuns', 0, () => {
+      const blocks = parseZhihuHtml('<p><b>粗</b><img eeimg="1" ' +
+        'src="https://www.zhihu.com/equation?tex=x" alt="x">尾</p>');
+      expect(blocks[0].inlineRuns.length).assertEqual(3);
+      expect(blocks[0].inlineRuns[0].bold === true).assertTrue();
+      expect(blocks[0].inlineRuns[1].kind).assertEqual(ReaderInlineKind.FORMULA);
+      expect(blocks[0].inlineRuns[2].text).assertEqual('尾');
     });
 
     it('parsesInlineEquationAndKeepsReadableFallback', 0, () => {
