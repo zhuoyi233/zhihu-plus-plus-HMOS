@@ -19,7 +19,6 @@ import {
   FeedItem,
   FeedTargetKind
 } from 'data';
-import { ComponentContent } from '@kit.ArkUI';
 import {
   BlockingActionContext,
   BlockingActionController,
@@ -30,9 +29,8 @@ import {
 import {
   AppPageStatusKind,
   AppPageStatusPanel,
-  FLOATING_TITLE_BAR_OFFSET,
-  FeedPullDownIndicatorOptions,
-  feedPullDownIndicator
+  FeedPullDownIndicatorHost,
+  FLOATING_TITLE_BAR_OFFSET
 } from './AppPageChrome';
 import {
   ChannelFeedController,
@@ -78,7 +76,7 @@ export struct ChannelFeedPage {
   @StorageProp('fabOpacity') private fabOpacity: number = 100;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   // 下拉刷新自定义加载圆圈（refreshingContent 需 ComponentContent，随页面销毁释放）
-  private refreshContent?: ComponentContent<FeedPullDownIndicatorOptions> = undefined;
+  private indicator?: FeedPullDownIndicatorHost = undefined;
   @Consume('channelFeedInteractionBridge') private interactionBridge: ChannelFeedInteractionBridge =
     new ChannelFeedInteractionBridge();
   navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
@@ -107,11 +105,8 @@ export struct ChannelFeedPage {
 
   aboutToAppear(): void {
     this.pageActive = true;
-    const indicatorOptions = new FeedPullDownIndicatorOptions();
     // 覆盖式顶栏：Refresh 头部从页面顶端展开，把刷新圆圈绘制偏移到悬浮标题栏下沿
-    indicatorOptions.topInset = FLOATING_TITLE_BAR_OFFSET;
-    this.refreshContent = new ComponentContent(this.getUIContext(), wrapBuilder(feedPullDownIndicator),
-      indicatorOptions);
+    this.indicator = new FeedPullDownIndicatorHost(this.getUIContext(), FLOATING_TITLE_BAR_OFFSET);
     // P3-7：返回栈重显（页面实例与状态保留）时 aboutToAppear 可能再次触发；
     // 控制器仍存活时直接复用，避免重建控制器并重载列表导致滚动位置丢失。
     if (this.controller !== undefined) {
@@ -141,8 +136,8 @@ export struct ChannelFeedPage {
 
   aboutToDisappear(): void {
     this.pageActive = false;
-    this.refreshContent?.dispose();
-    this.refreshContent = undefined;
+    this.indicator?.dispose();
+    this.indicator = undefined;
     this.controller?.deactivate();
     this.pendingUserBlock = undefined;
     this.keywordBlockVisible = false;
@@ -256,7 +251,7 @@ export struct ChannelFeedPage {
 
         Refresh({
           refreshing: this.refreshing,
-          refreshingContent: this.refreshContent,
+          refreshingContent: this.indicator?.view(),
           offset: 80,
           friction: 100
         }) {
@@ -326,6 +321,7 @@ export struct ChannelFeedPage {
         .onRefreshing((): void => {
           this.controller?.refresh();
         })
+        .onStateChange((status: RefreshStatus): void => this.indicator?.onStateChange(status))
       }
 
       if (this.blockingMessage.length > 0) {
@@ -766,6 +762,7 @@ export struct ChannelFeedPage {
     this.phase = state.phase;
     this.items = state.items;
     this.refreshing = state.refreshing;
+    this.indicator?.setRefreshing(state.refreshing);
     this.loadingMore = state.loadingMore;
     this.canLoadMore = state.canLoadMore;
     this.requiresLogin = state.requiresLogin;

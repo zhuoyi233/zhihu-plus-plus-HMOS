@@ -1,6 +1,5 @@
 import { onThemeColor, DEFAULT_THEME_COLOR, ReadHistoryGateway } from 'data';
-import { FLOATING_TITLE_BAR_OFFSET, feedPullDownIndicator, FeedPullDownIndicatorOptions } from './AppPageChrome';
-import { ComponentContent } from '@kit.ArkUI';
+import { FLOATING_TITLE_BAR_OFFSET, FeedPullDownIndicatorHost } from './AppPageChrome';
 import {
   LocalHistoryController,
   ReadHistoryItem,
@@ -25,10 +24,11 @@ export struct LocalHistoryPage {
     loadingMore: false,
     canLoadMore: false
   };
-  @State private refreshing: boolean = false;
+  @State @Watch('syncRefreshIndicator') private refreshing: boolean = false;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: LocalHistoryController;
-  private refreshContent?: ComponentContent<FeedPullDownIndicatorOptions> = undefined;
+  // 下拉刷新自定义加载圆圈（refreshingContent 需 ComponentContent，随页面销毁释放）
+  private indicator?: FeedPullDownIndicatorHost = undefined;
 
   aboutToAppear(): void {
     if (this.controller !== undefined) {
@@ -54,16 +54,20 @@ export struct LocalHistoryPage {
       // Refresh 需 $$ 双向绑定让手势回写生效，否则刷新圈会永远卡住（见 ReadHistoryPage 注释）。
       this.refreshing = state.busy && state.phase === ReadHistoryPhase.LOADING;
     });
-    this.refreshContent = new ComponentContent(this.getUIContext(), wrapBuilder(feedPullDownIndicator),
-      new FeedPullDownIndicatorOptions());
+    this.indicator = new FeedPullDownIndicatorHost(this.getUIContext(), 0);
     this.controller.activate();
   }
 
   aboutToDisappear(): void {
     this.controller?.deactivate();
     this.controller = undefined;
-    this.refreshContent?.dispose();
-    this.refreshContent = undefined;
+    this.indicator?.dispose();
+    this.indicator = undefined;
+  }
+
+  /** 圆圈只在间隙展开时绘制（ArkUI 收起头部后不裁剪自定义内容）。 */
+  private syncRefreshIndicator(): void {
+    this.indicator?.setRefreshing(this.refreshing);
   }
 
   build() {
@@ -105,7 +109,7 @@ export struct LocalHistoryPage {
         } else {
           Refresh({
             refreshing: $$this.refreshing,
-            refreshingContent: this.refreshContent,
+            refreshingContent: this.indicator?.view(),
             offset: 80,
             friction: 100
           }) {
@@ -128,6 +132,7 @@ export struct LocalHistoryPage {
           .onRefreshing((): void => {
             void this.controller?.reload();
           })
+          .onStateChange((status: RefreshStatus): void => this.indicator?.onStateChange(status))
         }
       }
       .width('100%')
