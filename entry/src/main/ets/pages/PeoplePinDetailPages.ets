@@ -34,6 +34,8 @@ import { NativeContentDocument } from './NativeContentDocument';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { createSystemShareService } from '../platform/SystemShareService';
 import { ShareOutcome, SharePayloadKind, ShareTextPayload } from '../platform/ShareContracts';
+import { Want } from '@kit.AbilityKit';
+import { contentLinkDestination } from './NotificationLinkResolver';
 import {
   BlockingActionController,
   BlockingActionViewState,
@@ -983,6 +985,24 @@ export struct PinDetailPage {
     });
   }
 
+  /** 想法正文内联链接：站内内容走应用内导航，其余 http(s) 交系统浏览器。 */
+  private openContentLink(url: string): void {
+    const destination = contentLinkDestination(url);
+    if (destination !== undefined) {
+      this.navigate(destination);
+      return;
+    }
+    if (!/^https?:\/\//i.test(url)) {
+      return;
+    }
+    const context = getAbilityContext();
+    if (context === undefined) {
+      return;
+    }
+    const want: Want = { action: 'ohos.want.action.viewData', uri: url };
+    context.startAbility(want).catch((_error: Error): void => {});
+  }
+
   build() {
     Column() {
       if (this.phase === ReadOnlyDetailPhase.IDLE || this.phase === ReadOnlyDetailPhase.LOADING) {
@@ -1146,7 +1166,8 @@ export struct PinDetailPage {
 
         NativeContentDocument({
           html: pin.contentHtml,
-          emptyMessage: '这条想法暂时没有正文'
+          emptyMessage: '这条想法暂时没有正文',
+          onLinkClick: (url: string): void => this.openContentLink(url)
         })
           .layoutWeight(1)
       }

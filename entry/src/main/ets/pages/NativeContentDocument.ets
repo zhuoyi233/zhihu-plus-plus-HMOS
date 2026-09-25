@@ -3,6 +3,7 @@ import { image } from '@kit.ImageKit';
 import { http } from '@kit.NetworkKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { Want } from '@kit.AbilityKit';
+import { LengthMetrics } from '@ohos.arkui.node';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import {
   createSystemShareService
@@ -36,9 +37,11 @@ import {
   ReaderInlineRun
 } from 'reader';
 import {
+  flattenStyledTextSegments,
   HighlightSegment,
   SegmentHighlightRef,
-  splitTextByHighlights
+  splitTextByHighlights,
+  StyledTextSegment
 } from './ContentAnnotations';
 import {
   READING_PROGRESS_BAR_HIT_WIDTH_VP,
@@ -406,6 +409,9 @@ struct ContentInlineFormula {
   @StorageProp('contentFontSize') private fontSizePercent: number = 100;
   @StorageProp('contentLineHeight') private lineHeightPercent: number = 160;
   @StorageProp('formulaForegroundColor') private formulaColor: string = '#111111';
+  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  /** 正文内联链接点击回调（行内公式所在段落同样生效）。 */
+  onLinkClick?: (url: string) => void;
   @State private loadedRunIds: Array<string> = [];
   private pixelMaps: Map<string, image.PixelMap> = new Map();
   private formulaWidths: Map<string, number> = new Map();
@@ -443,7 +449,23 @@ struct ContentInlineFormula {
           this.pixelMaps.get(run.id) === undefined) {
           if (run.kind === ReaderInlineKind.TEXT) {
             Span(run.text)
-              .fontColor($r('app.color.primary_text'))
+              .fontColor((run.linkUrl ?? '').length > 0 ? this.resolvedThemeColor : $r('app.color.primary_text'))
+              .fontWeight(run.bold === true ? FontWeight.Bold : FontWeight.Normal)
+              .fontStyle(run.italic === true ? FontStyle.Italic : FontStyle.Normal)
+              .decoration({
+                type: run.strikethrough === true ? TextDecorationType.LineThrough : TextDecorationType.None,
+                style: TextDecorationStyle.SOLID,
+                color: Color.Transparent
+              })
+              .textBackgroundStyle(run.mark === true
+                ? { color: '#66FDD835', radius: 3 }
+                : { color: Color.Transparent, radius: 0 })
+              .onClick((): void => {
+                const link = run.linkUrl ?? '';
+                if (link.length > 0 && this.onLinkClick !== undefined) {
+                  this.onLinkClick(link);
+                }
+              })
           } else {
             Span(`「${run.text}」`)
               .fontColor($r('app.color.secondary_text'))
@@ -630,6 +652,8 @@ export struct NativeContentDocument {
   onScrollOffset?: (offset: number) => void;
   /** 正文视频卡片点击回调；播放上下文由详情页补齐。 */
   onVideoOpen?: (videoId: string) => void;
+  /** 正文内联链接（a[href]）点击回调：站内内容导航、外链交系统浏览器，由宿主详情页决定。 */
+  onLinkClick?: (url: string) => void;
   /** 问题详情页在正文末尾追加的 section（回答信息流）；未传入时渲染空。 */
   @BuilderParam documentHeader: () => void = this.emptyFooter;
   @BuilderParam documentBodyFooter: () => void = this.emptyFooter;
@@ -1153,26 +1177,36 @@ export struct NativeContentDocument {
   @Builder
   private readerBlock(item: ReaderBlock) {
     if (item.kind === ReaderBlockKind.HEADING) {
-      Text() {
-        ForEach(splitTextByHighlights(item.text, this.blockSegments(item)), (seg: HighlightSegment) => {
-          Span(seg.text)
-            .fontColor($r('app.color.primary_text'))
-            .decoration({
-              type: seg.segmentRef !== undefined ? TextDecorationType.Underline : TextDecorationType.None,
-              style: seg.segmentRef !== undefined ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
-              color: seg.segmentRef !== undefined ? this.resolvedThemeColor : Color.Transparent
-            })
-            .onClick((): void => {
-              if (seg.segmentRef !== undefined && this.onSegmentClick !== undefined) {
-                this.onSegmentClick(seg.segmentRef.paragraph, seg.segmentRef.markIndex);
-              }
-            })
-        }, (seg: HighlightSegment): string => `h:${seg.segmentRef !== undefined ? 's' : 'n'}:${seg.text}`)
+      if (item.inlineRuns.length > 0) {
+        Text() {
+          this.styledSpanChildren(item, true, this.headingFontSize())
+        }
+        .fontSize(this.headingFontSize())
+        .fontWeight(FontWeight.Bold)
+        .copyOption(CopyOptions.LocalDevice)
+        .width('100%')
+      } else {
+        Text() {
+          ForEach(splitTextByHighlights(item.text, this.blockSegments(item)), (seg: HighlightSegment) => {
+            Span(seg.text)
+              .fontColor($r('app.color.primary_text'))
+              .decoration({
+                type: seg.segmentRef !== undefined ? TextDecorationType.Underline : TextDecorationType.None,
+                style: seg.segmentRef !== undefined ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
+                color: seg.segmentRef !== undefined ? this.resolvedThemeColor : Color.Transparent
+              })
+              .onClick((): void => {
+                if (seg.segmentRef !== undefined && this.onSegmentClick !== undefined) {
+                  this.onSegmentClick(seg.segmentRef.paragraph, seg.segmentRef.markIndex);
+                }
+              })
+          }, (seg: HighlightSegment): string => `h:${seg.segmentRef !== undefined ? 's' : 'n'}:${seg.text}`)
+        }
+        .fontSize(this.headingFontSize())
+        .fontWeight(FontWeight.Bold)
+        .copyOption(CopyOptions.LocalDevice)
+        .width('100%')
       }
-      .fontSize(this.headingFontSize())
-      .fontWeight(FontWeight.Bold)
-      .copyOption(CopyOptions.LocalDevice)
-      .width('100%')
     } else if (item.kind === ReaderBlockKind.DIVIDER) {
       Divider().margin({ top: 8, bottom: 8 })
     } else if (item.kind === ReaderBlockKind.FORMULA) {
@@ -1225,11 +1259,22 @@ export struct NativeContentDocument {
         }
       })
     } else if (item.inlineRuns.length > 0) {
-      // 按主题 tick 奇偶翻转分支强制销毁重建（见 formulaRecreateTick 注释）。
-      if (this.formulaRecreateTick % 2 === 0) {
-        ContentInlineFormula({ item: item })
+      // 含行内公式的段落走公式宿主；其余 styled runs 走统一样式渲染（划线叠加保留）。
+      if (this.inlineHasFormula(item)) {
+        // 按主题 tick 奇偶翻转分支强制销毁重建（见 formulaRecreateTick 注释）。
+        if (this.formulaRecreateTick % 2 === 0) {
+          ContentInlineFormula({ item: item, onLinkClick: this.onLinkClick })
+        } else {
+          ContentInlineFormula({ item: item, onLinkClick: this.onLinkClick })
+        }
       } else {
-        ContentInlineFormula({ item: item })
+        Text() {
+          this.styledSpanChildren(item, false, this.bodyFontSize())
+        }
+        .fontSize(this.bodyFontSize())
+        .lineHeight(this.bodyLineHeight())
+        .copyOption(CopyOptions.LocalDevice)
+        .width('100%')
       }
     } else {
       Text() {
@@ -1255,6 +1300,90 @@ export struct NativeContentDocument {
       .lineHeight(this.bodyLineHeight())
       .copyOption(CopyOptions.LocalDevice)
       .width('100%')
+    }
+  }
+
+  /** 内联 runs 是否含公式 run（决定段落走公式宿主还是统一样式渲染）。 */
+  private inlineHasFormula(item: ReaderBlock): boolean {
+    return item.inlineRuns.some((run: ReaderInlineRun): boolean => run.kind === ReaderInlineKind.FORMULA);
+  }
+
+  /**
+   * 展平内联 runs × 他人划线：划线偏移按段落文本对齐，含公式 run 时偏移无法
+   * 与纯文本逐字对齐，退化为不叠加划线（公式段落原本也不参与划线渲染）。
+   */
+  private styledSegments(item: ReaderBlock): Array<StyledTextSegment> {
+    return flattenStyledTextSegments(item.inlineRuns, item.text,
+      this.inlineHasFormula(item) ? [] : this.blockSegments(item));
+  }
+
+  /** 统一样式渲染的 Span 序列（列表项圆点与纯文本路径一致）。 */
+  @Builder
+  private styledSpanChildren(item: ReaderBlock, baseBold: boolean, fontSizeVp: number) {
+    if (item.kind === ReaderBlockKind.LIST_ITEM) {
+      Span('• ')
+    }
+    ForEach(this.styledSegments(item), (seg: StyledTextSegment, index: number) => {
+      this.styledSpan(seg, baseBold, fontSizeVp)
+    }, (seg: StyledTextSegment, index: number): string => `${index}:${seg.text}`)
+  }
+
+  /**
+   * 单个样式化 Span：加粗/斜体/删除线/行内代码/高亮/上下标/链接 + 他人划线虚线叠加。
+   * code 与其余样式互斥分支（fontFamily 无中性值可传）；链接色跟随主题色。
+   */
+  @Builder
+  private styledSpan(seg: StyledTextSegment, baseBold: boolean, fontSizeVp: number) {
+    if (seg.code) {
+      Span(seg.text)
+        .fontSize(seg.superscript || seg.subscript ? fontSizeVp * 0.75 : fontSizeVp)
+        .fontWeight(seg.bold || baseBold ? FontWeight.Bold : FontWeight.Normal)
+        .fontStyle(seg.italic ? FontStyle.Italic : FontStyle.Normal)
+        .fontFamily('monospace')
+        .fontColor(seg.linkUrl.length > 0 ? this.resolvedThemeColor : $r('app.color.primary_text'))
+        .textBackgroundStyle({ color: '#14808080', radius: 3 })
+        .decoration({
+          type: seg.segmentRef !== undefined ? TextDecorationType.Underline :
+            (seg.strikethrough ? TextDecorationType.LineThrough : TextDecorationType.None),
+          style: seg.segmentRef !== undefined ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
+          color: seg.segmentRef !== undefined ? this.resolvedThemeColor : Color.Transparent
+        })
+        .baselineOffset(seg.superscript ? LengthMetrics.vp(fontSizeVp * 0.35) :
+          (seg.subscript ? LengthMetrics.vp(-fontSizeVp * 0.18) : LengthMetrics.vp(0)))
+        .onClick((): void => {
+          this.handleStyledSpanClick(seg);
+        })
+    } else {
+      Span(seg.text)
+        .fontSize(seg.superscript || seg.subscript ? fontSizeVp * 0.75 : fontSizeVp)
+        .fontWeight(seg.bold || baseBold ? FontWeight.Bold : FontWeight.Normal)
+        .fontStyle(seg.italic ? FontStyle.Italic : FontStyle.Normal)
+        .fontColor(seg.linkUrl.length > 0 ? this.resolvedThemeColor : $r('app.color.primary_text'))
+        .textBackgroundStyle(seg.mark ? { color: '#66FDD835', radius: 3 } : { color: Color.Transparent, radius: 0 })
+        .decoration({
+          type: seg.segmentRef !== undefined ? TextDecorationType.Underline :
+            (seg.strikethrough ? TextDecorationType.LineThrough : TextDecorationType.None),
+          style: seg.segmentRef !== undefined ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
+          color: seg.segmentRef !== undefined ? this.resolvedThemeColor : Color.Transparent
+        })
+        .baselineOffset(seg.superscript ? LengthMetrics.vp(fontSizeVp * 0.35) :
+          (seg.subscript ? LengthMetrics.vp(-fontSizeVp * 0.18) : LengthMetrics.vp(0)))
+        .onClick((): void => {
+          this.handleStyledSpanClick(seg);
+        })
+    }
+  }
+
+  /** 样式片段点击：链接优先于他人划线面板。 */
+  private handleStyledSpanClick(seg: StyledTextSegment): void {
+    if (seg.linkUrl.length > 0) {
+      if (this.onLinkClick !== undefined) {
+        this.onLinkClick(seg.linkUrl);
+      }
+      return;
+    }
+    if (seg.segmentRef !== undefined && this.onSegmentClick !== undefined) {
+      this.onSegmentClick(seg.segmentRef.paragraph, seg.segmentRef.markIndex);
     }
   }
 
