@@ -15,8 +15,6 @@ import {
   DefaultChannelFeedRepository,
   decodeChannelContentPage,
   decodeDailyFeedPage,
-  DomainDecodeError,
-  DomainDecodeFailureKind,
   FOLLOWING_FEED_BASE_URL,
   FOLLOWING_RECOMMEND_FEED_BASE_URL,
   HOT_FEED_BASE_URL,
@@ -309,21 +307,21 @@ export default function channelFeedRepositoryTest(): void {
       expect(matcher.summaries[0].topicIds.join(',')).assertEqual('1,2');
     });
 
-    it('skipsExplicitUnsupportedTargetsButRejectsMalformedSupportedData', 0, () => {
+    it('skipsExplicitUnsupportedTargetsAndMalformedItemsLikeUpstream', 0, () => {
       const unsupported = decodeChannelContentPage('{"data":[{"id":"skip",' +
         '"target":{"type":"pin","id":"1"}}],"paging":{"is_end":true}}');
       expect(unsupported.items.length).assertEqual(0);
 
-      let malformed: DomainDecodeError | undefined = undefined;
-      try {
-        decodeChannelContentPage('{"data":[{"id":"bad","action_text":7,' +
-          '"target":{"type":"question","id":"1","title":"标题"}}],"paging":{"is_end":true}}');
-      } catch (error) {
-        if (error instanceof DomainDecodeError) {
-          malformed = error;
-        }
+      // 对齐上游 PaginationViewModel.decodePage：单条条目字段畸形（如 action_text 类型无效）
+      // 记日志并跳过该条，其余条目照常返回，不使整页失败。
+      const malformed = decodeChannelContentPage('{"data":[{"id":"bad","action_text":7,' +
+        '"target":{"type":"question","id":"1","title":"标题"}},' +
+        '{"id":"ok","target":{"type":"question","id":"2","title":"正常"}}],"paging":{"is_end":true}}');
+      expect(malformed.items.length).assertEqual(1);
+      expect(malformed.items[0].kind).assertEqual(ChannelFeedItemKind.CONTENT);
+      if (malformed.items[0].kind === ChannelFeedItemKind.CONTENT) {
+        expect(malformed.items[0].feedItem.target.id).assertEqual('2');
       }
-      expect(malformed?.kind).assertEqual(DomainDecodeFailureKind.MISSING_FIELD);
       expect(() => decodeDailyFeedPage('{"date":"20260230","stories":[]}')).assertThrowError(
         'daily.date 格式无效'
       );
