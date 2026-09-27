@@ -9,7 +9,8 @@ import {
 import {
   CollectionFavoriteController,
   CollectionFavoritePhase,
-  CollectionFavoriteViewState
+  CollectionFavoriteViewState,
+  collectionFavoriteRowKey
 } from './CollectionFavoriteState';
 
 @Component
@@ -143,7 +144,7 @@ export struct CollectionDialogComponent {
             ListItem() {
               this.collectionRow(collection)
             }
-          }, (collection: CollectionSummary): string => collection.id)
+          }, (collection: CollectionSummary): string => collectionFavoriteRowKey(collection, this.busyCollectionId))
         }
         .id('p3_favorite_dialog_list')
         .layoutWeight(1)

@@ -259,6 +259,14 @@ function favoriteRequiresLogin(error: Object): boolean {
     (error.status === undefined || error.status === 401);
 }
 
+// ForEach 键值相同会直接复用行组件、不重执行 itemGenerator，
+// 因此 key 必须携带行内全部可变展示状态（收藏态/条目数/busy），否则界面停留在旧值。
+export function collectionFavoriteRowKey(collection: CollectionSummary, busyCollectionId?: string): string {
+  const busyFlag = busyCollectionId === undefined ? 'i' :
+    (busyCollectionId === collection.id ? 'b' : 'B');
+  return `${collection.id}|${collection.isFavorited ? 1 : 0}|${collection.itemCount}|${busyFlag}`;
+}
+
 function cloneCollectionWithFavorite(collection: CollectionSummary, isFavorited: boolean): CollectionSummary {
   return {
     id: collection.id,

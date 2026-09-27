@@ -14,7 +14,8 @@ import {
 } from 'data';
 import {
   CollectionFavoriteController,
-  CollectionFavoritePhase
+  CollectionFavoritePhase,
+  collectionFavoriteRowKey
 } from '../main/ets/pages/CollectionFavoriteState';
 
 class UnusedLoginOperation implements SessionLoginOperation {
@@ -267,6 +268,43 @@ export default function collectionFavoriteStateTest(): void {
       const ok = await controller.createAndAdd('   ', '', false, 'answer', '456');
       expect(ok).assertFalse();
       expect(repository.created.length).assertEqual(0);
+    });
+
+    it('rowKeyStableForIdenticalCollections', 0, () => {
+      expect(collectionFavoriteRowKey(collection('1', '收藏夹一', false)))
+        .assertEqual(collectionFavoriteRowKey(collection('1', '收藏夹一', false)));
+    });
+
+    it('rowKeyChangesWhenFavoriteStateChanges', 0, () => {
+      expect(collectionFavoriteRowKey(collection('1', '收藏夹一', false)) !==
+        collectionFavoriteRowKey(collection('1', '收藏夹一', true))).assertTrue();
+    });
+
+    it('rowKeyChangesWhenItemCountChanges', 0, () => {
+      const counted: CollectionSummary = {
+        id: '1',
+        title: '收藏夹一',
+        description: '',
+        isPublic: true,
+        answerCount: 0,
+        followerCount: 0,
+        itemCount: 2,
+        likeCount: 0,
+        commentCount: 0,
+        isFavorited: false,
+        updatedAt: 0
+      };
+      expect(collectionFavoriteRowKey(collection('1', '收藏夹一', false)) !==
+        collectionFavoriteRowKey(counted)).assertTrue();
+    });
+
+    it('rowKeyChangesWhenBusyStateChanges', 0, () => {
+      const idle = collectionFavoriteRowKey(collection('1', '收藏夹一', false));
+      expect(collectionFavoriteRowKey(collection('1', '收藏夹一', false), '1') !== idle).assertTrue();
+      expect(collectionFavoriteRowKey(collection('1', '收藏夹一', false), '2') !== idle).assertTrue();
+      expect(collectionFavoriteRowKey(collection('1', '收藏夹一', false), '1') !==
+        collectionFavoriteRowKey(collection('1', '收藏夹一', false), '2')).assertTrue();
+      expect(collectionFavoriteRowKey(collection('1', '收藏夹一', false), 'creating') !== idle).assertTrue();
     });
   });
 }
