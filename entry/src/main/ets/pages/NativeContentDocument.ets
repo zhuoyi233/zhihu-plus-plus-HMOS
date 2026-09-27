@@ -5,6 +5,7 @@ import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { Want } from '@kit.AbilityKit';
 import { LengthMetrics } from '@ohos.arkui.node';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
+import { DoubleTapDetector } from './DoubleTapDetector';
 import {
   createSystemShareService
 } from '../platform/SystemShareService';
@@ -654,6 +655,10 @@ export struct NativeContentDocument {
   onVideoOpen?: (videoId: string) => void;
   /** 正文内联链接（a[href]）点击回调：站内内容导航、外链交系统浏览器，由宿主详情页决定。 */
   onLinkClick?: (url: string) => void;
+  /** 正文区域双击回调（回答页双击赞同动作）。 */
+  onBodyDoubleTap?: () => void;
+  /** 正文 Text 的双击识别器：开启选词的 Text 会吞掉手势系统事件，只能靠 onTouch 自行识别。 */
+  private readonly bodyTapDetector: DoubleTapDetector = new DoubleTapDetector();
   /** 问题详情页在正文末尾追加的 section（回答信息流）；未传入时渲染空。 */
   @BuilderParam documentHeader: () => void = this.emptyFooter;
   @BuilderParam documentBodyFooter: () => void = this.emptyFooter;
@@ -1184,6 +1189,12 @@ export struct NativeContentDocument {
         .fontSize(this.headingFontSize())
         .fontWeight(FontWeight.Bold)
         .copyOption(CopyOptions.LocalDevice)
+        .onGestureJudgeBegin((gestureInfo: GestureInfo, event: BaseGestureEvent): GestureJudgeResult => {
+          return this.textGestureJudge(gestureInfo, event);
+        })
+        .onTouch((event: TouchEvent): void => {
+          this.onBodyTouch(event);
+        })
         .width('100%')
       } else {
         Text() {
@@ -1197,6 +1208,7 @@ export struct NativeContentDocument {
               })
               .onClick((): void => {
                 if (seg.segmentRef !== undefined && this.onSegmentClick !== undefined) {
+                  this.bodyTapDetector.markForeignClick();
                   this.onSegmentClick(seg.segmentRef.paragraph, seg.segmentRef.markIndex);
                 }
               })
@@ -1205,6 +1217,12 @@ export struct NativeContentDocument {
         .fontSize(this.headingFontSize())
         .fontWeight(FontWeight.Bold)
         .copyOption(CopyOptions.LocalDevice)
+        .onGestureJudgeBegin((gestureInfo: GestureInfo, event: BaseGestureEvent): GestureJudgeResult => {
+          return this.textGestureJudge(gestureInfo, event);
+        })
+        .onTouch((event: TouchEvent): void => {
+          this.onBodyTouch(event);
+        })
         .width('100%')
       }
     } else if (item.kind === ReaderBlockKind.DIVIDER) {
@@ -1274,6 +1292,12 @@ export struct NativeContentDocument {
         .fontSize(this.bodyFontSize())
         .lineHeight(this.bodyLineHeight())
         .copyOption(CopyOptions.LocalDevice)
+        .onGestureJudgeBegin((gestureInfo: GestureInfo, event: BaseGestureEvent): GestureJudgeResult => {
+          return this.textGestureJudge(gestureInfo, event);
+        })
+        .onTouch((event: TouchEvent): void => {
+          this.onBodyTouch(event);
+        })
         .width('100%')
       }
     } else {
@@ -1291,6 +1315,7 @@ export struct NativeContentDocument {
             })
             .onClick((): void => {
               if (seg.segmentRef !== undefined && this.onSegmentClick !== undefined) {
+                this.bodyTapDetector.markForeignClick();
                 this.onSegmentClick(seg.segmentRef.paragraph, seg.segmentRef.markIndex);
               }
             })
@@ -1299,6 +1324,12 @@ export struct NativeContentDocument {
       .fontSize(this.bodyFontSize())
       .lineHeight(this.bodyLineHeight())
       .copyOption(CopyOptions.LocalDevice)
+      .onGestureJudgeBegin((gestureInfo: GestureInfo, event: BaseGestureEvent): GestureJudgeResult => {
+        return this.textGestureJudge(gestureInfo, event);
+      })
+      .onTouch((event: TouchEvent): void => {
+        this.onBodyTouch(event);
+      })
       .width('100%')
     }
   }
@@ -1306,6 +1337,27 @@ export struct NativeContentDocument {
   /** 内联 runs 是否含公式 run（决定段落走公式宿主还是统一样式渲染）。 */
   private inlineHasFormula(item: ReaderBlock): boolean {
     return item.inlineRuns.some((run: ReaderInlineRun): boolean => run.kind === ReaderInlineKind.FORMULA);
+  }
+
+  /** 正文 Text 原始触摸入口：喂给双击识别器，识别到双击上报宿主（见 DoubleTapDetector 注释）。 */
+  private onBodyTouch(event: TouchEvent): void {
+    if (this.bodyTapDetector.feed(event)) {
+      const callback = this.onBodyDoubleTap;
+      if (callback !== undefined) {
+        callback();
+      }
+    }
+  }
+
+  /** 正文 Text 的手势仲裁：系统在双击抬起后走"双击选词"路径（真机行为），此时
+   * 双击记录仍新鲜，直接拒绝该系统手势——选词只保留长按路径（对齐上游
+   * NoDoubleClickSelectionScope 把 doubleTapTimeoutMillis 置 0 的语义）。
+   * 长按选择发生时没有前置双击记录，不受影响。 */
+  private textGestureJudge(gestureInfo: GestureInfo, _event: BaseGestureEvent): GestureJudgeResult {
+    if (gestureInfo.isSystemGesture && this.bodyTapDetector.hasRecentDoubleTap()) {
+      return GestureJudgeResult.REJECT;
+    }
+    return GestureJudgeResult.CONTINUE;
   }
 
   /**
@@ -1377,12 +1429,14 @@ export struct NativeContentDocument {
   /** 样式片段点击：链接优先于他人划线面板。 */
   private handleStyledSpanClick(seg: StyledTextSegment): void {
     if (seg.linkUrl.length > 0) {
+      this.bodyTapDetector.markForeignClick();
       if (this.onLinkClick !== undefined) {
         this.onLinkClick(seg.linkUrl);
       }
       return;
     }
     if (seg.segmentRef !== undefined && this.onSegmentClick !== undefined) {
+      this.bodyTapDetector.markForeignClick();
       this.onSegmentClick(seg.segmentRef.paragraph, seg.segmentRef.markIndex);
     }
   }
