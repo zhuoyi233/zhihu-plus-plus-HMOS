@@ -112,6 +112,8 @@ struct ContentDetailPage {
   @State private contentAtTop: boolean = true;
   /** overscroll 原始拖动累计量（阻尼换算前）。 */
   private overscrollRawDrag: number = 0;
+  /** 正文存在选区（长按建词/拖选扩展中）：过滑 pan 让位，防止拖选位移被误判为切换。 */
+  private bodyTextSelectionActive: boolean = false;
   /** 阅读排版偏好（AppStorage 广播键，与 NativeContentDocument 同源）：横向预览页摘要排版对齐正文。 */
   @StorageProp('contentFontSize') private previewFontSizePercent: number = 100;
   @StorageProp('contentLineHeight') private previewLineHeightPercent: number = 160;
@@ -224,6 +226,8 @@ struct ContentDetailPage {
   private lastContentScrollOffset: number = 0;
   /** 双击动作询问面板（Ask 动作）可见性。 */
   @State private doubleTapAskSheetShown: boolean = false;
+  /** 划线面板本次打开的时刻：onWillDismiss 用它拦截双击第二击造成的闪关。 */
+  private segmentSheetOpenedAt: number = 0;
   /** 问题页回答信息流（P1）：状态由 QuestionAnswersController 推送。 */
   @State private answersState: QuestionAnswersViewState = {
     phase: QuestionAnswersPhase.IDLE,
@@ -378,7 +382,18 @@ struct ContentDetailPage {
     }
     this.segmentSheetPid = paragraph.pid;
     this.segmentSheetMarkIndex = markIndex;
+    this.segmentSheetOpenedAt = Date.now();
     this.segmentSheetShown = true;
+  }
+
+  /** 划线面板打开后极短时间内的交互式关闭一律拦截：双击划线句的第二击会落在
+   * 刚弹出的面板遮罩上（约 200ms 后），不拦截会把面板"点开又点关"闪现一次。
+   * 窗口仅 400ms，正常点遮罩/下拉关闭（面板已打开一段时间）不受影响。 */
+  private guardSegmentSheetDismiss(action: DismissSheetAction): void {
+    if (Date.now() - this.segmentSheetOpenedAt < 400) {
+      return;
+    }
+    action.dismiss();
   }
 
   /** 当前面板展示划线的元信息（从最新 segmentInfos 实时读取，避免乐观更新后引用失效）。 */
@@ -826,6 +841,7 @@ struct ContentDetailPage {
           showClose: false,
           maskColor: '#66000000',
           backgroundColor: $r('app.color.surface_background'),
+          onWillDismiss: (action: DismissSheetAction): void => this.guardSegmentSheetDismiss(action),
           onDisappear: (): void => {
             if (this.segmentSheetShown) {
               this.segmentSheetShown = false;
@@ -963,6 +979,9 @@ struct ContentDetailPage {
           topInsetVp: this.immersiveReading ? 0 : FLOATING_TITLE_BAR_OFFSET,
           onVideoOpen: (videoId: string): void => this.openVideo(videoId),
           onLinkClick: (url: string): void => this.openContentLink(url),
+          // 文段上双击由正文 Text 的 onTouch 自行识别（见 DoubleTapDetector）；
+          // 此回调与下方父容器手势共同覆盖整个正文区域，onAnswerDoubleTap 内部幂等。
+          onBodyDoubleTap: (): void => this.onAnswerDoubleTap(),
           documentHeader: (): void => { this.contentHeader(content) },
           documentFooter: (): void => { this.contentDateFooter(content) },
           onScrollOffset: (offset: number): void => {
@@ -999,7 +1018,10 @@ struct ContentDetailPage {
             if (this.pageTurnSwitchAnswer && this.kind === ContentDetailKind.ANSWER) void this.moveAnswer(1);
           },
           segmentInfos: this.segmentInfos,
-          onSegmentClick: (paragraph: SegmentInfoParagraph, markIndex: number): void => this.openSegmentSheet(paragraph, markIndex)
+          onSegmentClick: (paragraph: SegmentInfoParagraph, markIndex: number): void => this.openSegmentSheet(paragraph, markIndex),
+          onBodySelectionActive: (active: boolean): void => {
+            this.bodyTextSelectionActive = active;
+          }
         })
           .layoutWeight(1)
       }
@@ -1033,8 +1055,9 @@ struct ContentDetailPage {
           this.cancelAnswerOverscrollPan();
         })
       )
-    // 双击正文赞同一键：互斥手势默认子组件优先，图片/链接等可点区域不触发；
-    // 与上方 parallelGesture 过滑 PanGesture 并存（tap 与 pan 不互斥）。
+    // 双击正文赞同一键：父容器手势只覆盖 Text 之外的正文空白（段落间隙/图文周围）；
+    // 开启选词的 Text 会吞掉手势系统事件，文段上的双击由正文 Text onTouch 自行识别
+    // （DoubleTapDetector → onBodyDoubleTap）。图片/链接等可点区域不触发（子组件优先）。
     .gesture(
       TapGesture({ count: 2 })
         .onAction((): void => {
@@ -2573,6 +2596,14 @@ struct ContentDetailPage {
   /** 按 tanh 阻尼转为过滑偏移：横向模式不依赖正文纵向边界，纵向模式仍要求贴顶/贴底。 */
   private onAnswerOverscrollPanUpdate(event: GestureEvent): void {
     if (this.kind !== ContentDetailKind.ANSWER || this.answerFabDragging || this.answerSwitchMode === 'off') { return; }
+    if (this.bodyTextSelectionActive) {
+      // 拖选让位：过滑 pan 与正文拖选并行识别（选词 Text 吞手势只影响互斥仲裁路径），
+      // 页顶拖选的位移会在这里被误判为"贴顶继续过滑"直接切走回答。选区通常在长按
+      // 建词时已置位（手指未动 pan 不会 start），此处只是兜底；若拖动中途才建立选区，
+      // 已累计的偏移立即回位。
+      if (this.answerOverscrollOffset !== 0) { this.cancelAnswerOverscrollPan(); }
+      return;
+    }
     const primaryOffset = this.answerSwitchMode === 'horizontal' ? event.offsetX : event.offsetY;
     const delta = primaryOffset - this.overscrollPanPrevY;
     this.overscrollPanPrevY = primaryOffset;

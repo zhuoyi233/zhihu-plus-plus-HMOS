@@ -5,6 +5,7 @@ import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { Want } from '@kit.AbilityKit';
 import { LengthMetrics } from '@ohos.arkui.node';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
+import { DoubleTapDetector } from './DoubleTapDetector';
 import {
   createSystemShareService
 } from '../platform/SystemShareService';
@@ -74,6 +75,13 @@ const IMAGE_PREVIEW_MAX_SCALE = 2;
  * 对齐上游 QUESTION_DETAIL_TOGGLE_ZONE：计入测量列高度，正文止步于按钮区之上。
  */
 const COLLAPSIBLE_TOGGLE_ZONE_VP = 48;
+
+/**
+ * 双击后临时禁选窗口（ms）：需覆盖双击选词判定（第二击抬起后立即）与双击序列中
+ * 第二击演化成长按的选词触发（按下后约 500ms）两个时机，取 800ms 留余量；
+ * 正常的独立长按选词没有前置双击，不经过此窗口。
+ */
+const DOUBLE_TAP_SELECTION_SUPPRESS_MS = 800;
 
 function clampPreviewScale(value: number): number {
   return Math.min(IMAGE_PREVIEW_MAX_SCALE, Math.max(1, value));
@@ -412,6 +420,8 @@ struct ContentInlineFormula {
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   /** 正文内联链接点击回调（行内公式所在段落同样生效）。 */
   onLinkClick?: (url: string) => void;
+  /** 行内公式段落 Text 的选区状态回调（转发宿主，语义同 NativeContentDocument.onBodySelectionActive）。 */
+  onBodySelectionActive?: (active: boolean) => void;
   @State private loadedRunIds: Array<string> = [];
   private pixelMaps: Map<string, image.PixelMap> = new Map();
   private formulaWidths: Map<string, number> = new Map();
@@ -488,6 +498,9 @@ struct ContentInlineFormula {
     .fontColor($r('app.color.primary_text'))
     // 鸿蒙原生长按选字：启用系统文本选择菜单（复制 / 全选 / 翻译 / 分享等"更多操作"）。
     .copyOption(CopyOptions.LocalDevice)
+    .onTextSelectionChange((start: number, end: number): void => {
+      this.onBodySelectionActive?.(start !== end);
+    })
     .width('100%')
   }
 
@@ -553,6 +566,8 @@ struct ContentBlockFormula {
   @State private pixelMap: image.PixelMap | undefined = undefined;
   @State private formulaAspectRatio: number = 4;
   @StorageProp('formulaForegroundColor') private formulaColor: string = '#111111';
+  /** 加载失败兜底 Text 的选区状态回调（转发宿主，语义同 NativeContentDocument.onBodySelectionActive）。 */
+  onBodySelectionActive?: (active: boolean) => void;
   private active: boolean = false;
   private loadGeneration: number = 0;
 
@@ -585,6 +600,9 @@ struct ContentBlockFormula {
           .fontSize($r('app.float.p1_secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .copyOption(CopyOptions.LocalDevice)
+          .onTextSelectionChange((start: number, end: number): void => {
+            this.onBodySelectionActive?.(start !== end);
+          })
           .textAlign(TextAlign.Center)
           .width('100%')
       }
@@ -654,6 +672,26 @@ export struct NativeContentDocument {
   onVideoOpen?: (videoId: string) => void;
   /** 正文内联链接（a[href]）点击回调：站内内容导航、外链交系统浏览器，由宿主详情页决定。 */
   onLinkClick?: (url: string) => void;
+  /** 正文区域双击回调（回答页双击赞同动作）。 */
+  onBodyDoubleTap?: () => void;
+  /** 正文 Text 的双击识别器：开启选词的 Text 会吞掉手势系统事件，只能靠 onTouch 自行识别。 */
+  private readonly bodyTapDetector: DoubleTapDetector = new DoubleTapDetector();
+  /**
+   * 正文选区状态回调：active=true 表示存在选区（长按建词/拖选扩展中），宿主据此
+   * 挂起回答切换过滑手势——过滑 pan 是 parallelGesture，与 Text 内部拖选并行识别
+   * （选词吞手势只影响互斥仲裁路径），页顶拖选会被误判为"贴顶继续过滑"直接切答。
+   */
+  onBodySelectionActive?: (active: boolean) => void;
+  /** 正文当前是否存在选区：onTextSelectionChange 回填去重，仅作信号，不参与渲染。 */
+  private bodySelectionActive: boolean = false;
+  /**
+   * 双击后临时禁选窗口：系统 Text 的"双击选词"在第二击抬起后才判定，且不经过
+   * onGestureJudgeBegin（实测长按路径即使进 judge，REJECT 也拦不住选词），唯一能
+   * 够拦下它的是让 Text 在双击序列内处于 copyOption(None) 不可选状态。双击识别
+   * 命中（第二击按下）即置位，短暂窗口后恢复，长按选词（无前置双击）不受影响。
+   */
+  @State private bodySelectionSuppressed: boolean = false;
+  private bodySelectionRestoreTimerId: number = -1;
   /** 问题详情页在正文末尾追加的 section（回答信息流）；未传入时渲染空。 */
   @BuilderParam documentHeader: () => void = this.emptyFooter;
   @BuilderParam documentBodyFooter: () => void = this.emptyFooter;
@@ -844,6 +882,13 @@ export struct NativeContentDocument {
 
   aboutToDisappear(): void {
     clearFormulaByteCache();
+    if (this.bodySelectionRestoreTimerId >= 0) {
+      clearTimeout(this.bodySelectionRestoreTimerId);
+      this.bodySelectionRestoreTimerId = -1;
+    }
+    // 组件销毁不触发 onTextSelectionChange：切换回答/离开页面时清掉残留的
+    // 选区信号，避免宿主过滑手势被永久挂起。
+    this.setBodySelectionActive(false);
   }
 
   build() {
@@ -1183,7 +1228,13 @@ export struct NativeContentDocument {
         }
         .fontSize(this.headingFontSize())
         .fontWeight(FontWeight.Bold)
-        .copyOption(CopyOptions.LocalDevice)
+        .copyOption(this.bodySelectionSuppressed ? CopyOptions.None : CopyOptions.LocalDevice)
+        .onTouch((event: TouchEvent): void => {
+          this.onBodyTouch(event);
+        })
+        .onTextSelectionChange((start: number, end: number): void => {
+          this.onBodySelectionChange(start, end);
+        })
         .width('100%')
       } else {
         Text() {
@@ -1197,6 +1248,7 @@ export struct NativeContentDocument {
               })
               .onClick((): void => {
                 if (seg.segmentRef !== undefined && this.onSegmentClick !== undefined) {
+                  this.bodyTapDetector.markForeignClick();
                   this.onSegmentClick(seg.segmentRef.paragraph, seg.segmentRef.markIndex);
                 }
               })
@@ -1204,7 +1256,13 @@ export struct NativeContentDocument {
         }
         .fontSize(this.headingFontSize())
         .fontWeight(FontWeight.Bold)
-        .copyOption(CopyOptions.LocalDevice)
+        .copyOption(this.bodySelectionSuppressed ? CopyOptions.None : CopyOptions.LocalDevice)
+        .onTouch((event: TouchEvent): void => {
+          this.onBodyTouch(event);
+        })
+        .onTextSelectionChange((start: number, end: number): void => {
+          this.onBodySelectionChange(start, end);
+        })
         .width('100%')
       }
     } else if (item.kind === ReaderBlockKind.DIVIDER) {
@@ -1212,9 +1270,13 @@ export struct NativeContentDocument {
     } else if (item.kind === ReaderBlockKind.FORMULA) {
       // 按主题 tick 奇偶翻转分支强制销毁重建（见 formulaRecreateTick 注释）。
       if (this.formulaRecreateTick % 2 === 0) {
-        ContentBlockFormula({ item: item })
+        ContentBlockFormula({ item: item, onBodySelectionActive: (active: boolean): void => {
+          this.setBodySelectionActive(active);
+        } })
       } else {
-        ContentBlockFormula({ item: item })
+        ContentBlockFormula({ item: item, onBodySelectionActive: (active: boolean): void => {
+          this.setBodySelectionActive(active);
+        } })
       }
     } else if (item.kind === ReaderBlockKind.IMAGE) {
       ReaderImageBlock({
@@ -1263,9 +1325,15 @@ export struct NativeContentDocument {
       if (this.inlineHasFormula(item)) {
         // 按主题 tick 奇偶翻转分支强制销毁重建（见 formulaRecreateTick 注释）。
         if (this.formulaRecreateTick % 2 === 0) {
-          ContentInlineFormula({ item: item, onLinkClick: this.onLinkClick })
+          ContentInlineFormula({ item: item, onLinkClick: this.onLinkClick,
+            onBodySelectionActive: (active: boolean): void => {
+              this.setBodySelectionActive(active);
+            } })
         } else {
-          ContentInlineFormula({ item: item, onLinkClick: this.onLinkClick })
+          ContentInlineFormula({ item: item, onLinkClick: this.onLinkClick,
+            onBodySelectionActive: (active: boolean): void => {
+              this.setBodySelectionActive(active);
+            } })
         }
       } else {
         Text() {
@@ -1273,7 +1341,13 @@ export struct NativeContentDocument {
         }
         .fontSize(this.bodyFontSize())
         .lineHeight(this.bodyLineHeight())
-        .copyOption(CopyOptions.LocalDevice)
+        .copyOption(this.bodySelectionSuppressed ? CopyOptions.None : CopyOptions.LocalDevice)
+        .onTouch((event: TouchEvent): void => {
+          this.onBodyTouch(event);
+        })
+        .onTextSelectionChange((start: number, end: number): void => {
+          this.onBodySelectionChange(start, end);
+        })
         .width('100%')
       }
     } else {
@@ -1291,6 +1365,7 @@ export struct NativeContentDocument {
             })
             .onClick((): void => {
               if (seg.segmentRef !== undefined && this.onSegmentClick !== undefined) {
+                this.bodyTapDetector.markForeignClick();
                 this.onSegmentClick(seg.segmentRef.paragraph, seg.segmentRef.markIndex);
               }
             })
@@ -1298,7 +1373,13 @@ export struct NativeContentDocument {
       }
       .fontSize(this.bodyFontSize())
       .lineHeight(this.bodyLineHeight())
-      .copyOption(CopyOptions.LocalDevice)
+      .copyOption(this.bodySelectionSuppressed ? CopyOptions.None : CopyOptions.LocalDevice)
+      .onTouch((event: TouchEvent): void => {
+        this.onBodyTouch(event);
+      })
+      .onTextSelectionChange((start: number, end: number): void => {
+        this.onBodySelectionChange(start, end);
+      })
       .width('100%')
     }
   }
@@ -1306,6 +1387,44 @@ export struct NativeContentDocument {
   /** 内联 runs 是否含公式 run（决定段落走公式宿主还是统一样式渲染）。 */
   private inlineHasFormula(item: ReaderBlock): boolean {
     return item.inlineRuns.some((run: ReaderInlineRun): boolean => run.kind === ReaderInlineKind.FORMULA);
+  }
+
+  /** 选区变化入口：建词/扩展置 active，清除（start==end）复位；去重后转发宿主。 */
+  private onBodySelectionChange(start: number, end: number): void {
+    this.setBodySelectionActive(start !== end);
+  }
+
+  private setBodySelectionActive(active: boolean): void {
+    if (active === this.bodySelectionActive) { return; }
+    this.bodySelectionActive = active;
+    const callback = this.onBodySelectionActive;
+    if (callback !== undefined) {
+      callback(active);
+    }
+  }
+
+  /** 正文 Text 原始触摸入口：喂给双击识别器，识别到双击上报宿主（见 DoubleTapDetector 注释）。 */
+  private onBodyTouch(event: TouchEvent): void {
+    if (this.bodyTapDetector.feed(event)) {
+      this.suppressBodySelection();
+      const callback = this.onBodyDoubleTap;
+      if (callback !== undefined) {
+        callback();
+      }
+    }
+  }
+
+  /** 双击命中即临时关掉正文选择（见 bodySelectionSuppressed 注释）。窗口结束后恢复，
+   * 期间再次双击则顺延；纯长按选词没有前置双击，不受影响。 */
+  private suppressBodySelection(): void {
+    this.bodySelectionSuppressed = true;
+    if (this.bodySelectionRestoreTimerId >= 0) {
+      clearTimeout(this.bodySelectionRestoreTimerId);
+    }
+    this.bodySelectionRestoreTimerId = setTimeout((): void => {
+      this.bodySelectionRestoreTimerId = -1;
+      this.bodySelectionSuppressed = false;
+    }, DOUBLE_TAP_SELECTION_SUPPRESS_MS);
   }
 
   /**
@@ -1377,12 +1496,14 @@ export struct NativeContentDocument {
   /** 样式片段点击：链接优先于他人划线面板。 */
   private handleStyledSpanClick(seg: StyledTextSegment): void {
     if (seg.linkUrl.length > 0) {
+      this.bodyTapDetector.markForeignClick();
       if (this.onLinkClick !== undefined) {
         this.onLinkClick(seg.linkUrl);
       }
       return;
     }
     if (seg.segmentRef !== undefined && this.onSegmentClick !== undefined) {
+      this.bodyTapDetector.markForeignClick();
       this.onSegmentClick(seg.segmentRef.paragraph, seg.segmentRef.markIndex);
     }
   }
