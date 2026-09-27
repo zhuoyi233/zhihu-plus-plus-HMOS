@@ -8,8 +8,10 @@ import { FeedContentSummary } from './components/FeedContentSummary';
 import { AppPageStatusKind, AppPageStatusPanel, FeedPullDownIndicatorHost, FLOATING_TITLE_BAR_OFFSET } from './AppPageChrome';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { Want } from '@kit.AbilityKit';
 import { motion } from '@kit.MultimodalAwarenessKit';
 import { SegmentButton, SegmentButtonOptions, curves } from '@kit.ArkUI';
+import { contentLinkDestination } from './NotificationLinkResolver';
 import {
   P1Destination,
   P1DestinationName
@@ -927,6 +929,7 @@ struct ContentDetailPage {
           disableEdgeSpring: this.kind === ContentDetailKind.ANSWER,
           topInsetVp: this.immersiveReading ? 0 : FLOATING_TITLE_BAR_OFFSET,
           onVideoOpen: (videoId: string): void => this.openVideo(videoId),
+          onLinkClick: (url: string): void => this.openContentLink(url),
           documentHeader: (): void => { this.contentHeader(content) },
           documentFooter: (): void => { this.contentDateFooter(content) },
           onScrollOffset: (offset: number): void => {
@@ -1877,6 +1880,7 @@ struct ContentDetailPage {
         html: contentHtml(content), emptyMessage: contentEmptyMessage(content), collapsible: true,
         topInsetVp: this.immersiveReading ? 0 : FLOATING_TITLE_BAR_OFFSET,
         onVideoOpen: (videoId: string): void => this.openVideo(videoId),
+        onLinkClick: (url: string): void => this.openContentLink(url),
         documentHeader: (): void => { this.contentHeader(content) },
         documentBodyFooter: (): void => { this.questionBodyFooter(content) },
         documentItems: (): void => { this.questionAnswerItems() },
@@ -1905,6 +1909,26 @@ struct ContentDetailPage {
       contentType: contentType
     });
     this.navigate({ name: P1DestinationName.VIDEO, id: videoId });
+  }
+
+  /** 正文内联链接：站内内容（问题/回答/文章/想法/用户）走应用内导航，其余 http(s) 交系统浏览器。 */
+  private openContentLink(url: string): void {
+    const destination = contentLinkDestination(url);
+    if (destination !== undefined) {
+      this.navigate(destination);
+      return;
+    }
+    if (!/^https?:\/\//i.test(url)) {
+      return;
+    }
+    const context = getAbilityContext();
+    if (context === undefined) {
+      return;
+    }
+    const want: Want = { action: 'ohos.want.action.viewData', uri: url };
+    context.startAbility(want).catch((_error: BusinessError): void => {
+      this.getUIContext().getPromptAction().showToast({ message: '暂时无法打开链接' });
+    });
   }
 
   @Builder
