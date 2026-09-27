@@ -25,6 +25,8 @@ export interface CommentViewState {
   readonly phase: CommentPhase;
   /** 当前模式（根评论列表或子评论列表）的条目。 */
   readonly items: Array<CommentItem>;
+  /** 根评论列表条目：无论当前处于哪一层都始终携带，供页面保活根列表并同步点赞等变更。 */
+  readonly rootItems: Array<CommentItem>;
   readonly loadingMore: boolean;
   readonly canLoadMore: boolean;
   readonly requiresLogin: boolean;
@@ -138,6 +140,7 @@ export class CommentController {
     return {
       phase: this.phase,
       items: isChild ? this.childItems.slice() : this.rootItems.slice(),
+      rootItems: this.rootItems.slice(),
       loadingMore: loadingMore,
       canLoadMore: !paginationBlocked && this.hasNext(isChild),
       requiresLogin: this.requiresLogin,

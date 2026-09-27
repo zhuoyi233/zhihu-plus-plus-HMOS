@@ -289,6 +289,9 @@ export default function commentStateTest(): void {
       expect(controller.snapshot().activeRoot?.id).assertEqual('1');
       expect(repository.childRequests[0]).assertUndefined();
       expect(controller.snapshot().items.length).assertEqual(2);
+      // 子评论层打开期间根列表数据仍随快照携带（供页面隐藏保活的根列表同步点赞等变更）。
+      expect(controller.snapshot().rootItems.length).assertEqual(1);
+      expect(controller.snapshot().rootItems[0].id).assertEqual('1');
       controller.closeChildComments();
       expect(controller.snapshot().activeRoot).assertUndefined();
       expect(controller.snapshot().items.length).assertEqual(1);
