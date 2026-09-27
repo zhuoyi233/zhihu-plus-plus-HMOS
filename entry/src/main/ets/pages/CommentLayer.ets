@@ -44,7 +44,10 @@ export struct CommentPage {
   onDismiss: () => void = (): void => {
   };
   @State private phase: CommentPhase = CommentPhase.IDLE;
-  @State private items: Array<CommentItem> = [];
+  /** 根评论列表条目：整页生命周期内持续更新，根列表常驻挂载（子评论层仅隐藏），避免重建闪屏。 */
+  @State private rootListItems: Array<CommentItem> = [];
+  /** 子评论列表条目：仅在子评论层更新。 */
+  @State private childListItems: Array<CommentItem> = [];
   @State private loadingMore: boolean = false;
   @State private canLoadMore: boolean = false;
   @State private requiresLogin: boolean = false;
@@ -192,13 +195,19 @@ export struct CommentPage {
 
   @Builder
   private sheetBody() {
-    if (this.phase === CommentPhase.IDLE || this.phase === CommentPhase.LOADING) {
-      this.statusPanel('正在加载评论…', false)
-    } else if (this.phase === CommentPhase.ERROR) {
-      this.statusPanel(this.errorMessage.length > 0 ? this.errorMessage : '评论加载失败', true)
+    if (this.activeRoot === undefined && this.phase !== CommentPhase.READY) {
+      // 根评论层未就绪（首次加载/错误/空态）：占满内容区，根列表此时不挂载。
+      if (this.phase === CommentPhase.IDLE || this.phase === CommentPhase.LOADING) {
+        this.statusPanel('正在加载评论…', false)
+      } else if (this.phase === CommentPhase.ERROR) {
+        this.statusPanel(this.errorMessage.length > 0 ? this.errorMessage : '评论加载失败', true)
+      } else {
+        this.statusPanel('暂无评论，来发表第一条吧', false)
+      }
     } else {
       Column() {
-        if (this.errorMessage.length > 0) {
+        if (this.errorMessage.length > 0 && (this.phase === CommentPhase.READY ||
+          (this.phase === CommentPhase.EMPTY && this.activeRoot !== undefined))) {
           Row({ space: $r('app.float.p1_spacing_small') }) {
             Text(this.errorMessage)
               .fontSize($r('app.float.p1_secondary_font_size'))
@@ -226,91 +235,118 @@ export struct CommentPage {
           .backgroundColor($r('app.color.surface_background'))
         }
 
-        if (this.phase === CommentPhase.EMPTY && this.activeRoot === undefined) {
-          this.statusPanel(this.activeRoot === undefined ? '暂无评论，来发表第一条吧' : '暂无回复', false)
-        } else {
+        Stack({ alignContent: Alignment.TopStart }) {
+          // 根列表常驻挂载：进入子评论层仅隐藏（对齐上游双弹层叠加），滚动位置与已加载的头像得以保留。
+          this.rootCommentList()
           if (this.activeRoot !== undefined) {
-            List({ space: 16, scroller: this.childScroller }) {
-              ListItem() {
-                this.pinnedRootCard(this.activeRoot)
+            if (this.phase === CommentPhase.LOADING) {
+              Column() {
+                this.statusPanel('正在加载评论…', false)
               }
-              if (this.items.length === 0) {
-                ListItem() {
-                  Text('暂无回复')
-                    .fontColor($r('app.color.secondary_text'))
-                    .width('100%')
-                    .textAlign(TextAlign.Center)
-                }
+              .width('100%')
+              .height('100%')
+            } else if (this.phase === CommentPhase.ERROR) {
+              Column() {
+                this.statusPanel(this.errorMessage.length > 0 ? this.errorMessage : '评论加载失败', true)
               }
-              ForEach(this.items, (comment: CommentItem) => {
-                ListItem() {
-                  this.commentCard(comment, false)
-                }
-              }, (comment: CommentItem): string => `child_${comment.id}`)
-              if (this.loadingMore) {
-                ListItem() {
-                  // 上拉加载更多：与首页一致的圆形加载动画（onReachEnd 自动触发）
-                  LoadingProgress()
-                    .id('p3_comments_children_load_more')
-                    .width(40)
-                    .height(40)
-                    .color(this.resolvedThemeColor)
-                }
-                .width('100%')
-                .padding({ top: 12, bottom: 12 })
-              }
+              .width('100%')
+              .height('100%')
+            } else {
+              this.childCommentList()
             }
-            .id('p3_comments_children_list')
-            .padding({ left: 16, right: 16, top: 8 })
-            .width('100%')
-            .layoutWeight(1)
-            .edgeEffect(EdgeEffect.Spring)
-            .contentStartOffset(FLOATING_TITLE_BAR_OFFSET)
-            .contentEndOffset(this.bottomChromeHeight() + 16)
-            .onReachEnd(() => this.controller?.loadMore())
-          } else {
-            List({ space: 16, scroller: this.rootScroller }) {
-              ListItem() {
-                Row({ space: 12 }) {
-                  this.sortChip(CommentSortOrder.SCORE, '最热', 'p3_comments_sort_score')
-                  this.sortChip(CommentSortOrder.TIME, '最新', 'p3_comments_sort_time')
-                }
-                .width('100%')
-                .justifyContent(FlexAlign.End)
-              }
-              ForEach(this.items, (comment: CommentItem) => {
-                ListItem() {
-                  this.commentCard(comment, true)
-                }
-              }, (comment: CommentItem): string => `root_${comment.id}`)
-              if (this.loadingMore) {
-                ListItem() {
-                  // 上拉加载更多：与首页一致的圆形加载动画（onReachEnd 自动触发）
-                  LoadingProgress()
-                    .id('p3_comments_root_load_more')
-                    .width(40)
-                    .height(40)
-                    .color(this.resolvedThemeColor)
-                }
-                .width('100%')
-                .padding({ top: 12, bottom: 12 })
-              }
-            }
-            .id('p3_comments_root_list')
-            .padding({ left: 16, right: 16, top: 8 })
-            .width('100%')
-            .scrollBar(BarState.Off)
-            .layoutWeight(1)
-            .edgeEffect(EdgeEffect.Spring)
-            .contentStartOffset(FLOATING_TITLE_BAR_OFFSET)
-            .contentEndOffset(this.bottomChromeHeight() + 16)
-            .onReachEnd(() => this.controller?.loadMore())
           }
         }
+        .width('100%')
+        .layoutWeight(1)
       }
       .width('100%')
       .layoutWeight(1)
     }
+  }
+
+  @Builder
+  private rootCommentList() {
+    List({ space: 16, scroller: this.rootScroller }) {
+      ListItem() {
+        Row({ space: 12 }) {
+          this.sortChip(CommentSortOrder.SCORE, '最热', 'p3_comments_sort_score')
+          this.sortChip(CommentSortOrder.TIME, '最新', 'p3_comments_sort_time')
+        }
+        .width('100%')
+        .justifyContent(FlexAlign.End)
+      }
+      ForEach(this.rootListItems, (comment: CommentItem) => {
+        ListItem() {
+          this.commentCard(comment, true)
+        }
+      }, (comment: CommentItem): string => `root_${comment.id}`)
+      if (this.loadingMore) {
+        ListItem() {
+          // 上拉加载更多：与首页一致的圆形加载动画（onReachEnd 自动触发）
+          LoadingProgress()
+            .id('p3_comments_root_load_more')
+            .width(40)
+            .height(40)
+            .color(this.resolvedThemeColor)
+        }
+        .width('100%')
+        .padding({ top: 12, bottom: 12 })
+      }
+    }
+    .id('p3_comments_root_list')
+    .padding({ left: 16, right: 16, top: 8 })
+    .width('100%')
+    .height('100%')
+    .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring)
+    .contentStartOffset(FLOATING_TITLE_BAR_OFFSET)
+    .contentEndOffset(this.bottomChromeHeight() + 16)
+    .onReachEnd(() => this.controller?.loadMore())
+    .visibility(this.activeRoot !== undefined ? Visibility.None : Visibility.Visible)
+  }
+
+  @Builder
+  private childCommentList() {
+    List({ space: 16, scroller: this.childScroller }) {
+      if (this.activeRoot !== undefined) {
+        ListItem() {
+          this.pinnedRootCard(this.activeRoot)
+        }
+      }
+      if (this.childListItems.length === 0) {
+        ListItem() {
+          Text('暂无回复')
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
+            .textAlign(TextAlign.Center)
+        }
+      }
+      ForEach(this.childListItems, (comment: CommentItem) => {
+        ListItem() {
+          this.commentCard(comment, false)
+        }
+      }, (comment: CommentItem): string => `child_${comment.id}`)
+      if (this.loadingMore) {
+        ListItem() {
+          // 上拉加载更多：与首页一致的圆形加载动画（onReachEnd 自动触发）
+          LoadingProgress()
+            .id('p3_comments_children_load_more')
+            .width(40)
+            .height(40)
+            .color(this.resolvedThemeColor)
+        }
+        .width('100%')
+        .padding({ top: 12, bottom: 12 })
+      }
+    }
+    .id('p3_comments_children_list')
+    .padding({ left: 16, right: 16, top: 8 })
+    .width('100%')
+    .height('100%')
+    .edgeEffect(EdgeEffect.Spring)
+    .contentStartOffset(FLOATING_TITLE_BAR_OFFSET)
+    .contentEndOffset(this.bottomChromeHeight() + 16)
+    .onReachEnd(() => this.controller?.loadMore())
   }
 
   @Builder
@@ -607,7 +643,7 @@ export struct CommentPage {
       this.controller?.setReplyTarget(comment);
       return;
     }
-    const root = this.items.find((item: CommentItem): boolean =>
+    const root = this.rootListItems.find((item: CommentItem): boolean =>
       item.id === comment.id || item.childComments.some((child: CommentItem): boolean => child.id === comment.id));
     if (root !== undefined) {
       this.controller?.openChildComments(root);
@@ -892,11 +928,13 @@ export struct CommentPage {
   private applyState(state: CommentViewState): void {
     if (state.activeRoot !== undefined) {
       this.likeStateStore.sync([state.activeRoot]);
+      this.likeStateStore.sync(state.items);
     }
-    this.likeStateStore.sync(state.items);
+    this.likeStateStore.sync(state.rootItems);
     this.likeStates = this.likeStateStore.snapshot();
     this.phase = state.phase;
-    this.items = state.items;
+    this.rootListItems = state.rootItems;
+    this.childListItems = state.activeRoot !== undefined ? state.items : [];
     this.loadingMore = state.loadingMore;
     this.canLoadMore = state.canLoadMore;
     this.requiresLogin = state.requiresLogin;
