@@ -76,6 +76,13 @@ const IMAGE_PREVIEW_MAX_SCALE = 2;
  */
 const COLLAPSIBLE_TOGGLE_ZONE_VP = 48;
 
+/**
+ * 双击后临时禁选窗口（ms）：需覆盖双击选词判定（第二击抬起后立即）与双击序列中
+ * 第二击演化成长按的选词触发（按下后约 500ms）两个时机，取 800ms 留余量；
+ * 正常的独立长按选词没有前置双击，不经过此窗口。
+ */
+const DOUBLE_TAP_SELECTION_SUPPRESS_MS = 800;
+
 function clampPreviewScale(value: number): number {
   return Math.min(IMAGE_PREVIEW_MAX_SCALE, Math.max(1, value));
 }
@@ -659,6 +666,14 @@ export struct NativeContentDocument {
   onBodyDoubleTap?: () => void;
   /** 正文 Text 的双击识别器：开启选词的 Text 会吞掉手势系统事件，只能靠 onTouch 自行识别。 */
   private readonly bodyTapDetector: DoubleTapDetector = new DoubleTapDetector();
+  /**
+   * 双击后临时禁选窗口：系统 Text 的"双击选词"在第二击抬起后才判定，且不经过
+   * onGestureJudgeBegin（实测长按路径即使进 judge，REJECT 也拦不住选词），唯一能
+   * 够拦下它的是让 Text 在双击序列内处于 copyOption(None) 不可选状态。双击识别
+   * 命中（第二击按下）即置位，短暂窗口后恢复，长按选词（无前置双击）不受影响。
+   */
+  @State private bodySelectionSuppressed: boolean = false;
+  private bodySelectionRestoreTimerId: number = -1;
   /** 问题详情页在正文末尾追加的 section（回答信息流）；未传入时渲染空。 */
   @BuilderParam documentHeader: () => void = this.emptyFooter;
   @BuilderParam documentBodyFooter: () => void = this.emptyFooter;
@@ -849,6 +864,10 @@ export struct NativeContentDocument {
 
   aboutToDisappear(): void {
     clearFormulaByteCache();
+    if (this.bodySelectionRestoreTimerId >= 0) {
+      clearTimeout(this.bodySelectionRestoreTimerId);
+      this.bodySelectionRestoreTimerId = -1;
+    }
   }
 
   build() {
@@ -1188,10 +1207,7 @@ export struct NativeContentDocument {
         }
         .fontSize(this.headingFontSize())
         .fontWeight(FontWeight.Bold)
-        .copyOption(CopyOptions.LocalDevice)
-        .onGestureJudgeBegin((gestureInfo: GestureInfo, event: BaseGestureEvent): GestureJudgeResult => {
-          return this.textGestureJudge(gestureInfo, event);
-        })
+        .copyOption(this.bodySelectionSuppressed ? CopyOptions.None : CopyOptions.LocalDevice)
         .onTouch((event: TouchEvent): void => {
           this.onBodyTouch(event);
         })
@@ -1216,10 +1232,7 @@ export struct NativeContentDocument {
         }
         .fontSize(this.headingFontSize())
         .fontWeight(FontWeight.Bold)
-        .copyOption(CopyOptions.LocalDevice)
-        .onGestureJudgeBegin((gestureInfo: GestureInfo, event: BaseGestureEvent): GestureJudgeResult => {
-          return this.textGestureJudge(gestureInfo, event);
-        })
+        .copyOption(this.bodySelectionSuppressed ? CopyOptions.None : CopyOptions.LocalDevice)
         .onTouch((event: TouchEvent): void => {
           this.onBodyTouch(event);
         })
@@ -1291,10 +1304,7 @@ export struct NativeContentDocument {
         }
         .fontSize(this.bodyFontSize())
         .lineHeight(this.bodyLineHeight())
-        .copyOption(CopyOptions.LocalDevice)
-        .onGestureJudgeBegin((gestureInfo: GestureInfo, event: BaseGestureEvent): GestureJudgeResult => {
-          return this.textGestureJudge(gestureInfo, event);
-        })
+        .copyOption(this.bodySelectionSuppressed ? CopyOptions.None : CopyOptions.LocalDevice)
         .onTouch((event: TouchEvent): void => {
           this.onBodyTouch(event);
         })
@@ -1323,10 +1333,7 @@ export struct NativeContentDocument {
       }
       .fontSize(this.bodyFontSize())
       .lineHeight(this.bodyLineHeight())
-      .copyOption(CopyOptions.LocalDevice)
-      .onGestureJudgeBegin((gestureInfo: GestureInfo, event: BaseGestureEvent): GestureJudgeResult => {
-        return this.textGestureJudge(gestureInfo, event);
-      })
+      .copyOption(this.bodySelectionSuppressed ? CopyOptions.None : CopyOptions.LocalDevice)
       .onTouch((event: TouchEvent): void => {
         this.onBodyTouch(event);
       })
@@ -1342,6 +1349,7 @@ export struct NativeContentDocument {
   /** 正文 Text 原始触摸入口：喂给双击识别器，识别到双击上报宿主（见 DoubleTapDetector 注释）。 */
   private onBodyTouch(event: TouchEvent): void {
     if (this.bodyTapDetector.feed(event)) {
+      this.suppressBodySelection();
       const callback = this.onBodyDoubleTap;
       if (callback !== undefined) {
         callback();
@@ -1349,15 +1357,17 @@ export struct NativeContentDocument {
     }
   }
 
-  /** 正文 Text 的手势仲裁：系统在双击抬起后走"双击选词"路径（真机行为），此时
-   * 双击记录仍新鲜，直接拒绝该系统手势——选词只保留长按路径（对齐上游
-   * NoDoubleClickSelectionScope 把 doubleTapTimeoutMillis 置 0 的语义）。
-   * 长按选择发生时没有前置双击记录，不受影响。 */
-  private textGestureJudge(gestureInfo: GestureInfo, _event: BaseGestureEvent): GestureJudgeResult {
-    if (gestureInfo.isSystemGesture && this.bodyTapDetector.hasRecentDoubleTap()) {
-      return GestureJudgeResult.REJECT;
+  /** 双击命中即临时关掉正文选择（见 bodySelectionSuppressed 注释）。窗口结束后恢复，
+   * 期间再次双击则顺延；纯长按选词没有前置双击，不受影响。 */
+  private suppressBodySelection(): void {
+    this.bodySelectionSuppressed = true;
+    if (this.bodySelectionRestoreTimerId >= 0) {
+      clearTimeout(this.bodySelectionRestoreTimerId);
     }
-    return GestureJudgeResult.CONTINUE;
+    this.bodySelectionRestoreTimerId = setTimeout((): void => {
+      this.bodySelectionRestoreTimerId = -1;
+      this.bodySelectionSuppressed = false;
+    }, DOUBLE_TAP_SELECTION_SUPPRESS_MS);
   }
 
   /**

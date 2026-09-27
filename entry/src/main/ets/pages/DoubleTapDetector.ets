@@ -15,17 +15,10 @@ export class DoubleTapDetector {
   private lastUpTime: number = 0;
   private lastUpX: number = 0;
   private lastUpY: number = 0;
-  private lastDoubleTapAt: number = 0;
   /** 最近一次可点击子元素（划线片段/链接 Span）的 onClick 时刻：双击的第一击会先触发
    * 这些单击语义（打开划线面板/跳转链接），本序列的双击必须让位（对齐上游"可点区域
    * 不触发双击动作"），否则出现"面板打开又触发点赞"的双触发竞态。 */
   private lastForeignClickTime: number = 0;
-
-  /** 供手势仲裁联动：系统"双击选词"在第二击抬起后才会走到仲裁，此时本窗口内
-   * 的双击记录仍然新鲜，据此拒绝该手势（选词只保留长按路径）。 */
-  hasRecentDoubleTap(): boolean {
-    return Date.now() - this.lastDoubleTapAt < 600;
-  }
 
   /** 可点击子元素的 onClick 回调里调用：抑制紧接着的双击上报。 */
   markForeignClick(): void {
@@ -53,9 +46,6 @@ export class DoubleTapDetector {
       && Math.abs(touch.windowX - this.lastUpX) <= DoubleTapDetector.SLOP_VP
       && Math.abs(touch.windowY - this.lastUpY) <= DoubleTapDetector.SLOP_VP;
     this.lastUpTime = 0;
-    if (isDoubleTap) {
-      this.lastDoubleTapAt = now;
-    }
     return isDoubleTap;
   }
 }
