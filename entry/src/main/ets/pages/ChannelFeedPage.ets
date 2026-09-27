@@ -223,32 +223,6 @@ export struct ChannelFeedPage {
       } else if (this.phase === ChannelFeedPhase.EMPTY) {
         this.centeredStatus(`暂时没有${channelFeedTitle(this.source)}内容`, true);
       } else {
-        if (this.errorMessage.length > 0) {
-          Row({ space: $r('app.float.p1_spacing_small') }) {
-            Text(this.errorMessage)
-              .fontSize($r('app.float.p1_secondary_font_size'))
-              .fontColor($r('app.color.secondary_text'))
-              .layoutWeight(1)
-            if (this.requiresLogin) {
-              Button('去登录')
-                .backgroundColor(this.resolvedThemeColor)
-                .fontColor(onThemeColor(this.resolvedThemeColor))
-                .id(`p2_channel_${this.source}_login`)
-                .onClick(() => this.navigate({ name: P1DestinationName.LOGIN }))
-            } else {
-              Button('重试')
-                .backgroundColor(this.resolvedThemeColor)
-                .fontColor(onThemeColor(this.resolvedThemeColor))
-                .id(`p2_channel_${this.source}_retry_more`)
-                .onClick(() => this.controller?.retry())
-            }
-          }
-          .width('100%')
-          .padding($r('app.float.p1_spacing_small'))
-          .borderRadius($r('app.float.p1_card_radius'))
-          .backgroundColor($r('app.color.surface_background'))
-        }
-
         Refresh({
           refreshing: this.refreshing,
           refreshingContent: this.indicator?.view(),
@@ -256,6 +230,37 @@ export struct ChannelFeedPage {
           friction: 100
         }) {
           List({ scroller: this.listScroller }) {
+            // 可恢复错误横幅必须是 List 内的首个 ListItem：覆盖式顶栏下 Column 顶部
+            // 就是状态栏区域，只有 List 内容项才被 contentStartOffset 内缩让位到标题栏下沿
+            if (this.errorMessage.length > 0) {
+              ListItem() {
+                Row({ space: $r('app.float.p1_spacing_small') }) {
+                  Text(this.errorMessage)
+                    .fontSize($r('app.float.p1_secondary_font_size'))
+                    .fontColor($r('app.color.secondary_text'))
+                    .layoutWeight(1)
+                  if (this.requiresLogin) {
+                    Button('去登录')
+                      .backgroundColor(this.resolvedThemeColor)
+                      .fontColor(onThemeColor(this.resolvedThemeColor))
+                      .id(`p2_channel_${this.source}_login`)
+                      .onClick(() => this.navigate({ name: P1DestinationName.LOGIN }))
+                  } else {
+                    Button('重试')
+                      .backgroundColor(this.resolvedThemeColor)
+                      .fontColor(onThemeColor(this.resolvedThemeColor))
+                      .id(`p2_channel_${this.source}_retry_more`)
+                      .onClick(() => this.controller?.retry())
+                  }
+                }
+                .width('100%')
+                .padding($r('app.float.p1_spacing_small'))
+                .borderRadius($r('app.float.p1_card_radius'))
+                .backgroundColor($r('app.color.surface_background'))
+              }
+              .margin({ bottom: $r('app.float.p1_spacing_medium') })
+            }
+
             if (this.topContentVisible) {
               ListItem() {
                 this.topContent()
