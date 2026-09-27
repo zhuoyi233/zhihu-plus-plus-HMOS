@@ -23,6 +23,9 @@ export struct CollectionDialogComponent {
   };
   onDismiss: () => void = (): void => {
   };
+  // 收藏态（任一收藏夹含此内容）变化时通知宿主页面，供详情页收藏栏图标同步
+  onFavoriteStateChange: (favorited: boolean) => void = (_favorited: boolean): void => {
+  };
   @State private phase: CollectionFavoritePhase = CollectionFavoritePhase.IDLE;
   @State private collections: Array<CollectionSummary> = [];
   @State private busyCollectionId?: string = undefined;
@@ -34,6 +37,7 @@ export struct CollectionDialogComponent {
   @State private createIsPublic: boolean = false;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: CollectionFavoriteController;
+  private lastReportedFavorite?: boolean;
 
   aboutToAppear(): void {
     const repository = this.repository;
@@ -173,10 +177,11 @@ export struct CollectionDialogComponent {
             .width('100%')
         }
         .layoutWeight(1)
-        Text(collection.isFavorited ? '已收藏' : '未收藏')
+        SymbolGlyph(collection.isFavorited ? $r('sys.symbol.bookmark_fill') : $r('sys.symbol.bookmark'))
           .id(`p3_favorite_dialog_item_${collection.id}`)
-          .fontSize($r('app.float.p1_secondary_font_size'))
-          .fontColor(collection.isFavorited ? this.resolvedThemeColor : $r('app.color.secondary_text'))
+          .fontSize(20)
+          .fontColor([collection.isFavorited ? this.resolvedThemeColor : $r('app.color.secondary_text')])
+          .accessibilityText(collection.isFavorited ? '已收藏' : '未收藏')
       }
       .width('100%')
     }
@@ -268,5 +273,17 @@ export struct CollectionDialogComponent {
     this.busyCollectionId = state.busyCollectionId;
     this.requiresLogin = state.requiresLogin;
     this.message = state.message ?? '';
+    const toast = state.toast;
+    if (toast !== undefined) {
+      this.getUIContext().getPromptAction().showToast({ message: toast, duration: 2000 });
+    }
+    // 仅在 READY 后上报，避免 load 清空列表的中间态把已收藏误报为未收藏
+    if (state.phase === CollectionFavoritePhase.READY) {
+      const favorited = state.collections.some((collection: CollectionSummary): boolean => collection.isFavorited);
+      if (this.lastReportedFavorite !== favorited) {
+        this.lastReportedFavorite = favorited;
+        this.onFavoriteStateChange(favorited);
+      }
+    }
   }
 }

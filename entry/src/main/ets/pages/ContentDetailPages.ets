@@ -27,6 +27,7 @@ import {
   BlockingRuleGateway,
   ChannelContentItem,
   CollectionRepository,
+  CollectionSummary,
   CommentRepository,
   ContentDetailKind,
   ContentRepository,
@@ -193,6 +194,9 @@ struct ContentDetailPage {
   @State private interactionErrorMessage: string = '';
   @State private interactionRequiresLogin: boolean = false;
   @State private favoriteDialogShown: boolean = false;
+  /** 详情收藏态：任一收藏夹含此内容即已收藏（对齐上游 ArticleViewModel.isFavorited），驱动右下角书签图标 */
+  @State private contentFavorited: boolean = false;
+  private favoriteStateContentId: string = '';
   /** 回答页双击正文动作（对齐上游 answerDoubleTapAction）：AppStorage 广播跨页同步
    * （详情页 Ask 面板与设置页改动互见），默认询问并记住。 */
   @StorageProp('answerDoubleTapAction') private answerDoubleTapAction: AnswerDoubleTapAction =
@@ -867,8 +871,37 @@ struct ContentDetailPage {
       navigate: this.navigate,
       onDismiss: (): void => {
         this.favoriteDialogShown = false;
+      },
+      onFavoriteStateChange: (favorited: boolean): void => {
+        this.contentFavorited = favorited;
       }
     })
+  }
+
+  /** 拉取详情收藏态（对齐上游 ArticleViewModel.loadCollections）；失败静默——
+   * 收藏夹弹窗打开时会取消共享仓库的在途请求，图标保持当前态即可。 */
+  private refreshContentFavoriteState(): void {
+    const repository = this.collectionRepository;
+    const session = this.session;
+    if (repository === undefined || session === undefined ||
+      session.getState().status !== SessionStatus.AUTHENTICATED ||
+      this.kind === ContentDetailKind.QUESTION) {
+      this.contentFavorited = false;
+      return;
+    }
+    const contentType = this.kind === ContentDetailKind.ARTICLE ? 'article' : 'answer';
+    const contentId = this.activeContentId;
+    this.favoriteStateContentId = contentId;
+    repository.getContentCollections(contentType, contentId)
+      .then((collections: Array<CollectionSummary>): void => {
+        if (!this.pageActive || this.favoriteStateContentId !== contentId) {
+          return;
+        }
+        this.contentFavorited =
+          collections.some((collection: CollectionSummary): boolean => collection.isFavorited);
+      })
+      .catch((_error: Object): void => {
+      });
   }
 
   @Builder
@@ -2213,14 +2246,15 @@ struct ContentDetailPage {
     }
 
     Button({ type: ButtonType.Normal, stateEffect: false }) {
-      SymbolGlyph($r('sys.symbol.bookmark'))
+      SymbolGlyph(this.contentFavorited ? $r('sys.symbol.bookmark_fill') : $r('sys.symbol.bookmark'))
         .fontSize(20)
-        .fontColor([$r('app.color.secondary_text')])
+        .fontColor([this.contentFavorited ? this.resolvedThemeColor : $r('app.color.secondary_text')])
     }
     .id(`p3_${this.kind}_detail_favorite_bar`)
     .width(36)
     .height(36)
     .backgroundColor(Color.Transparent)
+    .accessibilityText(this.contentFavorited ? '已收藏' : '未收藏')
     .onClick((): void => {
       if (this.collectionRepository !== undefined && this.session !== undefined) {
         this.favoriteDialogShown = true;
@@ -2530,6 +2564,7 @@ struct ContentDetailPage {
       this.voteController?.deactivate();
       this.voteController = undefined;
       this.favoriteDialogShown = false;
+      this.contentFavorited = false;
       this.activeContentId = id;
       await this.controller?.load(ContentDetailKind.ANSWER, id);
     } finally { this.navigatorBusy = false; }
@@ -3128,6 +3163,7 @@ struct ContentDetailPage {
     this.requiresLogin = state.requiresLogin;
     this.openedRecordPhase = state.openedRecordPhase;
     if (state.phase === ContentDetailPhase.READY && state.content !== undefined) {
+      this.refreshContentFavoriteState();
       this.activateInteraction(state.content);
       if (state.content.kind === ContentDetailKind.QUESTION) {
         publishQuestionTitle({ id: this.activeContentId, title: state.content.value.title, scrolled: this.questionScrolled });

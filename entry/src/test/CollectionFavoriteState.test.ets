@@ -15,6 +15,7 @@ import {
 import {
   CollectionFavoriteController,
   CollectionFavoritePhase,
+  CollectionFavoriteViewState,
   collectionFavoriteRowKey
 } from '../main/ets/pages/CollectionFavoriteState';
 
@@ -305,6 +306,50 @@ export default function collectionFavoriteStateTest(): void {
       expect(collectionFavoriteRowKey(collection('1', '收藏夹一', false), '1') !==
         collectionFavoriteRowKey(collection('1', '收藏夹一', false), '2')).assertTrue();
       expect(collectionFavoriteRowKey(collection('1', '收藏夹一', false), 'creating') !== idle).assertTrue();
+    });
+
+    it('emitsTransientToastOnToggleSuccess', 0, async () => {
+      const repository = new ControlledFavoriteRepository();
+      repository.setCollections([collection('1', '收藏夹一', false)]);
+      let toastText: string | undefined = undefined;
+      const controller = new CollectionFavoriteController(repository,
+        new FixedSessionGateway(SessionStatus.AUTHENTICATED),
+        (state: CollectionFavoriteViewState): void => {
+          if (state.toast !== undefined) {
+            toastText = state.toast;
+          }
+        });
+      controller.activate();
+      await controller.load('answer', '456');
+      const added = await controller.toggle(controller.snapshot().collections[0], 'answer', '456');
+      expect(added).assertTrue();
+      expect(toastText).assertEqual('已收藏到「收藏夹一」');
+      expect(controller.snapshot().toast).assertUndefined();
+      const removed = await controller.toggle(controller.snapshot().collections[0], 'answer', '456');
+      expect(removed).assertTrue();
+      expect(toastText).assertEqual('已取消收藏');
+      expect(controller.snapshot().toast).assertUndefined();
+    });
+
+    it('keepsInlineMessageAndNoToastOnToggleFailure', 0, async () => {
+      const repository = new ControlledFavoriteRepository();
+      repository.setCollections([collection('1', '收藏夹一', false)]);
+      repository.failAdd = true;
+      let toastSeen: boolean = false;
+      const controller = new CollectionFavoriteController(repository,
+        new FixedSessionGateway(SessionStatus.AUTHENTICATED),
+        (state: CollectionFavoriteViewState): void => {
+          if (state.toast !== undefined) {
+            toastSeen = true;
+          }
+        });
+      controller.activate();
+      await controller.load('answer', '456');
+      const ok = await controller.toggle(controller.snapshot().collections[0], 'answer', '456');
+      expect(ok).assertFalse();
+      expect(toastSeen).assertFalse();
+      expect(controller.snapshot().message).assertEqual('收藏操作失败，请重试');
+      expect(controller.snapshot().toast).assertUndefined();
     });
   });
 }
