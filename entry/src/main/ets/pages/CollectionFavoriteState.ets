@@ -22,6 +22,8 @@ export interface CollectionFavoriteViewState {
   readonly busyCollectionId?: string;
   readonly requiresLogin: boolean;
   readonly message?: string;
+  // 一次性成功提示：仅在 emit 时投递给观察者，随后立即清空（toast 语义，不内联常驻）
+  readonly toast?: string;
 }
 
 export type CollectionFavoriteObserver = (state: CollectionFavoriteViewState) => void;
@@ -37,6 +39,7 @@ export class CollectionFavoriteController {
   private busyCollectionId?: string;
   private requiresLogin: boolean = false;
   private message?: string;
+  private toast?: string;
 
   constructor(repository: CollectionRepository, session: LoginSessionGateway,
     observer: CollectionFavoriteObserver = (_state: CollectionFavoriteViewState): void => {
@@ -69,7 +72,8 @@ export class CollectionFavoriteController {
       collections: this.collections.slice(),
       busyCollectionId: this.busyCollectionId,
       requiresLogin: this.requiresLogin,
-      message: this.message
+      message: this.message,
+      toast: this.toast
     };
   }
 
@@ -84,6 +88,7 @@ export class CollectionFavoriteController {
     this.busyCollectionId = undefined;
     this.requiresLogin = false;
     this.message = undefined;
+    this.toast = undefined;
     this.emit();
     if (this.session.getState().status !== SessionStatus.AUTHENTICATED) {
       this.phase = CollectionFavoritePhase.ERROR;
@@ -121,6 +126,7 @@ export class CollectionFavoriteController {
     const optimistic = !collection.isFavorited;
     this.busyCollectionId = collection.id;
     this.message = undefined;
+    this.toast = undefined;
     this.collections = this.collections.map((candidate: CollectionSummary): CollectionSummary => {
       if (candidate.id !== collection.id) {
         return candidate;
@@ -137,7 +143,7 @@ export class CollectionFavoriteController {
       if (!this.isCurrent(generation)) {
         return false;
       }
-      this.message = optimistic ? '已收藏到「' + collection.title + '」' : '已取消收藏';
+      this.toast = optimistic ? '已收藏到「' + collection.title + '」' : '已取消收藏';
       return true;
     } catch (error) {
       if (!this.isCurrent(generation)) {
@@ -156,6 +162,7 @@ export class CollectionFavoriteController {
       if (this.isCurrent(generation)) {
         this.busyCollectionId = undefined;
         this.emit();
+        this.toast = undefined;
       }
     }
   }
@@ -175,6 +182,7 @@ export class CollectionFavoriteController {
     const generation = this.generation;
     this.busyCollectionId = 'creating';
     this.message = undefined;
+    this.toast = undefined;
     this.emit();
     try {
       await this.repository.createCollection(trimmedTitle, description, isPublic);
@@ -257,6 +265,14 @@ function favoriteCreateError(error: Object): string {
 function favoriteRequiresLogin(error: Object): boolean {
   return error instanceof HttpFailure && error.kind === HttpFailureKind.AUTHENTICATION &&
     (error.status === undefined || error.status === 401);
+}
+
+// ForEach 键值相同会直接复用行组件、不重执行 itemGenerator，
+// 因此 key 必须携带行内全部可变展示状态（收藏态/条目数/busy），否则界面停留在旧值。
+export function collectionFavoriteRowKey(collection: CollectionSummary, busyCollectionId?: string): string {
+  const busyFlag = busyCollectionId === undefined ? 'i' :
+    (busyCollectionId === collection.id ? 'b' : 'B');
+  return `${collection.id}|${collection.isFavorited ? 1 : 0}|${collection.itemCount}|${busyFlag}`;
 }
 
 function cloneCollectionWithFavorite(collection: CollectionSummary, isFavorited: boolean): CollectionSummary {
