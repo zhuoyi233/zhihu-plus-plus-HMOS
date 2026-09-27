@@ -9,6 +9,7 @@ import {
   Question,
   UserProfile
 } from './DomainModels';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
   JsonArrayValue,
   jsonBoolean,
@@ -354,7 +355,7 @@ export function decodeFeedPage(json: string): FeedPage {
     }
     const typeValue = item.get('type');
     if (typeValue !== undefined && !(typeValue instanceof JsonStringValue)) {
-      throw invalid('feed.item.type 类型无效');
+      return;
     }
     const type = jsonString(typeValue);
     if (type === 'invited_answer' || type === 'tab_list' || type === 'feed_item_index_group') {
@@ -381,10 +382,11 @@ export function decodeFeedPage(json: string): FeedPage {
       if (error instanceof DomainDecodeError && error.kind === DomainDecodeFailureKind.UNSUPPORTED_CONTENT) {
         return;
       }
-      if (error instanceof DomainDecodeError) {
-        throw error;
-      }
-      throw invalid('feed.item 结构无效');
+      // 对齐上游 PaginationViewModel.decodePage：单条解码失败（如推荐流里作者缺 id 的
+      // 匿名/推广卡片）只记日志并跳过该条，不使整页失败——否则冷启动首页随机整体报错。
+      hilog.warn(0xD001, 'FeedDecode', 'skip feed item: %{public}s',
+        error instanceof DomainDecodeError ? error.message : '结构无效');
+      return;
     }
   });
   const paging = pagingValue instanceof JsonObjectValue ? pagingValue : undefined;

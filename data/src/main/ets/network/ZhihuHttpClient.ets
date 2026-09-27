@@ -370,16 +370,20 @@ export class ZhihuHttpClient {
 
   async execute(request: ZhihuHttpRequest): Promise<ZhihuHttpResponse> {
     if (this.activeRequest !== undefined) {
+      hilog.warn(0xD001, 'ZhihuHttp', 'rejected busy (single-flight)');
       throw new HttpFailure(HttpFailureKind.BUSY);
     }
     if (!isTrustedZhihuRequestUrl(request.url)) {
+      hilog.warn(0xD001, 'ZhihuHttp', 'rejected untrusted url');
       throw new HttpFailure(HttpFailureKind.CLIENT);
     }
     if (request.refererPath !== undefined && !isSafeZhihuRefererPath(request.refererPath)) {
+      hilog.warn(0xD001, 'ZhihuHttp', 'rejected unsafe referer');
       throw new HttpFailure(HttpFailureKind.CLIENT);
     }
     if ((request.useSession === true || request.signWithZse === true || request.includeXsrfToken === true) &&
       !isSessionCapableZhihuRequestUrl(request.url)) {
+      hilog.warn(0xD001, 'ZhihuHttp', 'rejected session-incapable url');
       throw new HttpFailure(HttpFailureKind.CLIENT);
     }
     let activeRequest: ActiveZhihuRequest | undefined = undefined;

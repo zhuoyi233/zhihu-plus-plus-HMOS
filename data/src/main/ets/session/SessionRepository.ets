@@ -4,6 +4,7 @@ import {
   ZhihuLoginClient,
   ZhihuProfile
 } from '../network/ZhihuLoginClient';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { SessionCookieProvider } from '../network/ZhihuHttpClient';
 import { copySessionCookies, parseCookieAssignments, SessionCookie } from './CookieSession';
 
@@ -105,12 +106,14 @@ export class SessionRepository implements SessionCookieProvider, LoginSessionGat
       try {
         const storedCookies = await this.persistence.load();
         if (storedCookies.length === 0) {
+          hilog.info(0xD001, 'SessionRepo', 'restore: no stored cookies');
           this.cookies = [];
           return this.updateState(INITIAL_SESSION_STATE);
         }
         return await this.verifyRestoredSession(copySessionCookies(storedCookies), previousCookies,
           previousState, hadAuthenticatedSession);
       } catch (_error) {
+        hilog.warn(0xD001, 'SessionRepo', 'restore: persistence load failed');
         if (hadAuthenticatedSession) {
           this.cookies = previousCookies;
           return this.updateState(previousState);
@@ -252,6 +255,7 @@ export class SessionRepository implements SessionCookieProvider, LoginSessionGat
   private async verifyRestoredSession(cookies: Array<SessionCookie>, previousCookies: Array<SessionCookie>,
     previousState: SessionState, hadAuthenticatedSession: boolean): Promise<SessionState> {
     const result = await this.verifier.verify(cookies);
+    hilog.info(0xD001, 'SessionRepo', 'restore verify: %{public}s', result.status);
     if (result.status === LoginVerificationStatus.AUTHENTICATED && result.profile !== undefined) {
       this.cookies = copySessionCookies(cookies);
       return this.updateState({

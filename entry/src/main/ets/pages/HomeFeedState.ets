@@ -1,4 +1,5 @@
 import { feedItemIdentity, FeedItem, FeedPage, FeedRepository, HttpFailure, HttpFailureKind } from 'data';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 
 export enum HomeFeedPhase {
   IDLE = 'idle',
@@ -43,6 +44,14 @@ function homeFeedErrorMessage(error: Error): string {
 
 function homeFeedRequiresLogin(error: Error): boolean {
   return error instanceof HttpFailure && error.kind === HttpFailureKind.AUTHENTICATION && error.status !== 403;
+}
+
+// 只记录错误类别与异常名，不输出 URL、Cookie 或响应内容（对齐 ZhihuHttpClient 的隐私口径）。
+export function describeFeedError(error: Error): string {
+  if (error instanceof HttpFailure) {
+    return `HttpFailure(kind=${error.kind}, status=${error.status ?? '-'})`;
+  }
+  return `${error.name}: ${error.message}`;
 }
 
 export class HomeFeedController {
@@ -209,6 +218,8 @@ export class HomeFeedController {
       if (!this.isCurrent(generation)) {
         return;
       }
+      hilog.warn(0xD001, 'HomeFeed', 'loadFirstPage failed: %{public}s',
+        error instanceof Error ? describeFeedError(error) : 'unknown');
       this.errorMessage = homeFeedErrorMessage(error);
       this.requiresLogin = homeFeedRequiresLogin(error);
       this.phase = this.items.length > 0 ? HomeFeedPhase.READY : HomeFeedPhase.ERROR;

@@ -132,15 +132,38 @@ export default function domainModelTest(): void {
       expect(page.items[0].id).assertEqual('feed-3');
     });
 
-    it('mapsMalformedFeedStructuresToDomainErrors', 0, () => {
+    it('skipsFeedItemWhoseAuthorLacksIdInsteadOfFailingWholePage', 0, () => {
+      // 冷启动首页整体报错的根因：推荐流中存在作者缺 id 的卡片（匿名/推广等），
+      // 对齐上游 PaginationViewModel.decodePage（单条解码失败记日志跳过），不应使整页失败。
+      const page = decodeFeedPage('{"data":[' +
+        '{"id":"feed-1","target":{"type":"answer","id":"456","question":{"id":"123","title":"正常回答"},' +
+        '"author":{"id":"user-1","name":"正常作者"}}},' +
+        '{"id":"feed-2","target":{"type":"answer","id":"789","question":{"id":"123","title":"异常回答"},' +
+        '"author":{"name":"缺少ID的作者"}}}' +
+        '],"paging":{"is_end":false,"is_start":true,"page":1}}');
+
+      expect(page.items.length).assertEqual(1);
+      expect(page.items[0].id).assertEqual('feed-1');
+      expect(page.items[0].target.author?.id).assertEqual('user-1');
+    });
+
+    it('skipsFeedItemWithMissingTargetTitleInsteadOfFailingWholePage', 0, () => {
+      const page = decodeFeedPage('{"data":[' +
+        '{"id":"feed-1","target":{"type":"article","id":"article-1"}},' +
+        '{"id":"feed-2","target":{"type":"article","id":"article-2","title":"可支持文章"}}]}');
+
+      expect(page.items.length).assertEqual(1);
+      expect(page.items[0].id).assertEqual('feed-2');
+    });
+
+    it('mapsPageLevelStructuralErrorsToDomainErrors', 0, () => {
+      // 页级结构错误（data 非数组、条目非对象、paging 结构无效）仍视为整页失败；
+      // 条目内字段错误（target 缺字段、字段类型无效）已改为跳过单条，不再整页失败。
       const malformed: Array<string> = [
         'null',
         '{"data":{}}',
         '{"data":[null]}',
         '{"data":[],"paging":"next"}',
-        '{"data":[{"id":"feed","target":{}}]}',
-        '{"data":[{"id":"feed","target":{"type":"article","id":"article","title":"标题",' +
-          '"excerpt":7}}]}',
         '{"data":[],"paging":{"is_end":"false"}}'
       ];
       malformed.forEach((payload: string): void => {

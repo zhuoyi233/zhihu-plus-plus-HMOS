@@ -166,25 +166,6 @@ export struct HomeFeedPage {
         } else if (this.phase === HomeFeedPhase.EMPTY) {
           this.centeredStatus('暂时没有可显示的内容', true, 'p2_home_empty');
         } else {
-          if (this.errorMessage.length > 0) {
-            Row({ space: $r('app.float.p1_spacing_small') }) {
-              Text(this.errorMessage)
-                .id('p2_home_recoverable_error_text')
-                .fontSize($r('app.float.p1_secondary_font_size'))
-                .fontColor($r('app.color.secondary_text'))
-                .layoutWeight(1)
-              Button('重试')
-                .backgroundColor(this.resolvedThemeColor)
-                .fontColor(onThemeColor(this.resolvedThemeColor))
-                .id('p2_home_recoverable_error_retry')
-                .onClick(() => this.controller?.retry())
-            }
-            .width('100%')
-            .padding($r('app.float.p1_spacing_small'))
-            .borderRadius($r('app.float.p1_card_radius'))
-            .backgroundColor($r('app.color.surface_background'))
-          }
-
           Refresh({
             refreshing: this.refreshing,
             refreshingContent: this.indicator?.view(),
@@ -192,6 +173,30 @@ export struct HomeFeedPage {
             friction: 100
           }) {
             List({ scroller: this.listScroller }) {
+              // 可恢复错误横幅必须是 List 内的首个 ListItem：覆盖式顶栏下 Column 顶部
+              // 就是状态栏区域，只有 List 内容项才被 contentStartOffset 内缩让位到标题栏下沿
+              if (this.errorMessage.length > 0) {
+                ListItem() {
+                  Row({ space: $r('app.float.p1_spacing_small') }) {
+                    Text(this.errorMessage)
+                      .id('p2_home_recoverable_error_text')
+                      .fontSize($r('app.float.p1_secondary_font_size'))
+                      .fontColor($r('app.color.secondary_text'))
+                      .layoutWeight(1)
+                    Button('重试')
+                      .backgroundColor(this.resolvedThemeColor)
+                      .fontColor(onThemeColor(this.resolvedThemeColor))
+                      .id('p2_home_recoverable_error_retry')
+                      .onClick(() => this.controller?.retry())
+                  }
+                  .width('100%')
+                  .padding($r('app.float.p1_spacing_small'))
+                  .borderRadius($r('app.float.p1_card_radius'))
+                  .backgroundColor($r('app.color.surface_background'))
+                }
+                .margin({ bottom: $r('app.float.p1_spacing_medium') })
+              }
+
               if (isUpdateAnnouncementVisible(this.pendingUpdateVersion, this.dismissedUpdateVersion)) {
                 ListItem() {
                   this.updateAnnouncementCard()
