@@ -420,6 +420,8 @@ struct ContentInlineFormula {
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   /** 正文内联链接点击回调（行内公式所在段落同样生效）。 */
   onLinkClick?: (url: string) => void;
+  /** 行内公式段落 Text 的选区状态回调（转发宿主，语义同 NativeContentDocument.onBodySelectionActive）。 */
+  onBodySelectionActive?: (active: boolean) => void;
   @State private loadedRunIds: Array<string> = [];
   private pixelMaps: Map<string, image.PixelMap> = new Map();
   private formulaWidths: Map<string, number> = new Map();
@@ -496,6 +498,9 @@ struct ContentInlineFormula {
     .fontColor($r('app.color.primary_text'))
     // 鸿蒙原生长按选字：启用系统文本选择菜单（复制 / 全选 / 翻译 / 分享等"更多操作"）。
     .copyOption(CopyOptions.LocalDevice)
+    .onTextSelectionChange((start: number, end: number): void => {
+      this.onBodySelectionActive?.(start !== end);
+    })
     .width('100%')
   }
 
@@ -561,6 +566,8 @@ struct ContentBlockFormula {
   @State private pixelMap: image.PixelMap | undefined = undefined;
   @State private formulaAspectRatio: number = 4;
   @StorageProp('formulaForegroundColor') private formulaColor: string = '#111111';
+  /** 加载失败兜底 Text 的选区状态回调（转发宿主，语义同 NativeContentDocument.onBodySelectionActive）。 */
+  onBodySelectionActive?: (active: boolean) => void;
   private active: boolean = false;
   private loadGeneration: number = 0;
 
@@ -593,6 +600,9 @@ struct ContentBlockFormula {
           .fontSize($r('app.float.p1_secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .copyOption(CopyOptions.LocalDevice)
+          .onTextSelectionChange((start: number, end: number): void => {
+            this.onBodySelectionActive?.(start !== end);
+          })
           .textAlign(TextAlign.Center)
           .width('100%')
       }
@@ -666,6 +676,14 @@ export struct NativeContentDocument {
   onBodyDoubleTap?: () => void;
   /** 正文 Text 的双击识别器：开启选词的 Text 会吞掉手势系统事件，只能靠 onTouch 自行识别。 */
   private readonly bodyTapDetector: DoubleTapDetector = new DoubleTapDetector();
+  /**
+   * 正文选区状态回调：active=true 表示存在选区（长按建词/拖选扩展中），宿主据此
+   * 挂起回答切换过滑手势——过滑 pan 是 parallelGesture，与 Text 内部拖选并行识别
+   * （选词吞手势只影响互斥仲裁路径），页顶拖选会被误判为"贴顶继续过滑"直接切答。
+   */
+  onBodySelectionActive?: (active: boolean) => void;
+  /** 正文当前是否存在选区：onTextSelectionChange 回填去重，仅作信号，不参与渲染。 */
+  private bodySelectionActive: boolean = false;
   /**
    * 双击后临时禁选窗口：系统 Text 的"双击选词"在第二击抬起后才判定，且不经过
    * onGestureJudgeBegin（实测长按路径即使进 judge，REJECT 也拦不住选词），唯一能
@@ -868,6 +886,9 @@ export struct NativeContentDocument {
       clearTimeout(this.bodySelectionRestoreTimerId);
       this.bodySelectionRestoreTimerId = -1;
     }
+    // 组件销毁不触发 onTextSelectionChange：切换回答/离开页面时清掉残留的
+    // 选区信号，避免宿主过滑手势被永久挂起。
+    this.setBodySelectionActive(false);
   }
 
   build() {
@@ -1211,6 +1232,9 @@ export struct NativeContentDocument {
         .onTouch((event: TouchEvent): void => {
           this.onBodyTouch(event);
         })
+        .onTextSelectionChange((start: number, end: number): void => {
+          this.onBodySelectionChange(start, end);
+        })
         .width('100%')
       } else {
         Text() {
@@ -1236,6 +1260,9 @@ export struct NativeContentDocument {
         .onTouch((event: TouchEvent): void => {
           this.onBodyTouch(event);
         })
+        .onTextSelectionChange((start: number, end: number): void => {
+          this.onBodySelectionChange(start, end);
+        })
         .width('100%')
       }
     } else if (item.kind === ReaderBlockKind.DIVIDER) {
@@ -1243,9 +1270,13 @@ export struct NativeContentDocument {
     } else if (item.kind === ReaderBlockKind.FORMULA) {
       // 按主题 tick 奇偶翻转分支强制销毁重建（见 formulaRecreateTick 注释）。
       if (this.formulaRecreateTick % 2 === 0) {
-        ContentBlockFormula({ item: item })
+        ContentBlockFormula({ item: item, onBodySelectionActive: (active: boolean): void => {
+          this.setBodySelectionActive(active);
+        } })
       } else {
-        ContentBlockFormula({ item: item })
+        ContentBlockFormula({ item: item, onBodySelectionActive: (active: boolean): void => {
+          this.setBodySelectionActive(active);
+        } })
       }
     } else if (item.kind === ReaderBlockKind.IMAGE) {
       ReaderImageBlock({
@@ -1294,9 +1325,15 @@ export struct NativeContentDocument {
       if (this.inlineHasFormula(item)) {
         // 按主题 tick 奇偶翻转分支强制销毁重建（见 formulaRecreateTick 注释）。
         if (this.formulaRecreateTick % 2 === 0) {
-          ContentInlineFormula({ item: item, onLinkClick: this.onLinkClick })
+          ContentInlineFormula({ item: item, onLinkClick: this.onLinkClick,
+            onBodySelectionActive: (active: boolean): void => {
+              this.setBodySelectionActive(active);
+            } })
         } else {
-          ContentInlineFormula({ item: item, onLinkClick: this.onLinkClick })
+          ContentInlineFormula({ item: item, onLinkClick: this.onLinkClick,
+            onBodySelectionActive: (active: boolean): void => {
+              this.setBodySelectionActive(active);
+            } })
         }
       } else {
         Text() {
@@ -1307,6 +1344,9 @@ export struct NativeContentDocument {
         .copyOption(this.bodySelectionSuppressed ? CopyOptions.None : CopyOptions.LocalDevice)
         .onTouch((event: TouchEvent): void => {
           this.onBodyTouch(event);
+        })
+        .onTextSelectionChange((start: number, end: number): void => {
+          this.onBodySelectionChange(start, end);
         })
         .width('100%')
       }
@@ -1337,6 +1377,9 @@ export struct NativeContentDocument {
       .onTouch((event: TouchEvent): void => {
         this.onBodyTouch(event);
       })
+      .onTextSelectionChange((start: number, end: number): void => {
+        this.onBodySelectionChange(start, end);
+      })
       .width('100%')
     }
   }
@@ -1344,6 +1387,20 @@ export struct NativeContentDocument {
   /** 内联 runs 是否含公式 run（决定段落走公式宿主还是统一样式渲染）。 */
   private inlineHasFormula(item: ReaderBlock): boolean {
     return item.inlineRuns.some((run: ReaderInlineRun): boolean => run.kind === ReaderInlineKind.FORMULA);
+  }
+
+  /** 选区变化入口：建词/扩展置 active，清除（start==end）复位；去重后转发宿主。 */
+  private onBodySelectionChange(start: number, end: number): void {
+    this.setBodySelectionActive(start !== end);
+  }
+
+  private setBodySelectionActive(active: boolean): void {
+    if (active === this.bodySelectionActive) { return; }
+    this.bodySelectionActive = active;
+    const callback = this.onBodySelectionActive;
+    if (callback !== undefined) {
+      callback(active);
+    }
   }
 
   /** 正文 Text 原始触摸入口：喂给双击识别器，识别到双击上报宿主（见 DoubleTapDetector 注释）。 */

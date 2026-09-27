@@ -112,6 +112,8 @@ struct ContentDetailPage {
   @State private contentAtTop: boolean = true;
   /** overscroll 原始拖动累计量（阻尼换算前）。 */
   private overscrollRawDrag: number = 0;
+  /** 正文存在选区（长按建词/拖选扩展中）：过滑 pan 让位，防止拖选位移被误判为切换。 */
+  private bodyTextSelectionActive: boolean = false;
   /** 阅读排版偏好（AppStorage 广播键，与 NativeContentDocument 同源）：横向预览页摘要排版对齐正文。 */
   @StorageProp('contentFontSize') private previewFontSizePercent: number = 100;
   @StorageProp('contentLineHeight') private previewLineHeightPercent: number = 160;
@@ -1016,7 +1018,10 @@ struct ContentDetailPage {
             if (this.pageTurnSwitchAnswer && this.kind === ContentDetailKind.ANSWER) void this.moveAnswer(1);
           },
           segmentInfos: this.segmentInfos,
-          onSegmentClick: (paragraph: SegmentInfoParagraph, markIndex: number): void => this.openSegmentSheet(paragraph, markIndex)
+          onSegmentClick: (paragraph: SegmentInfoParagraph, markIndex: number): void => this.openSegmentSheet(paragraph, markIndex),
+          onBodySelectionActive: (active: boolean): void => {
+            this.bodyTextSelectionActive = active;
+          }
         })
           .layoutWeight(1)
       }
@@ -2591,6 +2596,14 @@ struct ContentDetailPage {
   /** 按 tanh 阻尼转为过滑偏移：横向模式不依赖正文纵向边界，纵向模式仍要求贴顶/贴底。 */
   private onAnswerOverscrollPanUpdate(event: GestureEvent): void {
     if (this.kind !== ContentDetailKind.ANSWER || this.answerFabDragging || this.answerSwitchMode === 'off') { return; }
+    if (this.bodyTextSelectionActive) {
+      // 拖选让位：过滑 pan 与正文拖选并行识别（选词 Text 吞手势只影响互斥仲裁路径），
+      // 页顶拖选的位移会在这里被误判为"贴顶继续过滑"直接切走回答。选区通常在长按
+      // 建词时已置位（手指未动 pan 不会 start），此处只是兜底；若拖动中途才建立选区，
+      // 已累计的偏移立即回位。
+      if (this.answerOverscrollOffset !== 0) { this.cancelAnswerOverscrollPan(); }
+      return;
+    }
     const primaryOffset = this.answerSwitchMode === 'horizontal' ? event.offsetX : event.offsetY;
     const delta = primaryOffset - this.overscrollPanPrevY;
     this.overscrollPanPrevY = primaryOffset;
