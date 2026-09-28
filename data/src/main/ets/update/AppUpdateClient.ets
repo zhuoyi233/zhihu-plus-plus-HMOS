@@ -14,7 +14,7 @@ export const GITHUB_LATEST_RELEASE_API: string =
 export const GITHUB_RELEASES_ATOM: string =
   'https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases.atom';
 export const GITHUB_RELEASE_BY_TAG_API: string =
-  'https://api.github.com/repos/zhuoyi233/zhihu-plus-plus-HMOS/releases/tags/';
+  'https://gh-proxy.org/https://api.github.com/repos/zhuoyi233/zhihu-plus-plus-HMOS/releases/tags/';
 
 const APP_UPDATE_CONNECT_TIMEOUT_MS = 8000;
 const APP_UPDATE_READ_TIMEOUT_MS = 10000;
@@ -85,7 +85,7 @@ export class AppUpdateClient {
 
   /**
    * 按版本名拉取对应 Release 的完整详情（含 Markdown 描述），供“新版本更新”页使用。
-   * 与 checkLatestRelease 一样直连 api.github.com，不携带任何知乎会话侧信息；
+   * 经 gh-proxy.org 转发 GitHub JSON API，不携带任何知乎会话侧信息；
    * 描述原文只有 JSON API 提供（Atom 备源是 HTML），故此处不设备用源。
    */
   async fetchReleaseDetail(versionName: string): Promise<AppReleaseDetailResult> {
