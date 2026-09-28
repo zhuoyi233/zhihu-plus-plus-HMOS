@@ -50,6 +50,8 @@ export struct WhatsNewPage {
   onClosed: (shownVersionName: string) => void = (_shownVersionName: string): void => {};
   /** 行内链接/发布页跳转回调，壳层据此拉起系统浏览器。 */
   onOpenLink: (url: string) => void = (_url: string): void => {};
+  /** 下载新版本回调，壳层据此导航到「系统与更新」页（下载源列表与系统下载）。 */
+  onOpenDownload: () => void = (): void => {};
 
   aboutToAppear(): void {
     void this.loadReleaseDetail();
@@ -214,13 +216,13 @@ export struct WhatsNewPage {
     Column({ space: 10 }) {
       Text('准备升级？').fontSize(18).fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.primary_text')).width('100%')
-      Text('前往 GitHub 发布页获取未签名安装包')
+      Text('前往「系统与更新」获取未签名安装包，支持系统下载与多下载源')
         .fontSize($r('app.float.p1_secondary_font_size'))
         .fontColor($r('app.color.secondary_text')).width('100%')
       Button('下载新版本').id('p8_whats_new_download').width('100%').height(48)
         .fontColor(onThemeColor(this.resolvedThemeColor))
         .backgroundColor(this.resolvedThemeColor)
-        .onClick((): void => this.onOpenLink(this.releasePageUrl()))
+        .onClick((): void => this.onOpenDownload())
     }.width('100%').alignItems(HorizontalAlign.Start)
       .padding({ top: 20 })
   }

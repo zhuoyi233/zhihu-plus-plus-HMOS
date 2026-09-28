@@ -438,12 +438,13 @@ export struct P1Shell {
         WhatsNewPage({
           targetVersionName: destination.version ?? '',
           onClosed: (shownVersionName: string): void => this.markWhatsNewSeen(shownVersionName),
-          onOpenLink: (url: string): void => this.openExternalUrl(url, '无法打开链接')
+          onOpenLink: (url: string): void => this.openExternalUrl(url, '无法打开链接'),
+          onOpenDownload: (): void => this.navigate({ name: P1DestinationName.SYSTEM_UPDATE_SETTINGS })
         });
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
         content: {
-          title: { mainTitle: destination.version !== undefined ? '待更新版本内容' : '本版本更新内容' },
+          title: { mainTitle: destination.version !== undefined ? '新版本描述' : '本版本更新内容' },
           divider: { showType: DividerShowType.OFF }
         } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
@@ -2110,13 +2111,13 @@ export struct P1Shell {
       }
       if (result.status === AppUpdateCheckStatus.UPDATE_AVAILABLE && result.release !== undefined) {
         this.pendingUpdateRelease = result.release;
-        this.broadcastHomeUpdateAnnouncement(result.release.versionName, this.releaseDownloadUrl(result.release));
+        this.broadcastHomeUpdateAnnouncement(result.release.versionName);
         if (verbose) {
           this.updateCheckMessage = `发现新版本 ${result.release.versionName}，可前往下载`;
         }
       } else if (result.status === AppUpdateCheckStatus.UP_TO_DATE) {
         this.pendingUpdateRelease = undefined;
-        this.broadcastHomeUpdateAnnouncement('', '');
+        this.broadcastHomeUpdateAnnouncement('');
         if (verbose) {
           this.updateCheckMessage = '当前已是最新版本';
         }
@@ -2208,9 +2209,8 @@ export struct P1Shell {
   }
 
   /** 首页更新卡片经 AppStorage 广播（HdsTabs 树下跨页面信号唯一可靠通道）。 */
-  private broadcastHomeUpdateAnnouncement(version: string, url: string): void {
+  private broadcastHomeUpdateAnnouncement(version: string): void {
     AppStorage.setOrCreate('homeUpdateAnnouncementVersion', version);
-    AppStorage.setOrCreate('homeUpdateAnnouncementUrl', url);
   }
 
   private releaseDownloadUrl(release: AppUpdateRelease): string {
