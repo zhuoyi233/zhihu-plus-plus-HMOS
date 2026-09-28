@@ -114,12 +114,15 @@ export struct WhatsNewPage {
     if (detail !== undefined && detail.htmlUrl.length > 0) {
       return detail.htmlUrl;
     }
+    if (this.targetVersionName.length > 0) {
+      return `${GITHUB_RELEASES_PAGE}/tag/HMOSv${this.targetVersionName}`;
+    }
     return GITHUB_RELEASES_PAGE;
   }
 
   build() {
     Scroll() {
-      Column({ space: $r('app.float.p1_spacing_large') }) {
+      Column({ space: 24 }) {
         if (this.loading) {
           Column({ space: 12 }) {
             LoadingProgress().width(32).height(32).color(this.resolvedThemeColor)
@@ -142,12 +145,17 @@ export struct WhatsNewPage {
           }.width('100%').margin({ top: 48 })
         } else {
           this.releaseHeader()
+          Text('更新内容').fontSize(14).fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.secondary_text')).width('100%')
           this.markdownBlocks()
+        }
+        if (!this.loading && this.targetVersionName.length > 0) {
+          this.downloadFooter()
         }
       }
       .width('100%')
       .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
-        top: TITLE_BAR_CLEARANCE_VP + 16, bottom: 40 })
+        top: TITLE_BAR_CLEARANCE_VP + 16, bottom: 48 })
     }
     .id('p8_whats_new_scroll')
     .width('100%')
@@ -158,19 +166,30 @@ export struct WhatsNewPage {
 
   @Builder
   private releaseHeader() {
-    Column({ space: 8 }) {
-      Column({ space: 4 }) {
+    Column({ space: 14 }) {
+      Column({ space: 12 }) {
+        Row({ space: 8 }) {
+          SymbolGlyph($r('sys.symbol.arrow_up')).fontSize(18)
+            .fontColor([onThemeColor(this.resolvedThemeColor)])
+        }.width(36).height(36).borderRadius(12).backgroundColor(this.resolvedThemeColor)
+          .justifyContent(FlexAlign.Center).alignItems(VerticalAlign.Center)
+        Text(this.targetVersionName.length > 0 ? '发现新版本' : '当前版本')
+          .fontSize(14).fontWeight(FontWeight.Medium).fontColor($r('app.color.secondary_text'))
         Text(`v${this.detail?.versionName ?? ''}`).id('p8_whats_new_version')
-          .fontSize(28).fontWeight(FontWeight.Bold).fontColor(this.resolvedThemeColor)
+          .fontSize(34).fontWeight(FontWeight.Bold).fontColor($r('app.color.primary_text'))
         if (this.targetVersionName.length > 0 && this.installedVersionName.length > 0) {
-          Text(`将从当前版本 v${this.installedVersionName} 升级至此`).id('p8_whats_new_upgrade_hint')
-            .fontSize($r('app.float.p1_secondary_font_size')).fontColor(this.resolvedThemeColor)
+          Text(`当前 v${this.installedVersionName}  →  新版 v${this.targetVersionName}`)
+            .id('p8_whats_new_upgrade_hint')
+            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontColor(this.resolvedThemeColor)
         }
         if (this.detail !== undefined && formatReleaseDate(this.detail.publishedAt).length > 0) {
           Text(`发布于 ${formatReleaseDate(this.detail.publishedAt)}`)
             .fontSize($r('app.float.p1_secondary_font_size')).fontColor($r('app.color.secondary_text'))
         }
       }.width('100%').alignItems(HorizontalAlign.Start)
+        .padding(20).borderRadius($r('app.float.p1_card_radius'))
+        .backgroundColor($r('app.color.surface_background'))
 
       Button({ type: ButtonType.Normal, stateEffect: true }) {
         Row() {
@@ -180,10 +199,8 @@ export struct WhatsNewPage {
             .fontColor([$r('app.color.secondary_text')])
         }.width('100%').justifyContent(FlexAlign.SpaceBetween).alignItems(VerticalAlign.Center)
       }.id('p8_whats_new_open_release').width('100%')
-      .padding({ top: 12, bottom: 12, left: $r('app.float.p1_card_padding'),
-        right: $r('app.float.p1_card_padding') })
-      .backgroundColor($r('app.color.surface_background'))
-      .borderRadius($r('app.float.p1_card_radius'))
+      .padding({ top: 8, bottom: 8, left: 2, right: 2 })
+      .backgroundColor(Color.Transparent)
       .onClick((): void => {
         this.onOpenLink(this.releasePageUrl());
       })
@@ -191,8 +208,24 @@ export struct WhatsNewPage {
   }
 
   @Builder
+  private downloadFooter() {
+    Column({ space: 10 }) {
+      Text('准备升级？').fontSize(18).fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.primary_text')).width('100%')
+      Text('前往 GitHub 发布页获取未签名安装包')
+        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontColor($r('app.color.secondary_text')).width('100%')
+      Button('下载新版本').id('p8_whats_new_download').width('100%').height(48)
+        .fontColor(onThemeColor(this.resolvedThemeColor))
+        .backgroundColor(this.resolvedThemeColor)
+        .onClick((): void => this.onOpenLink(this.releasePageUrl()))
+    }.width('100%').alignItems(HorizontalAlign.Start)
+      .padding({ top: 20 })
+  }
+
+  @Builder
   private markdownBlocks() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
+    Column({ space: 18 }) {
       ForEach(this.visibleBlocks(), (block: ReleaseMarkdownBlock, index: number) => {
         this.markdownBlock(block)
       }, (block: ReleaseMarkdownBlock, index: number): string =>
@@ -226,6 +259,7 @@ export struct WhatsNewPage {
     }
     .width('100%')
     .fontColor(block.level === 2 ? this.resolvedThemeColor : $r('app.color.primary_text'))
+    .margin({ top: block.level === 2 ? 12 : 4 })
   }
 
   private headingFontSize(level: number): number {
@@ -240,7 +274,7 @@ export struct WhatsNewPage {
 
   @Builder
   private listRows(rows: ReleaseMarkdownListRow[]) {
-    Column({ space: 6 }) {
+    Column({ space: 10 }) {
       ForEach(rows, (row: ReleaseMarkdownListRow, index: number) => {
         Row({ space: 8 }) {
           if (row.number > 0) {
