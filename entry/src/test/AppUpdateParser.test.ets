@@ -3,9 +3,11 @@ import {
   AppUpdateCheckStatus,
   AppUpdateRelease,
   AUTO_UPDATE_CHECK_INTERVAL_MS,
+  catalogUrlWaves,
   compareVersionNames,
   decodeLatestRelease,
   decodeLatestReleaseAtom,
+  decodeReleaseDetail,
   isUpdateAnnouncementVisible,
   parseHmosTagVersion,
   resolveAppUpdateCheck,
@@ -140,6 +142,58 @@ export default function appUpdateParserTest(): void {
       expect(isUpdateAnnouncementVisible('0.3.3', '0.3.2')).assertTrue();
       expect(isUpdateAnnouncementVisible('0.3.3', '0.3.3')).assertFalse();
       expect(isUpdateAnnouncementVisible('', '')).assertFalse();
+    });
+
+    it('buildsCatalogUrlWavesWithProxyFallback', 0, () => {
+      const waves = catalogUrlWaves('version.json');
+      expect(waves.length).assertEqual(2);
+      expect(waves[0].length).assertEqual(3);
+      expect(waves[0][0].startsWith(
+        'https://raw.githubusercontent.com/zhuoyi233/zhihu-plus-plus-HMOS/main/assets/update/version.json?v='))
+        .assertTrue();
+      expect(waves[0][1].startsWith('https://cdn.jsdelivr.net/gh/zhuoyi233/zhihu-plus-plus-HMOS@main/'))
+        .assertTrue();
+      expect(waves[0][2].startsWith('https://fastly.jsdelivr.net/gh/zhuoyi233/zhihu-plus-plus-HMOS@main/'))
+        .assertTrue();
+      expect(waves[1].length).assertEqual(17);
+      expect(waves[1][0]).assertEqual('https://cdn.gh-proxy.org/' + waves[0][0]);
+      expect(waves[1][16]).assertEqual('https://g.blfrp.cn/' + waves[0][0]);
+      for (const url of waves[1]) {
+        expect(url.endsWith(waves[0][0])).assertTrue();
+      }
+    });
+
+    it('decodesSeedPendingReleaseWithoutAssetMetadata', 0, () => {
+      const payload = '{"tag_name":"HMOSv0.6.0","name":"HMOSv0.6.0","html_url":' +
+        '"https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.6.0",' +
+        '"published_at":"","body":"# 预置说明\\n\\n- 条目"}';
+      const latest = decodeLatestRelease(payload);
+      expect(latest !== undefined).assertTrue();
+      expect(latest?.versionName).assertEqual('0.6.0');
+      expect(latest?.publishedAt).assertEqual('');
+      expect(latest?.assetSha256).assertEqual('');
+      expect(latest?.assetUrl).assertEqual('');
+
+      const detail = decodeReleaseDetail(payload);
+      expect(detail !== undefined).assertTrue();
+      expect(detail?.versionName).assertEqual('0.6.0');
+      expect(detail?.body).assertEqual('# 预置说明\n\n- 条目');
+      expect(detail?.assetSha256).assertEqual('');
+    });
+
+    it('resolvesOfflineUpToDateFromSeedPendingBundledLatest', 0, () => {
+      const pending: AppUpdateRelease = {
+        tagName: 'HMOSv0.6.0',
+        versionName: '0.6.0',
+        releaseTitle: 'HMOSv0.6.0',
+        htmlUrl: 'https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.6.0',
+        publishedAt: ''
+      };
+      const same = resolveAppUpdateCheck('0.6.0', pending, '');
+      expect(same.status).assertEqual(AppUpdateCheckStatus.UP_TO_DATE);
+
+      const olderLocal = resolveAppUpdateCheck('0.5.5', pending, '');
+      expect(olderLocal.status).assertEqual(AppUpdateCheckStatus.UPDATE_AVAILABLE);
     });
   });
 }

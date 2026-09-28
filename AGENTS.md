@@ -101,7 +101,10 @@ $hdc = "hdc"
   之后只需提供 versionName 时，agent 按此公式自行补全 versionCode，无需再询问。
 
 - 版本 tag：仅用 `HMOSv<versionName>`（如 `HMOSv0.2.1`，与 `AppScope/app.json5` 的 `versionName` 一致）。
-  发版顺序：改 `versionName`/`versionCode` → 完整验证 → 提交（`chore(harmony): 应用版本号升至 x.y.z`）→
+  发版顺序：改 `versionName`/`versionCode` → 写发布说明文稿（建议存 `docs/release-notes/HMOSv<x.y.z>.md`）→
+  `pwsh -NoProfile -File scripts/update-release-catalog.ps1 -SeedPending -Version <x.y.z> -NotesFile <文稿>`
+  预置本版本说明进两份清单（**构建必须在其后**，发行 HAP 才能自带"本版本更新内容"；发布说明经
+  `gh release create --notes-file` 复用同一文稿）→ 完整验证 → 提交（`chore(harmony): 应用版本号升至 x.y.z`）→
   附注 tag（`git tag -a HMOSv0.2.1 -m "<一句里程碑中文摘要>"`）→ 推送仅在用户明确要求时执行
   （`git push origin dev` + 显式列出 HMOS tag）。仓库继承的上游 `0.x`/`nightly` tag 是 zly2006 的
   发布记录，**不要推送**，远端只保留 `HMOS*` tag。发版后续（GitHub 发布 Release、更新静态清单）
@@ -174,7 +177,9 @@ $hdc = "hdc"
   SHA-256）后，必须运行 `pwsh -NoProfile -File scripts/update-release-catalog.ps1`——自动从
   GitHub API 重新生成 `assets/update/` 与 `entry/src/main/resources/rawfile/update/` 两份清单
   （已发布 HMOSv* Release 的版本、附件 URL/大小/SHA-256、发布说明全文；草稿与预发布自动排除，
-  两处同步写入不漂移），并**随下一次代码变更一并提交**，无需单独开提交。清单推送前旧客户端
+  两处同步写入不漂移），并**随下一次代码变更一并提交**，无需单独开提交。该再生成同时会把
+  发版前 `-SeedPending` 预置的占位条目覆盖为真实附件元数据——**推送远端前必须已完成覆盖**，
+  否则线上清单会出现无附件可下载的待发布版本。清单推送前旧客户端
   仍可经 Atom 备用源发现新版本，但应用内下载源列表与安装包哈希校验要等清单到位。
   机制与代价说明见 `docs/update/hmos-update-catalog.md`。
 

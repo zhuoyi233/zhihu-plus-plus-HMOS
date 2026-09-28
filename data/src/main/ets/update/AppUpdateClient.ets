@@ -1,6 +1,7 @@
 import { http } from '@kit.NetworkKit';
 import { AppReleaseDetailResult, AppReleaseDetailStatus, AppUpdateCheckResult, AppUpdateRelease } from './AppUpdateModels';
 import { decodeLatestRelease, decodeLatestReleaseAtom, decodeReleaseDetail, resolveAppUpdateCheck } from './AppUpdateParser';
+import { proxiedCatalogUrls } from './AppUpdateSources';
 
 /**
  * 更新元数据优先读取仓库静态 JSON，避开 GitHub 匿名 Release API 的请求配额。
@@ -14,8 +15,10 @@ const APP_UPDATE_CONNECT_TIMEOUT_MS = 8000;
 const APP_UPDATE_READ_TIMEOUT_MS = 10000;
 const CATALOG_TTL_MS = 10 * 60 * 1000;
 const REPOSITORY = 'zhuoyi233/zhihu-plus-plus-HMOS';
+/** 直连/镜像 CDN 波次迟迟无响应时，叠加代理波次的等待时长；代理只在此之后才发出。 */
+const PROXY_WAVE_DELAY_MS = 4000;
 
-function catalogUrls(fileName: string): string[] {
+function primaryCatalogUrls(fileName: string): string[] {
   const path = `assets/update/${fileName}`;
   const cacheBucket = Math.floor(Date.now() / CATALOG_TTL_MS);
   return [
@@ -23,6 +26,12 @@ function catalogUrls(fileName: string): string[] {
     `https://cdn.jsdelivr.net/gh/${REPOSITORY}@main/${path}?v=${cacheBucket}`,
     `https://fastly.jsdelivr.net/gh/${REPOSITORY}@main/${path}?v=${cacheBucket}`
   ];
+}
+
+/** 两波清单地址：先直连与镜像 CDN，代理波次按 raw 直连地址拼前缀（带同样的防缓存参数）。 */
+export function catalogUrlWaves(fileName: string): string[][] {
+  const primary = primaryCatalogUrls(fileName);
+  return [primary, proxiedCatalogUrls(primary[0])];
 }
 
 export class AppUpdateClient {
@@ -106,28 +115,61 @@ export class AppUpdateClient {
     }
   }
 
-  /** 三个静态分发入口并行，首个结构有效的响应获胜。 */
+  /**
+   * 清单竞速：直连与镜像 CDN 波次立即发出，PROXY_WAVE_DELAY_MS 内仍无有效响应
+   * 再叠加下载代理波次；首个结构有效的响应获胜。不支持的代理返回的 HTML 错误页
+   * 会被结构校验计入失败，不影响其他源。
+   */
   private fetchStatic(fileName: string, valid: (json: string) => boolean): Promise<string> {
-    const urls = catalogUrls(fileName);
+    const waves = catalogUrlWaves(fileName);
     return new Promise<string>((resolve: (value: string) => void, reject: (reason: Error) => void): void => {
       let failures = 0;
-      for (const url of urls) {
+      let total = waves[0].length;
+      let received = 0;
+      let settled = false;
+      let proxyWaveDispatched = false;
+      const checkAllFailed = (): void => {
+        if (settled || failures < total || (!proxyWaveDispatched && waves[1].length > 0)) {
+          return;
+        }
+        settled = true;
+        reject(new Error(received > 0 ? '静态更新数据格式错误' : '静态更新源不可用'));
+      };
+      const failOnce = (): void => {
+        failures += 1;
+        checkAllFailed();
+      };
+      const request = (url: string): void => {
         void this.requestStatic(url).then((json: string): void => {
+          if (settled) {
+            return;
+          }
           if (valid(json)) {
+            settled = true;
             resolve(json);
-          } else {
-            failures += 1;
-            if (failures === urls.length) {
-              reject(new Error('静态更新数据格式错误'));
-            }
+            return;
           }
+          received += 1;
+          failOnce();
         }).catch((_error: Error): void => {
-          failures += 1;
-          if (failures === urls.length) {
-            reject(new Error('静态更新源不可用'));
-          }
+          failOnce();
         });
+      };
+      for (const url of waves[0]) {
+        request(url);
       }
+      setTimeout((): void => {
+        if (settled) {
+          return;
+        }
+        total += waves[1].length;
+        proxyWaveDispatched = true;
+        for (const url of waves[1]) {
+          request(url);
+        }
+        // 直连波次在延迟窗口内已全部失败时，此处补齐判定。
+        checkAllFailed();
+      }, PROXY_WAVE_DELAY_MS);
     });
   }
 
