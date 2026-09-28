@@ -67,6 +67,7 @@ export function decodeLatestRelease(payload: string): AppUpdateRelease | undefin
   const htmlUrlValue = record['html_url'];
   const releaseTitleValue = record['name'];
   const publishedAtValue = record['published_at'];
+  const asset = unsignedHapAsset(record);
   const release: AppUpdateRelease = {
     tagName: tagNameValue,
     versionName: versionName,
@@ -74,7 +75,10 @@ export function decodeLatestRelease(payload: string): AppUpdateRelease | undefin
       ? releaseTitleValue
       : tagNameValue,
     htmlUrl: typeof htmlUrlValue === 'string' ? htmlUrlValue : '',
-    publishedAt: typeof publishedAtValue === 'string' ? publishedAtValue : ''
+    publishedAt: typeof publishedAtValue === 'string' ? publishedAtValue : '',
+    assetUrl: asset.url,
+    assetName: asset.name,
+    assetSha256: asset.sha256
   };
   return release;
 }
@@ -151,6 +155,7 @@ export function decodeReleaseDetail(payload: string): AppReleaseDetail | undefin
   const releaseTitleValue = record['name'];
   const publishedAtValue = record['published_at'];
   const bodyValue = record['body'];
+  const asset = unsignedHapAsset(record);
   const detail: AppReleaseDetail = {
     tagName: tagNameValue,
     versionName: versionName,
@@ -159,9 +164,46 @@ export function decodeReleaseDetail(payload: string): AppReleaseDetail | undefin
       : tagNameValue,
     htmlUrl: typeof htmlUrlValue === 'string' ? htmlUrlValue : '',
     publishedAt: typeof publishedAtValue === 'string' ? publishedAtValue : '',
-    body: typeof bodyValue === 'string' ? bodyValue : ''
+    body: typeof bodyValue === 'string' ? bodyValue : '',
+    assetUrl: asset.url,
+    assetName: asset.name,
+    assetSha256: asset.sha256
   };
   return detail;
+}
+
+interface UnsignedHapAsset {
+  url: string;
+  name: string;
+  sha256: string;
+}
+
+function unsignedHapAsset(record: Record<string, Object>): UnsignedHapAsset {
+  const empty: UnsignedHapAsset = { url: '', name: '', sha256: '' };
+  const assets = record['assets'];
+  if (!Array.isArray(assets)) {
+    return empty;
+  }
+  const items = assets as Object[];
+  for (const item of items) {
+    const asset = item as Record<string, Object>;
+    const name = asset['name'];
+    const url = asset['browser_download_url'];
+    if (typeof name === 'string' && name.endsWith('-unsigned.hap') && typeof url === 'string' &&
+      url.startsWith('https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/download/')) {
+      // 静态清单存 sha256，GitHub API 的对应字段是带前缀的 digest；两者取其一即可。
+      let sha256 = '';
+      const digestValue = asset['digest'];
+      const sha256Value = asset['sha256'];
+      if (typeof digestValue === 'string' && digestValue.startsWith('sha256:')) {
+        sha256 = digestValue.substring('sha256:'.length);
+      } else if (typeof sha256Value === 'string') {
+        sha256 = sha256Value;
+      }
+      return { url: url, name: name, sha256: sha256 };
+    }
+  }
+  return empty;
 }
 
 /**

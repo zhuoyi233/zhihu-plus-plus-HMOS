@@ -9,7 +9,8 @@ import {
   isUpdateAnnouncementVisible,
   parseHmosTagVersion,
   resolveAppUpdateCheck,
-  shouldAutoCheckForUpdate
+  shouldAutoCheckForUpdate,
+  updateDownloadSources
 } from 'data';
 
 function releaseFixture(tag: string, version: string): AppUpdateRelease {
@@ -56,6 +57,42 @@ export default function appUpdateParserTest(): void {
       expect(release?.versionName).assertEqual('0.2.2');
       expect(release?.htmlUrl).assertEqual(
         'https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.2.2');
+    });
+
+    it('decodesAssetSha256FromCatalogAndGithubDigest', 0, () => {
+      const catalogPayload = '{"tag_name":"HMOSv0.5.4","html_url":"https://github.com/zhuoyi233/' +
+        'zhihu-plus-plus-HMOS/releases/tag/HMOSv0.5.4","assets":[{"name":' +
+        '"ZhihuPlusPlus-HMOS-v0.5.4-unsigned.hap","browser_download_url":"https://github.com/zhuoyi233/' +
+        'zhihu-plus-plus-HMOS/releases/download/HMOSv0.5.4/ZhihuPlusPlus-HMOS-v0.5.4-unsigned.hap",' +
+        '"size":7505067,"sha256":"dfa153323ab7ba85a17096b63e5f13eb6f10966460f2f6f218d8e9357a167384"}]}';
+      const fromCatalog = decodeLatestRelease(catalogPayload);
+      expect(fromCatalog?.assetSha256).assertEqual('dfa153323ab7ba85a17096b63e5f13eb6f10966460f2f6f218d8e9357a167384');
+
+      const apiPayload = '{"tag_name":"HMOSv0.5.4","html_url":"https://github.com/zhuoyi233/' +
+        'zhihu-plus-plus-HMOS/releases/tag/HMOSv0.5.4","assets":[{"name":' +
+        '"ZhihuPlusPlus-HMOS-v0.5.4-unsigned.hap","browser_download_url":"https://github.com/zhuoyi233/' +
+        'zhihu-plus-plus-HMOS/releases/download/HMOSv0.5.4/ZhihuPlusPlus-HMOS-v0.5.4-unsigned.hap",' +
+        '"digest":"sha256:dfa153323ab7ba85a17096b63e5f13eb6f10966460f2f6f218d8e9357a167384"}]}';
+      const fromApi = decodeLatestRelease(apiPayload);
+      expect(fromApi?.assetSha256).assertEqual('dfa153323ab7ba85a17096b63e5f13eb6f10966460f2f6f218d8e9357a167384');
+
+      const withoutHash = decodeLatestRelease('{"tag_name":"HMOSv0.2.2","assets":[{"name":' +
+        '"ZhihuPlusPlus-HMOS-v0.2.2-unsigned.hap","browser_download_url":"https://github.com/zhuoyi233/' +
+        'zhihu-plus-plus-HMOS/releases/download/HMOSv0.2.2/ZhihuPlusPlus-HMOS-v0.2.2-unsigned.hap"}]}');
+      expect(withoutHash?.assetSha256).assertEqual('');
+    });
+
+    it('buildsEighteenSourcesOnlyForPublishedUnsignedHap', 0, () => {
+      const url = 'https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/download/' +
+        'HMOSv0.5.4/ZhihuPlusPlus-HMOS-v0.5.4-unsigned.hap';
+      const sources = updateDownloadSources(url);
+      expect(sources.length).assertEqual(18);
+      expect(sources[0].url).assertEqual('https://cdn.gh-proxy.org/' + url);
+      expect(sources[11].resumable).assertTrue();
+      expect(sources[12].resumable).assertFalse();
+      expect(sources[17].url).assertEqual(url);
+      expect(sources[17].official).assertTrue();
+      expect(updateDownloadSources('https://example.com/app.hap').length).assertEqual(0);
     });
 
     it('rejectsMalformedReleasePayloads', 0, () => {

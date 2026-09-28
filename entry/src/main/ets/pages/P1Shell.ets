@@ -43,6 +43,7 @@ import {
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { resourceManager } from '@kit.LocalizationKit';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
+import { seedBundledUpdateCatalog } from './BundledUpdateCatalog';
 import {
   decodeP1Destination,
   findP1DestinationStackIndex,
@@ -166,6 +167,7 @@ export struct P1Shell {
   @State private versionTapCount: number = 0;
   /** GitHub 最新 Release 检出有新版本时非空：驱动“我的”页横幅与版本弹层下载入口。 */
   @State private pendingUpdateRelease: AppUpdateRelease | undefined = undefined;
+  @State private latestUpdateRelease: AppUpdateRelease | undefined = undefined;
   @State private updateCheckBusy: boolean = false;
   @State private updateCheckMessage: string = '';
   private installedVersionName: string = '';
@@ -417,8 +419,11 @@ export struct P1Shell {
           updateCheckBusy: this.updateCheckBusy,
           updateCheckMessage: this.updateCheckMessage,
           availableVersion: this.pendingUpdateRelease?.versionName ?? '',
+          latestVersion: this.latestUpdateRelease?.versionName ?? '',
+          latestAssetUrl: this.latestUpdateRelease?.assetUrl ?? '',
+          latestAssetSha256: this.latestUpdateRelease?.assetSha256 ?? '',
           onCheckUpdate: (): void => { void this.runUpdateCheck(true); },
-          onOpenDownload: (): void => this.openPendingUpdate(),
+          onOpenDownload: (url: string): void => this.openExternalUrl(url, '无法打开下载链接'),
           onOpenProject: (): void => this.openProjectHome(),
           onOpenWhatsNew: (): void => this.navigate({ name: P1DestinationName.WHATS_NEW }),
           onOpenUpdateWhatsNew: (): void => this.openUpdateWhatsNew()
@@ -2091,6 +2096,7 @@ export struct P1Shell {
     if (!verbose && !(await this.shouldAutoCheckUpdateNow())) {
       return;
     }
+    await seedBundledUpdateCatalog();
     await this.markUpdateCheckedNow();
     this.updateCheckBusy = true;
     if (verbose) {
@@ -2098,7 +2104,10 @@ export struct P1Shell {
     }
     try {
       const result: AppUpdateCheckResult =
-        await this.updateClient.checkLatestRelease(this.installedVersionName);
+        await this.updateClient.checkLatestRelease(this.installedVersionName, verbose);
+      if (result.release !== undefined) {
+        this.latestUpdateRelease = result.release;
+      }
       if (result.status === AppUpdateCheckStatus.UPDATE_AVAILABLE && result.release !== undefined) {
         this.pendingUpdateRelease = result.release;
         this.broadcastHomeUpdateAnnouncement(result.release.versionName, this.releaseDownloadUrl(result.release));
@@ -2114,8 +2123,10 @@ export struct P1Shell {
       } else if (verbose) {
         this.updateCheckMessage = result.message.length > 0 ? result.message : '检查更新失败，请稍后重试';
       }
-      hilog.info(0x0000, 'AppUpdate', 'check status=%{public}s remoteVersion=%{public}s',
-        result.status, result.release !== undefined ? result.release.versionName : '');
+      hilog.info(0x0000, 'AppUpdate', 'check status=%{public}s remoteVersion=%{public}s assetSha256Len=%{public}d',
+        result.status, result.release !== undefined ? result.release.versionName : '',
+        result.release !== undefined && result.release.assetSha256 !== undefined ?
+          result.release.assetSha256.length : -1);
     } finally {
       this.updateCheckBusy = false;
     }

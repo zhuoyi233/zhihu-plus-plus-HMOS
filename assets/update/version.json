@@ -1,0 +1,15 @@
+{
+  "tag_name": "HMOSv0.5.4",
+  "name": "HMOSv0.5.4",
+  "html_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.5.4",
+  "published_at": "2026-09-25T10:01:30Z",
+  "body": "# ZhihuPlusPlus-HMOS v0.5.4\r\n\r\n值此中秋佳节，祝大家中秋快乐、阖家团圆！\r\n\r\n本次更新以**沉浸式界面与阅读体验**为主题：覆盖式透光顶栏推广至全站、详情页悬浮底栏加高圆润化、正文划线与划线句评论上线，并修复用户主页、搜索页等多处问题，共 8 个提交。\r\n\r\n## 🎨 沉浸式顶栏\r\n\r\n- 详情页与评论页适配常驻沉浸光感：正文滚动时穿越玻璃顶栏，覆盖式透光布局\r\n- 覆盖式顶栏推广至首页、频道、消息、通知时间线与私信会话页面\r\n- 滚动态顶栏背景改为半透明白纱，彩色与深色图片上保持内容可读\r\n- 修复深色模式下详情与评论页顶栏发白的问题\r\n\r\n## 📖 阅读与划线\r\n\r\n- 详情页悬浮底栏胶囊加高圆润化，与主页导航栏保持同一高度线\r\n- 回答与文章支持**他人划线**：划线句原文高亮，点击弹出改版后的划线句面板（标题、放大原文与点赞评论胶囊操作）\r\n- 评论区支持段落定位与段落反应交互，段评面板同步改版\r\n\r\n## 👤 用户主页\r\n\r\n- 顶栏改覆盖式透光，昵称滚出后标题栏改显当前用户昵称\r\n- 回答/文章/动态选项卡吸顶，并支持左右滑动切换栏目\r\n- 修复赞同数恒为 0、动态列表解析失败、搜索进入用户后文章列表 404、卡片摘要露出 HTML 标签的问题\r\n\r\n## 🐛 问题修复\r\n\r\n- 搜索页结果选项栏改为自绘下划线选项栏并跟随主题色，加宽选项避免第五项溢出\r\n- 修复搜索排序菜单在点击外部关闭后图标失灵的问题\r\n- 下拉刷新圆圈跟随主题色，并修复刷新结束后圆圈常驻页面不收起的问题（首页、频道、详情页、阅读历史与本地历史五处）\r\n- 修正覆盖式页面下拉刷新圆圈贴状态栏出现的位置\r\n\r\n## 📥 下载与安装\r\n\r\n1. 下载下方附件 `ZhihuPlusPlus-HMOS-v0.5.4-unsigned.hap`\r\n2. 使用 [小白调试助手](https://github.com/likuai2010/auto-installer) 或 [HoKit](https://github.com/yabi-zzh/HoKit/releases) 自行签名\r\n3. 覆盖安装即可升级，原有登录状态、设置与历史数据会保留\r\n\r\n> [!IMPORTANT]\r\n> 本版本要求设备系统为 **HarmonyOS 6.1.0（API 23）及以上**。沉浸光感顶栏与悬浮底栏的玻璃效果取决于设备的系统材质支持情况。\r\n>\r\n> 本项目非知乎官方产品，内容来自知乎网站，服务端接口变化可能导致部分功能失效。\r\n",
+  "assets": [
+    {
+      "name": "ZhihuPlusPlus-HMOS-v0.5.4-unsigned.hap",
+      "browser_download_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/download/HMOSv0.5.4/ZhihuPlusPlus-HMOS-v0.5.4-unsigned.hap",
+      "size": 7505067,
+      "sha256": "dfa153323ab7ba85a17096b63e5f13eb6f10966460f2f6f218d8e9357a167384"
+    }
+  ]
+}

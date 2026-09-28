@@ -98,6 +98,8 @@ export * from './src/main/ets/data/LocalDraftImageReferences';
 export * from './src/main/ets/update/AppUpdateModels';
 export * from './src/main/ets/update/AppUpdateParser';
 export * from './src/main/ets/update/AppUpdateClient';
+export * from './src/main/ets/update/AppUpdateSources';
+export * from './src/main/ets/update/AppUpdateDigest';
 export * from './src/main/ets/update/ReleaseMarkdown';
 export * from './src/main/ets/emoji/EmojiRules';
 export * from './src/main/ets/emoji/EmojiStore';

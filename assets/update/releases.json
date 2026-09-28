@@ -1,0 +1,137 @@
+[
+  {
+    "tag_name": "HMOSv0.5.4",
+    "name": "HMOSv0.5.4",
+    "html_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.5.4",
+    "published_at": "2026-09-25T10:01:30Z",
+    "body": "# ZhihuPlusPlus-HMOS v0.5.4\r\n\r\n值此中秋佳节，祝大家中秋快乐、阖家团圆！\r\n\r\n本次更新以**沉浸式界面与阅读体验**为主题：覆盖式透光顶栏推广至全站、详情页悬浮底栏加高圆润化、正文划线与划线句评论上线，并修复用户主页、搜索页等多处问题，共 8 个提交。\r\n\r\n## 🎨 沉浸式顶栏\r\n\r\n- 详情页与评论页适配常驻沉浸光感：正文滚动时穿越玻璃顶栏，覆盖式透光布局\r\n- 覆盖式顶栏推广至首页、频道、消息、通知时间线与私信会话页面\r\n- 滚动态顶栏背景改为半透明白纱，彩色与深色图片上保持内容可读\r\n- 修复深色模式下详情与评论页顶栏发白的问题\r\n\r\n## 📖 阅读与划线\r\n\r\n- 详情页悬浮底栏胶囊加高圆润化，与主页导航栏保持同一高度线\r\n- 回答与文章支持**他人划线**：划线句原文高亮，点击弹出改版后的划线句面板（标题、放大原文与点赞评论胶囊操作）\r\n- 评论区支持段落定位与段落反应交互，段评面板同步改版\r\n\r\n## 👤 用户主页\r\n\r\n- 顶栏改覆盖式透光，昵称滚出后标题栏改显当前用户昵称\r\n- 回答/文章/动态选项卡吸顶，并支持左右滑动切换栏目\r\n- 修复赞同数恒为 0、动态列表解析失败、搜索进入用户后文章列表 404、卡片摘要露出 HTML 标签的问题\r\n\r\n## 🐛 问题修复\r\n\r\n- 搜索页结果选项栏改为自绘下划线选项栏并跟随主题色，加宽选项避免第五项溢出\r\n- 修复搜索排序菜单在点击外部关闭后图标失灵的问题\r\n- 下拉刷新圆圈跟随主题色，并修复刷新结束后圆圈常驻页面不收起的问题（首页、频道、详情页、阅读历史与本地历史五处）\r\n- 修正覆盖式页面下拉刷新圆圈贴状态栏出现的位置\r\n\r\n## 📥 下载与安装\r\n\r\n1. 下载下方附件 `ZhihuPlusPlus-HMOS-v0.5.4-unsigned.hap`\r\n2. 使用 [小白调试助手](https://github.com/likuai2010/auto-installer) 或 [HoKit](https://github.com/yabi-zzh/HoKit/releases) 自行签名\r\n3. 覆盖安装即可升级，原有登录状态、设置与历史数据会保留\r\n\r\n> [!IMPORTANT]\r\n> 本版本要求设备系统为 **HarmonyOS 6.1.0（API 23）及以上**。沉浸光感顶栏与悬浮底栏的玻璃效果取决于设备的系统材质支持情况。\r\n>\r\n> 本项目非知乎官方产品，内容来自知乎网站，服务端接口变化可能导致部分功能失效。\r\n",
+    "assets": [
+      {
+        "name": "ZhihuPlusPlus-HMOS-v0.5.4-unsigned.hap",
+        "browser_download_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/download/HMOSv0.5.4/ZhihuPlusPlus-HMOS-v0.5.4-unsigned.hap",
+        "size": 7505067,
+        "sha256": "dfa153323ab7ba85a17096b63e5f13eb6f10966460f2f6f218d8e9357a167384"
+      }
+    ]
+  },
+  {
+    "tag_name": "HMOSv0.5.3",
+    "name": "HMOSv0.5.3",
+    "html_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.5.3",
+    "published_at": "2026-09-20T11:32:25Z",
+    "body": "# ZhihuPlusPlus-HMOS v0.5.3\r\n\r\n本次更新以**主题定制与握姿交互**为主题：新增主题颜色设置与智感握姿跟随，重构评论区与回答页切换体验，共 10 个提交。\r\n\r\n## 🎨 主题颜色\r\n\r\n- 外观设置新增**主题颜色**选项，支持自定义应用主题色并持久化\r\n- 全量控件（按钮、开关、段控、悬浮球等）统一跟随主题色，深浅色模式下取对应色阶\r\n\r\n## ✋ 智感握姿\r\n\r\n- 回答页新增**操作跟随智感握姿**：双胶囊操作区随系统智感握姿识别自动换位，便于单手操作\r\n- 胶囊换位扩展到全部双胶囊详情页（问题、回答、文章等）\r\n\r\n## 📖 阅读与评论\r\n\r\n- 重构全屏评论页并采用分层返回，评论区上拉加载改为首页同款圆形加载动画\r\n- 回答页支持滑动切换（横向整页平铺，对齐上游），\"下一曲\"悬浮按钮对齐上游样式、支持拖放位置记忆，并修复短回答下按钮消失的问题\r\n\r\n## 🐛 问题修复\r\n\r\n- 修复问题详情\"收起\"按钮遮挡正文的问题，并优化展开/收起交互\r\n- 修复主题切换后行内公式渲染退化为 TeX 回退的问题\r\n\r\n## 📥 下载与安装\r\n\r\n1. 下载下方附件 `ZhihuPlusPlus-HMOS-v0.5.3-unsigned.hap`\r\n2. 使用 [小白调试助手](https://github.com/likuai2010/auto-installer) 或 [HoKit](https://github.com/yabi-zzh/HoKit/releases) 自行签名\r\n3. 覆盖安装即可升级，原有登录状态、设置与历史数据会保留\r\n\r\n> [!IMPORTANT]\r\n> 本版本要求设备系统为 **HarmonyOS 6.1.0（API 23）及以上**。智感握姿跟随的可用性取决于设备系统手势识别服务的支持情况。\r\n>\r\n> 本项目非知乎官方产品，内容来自知乎网站，服务端接口变化可能导致部分功能失效。\r\n",
+    "assets": [
+      {
+        "name": "ZhihuPlusPlus-HMOS-v0.5.3-unsigned.hap",
+        "browser_download_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/download/HMOSv0.5.3/ZhihuPlusPlus-HMOS-v0.5.3-unsigned.hap",
+        "size": 7323740,
+        "sha256": "dd7b7ace90b7d877d532286516831baaaaee4d928cfe1aa749848cf221c2c1c4"
+      }
+    ]
+  },
+  {
+    "tag_name": "HMOSv0.5.2",
+    "name": "HMOSv0.5.2",
+    "html_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.5.2",
+    "published_at": "2026-09-18T04:23:55Z",
+    "body": "# ZhihuPlusPlus-HMOS v0.5.2\r\n\r\n本次更新为小版本维护迭代，聚焦**跟随系统主题时公式颜色的实时联动**修复，共 1 个代码提交。\r\n\r\n## 📐 LaTeX 公式修复\r\n\r\n- 修复应用主题为\"跟随系统\"时，系统切换深浅色后**正文 LaTeX 公式颜色不联动**的问题\r\n- 公式 SVG 解码为像素图时前景色会被固化，无法随主题自动变色：现改为监听系统深浅色配置变化，按新的深浅色状态刷新公式前景色，并触发已生成的公式整体重新解码\r\n- 切换瞬间按回调携带的新配置取色，避免读到切换前的颜色状态，确保公式颜色与界面主题保持一致\r\n- 公式前景色（浅色 `#111111` / 深色 `#F5F5F5`）收敛为统一常量，与手动深浅色模式共用同一套取值\r\n\r\n## 📥 下载与安装\r\n\r\n1. 下载下方附件 `ZhihuPlusPlus-HMOS-v0.5.2-unsigned.hap`\r\n2. 使用 [小白调试助手](https://github.com/likuai2010/auto-installer) 或 [HoKit](https://github.com/yabi-zzh/HoKit/releases) 自行签名\r\n3. 覆盖安装即可升级，原有登录状态、设置与历史数据会保留\r\n\r\n> [!IMPORTANT]\r\n> 本版本要求设备系统为 **HarmonyOS 6.1.0（API 23）及以上**。离线朗读的可用音色取决于设备中的 HarmonyOS Core Speech Kit 服务与资源。\r\n>\r\n> 本项目非知乎官方产品，内容来自知乎网站，服务端接口变化可能导致部分功能失效。\r\n",
+    "assets": [
+      {
+        "name": "ZhihuPlusPlus-HMOS-v0.5.2-unsigned.hap",
+        "browser_download_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/download/HMOSv0.5.2/ZhihuPlusPlus-HMOS-v0.5.2-unsigned.hap",
+        "size": 7068261,
+        "sha256": "9f7b42c8f30e9f077c80c6b12e1b45ee266717597bb6190eb467623ac35e7c41"
+      }
+    ]
+  },
+  {
+    "tag_name": "HMOSv0.5.1",
+    "name": "HMOSv0.5.1",
+    "html_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.5.1",
+    "published_at": "2026-09-18T02:55:12Z",
+    "body": "# ZhihuPlusPlus-HMOS v0.5.1\r\n\r\n本次更新为小版本迭代，聚焦**回答视频播放体验完善**与 **LaTeX 公式渲染修复**，共 2 个代码提交。\r\n\r\n## 🎬 回答视频播放完善\r\n\r\n- 回答内视频支持**横屏全屏播放**，提供全屏/退出全屏切换按钮，退出时自动恢复竖屏\r\n- 视频播放地址改为经视频仓库统一解析：从知乎视频接口获取播放列表并**自动选择最高码率**的 MP4 源\r\n- 播放地址解析加入可信域名校验（仅接受知乎系视频域名），并支持取消进行中的解析请求\r\n- 从正文点击视频进入播放页时传递内容上下文，播放链路更稳定\r\n- 完善播放器适配与页面状态处理，补充视频仓库与播放适配相关单元测试\r\n\r\n## 📐 LaTeX 公式修复\r\n\r\n- 修复深色模式下 LaTeX 公式渲染颜色不正确的问题\r\n- 改进公式图元加载与排版，公式显示更清晰、布局更稳定\r\n\r\n## 📥 下载与安装\r\n\r\n1. 下载下方附件 `ZhihuPlusPlus-HMOS-v0.5.1-unsigned.hap`\r\n2. 使用 [小白调试助手](https://github.com/likuai2010/auto-installer) 或 [HoKit](https://github.com/yabi-zzh/HoKit/releases) 自行签名\r\n3. 覆盖安装即可升级，原有登录状态、设置与历史数据会保留\r\n\r\n> [!IMPORTANT]\r\n> 本版本要求设备系统为 **HarmonyOS 6.1.0（API 23）及以上**。离线朗读的可用音色取决于设备中的 HarmonyOS Core Speech Kit 服务与资源。\r\n>\r\n> 本项目非知乎官方产品，内容来自知乎网站，服务端接口变化可能导致部分功能失效。\r\n",
+    "assets": [
+      {
+        "name": "ZhihuPlusPlus-HMOS-v0.5.1-unsigned.hap",
+        "browser_download_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/download/HMOSv0.5.1/ZhihuPlusPlus-HMOS-v0.5.1-unsigned.hap",
+        "size": 7064798,
+        "sha256": "4b0f255d13fc481a39d665ec92ea7ebba04bf6f31fe32ae9564317f1e7254194"
+      }
+    ]
+  },
+  {
+    "tag_name": "HMOSv0.5.0",
+    "name": "HMOSv0.5.0",
+    "html_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.5.0",
+    "published_at": "2026-09-17T10:22:30Z",
+    "body": "# ZhihuPlusPlus-HMOS v0.5.0\r\n\r\n本次更新以**个性化阅读、内容过滤与消息体验升级**为主题：重做消息中心，补齐阅读排版、离线朗读和推荐过滤设置，并进一步对齐上游登录、账户与详情页体验。共 62 个提交。\r\n\r\n## 🪪 应用名称与图标\r\n\r\n- 经上游开发者 [@zly2006](https://github.com/zly2006) 授权，鸿蒙版现使用与上游一致的应用图标\r\n- 应用名称正式确定为 **“知乎++鸿蒙版”**\r\n- 本项目仍为独立维护的 HarmonyOS 移植版本\r\n\r\n## 📨 消息中心全面升级\r\n\r\n- 消息页对齐上游 `message/v3`，重做为**消息中心、分类时间线与私信会话**\r\n- 新增评论转发@、赞同喜欢、关注订阅、系统通知四类入口\r\n- 支持邀请回答时间线、会话列表、私信历史加载与消息发送\r\n- 支持知乎小表情的展示与输入\r\n- 修复消息体加密协议缺字导致服务端拒绝请求的问题\r\n\r\n## 📖 阅读体验升级\r\n\r\n- 新增正文**字号、行高和段间距**设置，回答与文章页面实时联动\r\n- 新增可拖动的阅读进度条，快速定位长篇内容\r\n- 回答过滑切换加入整页预览卡，切换过程更直观\r\n- “下一答”悬浮按钮支持拖动、贴边吸附与位置调整\r\n- 接入 HarmonyOS Core Speech Kit，支持回答和文章**离线朗读**\r\n- 朗读支持语速、音调和音色选择；未安装音色可按需下载\r\n\r\n## 🛡️ 推荐与内容过滤\r\n\r\n- 首页推荐来源支持 **Web 端、安卓端、本地排序和混合推荐**\r\n- 新增回答、文章、视频和问题的质量过滤阈值\r\n- 支持关键词、用户和话题精确屏蔽\r\n- 支持过滤知乎广告、知乎学堂、微信公众号外链和盐选付费内容\r\n- 新增智能重复推荐过滤、屏蔽记录和过滤统计\r\n- 首页信息流补充推荐来源标注，便于识别内容来源\r\n\r\n## 🎨 外观与导航设置\r\n\r\n- 完善外观与阅读体验设置，信息流样式改为统一的下拉选择\r\n- 底部栏支持选择 3–5 个项目并调整顺序，“我的”固定保留\r\n- 支持设置应用启动时默认打开的底部页签\r\n- 底栏项目调整后即时生效，并同步更新默认页面选项\r\n- 修复设置滑块拖动不实时刷新、卡片模式圆角丢失等问题\r\n\r\n## 🔐 登录与账户\r\n\r\n- 登录前新增三页免责声明，对齐上游登录流程\r\n- 重构手机号登录布局，精简不必要的账户展示\r\n- 网页登录改为应用内直接打开，减少中间跳转\r\n- 修复网页登录和风控页面被悬浮标题栏遮挡、返回按钮重复的问题\r\n- 完善“我的”页面账户操作区，新增身份管理能力\r\n- “我的”页面补充内容来源说明和子项图标\r\n\r\n## ✨ 详情与首页优化\r\n\r\n- 首页五个主页面支持横向滑动切换，关注页边缘手势可自然交接\r\n- 详情页新增作者认证、谢邀/话题收录胶囊及文章话题标识\r\n- IP 属地调整至正文末尾右侧展示\r\n- 收藏夹新建入口改为悬浮加号按钮，并避开底部页签\r\n- 首页刷新按钮和收藏夹按钮统一缩小为 48vp\r\n- 图片保存改用系统安全弹窗，不再申请图片写入权限\r\n\r\n## 🐛 问题修复\r\n\r\n- 修复历史页下拉刷新后加载状态无法停止\r\n- 修复底部栏实时调整后页签内容错乱、勾选状态脱节\r\n- 修复回答页操作栏贴底以及快速切换回答后内容不回显\r\n- 修复下拉刷新圆圈越界到状态栏\r\n- 修复详情页重复打开同一内容时点击无响应\r\n- 修复评论区打开图片预览时仍被评论面板遮挡\r\n- 修复深色模式下问题页排序控件文字不可读\r\n- 修复朗读音色重复、音色下载失败后无法正确回退等问题\r\n- 修正手机、平板与二合一设备的类型声明\r\n\r\n## 📥 下载与安装\r\n\r\n1. 下载下方附件 `ZhihuPlusPlus-HMOS-v0.5.0-unsigned.hap`\r\n2. 使用 [小白调试助手](https://github.com/likuai2010/auto-installer) 或 [HoKit](https://github.com/yabi-zzh/HoKit/releases) 自行签名\r\n3. 覆盖安装即可升级，原有登录状态、设置与历史数据会保留\r\n\r\n> [!IMPORTANT]\r\n> 本版本要求设备系统为 **HarmonyOS 6.1.0（API 23）及以上**。离线朗读的可用音色取决于设备中的 HarmonyOS Core Speech Kit 服务与资源。\r\n>\r\n> 本项目非知乎官方产品，内容来自知乎网站，服务端接口变化可能导致部分功能失效。",
+    "assets": [
+      {
+        "name": "ZhihuPlusPlus-HMOS-v0.5.0-unsigned.hap",
+        "browser_download_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/download/HMOSv0.5.0/ZhihuPlusPlus-HMOS-v0.5.0-unsigned.hap",
+        "size": 6991282,
+        "sha256": "10acad2888edc14c9ecc6c92cff65d8cdf5a4b11f8d99c9ac210a65d1fb33219"
+      }
+    ]
+  },
+  {
+    "tag_name": "HMOSv0.4.0",
+    "name": "HMOSv0.4.0",
+    "html_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.4.0",
+    "published_at": "2026-09-06T12:41:08Z",
+    "body": "# ZhihuPlusPlus-HMOS v0.4.0\r\n\r\n本次更新以**上游功能全面对齐**为主题：问题详情页完整迁移、搜索页/关注页/历史记录重构，\r\n同时将最低兼容降至 API 23，让更多设备可以安装使用。共 39 个提交。\r\n\r\n## 📱 更多设备可用\r\n\r\n- **最低兼容降至 HarmonyOS 6.1.0（API 23）**：移除 API 26 专属的 `uiMaterial` 玻璃材质路径，\r\n  统一以组件模糊兜底，HDS 材质改用 ADAPTIVE 跟随系统策略\r\n- 修复 API 23 真机上标题栏沉浸样式导致的白色遮挡条\r\n\r\n## 🆕 新功能\r\n\r\n- **问题详情页**完整迁移：回答流加载与排序、连续阅读、问题评论区、热榜卡片展示问题四项统计、支持从回答标题跳转对应问题页\r\n- **搜索页**对齐上游：顶栏注入、搜索历史与热搜、五个内容页签、排序菜单\r\n- **关注页**对齐上游：推荐/动态双子页滑动切换与规范页签\r\n- **历史记录**对齐上游卡片信息流，新增本地历史页，支持清除与单条删除\r\n- **首页信息流**顶部新增版本更新卡片；日报支持多日浏览与原生日期选择\r\n- **分享**改用 SystemShareKit 真实调起系统分享面板，并渲染链接卡片\r\n- **图片查看器**对齐上游：全屏缩放与长按菜单\r\n- **沉浸式阅读**对齐上游真全屏，并支持返回键退出\r\n- 回答页**双击正文**支持可配置动作，默认弹窗询问并记住选择\r\n- 回答切换改为**双向过滑预览**，支持拖动悬浮按钮\r\n- 底栏页签**双击刷新**对应 feed 页\r\n\r\n## 🎨 界面优化\r\n\r\n- 回答页 / 文章详情页**顶栏随滚动折叠**，联动显示标题与答主信息\r\n- 回答评论区完成点赞、子评论、图片预览迁移\r\n- 下拉刷新换用与上拉加载同款的蓝色加载圆圈\r\n- 应用名显示改为“知乎++”\r\n- 登录成功 / 登出后即时刷新各 feed 页与账号概览，无需重启应用\r\n\r\n## 🐛 问题修复\r\n\r\n- 修复回答底部异常留白、详情页操作栏双渲染叠压正文、问题详情页滚动条带重复渲染标题\r\n- 详情页操作栏恢复悬浮穿透，消除页底白色空带\r\n- 修复未登录首页“去登录”按钮被悬浮底栏遮挡\r\n- 手机号登录服务端参数级报错转译为可行动提示\r\n\r\n## 📥 下载与安装\r\n\r\n1. 下载下方附件 `ZhihuPlusPlus-HMOS-v0.4.0-unsigned.hap`\r\n2. 使用 [小白调试助手](https://github.com/likuai2010/auto-installer) 或 [HoKit](https://github.com/yabi-zzh/HoKit/releases) 自行签名\r\n3. 覆盖安装即可升级（历史数据保留）\r\n\r\n> [!IMPORTANT]\r\n> 本版本起要求设备系统为 **HarmonyOS 6.1.0（API 23）及以上**。本项目非知乎官方产品，内容来自知乎网站，服务端变化可能导致功能失效。",
+    "assets": [
+      {
+        "name": "ZhihuPlusPlus-HMOS-v0.4.0-unsigned.hap",
+        "browser_download_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/download/HMOSv0.4.0/ZhihuPlusPlus-HMOS-v0.4.0-unsigned.hap",
+        "size": 5662071,
+        "sha256": "21750dec78f9cc6071ecba35bb549011d1d328fff0d3c206238f8c853b70aae9"
+      }
+    ]
+  },
+  {
+    "tag_name": "HMOSv0.3.2",
+    "name": "HMOSv0.3.2",
+    "html_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.3.2",
+    "published_at": "2026-08-31T08:18:43Z",
+    "body": "# ZhihuPlusPlus-HMOS v0.3.2\r\n\r\n本次更新以**兼容性与交互完善**为主题：最低兼容版本降至 HarmonyOS 6.1.0（API 23），补齐问题评论、信息流快捷刷新与登录状态同步，同时修复了一批问题详情页和界面稳定性问题。共 23 个提交。\r\n\r\n## ✨ HarmonyOS 6.1 兼容与多设备支持\r\n\r\n- **最低兼容版本降至 API 23**：现在支持 HarmonyOS 6.1.0（API 23）及以上设备\r\n- **扩展设备类型支持**：完善手机、平板与 2-in-1 设备的工程适配\r\n- **系统能力兼容**：通知设置入口和材质效果会根据系统能力自动选择兼容实现\r\n- **材质策略优化**：界面材质跟随系统策略，不支持相关能力时自动降级为兼容效果\r\n\r\n## 🆕 新功能\r\n\r\n- **双击页签刷新**：双击“首页”“关注”“热榜”或“日报”底栏页签，即可刷新对应信息流\r\n- **问题评论入口**：问题详情底栏调整为“关注问题 / 评论 / 更多”，支持查看问题评论及评论数量\r\n- **登录后自动刷新**：完成登录后，各信息流会自动重新加载，无需重启应用\r\n- **退出状态同步**：退出登录后，“我的”页面会立即恢复为游客状态\r\n\r\n## 🎨 界面优化\r\n\r\n- **统一加载动画**：下拉刷新与上拉加载统一使用蓝色圆形加载动画\r\n- **优化刷新位置**：下拉刷新动画移至悬浮标题栏下方，避免与标题栏重叠\r\n- **统一详情页底栏**：问题详情页底部操作栏与回答详情页保持一致\r\n\r\n## 🐛 问题修复\r\n\r\n- 修复问题详情页底部操作栏**重复渲染、叠压正文**的问题\r\n- 修复问题详情页滚动时**重复显示问题标题**的问题\r\n- 修复未登录首页的“去登录”按钮被悬浮底栏遮挡、无法点击的问题\r\n- 修复登录成功后信息流仍停留在未登录状态、需要重启才能恢复的问题\r\n- 修复退出登录后账号概览未及时更新的问题\r\n- 优化手机号登录的服务端错误提示：遇到疑似风控拦截时，将提示稍后重试或改用 Cookie 登录\r\n\r\n## 📥 下载与安装\r\n\r\n1. 下载下方附件 `ZhihuPlusPlus-HMOS-v0.3.2-unsigned.hap`\r\n2. 使用 [小白调试助手](https://github.com/likuai2010/auto-installer) 或 [HoKit](https://github.com/yabi-zzh/HoKit/releases) 自行签名\r\n3. 使用与原版本相同的签名即可覆盖安装升级\r\n\r\n> [!IMPORTANT]\r\n> 本版本最低支持 HarmonyOS 6.1.0（API 23），应用仍以 API 26 构建；API 23–25 设备会自动使用兼容实现。手机号登录仍可能受到知乎服务端风控，遇到相关提示时可稍后重试或改用 Cookie 登录。\r\n>\r\n> 本项目并非知乎官方产品，内容来自知乎网站，知乎服务端变化可能导致部分功能失效。",
+    "assets": [
+      {
+        "name": "ZhihuPlusPlus-HMOS-v0.3.2-unsigned.hap",
+        "browser_download_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/download/HMOSv0.3.2/ZhihuPlusPlus-HMOS-v0.3.2-unsigned.hap",
+        "size": 5046438,
+        "sha256": "104d9236a7fcc4f02e475b10e10f7e6ef480be006f31d0b2e4f5dd7c45f18f64"
+      }
+    ]
+  },
+  {
+    "tag_name": "HMOSv0.3.1",
+    "name": "HMOSv0.3.1 ",
+    "html_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.3.1",
+    "published_at": "2026-08-30T07:23:22Z",
+    "body": "# ZhihuPlusPlus-HMOS v0.3.1\r\n\r\n本次更新以**沉浸光感（Immersive Light）适配**为主题：全应用接入鸿蒙 6.1+ 的 HDS 沉浸材质体系，同时修复了一批界面与稳定性问题。共 43 个提交。\r\n\r\n## ✨ 沉浸光感适配\r\n\r\n- **首屏底栏**：升级为 HDS 悬浮页签——图标 + 文字、知乎蓝选中态、渐变遮罩，接入沉浸光感材质，随设备能力与系统档位自适应\r\n- **回答 / 问题 / 文章详情页**：底部操作栏重构为左右两块**悬浮玻璃胶囊**（赞同/反对 ｜ 收藏/评论/更多），透明玻璃质感，正文从胶囊下方穿透；顶部返回键同款玻璃圆钮\r\n- **完全沉浸**：窗口全屏布局，移除系统避让区——正文直达屏幕物理底边，导航条透明，手势指示条浮于内容上\r\n- 不支持沉浸材质的设备自动降级为组件模糊，不影响使用\r\n\r\n## 🆕 新功能\r\n\r\n- **应用内更新检查**：每次启动静默检查 GitHub 最新 Release，“我的 → 应用与版本”支持手动检查，发现新版本一键前往下载\r\n- **历史记录**：更名“历史”，本地记录保存内容标题（回答显示问题标题，想法显示正文摘要），不再是一串 ID\r\n- **我的页**：账号概览显示真实头像；新增页脚免责声明\r\n- **详情页页头**注入 HDS 标题栏，消除顶部空置区域\r\n\r\n## 🎨 界面优化\r\n\r\n- 赞同/反对改用官方 `arrowtriangle` 细三角（描边/实心同形同粗细，选中实心加粗计数）\r\n- “更多”按钮统一为圆圈三点图标（对齐知乎官方卡片样式）\r\n- 深浅色模式下顶栏、底栏配色与层次全面优化（集成社区 PR #1 的 HDS 架构与状态展示，感谢 [@haohaoai0](https://github.com/haohaoai0)）\r\n\r\n## 🐛 问题修复\r\n\r\n- 修复回答页顶栏滚动时**反复闪烁**（作者栏收起/展开振荡）\r\n- 修复网页登录 / 风控验证页**无法打开**（子资源加载失败误触发全屏错误遮罩）\r\n- 修复回答页底部与详情页多处**白色空带**、底栏间距异常\r\n- 修复浅色模式返回键黑底、玻璃胶囊包裹不完全/挤字等渲染问题\r\n- 工程层面：`.gitattributes` 归一行尾，构建自动产出标准命名发布包\r\n\r\n## 📥 下载与安装\r\n\r\n1. 下载下方附件 `ZhihuPlusPlus-HMOS-v0.3.1-unsigned.hap`\r\n2. 使用 [小白调试助手](https://github.com/likuai2010/auto-installer) 或 [HoKit](https://github.com/yabi-zzh/HoKit/releases) 自行签名\r\n3. 覆盖安装即可升级（历史数据保留；更早的本地历史记录因未存标题仍显示 ID，新浏览内容不受影响）\r\n\r\n> [!IMPORTANT]\r\n> 沉浸光感效果需设备支持 HarmonyOS 沉浸材质能力（不支持时自动降级）。本项目非知乎官方产品，内容来自知乎网站，服务端变化可能导致功能失效。\r\n\r\n## 特别感谢\r\n\r\n贡献者 · [@haohaoai0](https://github.com/haohaoai0)（PR #1 UI 适配）",
+    "assets": [
+      {
+        "name": "ZhihuPlusPlus-HMOS-v0.3.1-unsigned.hap",
+        "browser_download_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/download/HMOSv0.3.1/ZhihuPlusPlus-HMOS-v0.3.1-unsigned.hap",
+        "size": 6264526,
+        "sha256": "98c65d655cf6ad6187d6bd00dc3b2b80212d3b09549e43f3ff56277b4b01395f"
+      }
+    ]
+  },
+  {
+    "tag_name": "HMOSv0.2.1",
+    "name": "首次发版 HMOSv0.2.1",
+    "html_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.2.1",
+    "published_at": "2026-08-29T05:51:40Z",
+    "body": "# ZhihuPlusPlus-HMOS v0.2.1\r\n\r\n🎉 首个公开发布版本。\r\n\r\nZhihu++ 的鸿蒙（HarmonyOS）原生移植版：使用 ArkTS/ArkUI 全新重写（非安卓代码转译），目标是在鸿蒙设备上提供与安卓 Lite 版一致的隐私增强、去广告与内容过滤体验。\r\n\r\n> [!IMPORTANT]\r\n> 本项目不是知乎官方产品，与知乎及其关联公司不存在隶属、授权或背书关系。项目依赖非公开接口，知乎服务端的变化可能随时导致部分功能失效。\r\n\r\n## 功能总览\r\n\r\n- **登录**：手机号 / 扫码 / 网页 Cookie 三种方式，支持风控 ArkWeb 人机验证\r\n- **信息流**：首页 / 频道（热榜、日报）/ 关注，卡片排版对齐上游（标题 2 行、摘要 3 行）\r\n- **内容浏览**：回答 / 文章 / 问题 / 想法详情页，前台视频播放，评论区（含回复、点赞），收藏夹，通知，沉浸式阅读，按日期分组的已读历史\r\n- **创作发布**：回答新建与编辑、想法发布，完整“本地草稿 → 图片上传 → 最终确认”链路\r\n- **隐私与屏蔽**：作者 / 关键词屏蔽规则与屏蔽记录\r\n- **其他**：深链接跳转、扫码、系统分享、设置项搜索、开源许可清单\r\n\r\n## 近期改进（相对内部基线）\r\n\r\n- 修复回答 / 问题 / 文章详情页底栏被屏幕截断的问题\r\n- 信息流卡片行数对齐上游，一屏可见卡片数约为原先两倍\r\n- 我的页接入账号概览、应用版本信息、项目协议与开源许可，GitHub 入口指向本仓库\r\n- 构建基线升级至 API 26（target/compatible 均为 26.0.0）\r\n\r\n## 下载与安装\r\n\r\n1. 下载下方附件 `ZhihuPlusPlus-HMOS-v0.2.1-unsigned.hap`（未签名包）\r\n2. 使用 [小白调试助手](https://github.com/likuai2010/auto-installer/releases) 或 [HoKit](https://github.com/yabi-zzh/HoKit/releases) 自行签名\r\n3. 安装到鸿蒙设备（需要 compatibleSdkVersion 26.0.0 的较新 HarmonyOS 版本）\r\n\r\n## 已知限制\r\n\r\n- 项目仍在开发中，功能覆盖以各阶段验收文档为准，不保证与安卓版 100% 一致\r\n- TTS 朗读等内容暂未实现（已完成可行性评估）\r\n\r\n## 特别感谢\r\n\r\n感谢原项目 [zly2006/zhihu-plus-plus](https://github.com/zly2006/zhihu-plus-plus) 的开发者 zly2006 与所有上游贡献者——本项目在此之上才得以存在。\r\n\r\n问题反馈请到 [Issues](https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/issues)。",
+    "assets": [
+      {
+        "name": "ZhihuPlusPlus-HMOS-v0.2.1-unsigned.hap",
+        "browser_download_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/download/HMOSv0.2.1/ZhihuPlusPlus-HMOS-v0.2.1-unsigned.hap",
+        "size": 6066764,
+        "sha256": "794a7b745cdc8e4e1385bf17893821f05d96f3048ecfed7da909ffcb28c3a08b"
+      }
+    ]
+  }
+]

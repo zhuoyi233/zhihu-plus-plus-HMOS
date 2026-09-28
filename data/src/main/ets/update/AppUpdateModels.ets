@@ -19,6 +19,11 @@ export interface AppUpdateRelease {
   htmlUrl: string;
   /** 发布时间（ISO 8601），缺失时为空串。 */
   publishedAt: string;
+  /** 已发布的未签名 HAP 附件；没有附件时为空串。 */
+  assetUrl?: string;
+  assetName?: string;
+  /** 附件 SHA-256 十六进制摘要，用于下载后完整性校验；来源缺失时为空串。 */
+  assetSha256?: string;
 }
 
 export interface AppUpdateCheckResult {
@@ -43,6 +48,10 @@ export interface AppReleaseDetail {
   publishedAt: string;
   /** Release 描述原文（Markdown），缺失时为空串。 */
   body: string;
+  assetUrl?: string;
+  assetName?: string;
+  /** 附件 SHA-256 十六进制摘要，用于下载后完整性校验；来源缺失时为空串。 */
+  assetSha256?: string;
 }
 
 export enum AppReleaseDetailStatus {

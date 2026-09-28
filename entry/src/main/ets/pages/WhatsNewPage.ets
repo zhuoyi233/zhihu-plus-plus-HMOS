@@ -17,6 +17,7 @@ import {
   releaseAlertLabel
 } from 'data';
 import bundleManager from '@ohos.bundle.bundleManager';
+import { seedBundledUpdateCatalog } from './BundledUpdateCatalog';
 
 const GITHUB_RELEASES_PAGE: string = 'https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases';
 /** HdsNavDestination 悬浮标题栏高度（vp）：NavDestination 内容区从状态栏下缘开始，
@@ -65,6 +66,7 @@ export struct WhatsNewPage {
   }
 
   private async loadReleaseDetail(): Promise<void> {
+    await seedBundledUpdateCatalog();
     this.loading = true;
     this.errorMessage = '';
     this.installedVersionName = this.readInstalledVersionName();
