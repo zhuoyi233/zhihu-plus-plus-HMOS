@@ -104,7 +104,8 @@ $hdc = "hdc"
   发版顺序：改 `versionName`/`versionCode` → 完整验证 → 提交（`chore(harmony): 应用版本号升至 x.y.z`）→
   附注 tag（`git tag -a HMOSv0.2.1 -m "<一句里程碑中文摘要>"`）→ 推送仅在用户明确要求时执行
   （`git push origin dev` + 显式列出 HMOS tag）。仓库继承的上游 `0.x`/`nightly` tag 是 zly2006 的
-  发布记录，**不要推送**，远端只保留 `HMOS*` tag。
+  发布记录，**不要推送**，远端只保留 `HMOS*` tag。发版后续（GitHub 发布 Release、更新静态清单）
+  见「发版说明（Release Notes）框架」。
 
 - 发布产物命名：`ZhihuPlusPlus-HMOS-v<version>-unsigned.hap`（如 `ZhihuPlusPlus-HMOS-v0.2.0-unsigned.hap`）。
   `verify-harmony.ps1` 构建校验通过后会自动从 `entry-default-unsigned/signed.hap` 复制出该命名的
@@ -168,6 +169,14 @@ $hdc = "hdc"
   `gh release edit --draft=false` 前再次确认）；**严格禁止直接发布正式 Release**。
   仅当用户**当次明确确认草稿内容并要求发布**时，才可将草稿转为正式发版（去除 `--draft`），
   该确认不延续到后续任务。
+
+- **静态更新清单**：正式 Release 发布（附上未签名 HAP 附件，GitHub 此时才生成附件
+  SHA-256）后，必须运行 `pwsh -NoProfile -File scripts/update-release-catalog.ps1`——自动从
+  GitHub API 重新生成 `assets/update/` 与 `entry/src/main/resources/rawfile/update/` 两份清单
+  （已发布 HMOSv* Release 的版本、附件 URL/大小/SHA-256、发布说明全文；草稿与预发布自动排除，
+  两处同步写入不漂移），并**随下一次代码变更一并提交**，无需单独开提交。清单推送前旧客户端
+  仍可经 Atom 备用源发现新版本，但应用内下载源列表与安装包哈希校验要等清单到位。
+  机制与代价说明见 `docs/update/hmos-update-catalog.md`。
 
 ## ArkTS / ArkUI 代码约束
 
