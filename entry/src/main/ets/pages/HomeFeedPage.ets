@@ -12,9 +12,6 @@ import {
   isUpdateAnnouncementVisible,
   OpenedContentStore
 } from 'data';
-import { Want } from '@kit.AbilityKit';
-import { hilog } from '@kit.PerformanceAnalysisKit';
-import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import {
   BlockingActionContext,
   BlockingActionController,
@@ -30,8 +27,6 @@ import {
 } from './AppPageChrome';
 import { HomeFeedController, HomeFeedPhase, HomeFeedViewState } from './HomeFeedState';
 import { DraggableRefreshButton } from './components/DraggableRefreshButton';
-
-const PROJECT_RELEASES_URI: string = 'https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/latest';
 
 @Component
 export struct HomeFeedPage {
@@ -58,7 +53,6 @@ export struct HomeFeedPage {
   // 首页更新卡片（对齐上游 HomeScreen 顶部 AnnouncementCard）：P1Shell 启动检查到新版本后经
   // AppStorage 广播（HdsTabs 树下跨页面信号唯一可靠通道）。“以后”仅本次会话内忽略，对齐上游。
   @StorageProp('homeUpdateAnnouncementVersion') private pendingUpdateVersion: string = '';
-  @StorageProp('homeUpdateAnnouncementUrl') private pendingUpdateUrl: string = '';
   @State private dismissedUpdateVersion: string = '';
   // 下拉刷新自定义加载圆圈（refreshingContent 需 ComponentContent，随页面销毁释放）
   private indicator?: FeedPullDownIndicatorHost = undefined;
@@ -332,12 +326,15 @@ export struct HomeFeedPage {
             this.dismissedUpdateVersion = this.pendingUpdateVersion;
           })
         Button('查看更新', { type: ButtonType.ROUNDED_RECTANGLE, stateEffect: true })
-          .id('p2_home_update_card_open')
+          .id('p2_home_update_card_whats_new')
           .fontSize($r('app.float.p1_body_font_size'))
           .fontColor(this.resolvedThemeColor)
           .backgroundColor(Color.White)
           .borderRadius(12)
-          .onClick((): void => this.openUpdateReleasePage())
+          .onClick((): void => {
+            // 应用内查看待更新版本的说明与下载入口（非跳浏览器）。
+            this.navigate({ name: P1DestinationName.WHATS_NEW, version: this.pendingUpdateVersion });
+          })
       }
         .width('100%')
         .justifyContent(FlexAlign.End)
@@ -347,28 +344,6 @@ export struct HomeFeedPage {
       .borderRadius($r('app.float.p1_card_radius'))
       .backgroundColor(this.resolvedThemeColor)
       .accessibilityText('发现新版本，可查看更新或稍后忽略')
-  }
-
-  private openUpdateReleasePage(): void {
-    const url = this.pendingUpdateUrl.length > 0 ? this.pendingUpdateUrl : PROJECT_RELEASES_URI;
-    const context = getAbilityContext();
-    if (context === undefined) {
-      hilog.warn(0x0000, 'AppUpdate', 'cannot open release page: no ability context');
-      return;
-    }
-    const want: Want = {
-      action: 'ohos.want.action.viewData',
-      uri: url
-    };
-    try {
-      void context.startAbility(want).then((): void => {}, (error: Object): void => {
-        const detail = error instanceof Error ? error.message : '';
-        hilog.warn(0x0000, 'AppUpdate', 'failed to open release page %{public}s', detail);
-      });
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : '';
-      hilog.warn(0x0000, 'AppUpdate', 'failed to open release page %{public}s', detail);
-    }
   }
 
   @Builder

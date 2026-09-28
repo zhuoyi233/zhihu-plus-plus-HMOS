@@ -31,6 +31,7 @@ import {
   SessionState,
   SessionStatus,
   shouldAutoCheckForUpdate,
+  shouldShowWhatsNewOnLaunch,
   getAppDatabase
 } from 'data';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
@@ -42,6 +43,7 @@ import {
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { resourceManager } from '@kit.LocalizationKit';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
+import { seedBundledUpdateCatalog } from './BundledUpdateCatalog';
 import {
   decodeP1Destination,
   findP1DestinationStackIndex,
@@ -69,6 +71,7 @@ import { ContentFilterSettingsPage } from './ContentFilterSettingsPage';
 import { IdentityManagementPage } from './IdentityManagementPage';
 import { ReadingSettingsPage } from './ReadingSettingsPage';
 import { SystemUpdateSettingsPage } from './SystemUpdateSettingsPage';
+import { WhatsNewPage } from './WhatsNewPage';
 import { materialCanvas } from './components/MaterialCanvas';
 import { ChannelFeedInteractionBridge } from './ChannelFeedState';
 import { dailyDateCursor, dailyPickerDate, formatDailyDate } from './DailyFeedDates';
@@ -164,10 +167,13 @@ export struct P1Shell {
   @State private versionTapCount: number = 0;
   /** GitHub 最新 Release 检出有新版本时非空：驱动“我的”页横幅与版本弹层下载入口。 */
   @State private pendingUpdateRelease: AppUpdateRelease | undefined = undefined;
+  @State private latestUpdateRelease: AppUpdateRelease | undefined = undefined;
   @State private updateCheckBusy: boolean = false;
   @State private updateCheckMessage: string = '';
   private installedVersionName: string = '';
   private readonly updateClient: AppUpdateClient = new AppUpdateClient();
+  /** 本次启动是否已送达深链等启动目标：有则不叠加“新版本更新”页。 */
+  private startupDestinationArrived: boolean = false;
   @State private projectLicenseSheetShown: boolean = false;
   @State private openSourceLicensesSheetShown: boolean = false;
   @State private projectHomeHelpShown: boolean = false;
@@ -225,12 +231,15 @@ export struct P1Shell {
     this.refreshInstalledVersionLabel();
     this.unsubscribeStartupDestination?.();
     const listener: StartupDestinationListener = (destination: P1Destination): void => {
+      this.startupDestinationArrived = true;
       this.navigate(destination);
     };
     this.unsubscribeStartupDestination = startupDestinationChannel.subscribe(listener);
     // 诊断：输出当前设备支持的沉浸材质类型（含 IMMERSIVE 即支持沉浸光感流动光效）。
     hilog.info(0x0000, 'ImmersiveLight', 'systemMaterialTypes=%{public}s',
       JSON.stringify(hdsMaterial.getSystemMaterialTypes()));
+    // 版本更迭后首次启动展示“新版本更新”页；本次启动带深链目标时让位，不叠加弹页。
+    void this.evaluateWhatsNewOnLaunch();
     // 每次启动静默检查 GitHub 最新 Release；失败不打扰，检出新版本时在“我的”页提示。
     void this.runUpdateCheck(false);
   }
@@ -410,13 +419,34 @@ export struct P1Shell {
           updateCheckBusy: this.updateCheckBusy,
           updateCheckMessage: this.updateCheckMessage,
           availableVersion: this.pendingUpdateRelease?.versionName ?? '',
+          latestVersion: this.latestUpdateRelease?.versionName ?? '',
+          latestAssetUrl: this.latestUpdateRelease?.assetUrl ?? '',
+          latestAssetSha256: this.latestUpdateRelease?.assetSha256 ?? '',
           onCheckUpdate: (): void => { void this.runUpdateCheck(true); },
-          onOpenDownload: (): void => this.openPendingUpdate(),
-          onOpenProject: (): void => this.openProjectHome()
+          onOpenDownload: (url: string): void => this.openExternalUrl(url, '无法打开下载链接'),
+          onOpenProject: (): void => this.openProjectHome(),
+          onOpenWhatsNew: (): void => this.navigate({ name: P1DestinationName.WHATS_NEW }),
+          onOpenUpdateWhatsNew: (): void => this.openUpdateWhatsNew()
         });
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
         content: { title: { mainTitle: '系统与更新' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === P1DestinationName.WHATS_NEW) {
+      HdsNavDestination() {
+        WhatsNewPage({
+          targetVersionName: destination.version ?? '',
+          onClosed: (shownVersionName: string): void => this.markWhatsNewSeen(shownVersionName),
+          onOpenLink: (url: string): void => this.openExternalUrl(url, '无法打开链接'),
+          onOpenDownload: (): void => this.navigate({ name: P1DestinationName.SYSTEM_UPDATE_SETTINGS })
+        });
+      }
+      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+        content: {
+          title: { mainTitle: destination.version !== undefined ? '新版本描述' : '本版本更新内容' },
+          divider: { showType: DividerShowType.OFF }
+        } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === P1DestinationName.RECOMMENDATION_FILTER_SETTINGS) {
@@ -2067,6 +2097,7 @@ export struct P1Shell {
     if (!verbose && !(await this.shouldAutoCheckUpdateNow())) {
       return;
     }
+    await seedBundledUpdateCatalog();
     await this.markUpdateCheckedNow();
     this.updateCheckBusy = true;
     if (verbose) {
@@ -2074,27 +2105,81 @@ export struct P1Shell {
     }
     try {
       const result: AppUpdateCheckResult =
-        await this.updateClient.checkLatestRelease(this.installedVersionName);
+        await this.updateClient.checkLatestRelease(this.installedVersionName, verbose);
+      if (result.release !== undefined) {
+        this.latestUpdateRelease = result.release;
+      }
       if (result.status === AppUpdateCheckStatus.UPDATE_AVAILABLE && result.release !== undefined) {
         this.pendingUpdateRelease = result.release;
-        this.broadcastHomeUpdateAnnouncement(result.release.versionName, this.releaseDownloadUrl(result.release));
+        this.broadcastHomeUpdateAnnouncement(result.release.versionName);
         if (verbose) {
           this.updateCheckMessage = `发现新版本 ${result.release.versionName}，可前往下载`;
         }
       } else if (result.status === AppUpdateCheckStatus.UP_TO_DATE) {
         this.pendingUpdateRelease = undefined;
-        this.broadcastHomeUpdateAnnouncement('', '');
+        this.broadcastHomeUpdateAnnouncement('');
         if (verbose) {
           this.updateCheckMessage = '当前已是最新版本';
         }
       } else if (verbose) {
         this.updateCheckMessage = result.message.length > 0 ? result.message : '检查更新失败，请稍后重试';
       }
-      hilog.info(0x0000, 'AppUpdate', 'check status=%{public}s remoteVersion=%{public}s',
-        result.status, result.release !== undefined ? result.release.versionName : '');
+      hilog.info(0x0000, 'AppUpdate', 'check status=%{public}s remoteVersion=%{public}s assetSha256Len=%{public}d',
+        result.status, result.release !== undefined ? result.release.versionName : '',
+        result.release !== undefined && result.release.assetSha256 !== undefined ?
+          result.release.assetSha256.length : -1);
     } finally {
       this.updateCheckBusy = false;
     }
+  }
+
+  /** 版本更迭后首次启动（含首次安装）推入“新版本更新”页；本次启动已带深链目标时让位。
+    * 判定依据本机版本名与上次已展示版本（AppPreferencesStore），推送走 NavPathStack，
+    * 与深链冷启动同一条时序已验证可靠。 */
+  private async evaluateWhatsNewOnLaunch(): Promise<void> {
+    if (this.installedVersionName.length === 0) {
+      return;
+    }
+    if (this.startupDestinationArrived) {
+      return;
+    }
+    const context = getAbilityContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      const shownVersion = await new AppPreferencesStore(context).loadWhatsNewShownVersion();
+      if (!this.startupDestinationArrived &&
+        shouldShowWhatsNewOnLaunch(shownVersion, this.installedVersionName)) {
+        this.navigate({ name: P1DestinationName.WHATS_NEW });
+      }
+    } catch (_error) {
+      // 偏好读取失败时静默跳过，不打扰启动流程。
+    }
+  }
+
+  /** “新版本更新”页（版本说明模式，展示本机版本）关闭后记录已展示版本，
+    * 之后同版本启动不再自动弹出；更新预览模式（展示目标版本）不记录。 */
+  private markWhatsNewSeen(shownVersionName: string): void {
+    if (shownVersionName.length === 0 || shownVersionName !== this.installedVersionName) {
+      return;
+    }
+    const context = getAbilityContext();
+    if (context === undefined) {
+      return;
+    }
+    void new AppPreferencesStore(context).saveWhatsNewShownVersion(shownVersionName)
+      .catch((_error: Error): void => {
+      });
+  }
+
+  /** 主页更新卡片/“系统与更新”页入口：预览待更新目标版本（GitHub 最新 Release）的更新内容。 */
+  private openUpdateWhatsNew(): void {
+    const release = this.pendingUpdateRelease;
+    if (release === undefined) {
+      return;
+    }
+    this.navigate({ name: P1DestinationName.WHATS_NEW, version: release.versionName });
   }
 
   private async shouldAutoCheckUpdateNow(): Promise<boolean> {
@@ -2124,9 +2209,8 @@ export struct P1Shell {
   }
 
   /** 首页更新卡片经 AppStorage 广播（HdsTabs 树下跨页面信号唯一可靠通道）。 */
-  private broadcastHomeUpdateAnnouncement(version: string, url: string): void {
+  private broadcastHomeUpdateAnnouncement(version: string): void {
     AppStorage.setOrCreate('homeUpdateAnnouncementVersion', version);
-    AppStorage.setOrCreate('homeUpdateAnnouncementUrl', url);
   }
 
   private releaseDownloadUrl(release: AppUpdateRelease): string {

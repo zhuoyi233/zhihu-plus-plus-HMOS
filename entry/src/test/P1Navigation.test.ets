@@ -7,11 +7,13 @@ import {
   isP1DestinationName,
   MAX_SEARCH_QUERY_LENGTH,
   P1DestinationName,
+  p1DestinationIdentity,
   SearchDestination,
   StatelessDestination,
   shouldReloadAfterAuthentication,
   shouldPushP1Destination,
-  toP1Destination
+  toP1Destination,
+  WhatsNewDestination
 } from 'core';
 import {
   isP1TopLevelTabIndex,
@@ -30,6 +32,7 @@ interface TestDestinationParam {
   questionId?: string;
   answerId?: string;
   draftId?: string;
+  version?: string;
   unexpected?: string;
 }
 
@@ -107,6 +110,38 @@ export default function p1NavigationTest(): void {
       expect(settings.name).assertEqual(P1DestinationName.SETTINGS);
       expect(laboratory.name).assertEqual(P1DestinationName.TECHNICAL_LAB);
       expect(login.name).assertEqual(P1DestinationName.LOGIN);
+    });
+
+    it('decodesWhatsNewDestinationWithOptionalTargetVersion', 0, () => {
+      const currentVersionParam: TestDestinationParam = { name: P1DestinationName.WHATS_NEW };
+      const previewParam: TestDestinationParam = {
+        name: P1DestinationName.WHATS_NEW,
+        version: '0.5.5'
+      };
+      const badVersionParam: TestDestinationParam = {
+        name: P1DestinationName.WHATS_NEW,
+        version: 'abc;drop'
+      };
+      const unexpectedFieldParam: TestDestinationParam = {
+        name: P1DestinationName.WHATS_NEW,
+        unexpected: 'x'
+      };
+
+      const current = decodeP1Destination(P1DestinationName.WHATS_NEW, currentVersionParam);
+      expect(current?.name).assertEqual(P1DestinationName.WHATS_NEW);
+      expect((current as WhatsNewDestination)?.version).assertEqual(undefined);
+
+      const preview = decodeP1Destination(P1DestinationName.WHATS_NEW, previewParam) as WhatsNewDestination;
+      expect(preview.version).assertEqual('0.5.5');
+      expect(p1DestinationIdentity({ name: P1DestinationName.WHATS_NEW }))
+        .assertEqual(p1DestinationIdentity({ name: P1DestinationName.WHATS_NEW }));
+      expect(p1DestinationIdentity({ name: P1DestinationName.WHATS_NEW }) !==
+        p1DestinationIdentity({ name: P1DestinationName.WHATS_NEW, version: '0.5.5' })).assertTrue();
+
+      expect(decodeP1Destination(P1DestinationName.WHATS_NEW, badVersionParam)).assertUndefined();
+      expect(decodeP1Destination(P1DestinationName.WHATS_NEW, unexpectedFieldParam)).assertUndefined();
+      // 更新预览页不属于底部页签，走导航栈推入。
+      expect(p1TopLevelTabForDestination({ name: P1DestinationName.WHATS_NEW })).assertUndefined();
     });
 
     it('mapsTopLevelDestinationsToStableBottomTabs', 0, () => {

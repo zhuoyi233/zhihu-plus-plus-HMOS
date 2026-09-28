@@ -1,4 +1,4 @@
-import { AppUpdateCheckResult, AppUpdateCheckStatus, AppUpdateRelease } from './AppUpdateModels';
+import { AppReleaseDetail, AppUpdateCheckResult, AppUpdateCheckStatus, AppUpdateRelease } from './AppUpdateModels';
 
 /**
  * 更新检测的纯函数解析：tag 版本名提取、语义化版本比较与 GitHub Release JSON 解码。
@@ -67,6 +67,7 @@ export function decodeLatestRelease(payload: string): AppUpdateRelease | undefin
   const htmlUrlValue = record['html_url'];
   const releaseTitleValue = record['name'];
   const publishedAtValue = record['published_at'];
+  const asset = unsignedHapAsset(record);
   const release: AppUpdateRelease = {
     tagName: tagNameValue,
     versionName: versionName,
@@ -74,7 +75,10 @@ export function decodeLatestRelease(payload: string): AppUpdateRelease | undefin
       ? releaseTitleValue
       : tagNameValue,
     htmlUrl: typeof htmlUrlValue === 'string' ? htmlUrlValue : '',
-    publishedAt: typeof publishedAtValue === 'string' ? publishedAtValue : ''
+    publishedAt: typeof publishedAtValue === 'string' ? publishedAtValue : '',
+    assetUrl: asset.url,
+    assetName: asset.name,
+    assetSha256: asset.sha256
   };
   return release;
 }
@@ -128,6 +132,92 @@ export function shouldAutoCheckForUpdate(lastUpdateCheckAt: number, now: number)
 /** 首页更新卡片可见性：有待更新版本且未在本次会话内被“以后”忽略。 */
 export function isUpdateAnnouncementVisible(pendingVersion: string, dismissedVersion: string): boolean {
   return pendingVersion.length > 0 && pendingVersion !== dismissedVersion;
+}
+
+/** 解析 GitHub /releases/tags/{tag} 响应体；结构不符合预期（如无 tag_name 或 tag 非版本号）时返回 undefined。 */
+export function decodeReleaseDetail(payload: string): AppReleaseDetail | undefined {
+  let parsed: Object | undefined = undefined;
+  try {
+    parsed = JSON.parse(payload) as Object;
+  } catch (_error) {
+    return undefined;
+  }
+  const record = parsed as Record<string, Object>;
+  const tagNameValue = record['tag_name'];
+  if (typeof tagNameValue !== 'string') {
+    return undefined;
+  }
+  const versionName = parseHmosTagVersion(tagNameValue);
+  if (versionName === undefined) {
+    return undefined;
+  }
+  const htmlUrlValue = record['html_url'];
+  const releaseTitleValue = record['name'];
+  const publishedAtValue = record['published_at'];
+  const bodyValue = record['body'];
+  const asset = unsignedHapAsset(record);
+  const detail: AppReleaseDetail = {
+    tagName: tagNameValue,
+    versionName: versionName,
+    releaseTitle: typeof releaseTitleValue === 'string' && releaseTitleValue.length > 0
+      ? releaseTitleValue
+      : tagNameValue,
+    htmlUrl: typeof htmlUrlValue === 'string' ? htmlUrlValue : '',
+    publishedAt: typeof publishedAtValue === 'string' ? publishedAtValue : '',
+    body: typeof bodyValue === 'string' ? bodyValue : '',
+    assetUrl: asset.url,
+    assetName: asset.name,
+    assetSha256: asset.sha256
+  };
+  return detail;
+}
+
+interface UnsignedHapAsset {
+  url: string;
+  name: string;
+  sha256: string;
+}
+
+function unsignedHapAsset(record: Record<string, Object>): UnsignedHapAsset {
+  const empty: UnsignedHapAsset = { url: '', name: '', sha256: '' };
+  const assets = record['assets'];
+  if (!Array.isArray(assets)) {
+    return empty;
+  }
+  const items = assets as Object[];
+  for (const item of items) {
+    const asset = item as Record<string, Object>;
+    const name = asset['name'];
+    const url = asset['browser_download_url'];
+    if (typeof name === 'string' && name.endsWith('-unsigned.hap') && typeof url === 'string' &&
+      url.startsWith('https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/download/')) {
+      // 静态清单存 sha256，GitHub API 的对应字段是带前缀的 digest；两者取其一即可。
+      let sha256 = '';
+      const digestValue = asset['digest'];
+      const sha256Value = asset['sha256'];
+      if (typeof digestValue === 'string' && digestValue.startsWith('sha256:')) {
+        sha256 = digestValue.substring('sha256:'.length);
+      } else if (typeof sha256Value === 'string') {
+        sha256 = sha256Value;
+      }
+      return { url: url, name: name, sha256: sha256 };
+    }
+  }
+  return empty;
+}
+
+/**
+ * “新版本更新”页的启动门控：本机版本与上次已展示版本不同即展示。
+ * 首次安装（已展示版本为空）也展示一次，兼作版本说明入口；读取不到本机版本时不展示。
+ */
+export function shouldShowWhatsNewOnLaunch(shownVersion: string, installedVersion: string): boolean {
+  return installedVersion.length > 0 && shownVersion !== installedVersion;
+}
+
+/** Release 发布时间（ISO 8601）取日期部分；无法解析时返回空串。 */
+export function formatReleaseDate(publishedAt: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(publishedAt.trim());
+  return match === null ? '' : `${match[1]}-${match[2]}-${match[3]}`;
 }
 
 /** 结合本机版本得出检测结论：本机不比远端新时视为已是最新。 */

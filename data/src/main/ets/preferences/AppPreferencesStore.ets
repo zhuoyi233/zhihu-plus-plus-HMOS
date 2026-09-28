@@ -53,6 +53,8 @@ const SEARCH_HISTORY_KEY = 'searchHistoryQueries';
 export const SEARCH_HISTORY_MAX_SIZE = 20;
 // 键与语义对齐上游 UpdateManager.PREF_LAST_UPDATE_CHECK（自动检查更新节流时间戳，毫秒）。
 const LAST_UPDATE_CHECK_KEY = 'lastUpdateCheck';
+// “新版本更新”页已展示过的本机版本名（空串表示尚未展示过，首次安装也会展示一次）。
+const WHATS_NEW_SHOWN_VERSION_KEY = 'whatsNewShownVersion';
 // 键与语义对齐上游 AppearanceSettingsScreen 的排版偏好（"阅读"分组，存 Int 百分比）。
 const CONTENT_FONT_SIZE_KEY = 'contentFontSize';
 const CONTENT_LINE_HEIGHT_KEY = 'contentLineHeight';
@@ -732,6 +734,43 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
         throw new Error(appPreferencesFailureMessage('Last update check save', error));
       }
       throw new Error(appPreferencesFailureMessage('Last update check save', undefined));
+    }
+  }
+
+  /** 上次已展示“新版本更新”页的版本名；空串表示从未展示过。 */
+  async loadWhatsNewShownVersion(): Promise<string> {
+    await this.saveQueue;
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      const value = await store.get(WHATS_NEW_SHOWN_VERSION_KEY, '');
+      return typeof value === 'string' ? value : '';
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('Whats new shown version load', error));
+      }
+      throw new Error(appPreferencesFailureMessage('Whats new shown version load', undefined));
+    }
+  }
+
+  saveWhatsNewShownVersion(version: string): Promise<void> {
+    const operation = this.saveQueue.then(
+      (): Promise<void> => this.writeWhatsNewShownVersion(version),
+      (): Promise<void> => this.writeWhatsNewShownVersion(version)
+    );
+    this.saveQueue = operation.then((): void => {}, (): void => {});
+    return operation;
+  }
+
+  private async writeWhatsNewShownVersion(version: string): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      await store.put(WHATS_NEW_SHOWN_VERSION_KEY, version);
+      await store.flush();
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('Whats new shown version save', error));
+      }
+      throw new Error(appPreferencesFailureMessage('Whats new shown version save', undefined));
     }
   }
 
