@@ -119,6 +119,9 @@ export function p1DestinationIdentity(destination: P1Destination): string {
         encodeURIComponent(destination.segmentId ?? '');
     case P1DestinationName.SEARCH:
       return `${destination.name}:${encodeURIComponent(destination.query)}`;
+    case P1DestinationName.WHATS_NEW:
+      // 展示本机版本与预览目标版本是两个不同页面身份，防止互相误去重。
+      return `${destination.name}:${encodeURIComponent(destination.version ?? '')}`;
     default:
       return destination.name;
   }

@@ -27,6 +27,7 @@ export enum P1DestinationName {
   IDENTITY_MANAGEMENT = 'IdentityManagement',
   READING_SETTINGS = 'ReadingSettings',
   SYSTEM_UPDATE_SETTINGS = 'SystemUpdateSettings',
+  WHATS_NEW = 'WhatsNew',
   RECOMMENDATION_FILTER_SETTINGS = 'RecommendationFilterSettings',
   BLOCKING_RULES = 'BlockingRules',
   BLOCKED_FEED_HISTORY = 'BlockedFeedHistory',
@@ -51,6 +52,8 @@ export interface StatelessDestination {
     P1DestinationName.DAILY | P1DestinationName.NOTIFICATION;
 }
 
+/** WHATS_NEW 不在本联合内：它有独立接口 WhatsNewDestination（带可选 version 参数），
+ * isInfrastructureDestination 对其单独返回 true。 */
 export interface InfrastructureDestination {
   readonly name: P1DestinationName.LOGIN | P1DestinationName.SETTINGS | P1DestinationName.APPEARANCE_SETTINGS |
     P1DestinationName.THEME_COLOR_SETTINGS |
@@ -121,9 +124,16 @@ export interface PrivateMessageDestination {
   readonly avatarUrl?: string;
 }
 
+/** “新版本更新”页：version 缺省时展示本机已装版本的 Release；携带时展示该目标版本
+ * 的 Release（检查到更新后的“更新内容预览”，对齐主页更新卡片与设置页入口）。 */
+export interface WhatsNewDestination {
+  readonly name: P1DestinationName.WHATS_NEW;
+  readonly version?: string;
+}
+
 export type P1Destination = StatelessDestination | InfrastructureDestination | ContentDestination |
   CommentDestination | SearchDestination | WriteAnswerDestination | WritePinDestination |
-  NotificationEntryDestination | PrivateMessageDestination;
+  NotificationEntryDestination | PrivateMessageDestination | WhatsNewDestination;
 
 export const MAX_SEARCH_QUERY_LENGTH: number = 200;
 export const MAX_DECIMAL_CONTENT_ID_LENGTH: number = 30;
@@ -181,6 +191,7 @@ export function isP1DestinationName(name: string): boolean {
     case P1DestinationName.IDENTITY_MANAGEMENT:
     case P1DestinationName.READING_SETTINGS:
     case P1DestinationName.SYSTEM_UPDATE_SETTINGS:
+    case P1DestinationName.WHATS_NEW:
     case P1DestinationName.RECOMMENDATION_FILTER_SETTINGS:
     case P1DestinationName.BLOCKING_RULES:
     case P1DestinationName.BLOCKED_FEED_HISTORY:
@@ -252,6 +263,8 @@ export function decodeP1Destination(name: string, param: Object): P1Destination 
       return hasNoParameters(wire) ? { name: P1DestinationName.READING_SETTINGS } : undefined;
     case P1DestinationName.SYSTEM_UPDATE_SETTINGS:
       return hasNoParameters(wire) ? { name: P1DestinationName.SYSTEM_UPDATE_SETTINGS } : undefined;
+    case P1DestinationName.WHATS_NEW:
+      return decodeWhatsNew(wire);
     case P1DestinationName.RECOMMENDATION_FILTER_SETTINGS:
       return hasNoParameters(wire) ? { name: P1DestinationName.RECOMMENDATION_FILTER_SETTINGS } : undefined;
     case P1DestinationName.LOGIN:
@@ -370,6 +383,7 @@ export function isInfrastructureDestination(destination: P1Destination): boolean
     case P1DestinationName.IDENTITY_MANAGEMENT:
     case P1DestinationName.READING_SETTINGS:
     case P1DestinationName.SYSTEM_UPDATE_SETTINGS:
+    case P1DestinationName.WHATS_NEW:
     case P1DestinationName.RECOMMENDATION_FILTER_SETTINGS:
     case P1DestinationName.BLOCKING_RULES:
     case P1DestinationName.BLOCKED_FEED_HISTORY:
@@ -417,6 +431,21 @@ export function shouldReloadAfterAuthentication(destination: P1Destination): boo
     default:
       return false;
   }
+}
+
+/** 校验 WhatsNewDestination.version：仅接受点分数字版本名（如 0.5.4），防止任意字符串入栈。 */
+export function isSafeWhatsNewVersion(value: string | undefined): boolean {
+  return typeof value === 'string' && /^\d{1,4}(\.\d{1,4}){0,3}$/.test(value);
+}
+
+function decodeWhatsNew(wire: JsonObjectValue): WhatsNewDestination | undefined {
+  const version = readString(wire, 'version');
+  // version 缺省 = 展示本机版本的版本说明模式；携带时必须是安全的点分数字版本名。
+  if ((version !== undefined && !isSafeWhatsNewVersion(version)) ||
+    !hasOnlyFields(wire, version === undefined ? ['name'] : ['name', 'version'])) {
+    return undefined;
+  }
+  return version === undefined ? { name: P1DestinationName.WHATS_NEW } : { name: P1DestinationName.WHATS_NEW, version: version };
 }
 
 function decodeContent(wire: JsonObjectValue, name: P1DestinationName.QUESTION | P1DestinationName.ANSWER |

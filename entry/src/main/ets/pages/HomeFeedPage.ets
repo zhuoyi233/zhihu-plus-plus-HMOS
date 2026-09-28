@@ -331,6 +331,16 @@ export struct HomeFeedPage {
           .onClick((): void => {
             this.dismissedUpdateVersion = this.pendingUpdateVersion;
           })
+        Button('更新内容', { type: ButtonType.ROUNDED_RECTANGLE, stateEffect: true })
+          .id('p2_home_update_card_whats_new')
+          .fontSize($r('app.float.p1_body_font_size'))
+          .fontColor(Color.White)
+          .backgroundColor(Color.Transparent)
+          .borderRadius(12)
+          .onClick((): void => {
+            // 应用内预览待更新版本的 Release 说明（非跳浏览器）。
+            this.navigate({ name: P1DestinationName.WHATS_NEW, version: this.pendingUpdateVersion });
+          })
         Button('查看更新', { type: ButtonType.ROUNDED_RECTANGLE, stateEffect: true })
           .id('p2_home_update_card_open')
           .fontSize($r('app.float.p1_body_font_size'))
