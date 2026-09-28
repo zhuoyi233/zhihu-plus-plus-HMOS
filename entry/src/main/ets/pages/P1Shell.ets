@@ -438,7 +438,7 @@ export struct P1Shell {
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
         content: {
-          title: { mainTitle: destination.version !== undefined ? '新版更新内容' : '新版本更新' },
+          title: { mainTitle: destination.version !== undefined ? '待更新版本内容' : '本版本更新内容' },
           divider: { showType: DividerShowType.OFF }
         } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])

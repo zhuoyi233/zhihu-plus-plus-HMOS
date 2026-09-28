@@ -42,42 +42,50 @@ export struct SystemUpdateSettingsPage {
               .fontSize($r('app.float.p1_secondary_font_size')).fontColor($r('app.color.secondary_text'))
               .width('100%')
           }
-          if (this.availableVersion.length > 0) {
-            Button(`前往下载 ${this.availableVersion}`).id('p5_system_update_download').width('100%')
-              .fontColor(onThemeColor(this.resolvedThemeColor))
-              .backgroundColor(this.resolvedThemeColor)
-              .onClick((): void => this.onOpenDownload())
-
-            Button({ type: ButtonType.Normal, stateEffect: true }) {
-              Row() {
-                Column({ space: 4 }) {
-                  Text(`查看 ${this.availableVersion} 更新内容`).fontSize($r('app.float.p1_body_font_size'))
-                    .fontColor($r('app.color.primary_text'))
-                  Text('浏览待更新版本的完整 Release 说明')
-                    .fontSize($r('app.float.p1_secondary_font_size')).fontColor($r('app.color.secondary_text'))
-                }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-                SymbolGlyph($r('sys.symbol.doc_text')).fontSize(18)
-                  .fontColor([$r('app.color.secondary_text')])
-              }.width('100%').alignItems(VerticalAlign.Center)
-            }.id('p5_system_update_whats_new').width('100%').padding(0)
-              .backgroundColor(Color.Transparent).onClick((): void => this.onOpenUpdateWhatsNew())
-          }
-
           Button({ type: ButtonType.Normal, stateEffect: true }) {
             Row() {
               Column({ space: 4 }) {
-                Text('新版本更新说明').fontSize($r('app.float.p1_body_font_size'))
+                Text('待更新版本内容').fontSize($r('app.float.p1_body_font_size'))
                   .fontColor($r('app.color.primary_text'))
-                Text('查看本机版本对应的 Release 发布内容')
+                Text(this.availableVersion.length > 0
+                  ? `查看即将更新至 v${this.availableVersion} 的发布说明`
+                  : '暂无待更新版本，检查更新后可查看')
                   .fontSize($r('app.float.p1_secondary_font_size')).fontColor($r('app.color.secondary_text'))
               }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-              SymbolGlyph($r('sys.symbol.arrow_up_right')).fontSize(18)
+              SymbolGlyph($r('sys.symbol.doc_text')).fontSize(18)
                 .fontColor([$r('app.color.secondary_text')])
             }.width('100%').alignItems(VerticalAlign.Center)
-          }.id('p5_system_open_whats_new').width('100%').padding(0)
-            .backgroundColor(Color.Transparent).onClick((): void => this.onOpenWhatsNew())
+          }.id('p5_system_update_whats_new').width('100%').padding(0)
+            .backgroundColor(Color.Transparent).enabled(this.availableVersion.length > 0)
+            .onClick((): void => this.onOpenUpdateWhatsNew())
+
+          if (this.availableVersion.length > 0) {
+            Button(`前往下载 v${this.availableVersion}`).id('p5_system_update_download').width('100%')
+              .fontColor(onThemeColor(this.resolvedThemeColor))
+              .backgroundColor(this.resolvedThemeColor)
+              .onClick((): void => this.onOpenDownload())
+          }
         }.width('100%').padding($r('app.float.p1_card_padding'))
           .borderRadius($r('app.float.p1_card_radius')).backgroundColor($r('app.color.surface_background'))
+
+        Text('已安装版本').fontSize($r('app.float.p1_secondary_font_size'))
+          .fontColor($r('app.color.secondary_text')).width('100%')
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          Row() {
+            Column({ space: 4 }) {
+              Text('本版本更新内容').fontSize($r('app.float.p1_body_font_size'))
+                .fontColor($r('app.color.primary_text'))
+              Text('查看本机已安装版本的发布说明')
+                .fontSize($r('app.float.p1_secondary_font_size')).fontColor($r('app.color.secondary_text'))
+            }.alignItems(HorizontalAlign.Start).layoutWeight(1)
+            SymbolGlyph($r('sys.symbol.doc_text')).fontSize(18)
+              .fontColor([$r('app.color.secondary_text')])
+          }.width('100%').alignItems(VerticalAlign.Center)
+        }.id('p5_system_open_whats_new').width('100%')
+          .padding($r('app.float.p1_card_padding'))
+          .borderRadius($r('app.float.p1_card_radius'))
+          .backgroundColor($r('app.color.surface_background'))
+          .onClick((): void => this.onOpenWhatsNew())
 
         Text('支持与诊断').fontSize($r('app.float.p1_secondary_font_size'))
           .fontColor($r('app.color.secondary_text')).width('100%')
