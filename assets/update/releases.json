@@ -1,5 +1,20 @@
 [
   {
+    "tag_name": "HMOSv0.5.6",
+    "name": "HMOSv0.5.6-hotfix",
+    "html_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.5.6",
+    "published_at": "2026-09-28T14:17:10Z",
+    "body": "# ZhihuPlusPlus-HMOS v0.5.6\r\n\r\n本次更新以**更新链路容错**为主题：检查更新与发布说明获取引入多源容错与离线兜底，升级后首次启动即可正常查看本版本更新内容，共 2 个提交。\r\n\r\n## 🔄 应用内更新\r\n\r\n- 静态更新清单在 GitHub Raw 与 jsDelivr/Fastly 镜像之外新增下载代理波次容错：4 秒内无有效响应自动叠加 17 个下载代理竞速，首个有效响应获胜，弱网环境下检查更新与查看发布说明更可靠\r\n- 发版时将本版本发布说明预置进安装包内置清单：离线状态下也能查看「本版本更新内容」，检查更新可正确判定\"已是最新\"\r\n- 不支持清单路径的代理返回的错误页由结构校验自动淘汰，无需维护白名单\r\n\r\n## 🐛 问题修复\r\n\r\n- 修复升级后首次启动的「本版本更新内容」页在弱网/离线下误报「静态更新清单中暂无发布说明」的结构性缺陷\r\n\r\n## 📥 下载与安装\r\n\r\n1. 下载下方附件 `ZhihuPlusPlus-HMOS-v0.5.6-unsigned.hap`\r\n2. 使用 [小白调试助手](https://github.com/likuai2010/auto-installer) 或 [HoKit](https://github.com/yabi-zzh/HoKit/releases) 自行签名\r\n3. 覆盖安装即可升级，原有登录状态、设置与历史数据会保留\r\n\r\n> [!IMPORTANT]\r\n> - 要求设备系统为 **HarmonyOS 6.1.0（API 23）及以上**\r\n> - 本项目非知乎官方产品，内容来自知乎网站，服务端接口变化可能导致部分功能失效。\r\n",
+    "assets": [
+      {
+        "name": "ZhihuPlusPlus-HMOS-v0.5.6-unsigned.hap",
+        "browser_download_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/download/HMOSv0.5.6/ZhihuPlusPlus-HMOS-v0.5.6-unsigned.hap",
+        "size": 7844629,
+        "sha256": "decf45cfb97923ece68700e1475184b6edf690fba8f498accf5de666f023f535"
+      }
+    ]
+  },
+  {
     "tag_name": "HMOSv0.5.5",
     "name": "HMOSv0.5.5",
     "html_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.5.5",

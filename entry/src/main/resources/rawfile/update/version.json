@@ -1,15 +1,15 @@
 {
-  "tag_name": "HMOSv0.5.5",
-  "name": "HMOSv0.5.5",
-  "html_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.5.5",
-  "published_at": "2026-09-28T12:40:12Z",
-  "body": "# ZhihuPlusPlus-HMOS v0.5.5\r\n\r\n本次更新以**应用内更新**为主题：版本更新页、多源系统下载与安装包 SHA-256 校验的完整链路首次落地，正文内联格式渲染对齐上游，并集中修复详情页手势冲突、收藏与评论列表状态等多处问题，共 8 个提交。\r\n\r\n## 🔄 应用内更新\r\n\r\n- 新增版本更新页：主页更新横幅「查看更新」改为应用内打开，新版发布说明区分展示待更新内容与本版本更新内容，不再跳转浏览器\r\n- 新增「系统与更新」下载页：内置多个镜像下载源与 GitHub 官方源，系统下载失败可更换下载源重试\r\n- 安装包下载完成后自动校验 SHA-256，校验一致才写入所选位置，不一致即拒绝保存并清理\r\n- 版本更新说明经镜像代理获取，GitHub 直连受限时也可正常查看\r\n\r\n## 📖 阅读体验\r\n\r\n- 回答与文章正文补齐内联格式渲染：加粗、斜体、删除线、行内代码、高亮、上下标、换行等对齐上游，修复正文加粗整段丢失的问题\r\n- 正文内联链接支持点击：站内内容应用内直达，外部链接交系统浏览器打开，覆盖回答、文章、问题、想法四个详情页\r\n\r\n## ✨ 详情与交互\r\n\r\n- 收藏态升级为书签图标：收藏夹弹窗内未收藏为灰色描边、已收藏为主题色实心，切换收藏后行状态实时刷新，成功提示改为系统 toast\r\n- 回答/文章详情页右下角收藏书签联动收藏态：任一收藏夹含当前内容即显示实心书签，切换收藏与失败回滚实时同步\r\n- 进入子评论页后返回不再回顶：根评论列表位置与已加载头像原生保留，消除重建闪屏，子评论层内的点赞等操作实时同步回根列表\r\n\r\n## 🐛 问题修复\r\n\r\n- 修复详情页双击赞同同时唤起选词菜单的冲突：双击正文仅触发赞同，纯长按选词不受影响\r\n- 修复详情页长按拖选文字被误判为下滑、直接切走当前回答的问题\r\n- 修复冷启动首页因偶发的单条异常卡片整页报「加载失败」的问题，现自动跳过异常条目\r\n- 修复断网刷新后错误横幅顶进状态栏、重试按钮被悬浮标题栏遮挡的问题\r\n\r\n## 📥 下载与安装\r\n\r\n1. 下载下方附件 `ZhihuPlusPlus-HMOS-v0.5.5-unsigned.hap`\r\n2. 使用 [小白调试助手](https://github.com/likuai2010/auto-installer) 或 [HoKit](https://github.com/yabi-zzh/HoKit/releases) 自行签名\r\n3. 覆盖安装即可升级，原有登录状态、设置与历史数据会保留\r\n\r\n> [!IMPORTANT]\r\n> 本版本要求设备系统为 **HarmonyOS 6.1.0（API 23）及以上**。应用内「检查更新」与安装包下载需设备可访问 GitHub 或其镜像源，安装包下载完成后经 SHA-256 校验再行安装。\r\n>\r\n> 本项目非知乎官方产品，内容来自知乎网站，服务端接口变化可能导致部分功能失效。\r\n",
+  "tag_name": "HMOSv0.5.6",
+  "name": "HMOSv0.5.6-hotfix",
+  "html_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.5.6",
+  "published_at": "2026-09-28T14:17:10Z",
+  "body": "# ZhihuPlusPlus-HMOS v0.5.6\r\n\r\n本次更新以**更新链路容错**为主题：检查更新与发布说明获取引入多源容错与离线兜底，升级后首次启动即可正常查看本版本更新内容，共 2 个提交。\r\n\r\n## 🔄 应用内更新\r\n\r\n- 静态更新清单在 GitHub Raw 与 jsDelivr/Fastly 镜像之外新增下载代理波次容错：4 秒内无有效响应自动叠加 17 个下载代理竞速，首个有效响应获胜，弱网环境下检查更新与查看发布说明更可靠\r\n- 发版时将本版本发布说明预置进安装包内置清单：离线状态下也能查看「本版本更新内容」，检查更新可正确判定\"已是最新\"\r\n- 不支持清单路径的代理返回的错误页由结构校验自动淘汰，无需维护白名单\r\n\r\n## 🐛 问题修复\r\n\r\n- 修复升级后首次启动的「本版本更新内容」页在弱网/离线下误报「静态更新清单中暂无发布说明」的结构性缺陷\r\n\r\n## 📥 下载与安装\r\n\r\n1. 下载下方附件 `ZhihuPlusPlus-HMOS-v0.5.6-unsigned.hap`\r\n2. 使用 [小白调试助手](https://github.com/likuai2010/auto-installer) 或 [HoKit](https://github.com/yabi-zzh/HoKit/releases) 自行签名\r\n3. 覆盖安装即可升级，原有登录状态、设置与历史数据会保留\r\n\r\n> [!IMPORTANT]\r\n> - 要求设备系统为 **HarmonyOS 6.1.0（API 23）及以上**\r\n> - 本项目非知乎官方产品，内容来自知乎网站，服务端接口变化可能导致部分功能失效。\r\n",
   "assets": [
     {
-      "name": "ZhihuPlusPlus-HMOS-v0.5.5-unsigned.hap",
-      "browser_download_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/download/HMOSv0.5.5/ZhihuPlusPlus-HMOS-v0.5.5-unsigned.hap",
-      "size": 7836592,
-      "sha256": "503df0b3816df7bcfd0e87b73085398f90d4279456a9287ed4178c90327ca2cf"
+      "name": "ZhihuPlusPlus-HMOS-v0.5.6-unsigned.hap",
+      "browser_download_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/download/HMOSv0.5.6/ZhihuPlusPlus-HMOS-v0.5.6-unsigned.hap",
+      "size": 7844629,
+      "sha256": "decf45cfb97923ece68700e1475184b6edf690fba8f498accf5de666f023f535"
     }
   ]
 }
