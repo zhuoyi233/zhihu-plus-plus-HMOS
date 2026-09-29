@@ -10,6 +10,8 @@ param(
   [string]$ExpectedTargetSdkVersion = '26.0.0',
   [string]$ExpectedCompatibleSdkVersion = '6.1.0(23)',
   [string]$ExpectedBundleName = 'com.github.zhuoyi233.zhplus',
+  [ValidateSet('debug', 'release')]
+  [string]$BuildMode = 'debug',
   [ValidateRange(0, 100000)]
   [int]$ExpectedTestCount = 0,
   [switch]$SkipDependencyInstall,
@@ -24,7 +26,7 @@ if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
 
 $script:Module = 'entry'
 $script:Product = 'default'
-$script:BuildMode = 'debug'
+$script:BuildMode = $BuildMode
 $script:RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
 function Resolve-ExistingFile {
@@ -186,31 +188,67 @@ function Get-RegisteredTestCount {
 function Copy-ReleaseArtifacts {
   param(
     [string]$HapDirectory,
-    [string]$AppManifestPath
+    [string]$VersionName
   )
 
-  # 按发布命名规范产出 ZhihuPlusPlus-HMOS-v<versionName>-{unsigned,signed}.hap（见 AGENTS.md）。
-  $manifest = Get-Content -LiteralPath $AppManifestPath -Raw
-  $versionMatch = [regex]::Match($manifest, '"versionName"\s*:\s*"([^"]+)"')
-  if (-not $versionMatch.Success) {
-    throw "无法从 $AppManifestPath 解析 versionName。"
-  }
-  $versionName = $versionMatch.Groups[1].Value
+  # 版本命名发行产物仅由 Release 出包生成（构建 + Hypium 全部通过后调用）；
+  # Debug 验证不调用本函数，避免用 Debug 包覆盖已验证的发行产物。
   $copied = @()
   foreach ($suffix in @('unsigned', 'signed')) {
     $source = Join-Path $HapDirectory "entry-default-$suffix.hap"
     if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+      if ($suffix -eq 'unsigned') {
+        throw "缺少未签名 HAP，无法复制发行产物：$source"
+      }
       continue
     }
-    $target = Join-Path $HapDirectory "ZhihuPlusPlus-HMOS-v$versionName-$suffix.hap"
+    $target = Join-Path $HapDirectory "ZhihuPlusPlus-HMOS-v$VersionName-$suffix.hap"
     Copy-Item -LiteralPath $source -Destination $target -Force
-    $copied += (Split-Path -Leaf $target)
+    $sourceHash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant()
+    $targetHash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($sourceHash -ne $targetHash) {
+      throw "发行产物复制后哈希不一致：$target"
+    }
+    $copied += "$(Split-Path -Leaf $target)（SHA-256 $sourceHash）"
   }
   if ($copied.Count -eq 0) {
-    Write-Host '发布产物：输出目录没有 HAP，跳过重命名复制。'
-    return
+    throw 'Release 构建成功但没有可复制的 HAP 产物。'
   }
-  Write-Host "发布产物：$($copied -join '、')"
+  Write-Host "发行产物：$($copied -join '、')"
+}
+
+function Copy-ReleaseMappingArchive {
+  param(
+    [string]$HapDirectory,
+    [string]$VersionName,
+    [string]$HapSha256
+  )
+
+  # 源码映射不入发行包；按版本与产物哈希单独归档，供崩溃定位使用。
+  $mappingDir = Join-Path $HapDirectory 'mapping'
+  if (-not (Test-Path -LiteralPath $mappingDir -PathType Container)) {
+    throw "Release 构建缺少映射目录：$mappingDir"
+  }
+  $archiveDir = Join-Path $HapDirectory ("mapping-archive\v" + $VersionName + '-' + $HapSha256.Substring(0, 8))
+  New-Item -ItemType Directory -Path $archiveDir -Force | Out-Null
+  Copy-Item -Path (Join-Path $mappingDir '*') -Destination $archiveDir -Recurse -Force
+  Write-Host "映射归档：$archiveDir"
+}
+
+function Assert-HapNoSourceMap {
+  param([string]$HapPath)
+
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $archive = [System.IO.Compression.ZipFile]::OpenRead($HapPath)
+  try {
+    $sourceMap = $archive.Entries | Where-Object { $_.FullName -eq 'ets/sourceMaps.map' } | Select-Object -First 1
+    if ($null -ne $sourceMap) {
+      throw "发行 HAP 不应包含 ets/sourceMaps.map：$HapPath"
+    }
+  } finally {
+    $archive.Dispose()
+  }
+  Write-Host '发行 HAP 不含源码映射（ets/sourceMaps.map）'
 }
 
 function Assert-HapApiVersions {
@@ -218,7 +256,10 @@ function Assert-HapApiVersions {
     [string]$HapPath,
     [int]$ExpectedTargetApiVersion,
     [int]$ExpectedCompatibleApiVersion,
-    [string]$ExpectedBundleName
+    [string]$ExpectedBundleName,
+    [string]$ExpectedBuildMode,
+    [string]$ExpectedVersionName,
+    [long]$ExpectedVersionCode
   )
 
   Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -231,6 +272,16 @@ function Assert-HapApiVersions {
     $reader = [System.IO.StreamReader]::new($packInfoEntry.Open())
     try {
       $packInfo = $reader.ReadToEnd() | ConvertFrom-Json
+    } finally {
+      $reader.Dispose()
+    }
+    $moduleJsonEntry = $archive.Entries | Where-Object { $_.FullName -eq 'module.json' } | Select-Object -First 1
+    if ($null -eq $moduleJsonEntry) {
+      throw "HAP 缺少 module.json：$HapPath"
+    }
+    $reader = [System.IO.StreamReader]::new($moduleJsonEntry.Open())
+    try {
+      $moduleJson = $reader.ReadToEnd() | ConvertFrom-Json
     } finally {
       $reader.Dispose()
     }
@@ -249,8 +300,20 @@ function Assert-HapApiVersions {
   if ($packInfo.summary.app.bundleName -ne $ExpectedBundleName) {
     throw "HAP Bundle Name 不匹配：$($packInfo.summary.app.bundleName)，期望 $ExpectedBundleName。"
   }
+  if ($moduleJson.app.buildMode -ne $ExpectedBuildMode) {
+    throw "HAP buildMode 不匹配：$($moduleJson.app.buildMode)，期望 $ExpectedBuildMode。"
+  }
+  $expectedDebugFlag = ($ExpectedBuildMode -eq 'debug')
+  if ($moduleJson.app.debug -ne $expectedDebugFlag) {
+    throw "HAP debug 字段不匹配：$($moduleJson.app.debug)，期望 $expectedDebugFlag。"
+  }
+  if ($moduleJson.app.versionName -ne $ExpectedVersionName -or
+    [long]$moduleJson.app.versionCode -ne $ExpectedVersionCode) {
+    throw "HAP 版本不匹配：$($moduleJson.app.versionName)/$($moduleJson.app.versionCode)，期望 $ExpectedVersionName/$ExpectedVersionCode。"
+  }
   Write-Host "HAP API：target=$($module.apiVersion.target)，compatible=$($module.apiVersion.compatible)"
   Write-Host "HAP Bundle Name：$($packInfo.summary.app.bundleName)"
+  Write-Host "HAP 构建模式：$($moduleJson.app.buildMode)（debug=$($moduleJson.app.debug)），版本 $($moduleJson.app.versionName)/$($moduleJson.app.versionCode)"
 }
 
 function Get-SdkApiVersion {
@@ -340,21 +403,44 @@ try {
     '-p', "product=$($script:Product)",
     '-p', "buildMode=$($script:BuildMode)"
   )
+
+  $appManifestPath = Join-Path $script:RepositoryRoot 'AppScope\app.json5'
+  $appManifest = Get-Content -LiteralPath $appManifestPath -Raw
+  $versionNameMatch = [regex]::Match($appManifest, '"versionName"\s*:\s*"([^"]+)"')
+  $versionCodeMatch = [regex]::Match($appManifest, '"versionCode"\s*:\s*(\d+)')
+  if (-not $versionNameMatch.Success -or -not $versionCodeMatch.Success) {
+    throw "无法从 $appManifestPath 解析 versionName/versionCode。"
+  }
+  $versionName = $versionNameMatch.Groups[1].Value
+  $versionCode = [long]$versionCodeMatch.Groups[1].Value
+
+  $hapDirectory = Join-Path $script:RepositoryRoot "entry\build\$($script:Product)\outputs\$($script:Product)"
+
   if (-not $SkipBuild) {
     Invoke-Hvigor -ResolvedNode $resolvedNode -ResolvedHvigor $resolvedHvigor `
       -Arguments (@('assembleHap') + $commonProperties + @('--no-daemon')) `
-      -Description '构建 API 26 Debug HAP' | Out-Null
-    $hapDirectory = Join-Path $script:RepositoryRoot "entry\build\$($script:Product)\outputs\$($script:Product)"
-    $hap = Get-ChildItem -LiteralPath $hapDirectory -Filter '*.hap' -File -ErrorAction SilentlyContinue |
-      Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
-    if ($null -eq $hap) {
-      throw "构建成功但没有在预期目录生成 HAP：$hapDirectory"
+      -Description "构建 API $ExpectedCompileApiVersion $($script:BuildMode) HAP" | Out-Null
+    # 按明确路径校验本次构建产物，不按目录内最新修改时间挑选，避免误用陈旧 HAP。
+    $hapPath = Join-Path $hapDirectory 'entry-default-unsigned.hap'
+    if (-not (Test-Path -LiteralPath $hapPath -PathType Leaf)) {
+      throw "构建成功但没有生成预期的未签名 HAP：$hapPath"
     }
+    $hap = Get-Item -LiteralPath $hapPath
     Write-Host "HAP: $($hap.FullName)"
+    if ($script:BuildMode -eq 'release') {
+      Assert-HapNoSourceMap -HapPath $hap.FullName
+    }
     Assert-HapApiVersions -HapPath $hap.FullName `
       -ExpectedTargetApiVersion (Get-SdkApiVersion -SdkVersion $ExpectedTargetSdkVersion -Description 'targetSdkVersion') `
       -ExpectedCompatibleApiVersion (Get-SdkApiVersion -SdkVersion $ExpectedCompatibleSdkVersion -Description 'compatibleSdkVersion') `
-      -ExpectedBundleName $ExpectedBundleName
+      -ExpectedBundleName $ExpectedBundleName `
+      -ExpectedBuildMode $script:BuildMode `
+      -ExpectedVersionName $versionName `
+      -ExpectedVersionCode $versionCode
+    if ($script:BuildMode -eq 'release') {
+      $hapSha256 = (Get-FileHash -LiteralPath $hap.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+      Copy-ReleaseMappingArchive -HapDirectory $hapDirectory -VersionName $versionName -HapSha256 $hapSha256
+    }
   }
 
   $sourceTestCount = Get-RegisteredTestCount
@@ -409,11 +495,19 @@ try {
     throw "Hypium 未全量通过：Pass=$passed Failure=$failures Error=$errors Ignore=$ignored。"
   }
 
-  Copy-ReleaseArtifacts `
-    -HapDirectory (Join-Path $script:RepositoryRoot "entry\build\$($script:Product)\outputs\$($script:Product)") `
-    -AppManifestPath (Join-Path $script:RepositoryRoot 'AppScope\app.json5')
+  if (-not $SkipBuild -and $script:BuildMode -eq 'release') {
+    Copy-ReleaseArtifacts -HapDirectory $hapDirectory -VersionName $versionName
+    # 交付前再次核对：版本命名未签名产物必须与本次构建产物哈希一致。
+    $finalUnsigned = Join-Path $hapDirectory "ZhihuPlusPlus-HMOS-v$versionName-unsigned.hap"
+    $builtUnsigned = Join-Path $hapDirectory 'entry-default-unsigned.hap'
+    $finalHash = (Get-FileHash -LiteralPath $finalUnsigned -Algorithm SHA256).Hash.ToLowerInvariant()
+    $builtHash = (Get-FileHash -LiteralPath $builtUnsigned -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($finalHash -ne $builtHash) {
+      throw "交付前核对失败：$finalUnsigned 与本次构建产物哈希不一致。"
+    }
+  }
 
-  Write-Host "HarmonyOS 迁移验证通过：API $ExpectedCompileApiVersion 编译，target=$ExpectedTargetSdkVersion，compatible=$ExpectedCompatibleSdkVersion，Hypium $passed/$requiredTestCount。"
+  Write-Host "HarmonyOS 迁移验证通过：API $ExpectedCompileApiVersion 编译（$($script:BuildMode)），target=$ExpectedTargetSdkVersion，compatible=$ExpectedCompatibleSdkVersion，Hypium $passed/$requiredTestCount。"
   Write-Host "测试报告：$testResultPath"
 } finally {
   Set-Location $previousLocation

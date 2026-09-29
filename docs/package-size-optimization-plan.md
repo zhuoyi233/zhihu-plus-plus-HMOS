@@ -4,7 +4,7 @@
 > 目标分支：`codex/phase-prefix-removal`  
 > 检查时 HEAD：`ace78dc586643ea7b4a9a4e7bcf2ce50f4cd0045`  
 > 应用版本：`0.5.6`  
-> 状态：阶段一（体积基线）已完成（2026-09-29）；阶段二起待实施
+> 状态：阶段一（体积基线）与阶段二（Release 出包分离）已完成（2026-09-29）；阶段三起待实施
 
 ## 1. 目标与实施顺序
 
@@ -97,26 +97,51 @@
 
 主要涉及 `scripts/verify-harmony.ps1`，必要时新增独立的发行构建脚本。
 
-- [ ] 保持日常 Debug 验证入口，提供显式的 Release 出包入口或构建模式参数。
-- [ ] 将测试使用的构建参数与发行 HAP 使用的参数分离，核实当前工具链的 Hypium 模式支持。
-- [ ] 第一轮保持混淆关闭，只测量 Debug → Release 本身的效果。
-- [ ] 用明确的 unsigned/signed 产物路径校验结果，避免仅按目录内最新修改时间挑选 HAP。
-- [ ] `-SkipBuild` 仅执行相应验证，不把旧 HAP 复制或标记为本次发行结果。
-- [ ] 仅在本次 Release 构建和验证成功后，复制 `ZhihuPlusPlus-HMOS-v<version>-unsigned.hap`。
-- [ ] 检查最终 HAP 的版本号、bundleName、API 版本、`buildMode` 与 `debug` 字段。
-- [ ] 确认发行 HAP 不包含 `ets/sourceMaps.map`；按版本和产物哈希单独归档映射，供崩溃定位使用。
-- [ ] 防止后续测试或 Debug 构建覆盖已验证的发行产物，交付前再次核对哈希。
+- [x] 保持日常 Debug 验证入口，提供显式的 Release 出包入口或构建模式参数。（新增 `-BuildMode`，默认 `debug`）
+- [x] 将测试使用的构建参数与发行 HAP 使用的参数分离，核实当前工具链的 Hypium 模式支持。
+  （核实结果：`hvigor test` 支持 `buildMode=release`，实测 704/704 通过，**无需分离**，测试与发行 HAP 共用同一模式参数）
+- [x] 第一轮保持混淆关闭，只测量 Debug → Release 本身的效果。
+- [x] 用明确的 unsigned/signed 产物路径校验结果，避免仅按目录内最新修改时间挑选 HAP。（固定校验 `entry-default-unsigned.hap`）
+- [x] `-SkipBuild` 仅执行相应验证，不把旧 HAP 复制或标记为本次发行结果。（复制逻辑移入"本次有构建且为 Release"分支）
+- [x] 仅在本次 Release 构建和验证成功后，复制 `ZhihuPlusPlus-HMOS-v<version>-unsigned.hap`。（Debug 验证不再产出/覆盖版本命名产物）
+- [x] 检查最终 HAP 的版本号、bundleName、API 版本、`buildMode` 与 `debug` 字段。（版本号与 `AppScope/app.json5` 核对）
+- [x] 确认发行 HAP 不包含 `ets/sourceMaps.map`；按版本和产物哈希单独归档映射，供崩溃定位使用。
+  （实测 release 构建本就不打包映射；脚本新增断言防回归，映射归档至 `mapping-archive/v<version>-<SHA前8位>/`）
+- [x] 防止后续测试或 Debug 构建覆盖已验证的发行产物，交付前再次核对哈希。（复制时与交付前各核对一次）
+
+### 实施与验证记录（2026-09-29）
+
+- `verify-harmony.ps1` 改造：新增 `-BuildMode`（`debug`/`release`，默认 `debug`，原行为不变）；构建产物改按
+  `entry-default-unsigned.hap` 明确路径校验；`Assert-HapApiVersions` 扩展为同时校验包内 `module.json` 的
+  `buildMode`/`debug`/`versionName`/`versionCode`（与 `AppScope/app.json5` 核对）；Release 模式增加
+  `Assert-HapNoSourceMap` 断言与 `Copy-ReleaseMappingArchive` 映射归档；`Copy-ReleaseArtifacts` 仅在
+  Release 构建且 Hypium 通过后调用，复制前后核对 SHA-256，流程末尾再次核对版本命名产物与本次构建产物一致；
+  `-SkipBuild` 不再触发任何复制。AGENTS.md 的构建命令与发布产物说明已同步更新。
+- Hypium 模式核实：`hvigor test -p buildMode=release` 实测通过（704/704），测试与发行 HAP 使用同一
+  `buildMode` 参数，无需拆分。
+- Release 出包全流程（`verify-harmony.ps1 -SkipDependencyInstall -BuildMode release`）通过：
+  构建 → 无映射断言 → 元数据断言 → 映射归档 → Hypium 704/704 → 版本命名产物复制与交付前哈希核对。
+- 实测体积（`size-reports/release-obfoff-3d4e3f2d.size-report.json`，对比 Debug 基线）：
+  **7,891,004 → 3,106,172 字节，减少 4,784,832 字节（-60.6%）**，约 2.96 MiB。条目级差异干净：
+  `ets/modules.abc` 5,376,664 → 3,007,480（Release 字节码 -2,369,184），`ets/sourceMaps.map` 2,415,539 → 0
+  （移出包外），`module.json` 仅 +3 字节（"debug"→"release"）。发行产物 SHA-256：
+  `4ada8c666fbf64184f2a21a9ade6d22a5f79db6b86a88303cfddb0619b86fc29`。
+- API 23 模拟器（`ZhihuPlus_API23`，`127.0.0.1:5555`）烟测通过：覆盖安装 Release 签名包（未清数据）→
+  冷启动首页 `home_feed_list` 正常加载且无登录错误节点（登录态保留）→ 底栏切日报
+  （`top_level_daily_content` 及日报内容可见）→ 深链热启动直达问题详情页（`question_detail`）。
 
 ### 收益与验收
 
-仅从现有 HAP 扣除源码映射，计算结果为 5,475,465 字节，约 **5.22 MiB**，减少约 **30.6%**。此数字没有计入 Release 字节码变化及 ZIP 目录变化，只用于估算，不是实测结果或收益保证。
+规划时仅从现有 HAP 扣除源码映射，估算为 5,475,465 字节（约 5.22 MiB，-30.6%）。该估算未计入 Release
+字节码变化；实测 Release（混淆关闭）为 **3,106,172 字节（约 2.96 MiB，-60.6%）**，收益远超估算——
+Release 字节码本身比 Debug 缩小 2,369,184 字节。估算值已被实测值取代，详见上方实施与验证记录。
 
-验收要求：
+验收要求（2026-09-29 全部满足）：
 
-- Release 元数据正确，映射文件在包外归档。
-- 与新构建的 Debug 基线相比体积下降；若未下降，解释具体条目变化后再决定下一步。
-- API 23 上安装、冷启动、登录态恢复及主要页面烟测通过。
-- 记录真正生成的 Release 体积，替换估算值。
+- [x] Release 元数据正确（`buildMode=release`、`debug=false`、版本与 bundleName 与清单一致），映射文件在包外归档。
+- [x] 与新构建的 Debug 基线相比体积下降（-60.6%，条目级差异干净，无需进一步解释）。
+- [x] API 23 上安装、冷启动、登录态恢复及主要页面烟测通过。
+- [x] 记录真正生成的 Release 体积，替换估算值。
 
 ## 5. 阶段三：逐步启用混淆
 
@@ -181,7 +206,13 @@ pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall -SkipBui
 pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall
 ```
 
-随后使用阶段二实现的发行入口构建、校验 Release HAP。最终入口和命令在实现后补入本文；上面现有命令目前生成 Debug 包，不代表已经具备 Release 验证能力。
+随后使用阶段二实现的发行入口构建、校验 Release HAP：
+
+```powershell
+pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall -BuildMode release
+```
+
+该入口已实现并实测通过（见第 4 节记录）；上面现有命令生成 Debug 验证包，不产出版本命名发行产物。
 
 - Hypium 用例数由 `entry/src/test/List.test.ets` 动态统计，记录实际通过数。
 - 默认设备为 `ZhihuPlus_API23`（`127.0.0.1:5555`）；多设备时显式指定目标。
@@ -195,7 +226,7 @@ pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall
 | --- | ---: | --- | --- | --- | --- |
 | 检查时现有 Debug 包 | 7,891,004 | — | 本轮未执行 | 本轮未执行 | 已读取产物，重建前已归档 |
 | 重新构建 Debug 基线 | 7,891,004 | 0 字节（条目级一致） | 未执行（阶段一不含） | 未执行（阶段一不含） | 已完成（2026-09-29） |
-| Release，混淆关闭 | 待测 | 待测 | 待执行 | 待执行 | 待实施 |
+| Release，混淆关闭 | 3,106,172 | -60.6%（相对 Debug 基线） | 704/704（release 模式） | 通过（烟测） | 已完成（2026-09-29） |
 | Release，开启混淆 | 待测 | 待测 | 待执行 | 待执行 | 待实施 |
 | Release，排除诊断功能 | 待测 | 待测 | 待执行 | 待执行 | 待评估 |
 
