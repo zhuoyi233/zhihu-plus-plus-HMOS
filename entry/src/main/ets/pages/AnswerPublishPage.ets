@@ -432,6 +432,8 @@ export class SystemAnswerPublishTraceIdFactory implements AnswerPublishTraceIdFa
 export struct AnswerPublishPage {
   /** 当前生效主题色（AppShell 广播），驱动强调色控件。 */
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  /** 系统状态栏高度（vp）：隐藏注入标题栏后，页面头部需自行让出状态栏并留出呼吸空间。 */
+  @StorageProp('statusBarHeight') private statusBarHeightVp: number = 0;
   questionId: string = '';
   answerId?: string = undefined;
   session: LoginSessionGateway | undefined = undefined;
@@ -556,7 +558,12 @@ export struct AnswerPublishPage {
     .alignItems(HorizontalAlign.Start)
     .width('100%')
     .height('100%')
-    .padding($r('app.float.card_padding'))
+    .padding({
+      left: $r('app.float.card_padding'),
+      right: $r('app.float.card_padding'),
+      top: Math.max(this.statusBarHeightVp, 0) + 12,
+      bottom: $r('app.float.card_padding')
+    })
     .backgroundColor($r('app.color.page_background'))
   }
 

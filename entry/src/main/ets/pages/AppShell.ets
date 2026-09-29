@@ -717,6 +717,8 @@ export struct AppShell {
         );
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '写回答' }, divider: { showType: DividerShowType.OFF } } })
+      // 页面自带返回键/标题/发布按钮的完整头部，注入标题栏会与之重叠（同视频页先例）。
+      .hideTitleBar(true)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.WRITE_PIN) {
