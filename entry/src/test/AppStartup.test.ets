@@ -2,9 +2,9 @@ import { describe, expect, it } from '@ohos/hypium';
 import {
   AppStartup,
   LatestOperationGuard,
-  P1Destination,
-  p1DestinationIdentity,
-  P1DestinationName,
+  AppDestination,
+  appDestinationIdentity,
+  AppDestinationName,
   StartupDestinationChannel,
   StartupClock,
   StartupPhase,
@@ -145,35 +145,35 @@ export default function appStartupTest(): void {
 
     it('keepsOnlyLatestColdStartupDestination', 0, () => {
       const channel = new StartupDestinationChannel();
-      const received: Array<P1Destination> = [];
-      channel.publish({ name: P1DestinationName.ANSWER, id: 'cold-a' });
-      channel.publish({ name: P1DestinationName.ARTICLE, id: 'cold-b' });
+      const received: Array<AppDestination> = [];
+      channel.publish({ name: AppDestinationName.ANSWER, id: 'cold-a' });
+      channel.publish({ name: AppDestinationName.ARTICLE, id: 'cold-b' });
 
-      const unsubscribe = channel.subscribe((destination: P1Destination): void => {
+      const unsubscribe = channel.subscribe((destination: AppDestination): void => {
         received.push(destination);
       });
       unsubscribe();
 
       expect(received.length).assertEqual(1);
-      expect(received[0].name).assertEqual(P1DestinationName.ARTICLE);
-      expect(p1DestinationIdentity(received[0])).assertEqual('Article:cold-b');
+      expect(received[0].name).assertEqual(AppDestinationName.ARTICLE);
+      expect(appDestinationIdentity(received[0])).assertEqual('Article:cold-b');
     });
 
     it('doesNotDeliverDuplicateNewWantDestination', 0, () => {
       const channel = new StartupDestinationChannel();
-      const received: Array<P1Destination> = [];
-      const unsubscribe = channel.subscribe((destination: P1Destination): void => {
+      const received: Array<AppDestination> = [];
+      const unsubscribe = channel.subscribe((destination: AppDestination): void => {
         received.push(destination);
       });
-      channel.publish({ name: P1DestinationName.SEARCH, query: 'ArkTS 导航' });
-      channel.publish({ name: P1DestinationName.SEARCH, query: 'ArkTS 导航' });
-      channel.publish({ name: P1DestinationName.SEARCH, query: 'HarmonyOS' });
+      channel.publish({ name: AppDestinationName.SEARCH, query: 'ArkTS 导航' });
+      channel.publish({ name: AppDestinationName.SEARCH, query: 'ArkTS 导航' });
+      channel.publish({ name: AppDestinationName.SEARCH, query: 'HarmonyOS' });
       unsubscribe();
 
       expect(received.length).assertEqual(2);
-      expect(p1DestinationIdentity(received[0]))
+      expect(appDestinationIdentity(received[0]))
         .assertEqual(`Search:${encodeURIComponent('ArkTS 导航')}`);
-      expect(p1DestinationIdentity(received[1])).assertEqual('Search:HarmonyOS');
+      expect(appDestinationIdentity(received[1])).assertEqual('Search:HarmonyOS');
     });
 
     it('makesNewerThemeSelectionOutrankRestoreAndInvalidatesOnLeave', 0, () => {

@@ -1,6 +1,6 @@
-import { P1Destination } from 'core';
+import { AppDestination } from 'core';
 
 export interface DailyStoryRepository {
-  getDestination(storyId: string): Promise<P1Destination | undefined>;
+  getDestination(storyId: string): Promise<AppDestination | undefined>;
   cancel(): void;
 }

@@ -1,103 +1,103 @@
 {
   "float": [
     {
-      "name": "p1_display_font_size",
+      "name": "display_font_size",
       "value": "30fp"
     },
     {
-      "name": "p1_heading_font_size",
+      "name": "heading_font_size",
       "value": "20fp"
     },
     {
-      "name": "p1_body_font_size",
+      "name": "body_font_size",
       "value": "16fp"
     },
     {
-      "name": "p1_secondary_font_size",
+      "name": "secondary_font_size",
       "value": "14fp"
     },
     {
-      "name": "p1_caption_font_size",
+      "name": "caption_font_size",
       "value": "12fp"
     },
     {
-      "name": "p1_page_padding",
+      "name": "page_padding",
       "value": "12vp"
     },
     {
-      "name": "p1_card_padding",
+      "name": "card_padding",
       "value": "18vp"
     },
     {
-      "name": "p1_card_radius",
+      "name": "card_radius",
       "value": "16vp"
     },
     {
-      "name": "p1_spacing_large",
+      "name": "spacing_large",
       "value": "24vp"
     },
     {
-      "name": "p1_spacing_medium",
+      "name": "spacing_medium",
       "value": "14vp"
     },
     {
-      "name": "p1_spacing_small",
+      "name": "spacing_small",
       "value": "10vp"
     },
     {
-      "name": "p1_spacing_xsmall",
+      "name": "spacing_xsmall",
       "value": "4vp"
     },
     {
-      "name": "p3_segment_sheet_title_font_size",
+      "name": "segment_sheet_title_font_size",
       "value": "14fp"
     },
     {
-      "name": "p3_segment_quote_font_size",
+      "name": "segment_quote_font_size",
       "value": "18fp"
     },
     {
-      "name": "p3_segment_quote_line_height",
+      "name": "segment_quote_line_height",
       "value": "26fp"
     },
     {
-      "name": "p3_segment_action_button_height",
+      "name": "segment_action_button_height",
       "value": "40vp"
     },
     {
-      "name": "p3_segment_action_button_radius",
+      "name": "segment_action_button_radius",
       "value": "20vp"
     },
     {
-      "name": "p3_settings_slider_height",
+      "name": "settings_slider_height",
       "value": "48vp"
     },
     {
-      "name": "p3_settings_slider_track_thickness",
+      "name": "settings_slider_track_thickness",
       "value": "16vp"
     },
     {
-      "name": "p3_settings_slider_track_radius",
+      "name": "settings_slider_track_radius",
       "value": "8vp"
     },
     {
-      "name": "p3_settings_slider_thumb_width",
+      "name": "settings_slider_thumb_width",
       "value": "4vp"
     },
     {
-      "name": "p3_settings_slider_thumb_height",
+      "name": "settings_slider_thumb_height",
       "value": "44vp"
     },
     {
-      "name": "p3_settings_slider_thumb_radius",
+      "name": "settings_slider_thumb_radius",
       "value": "2vp"
     },
     {
-      "name": "p3_settings_slider_thumb_gap_width",
+      "name": "settings_slider_thumb_gap_width",
       "value": "16vp"
     },
     {
-      "name": "p3_settings_slider_thumb_gap_offset",
+      "name": "settings_slider_thumb_gap_offset",
       "value": "-6vp"
     }
   ]

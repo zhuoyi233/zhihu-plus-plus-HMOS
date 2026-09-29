@@ -59,21 +59,21 @@ export struct PhoneLoginPage {
   }
 
   build() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
+    Column({ space: $r('app.float.spacing_medium') }) {
       Text('手机号登录')
-        .fontSize($r('app.float.p1_heading_font_size'))
+        .fontSize($r('app.float.heading_font_size'))
         .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.primary_text'))
       Text('使用知乎官方 Android 登录协议。是否需要图形验证码由知乎风控实时决定。')
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
 
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Text('+86')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.body_font_size'))
           .fontColor($r('app.color.secondary_text'))
         TextInput({ text: this.phone, placeholder: '请输入手机号' })
-          .id('p3_phone_input')
+          .id('phone_input')
           .type(InputType.PhoneNumber)
           .layoutWeight(1)
           .maxLength(11)
@@ -86,28 +86,28 @@ export struct PhoneLoginPage {
       .alignItems(VerticalAlign.Center)
 
       if (this.captchaRequired) {
-        Column({ space: $r('app.float.p1_spacing_small') }) {
+        Column({ space: $r('app.float.spacing_small') }) {
           Image(this.captchaDataUri())
-            .id('p3_phone_captcha_image')
+            .id('phone_captcha_image')
             .width('100%')
             .height(96)
             .objectFit(ImageFit.Contain)
             .backgroundColor($r('app.color.divider_color'))
           TextInput({ text: this.captchaInput, placeholder: '图形验证码' })
-            .id('p3_phone_captcha_input')
+            .id('phone_captcha_input')
             .maxLength(16)
             .enabled(!this.isSendingDigits)
             .onChange((value: string): void => {
               this.captchaInput = value;
             })
-          Row({ space: $r('app.float.p1_spacing_medium') }) {
+          Row({ space: $r('app.float.spacing_medium') }) {
             Button('换一张')
-              .id('p3_phone_captcha_refresh')
+              .id('phone_captcha_refresh')
               .layoutWeight(1)
-              .fontSize($r('app.float.p1_body_font_size'))
+              .fontSize($r('app.float.body_font_size'))
               .fontColor(this.resolvedThemeColor)
               .backgroundColor(Color.Transparent)
-              .border({ width: 1, color: this.resolvedThemeColor, radius: $r('app.float.p1_card_radius') })
+              .border({ width: 1, color: this.resolvedThemeColor, radius: $r('app.float.card_radius') })
               .enabled(!this.isSendingDigits)
               .onClick((): void => {
                 this.refreshCaptchaImage();
@@ -115,9 +115,9 @@ export struct PhoneLoginPage {
             Button('验证并发送')
               .backgroundColor(this.resolvedThemeColor)
               .fontColor(onThemeColor(this.resolvedThemeColor))
-              .id('p3_phone_captcha_submit')
+              .id('phone_captcha_submit')
               .layoutWeight(1)
-              .fontSize($r('app.float.p1_body_font_size'))
+              .fontSize($r('app.float.body_font_size'))
               .enabled(this.captchaInput.trim().length > 0 && !this.isSendingDigits)
               .onClick((): void => {
                 this.verifyCaptchaAndSend();
@@ -130,9 +130,9 @@ export struct PhoneLoginPage {
       }
 
       // 对齐上游：短信验证码输入框（左）+ 发送/倒计时按钮（右）同一行
-      Row({ space: $r('app.float.p1_spacing_medium') }) {
+      Row({ space: $r('app.float.spacing_medium') }) {
         TextInput({ text: this.digits, placeholder: '短信验证码' })
-          .id('p3_phone_digits_input')
+          .id('phone_digits_input')
           .type(InputType.Number)
           .layoutWeight(1)
           .maxLength(6)
@@ -148,11 +148,11 @@ export struct PhoneLoginPage {
               .color(Color.White)
           } else {
             Text(this.resendSeconds > 0 ? `${this.resendSeconds}s` : '发送验证码')
-              .fontSize($r('app.float.p1_body_font_size'))
+              .fontSize($r('app.float.body_font_size'))
               .fontColor(Color.White)
           }
         }
-        .id('p3_phone_send')
+        .id('phone_send')
         .width(112)
         .height(40)
         .padding({ left: 8, right: 8 })
@@ -167,20 +167,20 @@ export struct PhoneLoginPage {
       .alignItems(VerticalAlign.Center)
 
       // 对齐上游：协议勾选行，整行可点按切换
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Checkbox()
-          .id('p3_phone_agreement')
+          .id('phone_agreement')
           .select(this.agreementChecked)
           .selectedColor(this.resolvedThemeColor)
           .onChange((checked: boolean): void => {
             this.agreementChecked = checked;
           })
         Text('我已阅读并同意《知乎协议》《个人信息保护指引》')
-          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontSize($r('app.float.secondary_font_size'))
           .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
       }
-      .id('p3_phone_agreement_row')
+      .id('phone_agreement_row')
       .width('100%')
       .alignItems(VerticalAlign.Center)
       .onClick((): void => {
@@ -190,7 +190,7 @@ export struct PhoneLoginPage {
       Button(this.isLoggingIn ? '正在登录…' : '登录')
         .backgroundColor(this.resolvedThemeColor)
         .fontColor(onThemeColor(this.resolvedThemeColor))
-        .id('p3_phone_signin')
+        .id('phone_signin')
         .width('100%')
         .enabled(this.canSignIn())
         .onClick((): void => {
@@ -199,8 +199,8 @@ export struct PhoneLoginPage {
 
       if (this.message.length > 0) {
         Text(this.message)
-          .id('p3_phone_status')
-          .fontSize($r('app.float.p1_secondary_font_size'))
+          .id('phone_status')
+          .fontSize($r('app.float.secondary_font_size'))
           .fontColor(this.message.includes('失败') || this.message.includes('错误') ||
             this.message.includes('不正确') ? $r('app.color.error_text') : $r('app.color.secondary_text'))
       }

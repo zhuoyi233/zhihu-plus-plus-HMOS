@@ -27,10 +27,10 @@ export struct HistoryTitleBar {
 
   build() {
     Row({ space: 8 }) {
-      // 返回键由 HDS 标题栏默认 backIcon 承载（P1Shell 传入 action），这里从其右侧起排。
+      // 返回键由 HDS 标题栏默认 backIcon 承载（AppShell 传入 action），这里从其右侧起排。
       Text(this.title)
-        .id('p2_history_title')
-        .fontSize($r('app.float.p1_heading_font_size'))
+        .id('history_title')
+        .fontSize($r('app.float.heading_font_size'))
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.primary_text'))
         .maxLines(1)
@@ -41,7 +41,7 @@ export struct HistoryTitleBar {
           .fontSize(20)
           .fontColor([$r('app.color.primary_text')])
       }
-      .id('p2_history_overflow')
+      .id('history_overflow')
       .width(40)
       .height(40)
       .padding(0)

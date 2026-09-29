@@ -1,5 +1,5 @@
 import { common } from '@kit.AbilityKit';
-import { P1Destination, P1DestinationName } from 'core';
+import { AppDestination, AppDestinationName } from 'core';
 import {
   COOKIE_HEADER_MAX_LENGTH,
   CookieSessionStore,
@@ -25,7 +25,7 @@ export struct TechnicalLabPage {
   @State private loginBusy: boolean = false;
   @State private authenticated: boolean = false;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
-  navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
+  navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {
   };
   onDeveloperModeDisabled: () => void = (): void => {};
   private readonly httpProbeClient: HttpProbeClient = new HttpProbeClient();
@@ -37,18 +37,18 @@ export struct TechnicalLabPage {
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       Scroll() {
-        Column({ space: $r('app.float.p1_spacing_medium') }) {
+        Column({ space: $r('app.float.spacing_medium') }) {
           Blank().height(64)
           Text('开发者模式')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
           Row() {
             Column({ space: 4 }) {
-              Text('开发者模式').fontSize($r('app.float.p1_body_font_size'))
+              Text('开发者模式').fontSize($r('app.float.body_font_size'))
                 .fontColor($r('app.color.primary_text'))
               Text('关闭后将立即隐藏开发者选项并返回设置页')
-                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontSize($r('app.float.secondary_font_size'))
                 .fontColor($r('app.color.secondary_text'))
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
             Toggle({ type: ToggleType.Switch, isOn: this.developerModeEnabled })
@@ -63,18 +63,18 @@ export struct TechnicalLabPage {
           }
           .width('100%')
           .alignItems(VerticalAlign.Center)
-          .padding($r('app.float.p1_card_padding'))
-          .borderRadius($r('app.float.p1_card_radius'))
+          .padding($r('app.float.card_padding'))
+          .borderRadius($r('app.float.card_radius'))
           .backgroundColor($r('app.color.surface_background'))
 
           Text('账号与会话')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
-          Column({ space: $r('app.float.p1_spacing_medium') }) {
+          Column({ space: $r('app.float.spacing_medium') }) {
             Text(this.loginStatus)
               .id('developer_login_status')
-              .fontSize($r('app.float.p1_body_font_size'))
+              .fontSize($r('app.float.body_font_size'))
               .fontColor($r('app.color.primary_text'))
               .width('100%')
             Button('验证登录')
@@ -87,12 +87,12 @@ export struct TechnicalLabPage {
                 void this.verifyLogin();
               })
             Text('手动设置 Cookie')
-              .fontSize($r('app.float.p1_heading_font_size'))
+              .fontSize($r('app.float.heading_font_size'))
               .fontWeight(FontWeight.Medium)
               .fontColor($r('app.color.primary_text'))
               .width('100%')
             Text('请输入完整 Cookie 字符串。仅在本机验证并加密保存，提交后输入框会立即清空。')
-              .fontSize($r('app.float.p1_secondary_font_size'))
+              .fontSize($r('app.float.secondary_font_size'))
               .fontColor($r('app.color.secondary_text'))
               .width('100%')
             TextInput({ text: this.cookieInput, placeholder: 'name1=value1; name2=value2' })
@@ -124,18 +124,18 @@ export struct TechnicalLabPage {
           }
           .alignItems(HorizontalAlign.Start)
           .width('100%')
-          .padding($r('app.float.p1_card_padding'))
-          .borderRadius($r('app.float.p1_card_radius'))
+          .padding($r('app.float.card_padding'))
+          .borderRadius($r('app.float.card_radius'))
           .backgroundColor($r('app.color.surface_background'))
 
           Text('网络诊断')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
-          Column({ space: $r('app.float.p1_spacing_medium') }) {
+          Column({ space: $r('app.float.spacing_medium') }) {
             Text(this.networkStatus)
               .id('http_status')
-              .fontSize($r('app.float.p1_body_font_size'))
+              .fontSize($r('app.float.body_font_size'))
               .fontColor($r('app.color.primary_text'))
               .width('100%')
             Button('运行 HTTP 探针')
@@ -158,59 +158,59 @@ export struct TechnicalLabPage {
           }
           .alignItems(HorizontalAlign.Start)
           .width('100%')
-          .padding($r('app.float.p1_card_padding'))
-          .borderRadius($r('app.float.p1_card_radius'))
+          .padding($r('app.float.card_padding'))
+          .borderRadius($r('app.float.card_radius'))
           .backgroundColor($r('app.color.surface_background'))
 
           Text('调试页面')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
           Column() {
             AppNavigationRow({ title: '原生长正文', description: '验证正文解析、排版与公式渲染',
               testId: 'open_reader_probe', grouped: true,
-              onRowClick: (): void => this.navigate({ name: P1DestinationName.READER_PROBE }) })
+              onRowClick: (): void => this.navigate({ name: AppDestinationName.READER_PROBE }) })
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '图片与 GIF', description: '验证图片加载和动图展示',
               testId: 'open_image_probe', grouped: true,
-              onRowClick: (): void => this.navigate({ name: P1DestinationName.IMAGE_PROBE }) })
+              onRowClick: (): void => this.navigate({ name: AppDestinationName.IMAGE_PROBE }) })
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '数据库迁移', description: '验证本地数据库结构升级',
               testId: 'open_database_probe', grouped: true,
-              onRowClick: (): void => this.navigate({ name: P1DestinationName.DATABASE_PROBE }) })
+              onRowClick: (): void => this.navigate({ name: AppDestinationName.DATABASE_PROBE }) })
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '深链解析', description: '验证知乎链接到原生页面的路由',
               testId: 'open_deep_link_probe', grouped: true,
-              onRowClick: (): void => this.navigate({ name: P1DestinationName.DEEP_LINK_PROBE }) })
+              onRowClick: (): void => this.navigate({ name: AppDestinationName.DEEP_LINK_PROBE }) })
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '二维码扫描', description: '验证 Scan Kit 与结果安全策略',
               testId: 'open_qr_scan_probe', grouped: true,
-              onRowClick: (): void => this.navigate({ name: P1DestinationName.QR_SCAN_PROBE }) })
+              onRowClick: (): void => this.navigate({ name: AppDestinationName.QR_SCAN_PROBE }) })
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '后台任务约束', description: '验证后台执行边界',
               testId: 'open_background_task_probe', grouped: true,
-              onRowClick: (): void => this.navigate({ name: P1DestinationName.BACKGROUND_TASK_PROBE }) })
+              onRowClick: (): void => this.navigate({ name: AppDestinationName.BACKGROUND_TASK_PROBE }) })
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '领域模型夹具门禁', description: '运行领域模型设备端回归',
-              testId: 'p1_open_domain_fixture_probe', grouped: true,
-              onRowClick: (): void => this.navigate({ name: P1DestinationName.DOMAIN_FIXTURE_PROBE }) })
+              testId: 'open_domain_fixture_probe', grouped: true,
+              onRowClick: (): void => this.navigate({ name: AppDestinationName.DOMAIN_FIXTURE_PROBE }) })
           }
           .width('100%')
-          .borderRadius($r('app.float.p1_card_radius'))
+          .borderRadius($r('app.float.card_radius'))
           .backgroundColor($r('app.color.surface_background'))
 
           Text('本地存储诊断')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
-          Column({ space: $r('app.float.p1_spacing_medium') }) {
+          Column({ space: $r('app.float.spacing_medium') }) {
             Text(this.sessionStatus)
               .id('session_status')
-              .fontSize($r('app.float.p1_body_font_size'))
+              .fontSize($r('app.float.body_font_size'))
               .fontColor($r('app.color.primary_text'))
               .width('100%')
             Text('测试会话会暂时覆盖本地 Cookie 存储；仅用于无真实登录态时的开发验证。')
-              .fontSize($r('app.float.p1_secondary_font_size'))
+              .fontSize($r('app.float.secondary_font_size'))
               .fontColor($r('app.color.secondary_text'))
               .width('100%')
             Button('写入测试会话')
@@ -234,22 +234,22 @@ export struct TechnicalLabPage {
           }
           .alignItems(HorizontalAlign.Start)
           .width('100%')
-          .padding($r('app.float.p1_card_padding'))
-          .borderRadius($r('app.float.p1_card_radius'))
+          .padding($r('app.float.card_padding'))
+          .borderRadius($r('app.float.card_radius'))
           .backgroundColor($r('app.color.surface_background'))
         }
         .width('100%')
-        .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
-          bottom: $r('app.float.p1_page_padding') })
+        .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
+          bottom: $r('app.float.page_padding') })
       }
       .scrollBar(BarState.Off)
-      .id('p1_technical_lab_scroll')
+      .id('technical_lab_scroll')
       .width('100%')
       .height('100%')
       .align(Alignment.TopStart)
       .backgroundColor($r('app.color.page_background'))
     }
-    .id('p1_technical_lab_top_start_container')
+    .id('technical_lab_top_start_container')
     .width('100%')
     .height('100%')
     .alignContent(Alignment.TopStart)

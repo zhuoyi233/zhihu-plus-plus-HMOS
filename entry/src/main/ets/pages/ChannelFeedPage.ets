@@ -1,6 +1,6 @@
 import { FeedContentSummary } from './components/FeedContentSummary';
 import { HotQuestionStatistics } from './components/HotQuestionStatistics';
-import { isSafeDecimalContentId, P1Destination, P1DestinationName } from 'core';
+import { isSafeDecimalContentId, AppDestination, AppDestinationName } from 'core';
 import {
   onThemeColor,
   BlockedFeedHistoryGateway,
@@ -65,7 +65,7 @@ export struct ChannelFeedPage {
   @StorageProp('dailyDateSelectionTick') @Watch('loadDateFromTitleBar') dailyDateSelectionTick: number = 0;
   // 登录成功重载信号：经 AppStorage 广播（@Consume 在 HdsTabs 树下实测不链接）
   @StorageProp('loginFeedReloadTick') @Watch('onLoginFeedReloadTick') loginFeedReloadTick: number = 0;
-  // 双击底栏页签刷新：关注=1、热榜=2、日报=3（P1TopLevelTab），复用下拉刷新链路
+  // 双击底栏页签刷新：关注=1、热榜=2、日报=3（TopLevelTab），复用下拉刷新链路
   @StorageProp('tabRefreshTick') @Watch('onTabRefreshRequested') tabRefreshTick: number = 0;
   @StorageProp('tabRefreshTabIndex') tabRefreshTabIndex: number = -1;
   @StorageProp('tabScrollTopTick') @Watch('onTabScrollTopRequested') private tabScrollTopTick: number = 0;
@@ -79,7 +79,7 @@ export struct ChannelFeedPage {
   private indicator?: FeedPullDownIndicatorHost = undefined;
   @Consume('channelFeedInteractionBridge') private interactionBridge: ChannelFeedInteractionBridge =
     new ChannelFeedInteractionBridge();
-  navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
+  navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {
   };
   @State private phase: ChannelFeedPhase = ChannelFeedPhase.IDLE;
   @State private items: Array<ChannelFeedItem> = [];
@@ -215,7 +215,7 @@ export struct ChannelFeedPage {
 
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
-      Column({ space: $r('app.float.p1_spacing_medium') }) {
+      Column({ space: $r('app.float.spacing_medium') }) {
       if (this.phase === ChannelFeedPhase.IDLE || this.phase === ChannelFeedPhase.INITIAL_LOADING) {
         this.centeredStatus(`正在加载${channelFeedTitle(this.source)}…`, false);
       } else if (this.phase === ChannelFeedPhase.ERROR) {
@@ -234,31 +234,31 @@ export struct ChannelFeedPage {
             // 就是状态栏区域，只有 List 内容项才被 contentStartOffset 内缩让位到标题栏下沿
             if (this.errorMessage.length > 0) {
               ListItem() {
-                Row({ space: $r('app.float.p1_spacing_small') }) {
+                Row({ space: $r('app.float.spacing_small') }) {
                   Text(this.errorMessage)
-                    .fontSize($r('app.float.p1_secondary_font_size'))
+                    .fontSize($r('app.float.secondary_font_size'))
                     .fontColor($r('app.color.secondary_text'))
                     .layoutWeight(1)
                   if (this.requiresLogin) {
                     Button('去登录')
                       .backgroundColor(this.resolvedThemeColor)
                       .fontColor(onThemeColor(this.resolvedThemeColor))
-                      .id(`p2_channel_${this.source}_login`)
-                      .onClick(() => this.navigate({ name: P1DestinationName.LOGIN }))
+                      .id(`channel_${this.source}_login`)
+                      .onClick(() => this.navigate({ name: AppDestinationName.LOGIN }))
                   } else {
                     Button('重试')
                       .backgroundColor(this.resolvedThemeColor)
                       .fontColor(onThemeColor(this.resolvedThemeColor))
-                      .id(`p2_channel_${this.source}_retry_more`)
+                      .id(`channel_${this.source}_retry_more`)
                       .onClick(() => this.controller?.retry())
                   }
                 }
                 .width('100%')
-                .padding($r('app.float.p1_spacing_small'))
-                .borderRadius($r('app.float.p1_card_radius'))
+                .padding($r('app.float.spacing_small'))
+                .borderRadius($r('app.float.card_radius'))
                 .backgroundColor($r('app.color.surface_background'))
               }
-              .margin({ bottom: $r('app.float.p1_spacing_medium') })
+              .margin({ bottom: $r('app.float.spacing_medium') })
             }
 
             if (this.topContentVisible) {
@@ -281,14 +281,14 @@ export struct ChannelFeedPage {
                   .width('100%')
                 }
               }
-              .margin({ bottom: this.feedCardStyle === 'card' ? $r('app.float.p1_spacing_medium') : 0 })
+              .margin({ bottom: this.feedCardStyle === 'card' ? $r('app.float.spacing_medium') : 0 })
             }, (item: ChannelFeedItem): string => channelFeedItemIdentity(item))
 
             if (this.loadingMore) {
               // 上拉加载更多：与下拉刷新一致的圆形加载动画（onReachEnd 自动触发）
               ListItem() {
                 LoadingProgress()
-                  .id(`p2_channel_${this.source}_load_more`)
+                  .id(`channel_${this.source}_load_more`)
                   .width(40)
                   .height(40)
                   .color(this.resolvedThemeColor)
@@ -297,7 +297,7 @@ export struct ChannelFeedPage {
               .padding({ top: 12, bottom: 12 })
             }
           }
-          .id(`p2_channel_${this.source}_list`)
+          .id(`channel_${this.source}_list`)
           .width('100%')
           // 顶栏让位：内缩滚动内容起点，未滚动时首条卡片仍从标题栏下沿开始
           .contentStartOffset(FLOATING_TITLE_BAR_OFFSET)
@@ -331,8 +331,8 @@ export struct ChannelFeedPage {
 
       if (this.blockingMessage.length > 0) {
         Text(this.blockingMessage)
-          .id(`p3_channel_${this.source}_blocking_status`)
-          .fontSize($r('app.float.p1_secondary_font_size'))
+          .id(`channel_${this.source}_blocking_status`)
+          .fontSize($r('app.float.secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .width('100%')
       }
@@ -349,14 +349,14 @@ export struct ChannelFeedPage {
       // 覆盖式顶栏：容器不设 top padding，滚动视口一直延伸到屏幕顶，卡片滚起来后
       // 穿过玻璃标题栏形成沉浸光感；首屏起始位置由列表的 contentStartOffset 内缩。
       .padding({
-        left: $r('app.float.p1_page_padding'),
-        right: $r('app.float.p1_page_padding'),
-        bottom: $r('app.float.p1_page_padding')
+        left: $r('app.float.page_padding'),
+        right: $r('app.float.page_padding'),
+        bottom: $r('app.float.page_padding')
       })
 
       if (this.showRefreshFab && this.phase === ChannelFeedPhase.READY) {
         DraggableRefreshButton({
-          elementId: `p3_channel_${this.source}_refresh_fab`,
+          elementId: `channel_${this.source}_refresh_fab`,
           accessibilityLabel: `刷新${channelFeedTitle(this.source)}`,
           fabOpacity: this.fabOpacity,
           loading: this.refreshing,
@@ -374,8 +374,8 @@ export struct ChannelFeedPage {
             .height(40)
             .color(this.resolvedThemeColor)
           Text('正在打开日报原文…')
-            .id(`p2_channel_${this.source}_daily_opening`)
-            .fontSize($r('app.float.p1_body_font_size'))
+            .id(`channel_${this.source}_daily_opening`)
+            .fontSize($r('app.float.body_font_size'))
             .fontColor($r('app.color.primary_text'))
         }
         .width('100%')
@@ -387,26 +387,26 @@ export struct ChannelFeedPage {
       // 打开失败提示。
       if (this.dailyStoryOpenError.length > 0) {
         Column() {
-          Column({ space: $r('app.float.p1_spacing_medium') }) {
+          Column({ space: $r('app.float.spacing_medium') }) {
             Text('打开日报失败')
-              .fontSize($r('app.float.p1_body_font_size'))
+              .fontSize($r('app.float.body_font_size'))
               .fontWeight(FontWeight.Medium)
             Text(this.dailyStoryOpenError)
-              .fontSize($r('app.float.p1_secondary_font_size'))
+              .fontSize($r('app.float.secondary_font_size'))
               .fontColor($r('app.color.secondary_text'))
               .textAlign(TextAlign.Center)
             Button('确定')
               .backgroundColor(this.resolvedThemeColor)
               .fontColor(onThemeColor(this.resolvedThemeColor))
-              .id(`p2_channel_${this.source}_daily_open_error_ok`)
+              .id(`channel_${this.source}_daily_open_error_ok`)
               .width('100%')
               .onClick((): void => {
                 this.dailyStoryOpenError = '';
               })
           }
           .width('80%')
-          .padding($r('app.float.p1_card_padding'))
-          .borderRadius($r('app.float.p1_card_radius'))
+          .padding($r('app.float.card_padding'))
+          .borderRadius($r('app.float.card_radius'))
           .backgroundColor($r('app.color.surface_background'))
         }
         .width('100%')
@@ -429,12 +429,12 @@ export struct ChannelFeedPage {
     AppPageStatusPanel({
       kind: retry ? AppPageStatusKind.ERROR : AppPageStatusKind.LOADING,
       message: message,
-      testId: `p2_channel_${this.source}_status`,
+      testId: `channel_${this.source}_status`,
       actionLabel: retry ? (this.requiresLogin ? '去登录' : '重新加载') : '',
-      actionId: this.requiresLogin ? `p2_channel_${this.source}_login` : `p2_channel_${this.source}_retry`,
+      actionId: this.requiresLogin ? `channel_${this.source}_login` : `channel_${this.source}_retry`,
       onAction: (): void => {
         if (this.requiresLogin) {
-          this.navigate({ name: P1DestinationName.LOGIN });
+          this.navigate({ name: AppDestinationName.LOGIN });
           return;
         }
         this.controller?.retry();
@@ -445,23 +445,23 @@ export struct ChannelFeedPage {
   @Builder
   private contentCard(item: ChannelContentItem, index: number) {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
-      Column({ space: $r('app.float.p1_spacing_small') }) {
-        Row({ space: $r('app.float.p1_spacing_xsmall') }) {
+      Column({ space: $r('app.float.spacing_small') }) {
+        Row({ space: $r('app.float.spacing_xsmall') }) {
           if (this.source === ChannelFeedSource.HOT) {
             Text(`${index + 1}`)
-              .id(`p2_channel_hot_rank_${item.feedItem.target.id}`)
-              .fontSize($r('app.float.p1_heading_font_size'))
+              .id(`channel_hot_rank_${item.feedItem.target.id}`)
+              .fontSize($r('app.float.heading_font_size'))
               .fontWeight(FontWeight.Bold)
               .fontColor(this.resolvedThemeColor)
           }
           Text(channelActionLabel(item.feedItem, this.source))
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .layoutWeight(1)
           Text(channelKindLabel(item.feedItem.target.kind))
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor(this.resolvedThemeColor)
 
           // 对齐上游 FeedCardMenuBox：右上角紧凑“更多”符号图标，屏蔽等操作收进菜单。
@@ -470,7 +470,7 @@ export struct ChannelFeedPage {
               .fontSize(18)
               .fontColor([$r('app.color.secondary_text')])
           }
-          .id(`p3_channel_${this.source}_block_${item.feedItem.target.kind}_${item.feedItem.target.id}`)
+          .id(`channel_${this.source}_block_${item.feedItem.target.kind}_${item.feedItem.target.id}`)
           .width(32)
           .height(32)
           .padding(0)
@@ -485,7 +485,7 @@ export struct ChannelFeedPage {
           Image(item.feedItem.target.thumbnailUrl)
             .width('100%')
             .height(128)
-            .borderRadius($r('app.float.p1_spacing_small'))
+            .borderRadius($r('app.float.spacing_small'))
             .objectFit(ImageFit.Cover)
             .alt('内容缩略图')
         }
@@ -496,17 +496,17 @@ export struct ChannelFeedPage {
       .alignItems(HorizontalAlign.Start)
       .width('100%')
     }
-    .id(`p2_channel_content_${item.feedItem.target.kind}_${item.feedItem.target.id}`)
+    .id(`channel_content_${item.feedItem.target.kind}_${item.feedItem.target.id}`)
     .width('100%')
-    .padding($r('app.float.p1_card_padding'))
-    .borderRadius(this.feedCardStyle === 'card' ? $r('app.float.p1_card_radius') : 0)
+    .padding($r('app.float.card_padding'))
+    .borderRadius(this.feedCardStyle === 'card' ? $r('app.float.card_radius') : 0)
     .backgroundColor(this.feedCardStyle === 'card' ? $r('app.color.surface_background') : Color.Transparent)
     // border 的 radius 优先级高于 borderRadius 属性（未指定时按 0 处理），
     // 卡片模式必须把圆角同步写进 border，否则背景圆角被重置成直角。
     .border({
       width: { bottom: this.feedCardStyle === 'divider' ? 1 : 0 },
       color: $r('app.color.divider_color'),
-      radius: this.feedCardStyle === 'card' ? $r('app.float.p1_card_radius') : 0
+      radius: this.feedCardStyle === 'card' ? $r('app.float.card_radius') : 0
     })
     .accessibilityText(`打开${channelKindLabel(item.feedItem.target.kind)}：${item.feedItem.target.title}`)
     .onClick(() => {
@@ -522,8 +522,8 @@ export struct ChannelFeedPage {
     Row({ space: 16 }) {
       Divider().layoutWeight(1).color($r('app.color.secondary_text')).opacity(0.2)
       Text(formatDailyDate(date))
-        .id(`p2_daily_section_${date}`)
-        .fontSize($r('app.float.p1_body_font_size'))
+        .id(`daily_section_${date}`)
+        .fontSize($r('app.float.body_font_size'))
         .fontWeight(FontWeight.Medium)
         .fontColor(this.resolvedThemeColor)
       Divider().layoutWeight(1).color($r('app.color.secondary_text')).opacity(0.2)
@@ -535,18 +535,18 @@ export struct ChannelFeedPage {
   @Builder
   private dailyCard(item: ChannelDailyStoryItem) {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
-      Row({ space: $r('app.float.p1_spacing_medium') }) {
+      Row({ space: $r('app.float.spacing_medium') }) {
         if (this.showFeedThumbnail && item.story.imageUrl !== undefined && /^https:\/\/[^\s]+$/i.test(item.story.imageUrl)) {
           Image(item.story.imageUrl)
             .width('28%')
             .aspectRatio(1)
-            .borderRadius($r('app.float.p1_spacing_small'))
+            .borderRadius($r('app.float.spacing_small'))
             .objectFit(ImageFit.Cover)
             .alt('日报缩略图')
         }
-        Column({ space: $r('app.float.p1_spacing_small') }) {
+        Column({ space: $r('app.float.spacing_small') }) {
           Text(item.story.title)
-            .fontSize($r('app.float.p1_body_font_size'))
+            .fontSize($r('app.float.body_font_size'))
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.primary_text'))
             .maxLines(4)
@@ -554,7 +554,7 @@ export struct ChannelFeedPage {
             .width('100%')
           if (item.story.hint.trim().length > 0) {
             Text(item.story.hint)
-              .fontSize($r('app.float.p1_secondary_font_size'))
+              .fontSize($r('app.float.secondary_font_size'))
               .fontColor($r('app.color.secondary_text'))
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -567,17 +567,17 @@ export struct ChannelFeedPage {
       .alignItems(VerticalAlign.Top)
       .width('100%')
     }
-    .id(`p2_channel_daily_${item.story.id}`)
+    .id(`channel_daily_${item.story.id}`)
     .width('100%')
-    .padding($r('app.float.p1_card_padding'))
-    .borderRadius(this.feedCardStyle === 'card' ? $r('app.float.p1_card_radius') : 0)
+    .padding($r('app.float.card_padding'))
+    .borderRadius(this.feedCardStyle === 'card' ? $r('app.float.card_radius') : 0)
     .backgroundColor(this.feedCardStyle === 'card' ? $r('app.color.surface_background') : Color.Transparent)
     // border 的 radius 优先级高于 borderRadius 属性（未指定时按 0 处理），
     // 卡片模式必须把圆角同步写进 border，否则背景圆角被重置成直角。
     .border({
       width: { bottom: this.feedCardStyle === 'divider' ? 1 : 0 },
       color: $r('app.color.divider_color'),
-      radius: this.feedCardStyle === 'card' ? $r('app.float.p1_card_radius') : 0
+      radius: this.feedCardStyle === 'card' ? $r('app.float.card_radius') : 0
     })
     .accessibilityText(`知乎日报：${item.story.title}`)
     .onClick((): void => {
@@ -592,7 +592,7 @@ export struct ChannelFeedPage {
   private async openDailyStory(storyId: string): Promise<void> {
     const repository = this.dailyStoryRepository;
     if (repository === undefined) {
-      this.navigate({ name: P1DestinationName.DAILY_STORY, id: storyId });
+      this.navigate({ name: AppDestinationName.DAILY_STORY, id: storyId });
       return;
     }
     if (this.dailyStoryOpening) {
@@ -601,7 +601,7 @@ export struct ChannelFeedPage {
     this.dailyStoryOpening = true;
     this.dailyStoryOpenError = '';
     try {
-      const destination = await repository.getDestination(storyId);
+      const destination: AppDestination | undefined = await repository.getDestination(storyId);
       if (destination !== undefined) {
         this.navigate(destination);
       } else {
@@ -682,15 +682,15 @@ export struct ChannelFeedPage {
 
   @Builder
   private userBlockDialog() {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_small') }) {
       Text(`确定要屏蔽用户「${this.pendingUserBlock?.userName ?? ''}」吗？`)
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .width('100%')
       Text('屏蔽后，该作者的内容将不再显示。')
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Button('取消')
           .backgroundColor($r('app.color.control_background'))
           .fontColor($r('app.color.primary_text'))
@@ -702,7 +702,7 @@ export struct ChannelFeedPage {
         Button('确定屏蔽')
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id(`p3_channel_${this.source}_confirm_block_user`)
+          .id(`channel_${this.source}_confirm_block_user`)
           .layoutWeight(1)
           .enabled(!this.blockingBusy)
           .onClick((): void => this.confirmUserBlock())
@@ -710,24 +710,24 @@ export struct ChannelFeedPage {
       .width('100%')
     }
     .width('100%')
-    .padding($r('app.float.p1_spacing_medium'))
+    .padding($r('app.float.spacing_medium'))
     .backgroundColor($r('app.color.card_background'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .borderRadius($r('app.float.card_radius'))
   }
 
   @Builder
   private keywordBlockDialog() {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_small') }) {
       Text('输入要屏蔽的关键词（普通文本，不区分大小写）')
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .width('100%')
       TextInput({ text: this.keywordBlockInput, placeholder: '输入关键词' })
-        .id(`p3_channel_${this.source}_keyword_block_input`)
+        .id(`channel_${this.source}_keyword_block_input`)
         .maxLength(200)
         .onChange((value: string): void => {
           this.keywordBlockInput = value;
         })
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Button('取消')
           .backgroundColor($r('app.color.control_background'))
           .fontColor($r('app.color.primary_text'))
@@ -740,7 +740,7 @@ export struct ChannelFeedPage {
         Button('确认屏蔽')
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id(`p3_channel_${this.source}_confirm_block_keyword`)
+          .id(`channel_${this.source}_confirm_block_keyword`)
           .layoutWeight(1)
           .enabled(!this.blockingBusy && this.keywordBlockInput.trim().length > 0)
           .onClick((): void => this.confirmKeywordBlock())
@@ -748,9 +748,9 @@ export struct ChannelFeedPage {
       .width('100%')
     }
     .width('100%')
-    .padding($r('app.float.p1_spacing_medium'))
+    .padding($r('app.float.spacing_medium'))
     .backgroundColor($r('app.color.card_background'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .borderRadius($r('app.float.card_radius'))
   }
 
   private applyState(state: ChannelFeedViewState): void {
@@ -786,19 +786,19 @@ export struct ChannelFeedPage {
   }
 }
 
-export function channelFeedDestination(item: ChannelContentItem): P1Destination | undefined {
+export function channelFeedDestination(item: ChannelContentItem): AppDestination | undefined {
   if (!isSafeDecimalContentId(item.feedItem.target.id)) {
     return undefined;
   }
   switch (item.feedItem.target.kind) {
     case FeedTargetKind.QUESTION:
-      return { name: P1DestinationName.QUESTION, id: item.feedItem.target.id };
+      return { name: AppDestinationName.QUESTION, id: item.feedItem.target.id };
     case FeedTargetKind.ANSWER:
-      return { name: P1DestinationName.ANSWER, id: item.feedItem.target.id };
+      return { name: AppDestinationName.ANSWER, id: item.feedItem.target.id };
     case FeedTargetKind.ARTICLE:
-      return { name: P1DestinationName.ARTICLE, id: item.feedItem.target.id };
+      return { name: AppDestinationName.ARTICLE, id: item.feedItem.target.id };
     case FeedTargetKind.VIDEO:
-      return { name: P1DestinationName.VIDEO, id: item.feedItem.target.id };
+      return { name: AppDestinationName.VIDEO, id: item.feedItem.target.id };
   }
 }
 

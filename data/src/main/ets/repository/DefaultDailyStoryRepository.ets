@@ -1,4 +1,4 @@
-import { P1Destination } from 'core';
+import { AppDestination } from 'core';
 import { decodeDailyStoryDestination } from '../domain/DailyStoryDetailDecoder';
 import { ZhihuHttpClient } from '../network/ZhihuHttpClient';
 import { DailyStoryRepository } from './DailyStoryRepository';
@@ -44,7 +44,7 @@ export class DefaultDailyStoryRepository implements DailyStoryRepository {
     this.httpClient.cancel();
   }
 
-  async getDestination(storyId: string): Promise<P1Destination | undefined> {
+  async getDestination(storyId: string): Promise<AppDestination | undefined> {
     const generation = this.generation;
     const response = await this.httpClient.execute({
       url: buildDailyStoryDetailUrl(storyId),

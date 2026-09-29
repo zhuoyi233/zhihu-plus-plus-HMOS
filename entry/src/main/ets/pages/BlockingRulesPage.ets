@@ -91,19 +91,19 @@ export struct BlockingRulesPage {
 
   build() {
     Stack({ alignContent: Alignment.BottomEnd }) {
-      Column({ space: $r('app.float.p1_spacing_medium') }) {
+      Column({ space: $r('app.float.spacing_medium') }) {
         this.preferencesPanel()
         this.tabBar()
         if (this.viewState.phase === BlockingRulesPhase.LOADING && this.currentRuleCount() === 0) {
           LoadingProgress()
-            .id('p2_blocking_rules_loading')
+            .id('blocking_rules_loading')
             .width(40)
             .height(40)
             .color(this.resolvedThemeColor)
         } else {
           Text(this.viewState.message)
-            .id('p2_blocking_rules_status')
-            .fontSize($r('app.float.p1_caption_font_size'))
+            .id('blocking_rules_status')
+            .fontSize($r('app.float.caption_font_size'))
             .fontColor(this.viewState.phase === BlockingRulesPhase.ERROR ?
               $r('app.color.error_text') : $r('app.color.secondary_text'))
             .width('100%')
@@ -113,8 +113,8 @@ export struct BlockingRulesPage {
       .alignItems(HorizontalAlign.Start)
       .width('100%')
       .height('100%')
-      .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
-        top: 94, bottom: $r('app.float.p1_page_padding') })
+      .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
+        top: 94, bottom: $r('app.float.page_padding') })
       .backgroundColor($r('app.color.page_background'))
 
       Button({ type: ButtonType.Normal, stateEffect: true }) {
@@ -122,15 +122,15 @@ export struct BlockingRulesPage {
           .fontSize(24)
           .fontColor([Color.White])
       }
-        .id('p3_blocking_add_rule')
+        .id('blocking_add_rule')
         .width(56)
         .height(56)
         .padding(0)
         .borderRadius(28)
         .backgroundColor(this.resolvedThemeColor)
         .margin({
-          right: $r('app.float.p1_page_padding'),
-          bottom: $r('app.float.p1_page_padding')
+          right: $r('app.float.page_padding'),
+          bottom: $r('app.float.page_padding')
         })
         .accessibilityText('新增屏蔽规则')
         .enabled(!this.viewState.busy)
@@ -204,7 +204,7 @@ export struct BlockingRulesPage {
           }
         })
     }
-    .id('p2_blocking_rules_page')
+    .id('blocking_rules_page')
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.page_background'))
@@ -212,13 +212,13 @@ export struct BlockingRulesPage {
 
   @Builder
   private pageHeader() {
-    Row({ space: $r('app.float.p1_spacing_small') }) {
+    Row({ space: $r('app.float.spacing_small') }) {
       Button({ type: ButtonType.Normal, stateEffect: true }) {
         SymbolGlyph($r('sys.symbol.chevron_left'))
           .fontSize(20)
           .fontColor([$r('app.color.primary_text')])
       }
-        .id('p3_blocking_rules_back')
+        .id('blocking_rules_back')
         .width(40)
         .height(40)
         .padding(0)
@@ -226,7 +226,7 @@ export struct BlockingRulesPage {
         .accessibilityText('返回')
         .onClick((): void => this.onBack())
       Text('内容屏蔽')
-        .fontSize($r('app.float.p1_heading_font_size'))
+        .fontSize($r('app.float.heading_font_size'))
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.primary_text'))
         .layoutWeight(1)
@@ -235,7 +235,7 @@ export struct BlockingRulesPage {
           .fontSize(20)
           .fontColor([$r('app.color.primary_text')])
       }
-        .id('p3_blocking_rules_actions')
+        .id('blocking_rules_actions')
         .width(40)
         .height(40)
         .padding(0)
@@ -250,10 +250,10 @@ export struct BlockingRulesPage {
 
   @Builder
   private actionsSheet() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_medium') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Text('内容屏蔽操作')
-          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontSize($r('app.float.heading_font_size'))
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
@@ -262,7 +262,7 @@ export struct BlockingRulesPage {
             .fontSize(20)
             .fontColor([$r('app.color.primary_text')])
         }
-          .id('p3_blocking_rules_actions_close')
+          .id('blocking_rules_actions_close')
           .width(40)
           .height(40)
           .padding(0)
@@ -276,18 +276,18 @@ export struct BlockingRulesPage {
       Button('导入或导出屏蔽规则')
         .backgroundColor($r('app.color.control_background'))
         .fontColor($r('app.color.primary_text'))
-        .id('p3_blocking_backup_actions')
+        .id('blocking_backup_actions')
         .width('100%')
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .enabled(!this.viewState.busy)
         .onClick((): void => {
           this.actionsSheetShown = false;
           this.backupSheetShown = true;
         })
       Button('清空当前分类')
-        .id('p2_blocking_clear')
+        .id('blocking_clear')
         .width('100%')
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.error_text'))
         .backgroundColor($r('app.color.control_background'))
         .enabled(!this.viewState.busy && this.currentRuleCount() > 0)
@@ -297,15 +297,15 @@ export struct BlockingRulesPage {
         })
     }
     .width('100%')
-    .padding($r('app.float.p1_page_padding'))
+    .padding($r('app.float.page_padding'))
   }
 
   @Builder
   private addRuleSheet() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_medium') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Text(`新增${this.selectedKindLabel()}屏蔽规则`)
-          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontSize($r('app.float.heading_font_size'))
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
@@ -314,7 +314,7 @@ export struct BlockingRulesPage {
             .fontSize(20)
             .fontColor([$r('app.color.primary_text')])
         }
-          .id('p3_blocking_add_rule_close')
+          .id('blocking_add_rule_close')
           .width(40)
           .height(40)
           .padding(0)
@@ -328,15 +328,15 @@ export struct BlockingRulesPage {
       this.addPanel()
     }
     .width('100%')
-    .padding($r('app.float.p1_page_padding'))
+    .padding($r('app.float.page_padding'))
   }
 
   @Builder
   private backupSheet() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_medium') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Text('导入或导出屏蔽规则')
-          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontSize($r('app.float.heading_font_size'))
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
@@ -345,7 +345,7 @@ export struct BlockingRulesPage {
             .fontSize(20)
             .fontColor([$r('app.color.primary_text')])
         }
-          .id('p3_blocking_backup_close')
+          .id('blocking_backup_close')
           .width(40)
           .height(40)
           .padding(0)
@@ -359,18 +359,18 @@ export struct BlockingRulesPage {
       this.backupPanel()
     }
     .width('100%')
-    .padding($r('app.float.p1_page_padding'))
+    .padding($r('app.float.page_padding'))
   }
 
   @Builder
   private preferencesPanel() {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_small') }) {
       Text('屏蔽开关')
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .fontWeight(FontWeight.Medium)
         .width('100%')
       this.preferenceSwitch('关键词屏蔽', this.viewState.preferences.keywordBlockingEnabled,
-        'p2_blocking_keyword_switch', (enabled: boolean): void => {
+        'blocking_keyword_switch', (enabled: boolean): void => {
           this.controller?.savePreferences({
             keywordBlockingEnabled: enabled,
             userBlockingEnabled: this.viewState.preferences.userBlockingEnabled,
@@ -379,7 +379,7 @@ export struct BlockingRulesPage {
           });
         })
       this.preferenceSwitch('用户屏蔽', this.viewState.preferences.userBlockingEnabled,
-        'p2_blocking_user_switch', (enabled: boolean): void => {
+        'blocking_user_switch', (enabled: boolean): void => {
           this.controller?.savePreferences({
             keywordBlockingEnabled: this.viewState.preferences.keywordBlockingEnabled,
             userBlockingEnabled: enabled,
@@ -388,7 +388,7 @@ export struct BlockingRulesPage {
           });
         })
       this.preferenceSwitch('话题屏蔽', this.viewState.preferences.topicBlockingEnabled,
-        'p2_blocking_topic_switch', (enabled: boolean): void => {
+        'blocking_topic_switch', (enabled: boolean): void => {
           this.controller?.savePreferences({
             keywordBlockingEnabled: this.viewState.preferences.keywordBlockingEnabled,
             userBlockingEnabled: this.viewState.preferences.userBlockingEnabled,
@@ -397,22 +397,22 @@ export struct BlockingRulesPage {
           });
         })
       if (this.viewState.preferences.topicBlockingEnabled) {
-        Row({ space: $r('app.float.p1_spacing_small') }) {
+        Row({ space: $r('app.float.spacing_small') }) {
           Text('命中话题数量达到')
-            .fontSize($r('app.float.p1_body_font_size'))
+            .fontSize($r('app.float.body_font_size'))
             .layoutWeight(1)
           Button('−')
             .backgroundColor($r('app.color.control_background'))
             .fontColor($r('app.color.primary_text'))
-            .id('p2_blocking_topic_threshold_decrease')
+            .id('blocking_topic_threshold_decrease')
             .enabled(!this.viewState.busy && this.viewState.preferences.topicBlockingThreshold > 1)
             .onClick((): void => this.changeTopicThreshold(-1))
           Text(`${this.viewState.preferences.topicBlockingThreshold}`)
-            .fontSize($r('app.float.p1_body_font_size'))
+            .fontSize($r('app.float.body_font_size'))
           Button('+')
             .backgroundColor($r('app.color.control_background'))
             .fontColor($r('app.color.primary_text'))
-            .id('p2_blocking_topic_threshold_increase')
+            .id('blocking_topic_threshold_increase')
             .enabled(!this.viewState.busy && this.viewState.preferences.topicBlockingThreshold < 100)
             .onClick((): void => this.changeTopicThreshold(1))
         }
@@ -421,16 +421,16 @@ export struct BlockingRulesPage {
       }
     }
     .width('100%')
-    .padding($r('app.float.p1_spacing_medium'))
+    .padding($r('app.float.spacing_medium'))
     .backgroundColor($r('app.color.card_background'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .borderRadius($r('app.float.card_radius'))
   }
 
   @Builder
   private preferenceSwitch(label: string, enabled: boolean, id: string, onChange: (value: boolean) => void) {
     Row() {
       Text(label)
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: enabled })
         .id(id)
@@ -444,10 +444,10 @@ export struct BlockingRulesPage {
 
   @Builder
   private tabBar() {
-    Row({ space: $r('app.float.p1_spacing_small') }) {
-      this.tabButton('关键词', BlockingRuleKind.KEYWORD, 'p2_blocking_tab_keyword')
-      this.tabButton('用户', BlockingRuleKind.USER, 'p2_blocking_tab_user')
-      this.tabButton('话题', BlockingRuleKind.TOPIC, 'p2_blocking_tab_topic')
+    Row({ space: $r('app.float.spacing_small') }) {
+      this.tabButton('关键词', BlockingRuleKind.KEYWORD, 'blocking_tab_keyword')
+      this.tabButton('用户', BlockingRuleKind.USER, 'blocking_tab_user')
+      this.tabButton('话题', BlockingRuleKind.TOPIC, 'blocking_tab_topic')
     }
     .width('100%')
   }
@@ -469,10 +469,10 @@ export struct BlockingRulesPage {
 
   @Builder
   private addPanel() {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_small') }) {
       if (this.viewState.selectedKind === BlockingRuleKind.KEYWORD) {
         TextInput({ text: this.keywordInput, placeholder: '输入关键词或安全正则' })
-          .id('p2_blocking_keyword_input')
+          .id('blocking_keyword_input')
           .maxLength(MAX_BLOCKING_KEYWORD_LENGTH)
           .onChange((value: string): void => {
             this.keywordInput = value;
@@ -480,14 +480,14 @@ export struct BlockingRulesPage {
         Row() {
           Text('区分大小写').layoutWeight(1)
           Toggle({ type: ToggleType.Switch, isOn: this.caseSensitive })
-            .id('p2_blocking_case_sensitive')
+            .id('blocking_case_sensitive')
             .selectedColor(this.resolvedThemeColor)
             .onChange((value: boolean): void => {
               this.caseSensitive = value;
             })
-          Text('正则').margin({ left: $r('app.float.p1_spacing_medium') })
+          Text('正则').margin({ left: $r('app.float.spacing_medium') })
           Toggle({ type: ToggleType.Switch, isOn: this.regex })
-            .id('p2_blocking_regex')
+            .id('blocking_regex')
             .selectedColor(this.resolvedThemeColor)
             .onChange((value: boolean): void => {
               this.regex = value;
@@ -495,7 +495,7 @@ export struct BlockingRulesPage {
         }
         .width('100%')
         Button('添加关键词规则')
-          .id('p2_blocking_add_keyword')
+          .id('blocking_add_keyword')
           .enabled(!this.viewState.busy && this.keywordInput.trim().length > 0)
           .width('100%')
           .fontColor(onThemeColor(this.resolvedThemeColor))
@@ -508,20 +508,20 @@ export struct BlockingRulesPage {
       } else {
         TextInput({ text: this.identifierInput,
           placeholder: this.viewState.selectedKind === BlockingRuleKind.USER ? '用户 ID' : '话题 ID' })
-          .id('p2_blocking_identifier_input')
+          .id('blocking_identifier_input')
           .maxLength(MAX_BLOCKING_ID_LENGTH)
           .onChange((value: string): void => {
             this.identifierInput = value;
           })
         TextInput({ text: this.nameInput,
           placeholder: this.viewState.selectedKind === BlockingRuleKind.USER ? '用户显示名' : '话题显示名' })
-          .id('p2_blocking_name_input')
+          .id('blocking_name_input')
           .maxLength(MAX_BLOCKING_NAME_LENGTH)
           .onChange((value: string): void => {
             this.nameInput = value;
           })
         Button(this.viewState.selectedKind === BlockingRuleKind.USER ? '添加用户规则' : '添加话题规则')
-          .id('p2_blocking_add_named_rule')
+          .id('blocking_add_named_rule')
           .enabled(!this.viewState.busy && this.identifierInput.trim().length > 0 &&
             this.nameInput.trim().length > 0)
           .width('100%')
@@ -531,26 +531,26 @@ export struct BlockingRulesPage {
       }
     }
     .width('100%')
-    .padding($r('app.float.p1_spacing_medium'))
+    .padding($r('app.float.spacing_medium'))
     .backgroundColor($r('app.color.card_background'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .borderRadius($r('app.float.card_radius'))
   }
 
   @Builder
   private ruleList() {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_small') }) {
       Text(`当前 ${this.currentRuleCount()} 条`)
-        .fontSize($r('app.float.p1_caption_font_size'))
+        .fontSize($r('app.float.caption_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
       if (this.currentRuleCount() === 0) {
         Text('当前分类暂无规则')
-          .id('p2_blocking_empty')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .id('blocking_empty')
+          .fontSize($r('app.float.body_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .textAlign(TextAlign.Center)
           .width('100%')
-          .padding($r('app.float.p1_spacing_large'))
+          .padding($r('app.float.spacing_large'))
       } else if (this.viewState.selectedKind === BlockingRuleKind.KEYWORD) {
         List({ space: 10 }) {
           ForEach(this.viewState.keywords, (rule: BlockedKeywordRule) => {
@@ -559,7 +559,7 @@ export struct BlockingRulesPage {
             }
           }, (rule: BlockedKeywordRule): string => `${rule.id}`)
         }
-        .id('p2_blocking_keyword_list')
+        .id('blocking_keyword_list')
         .layoutWeight(1)
         .scrollBar(BarState.Off)
       } else if (this.viewState.selectedKind === BlockingRuleKind.USER) {
@@ -572,7 +572,7 @@ export struct BlockingRulesPage {
             }
           }, (rule: BlockedUserRule): string => rule.userId)
         }
-        .id('p2_blocking_user_list')
+        .id('blocking_user_list')
         .layoutWeight(1)
         .scrollBar(BarState.Off)
       } else {
@@ -585,7 +585,7 @@ export struct BlockingRulesPage {
             }
           }, (rule: BlockedTopicRule): string => rule.topicId)
         }
-        .id('p2_blocking_topic_list')
+        .id('blocking_topic_list')
         .layoutWeight(1)
         .scrollBar(BarState.Off)
       }
@@ -596,13 +596,13 @@ export struct BlockingRulesPage {
 
   @Builder
   private keywordRow(rule: BlockedKeywordRule) {
-    Row({ space: $r('app.float.p1_spacing_small') }) {
+    Row({ space: $r('app.float.spacing_small') }) {
       Column({ space: 2 }) {
         Text(rule.keyword)
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.body_font_size'))
           .width('100%')
         Text(`${rule.caseSensitive ? '区分大小写' : '忽略大小写'}${rule.isRegex ? ' · 安全正则' : ''}`)
-          .fontSize($r('app.float.p1_caption_font_size'))
+          .fontSize($r('app.float.caption_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .width('100%')
       }
@@ -616,18 +616,18 @@ export struct BlockingRulesPage {
         })
     }
     .width('100%')
-    .padding($r('app.float.p1_spacing_medium'))
+    .padding($r('app.float.spacing_medium'))
     .backgroundColor($r('app.color.card_background'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .borderRadius($r('app.float.card_radius'))
   }
 
   @Builder
   private namedRuleRow(name: string, id: string, onDelete: () => void) {
-    Row({ space: $r('app.float.p1_spacing_small') }) {
+    Row({ space: $r('app.float.spacing_small') }) {
       Column({ space: 2 }) {
-        Text(name).fontSize($r('app.float.p1_body_font_size')).width('100%')
+        Text(name).fontSize($r('app.float.body_font_size')).width('100%')
         Text(id)
-          .fontSize($r('app.float.p1_caption_font_size'))
+          .fontSize($r('app.float.caption_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .width('100%')
       }
@@ -639,18 +639,18 @@ export struct BlockingRulesPage {
         .onClick(onDelete)
     }
     .width('100%')
-    .padding($r('app.float.p1_spacing_medium'))
+    .padding($r('app.float.spacing_medium'))
     .backgroundColor($r('app.color.card_background'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .borderRadius($r('app.float.card_radius'))
   }
 
   @Builder
   private clearConfirmation() {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_small') }) {
       Text('确认清空当前分类？此操作无法撤销。')
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .width('100%')
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Button('取消')
           .backgroundColor($r('app.color.control_background'))
           .fontColor($r('app.color.primary_text'))
@@ -661,7 +661,7 @@ export struct BlockingRulesPage {
         Button('确认清空')
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id('p2_blocking_clear_confirm')
+          .id('blocking_clear_confirm')
           .layoutWeight(1)
           .enabled(!this.viewState.busy)
           .onClick((): void => {
@@ -672,37 +672,37 @@ export struct BlockingRulesPage {
       .width('100%')
     }
     .width('100%')
-    .padding($r('app.float.p1_spacing_medium'))
+    .padding($r('app.float.spacing_medium'))
     .backgroundColor($r('app.color.card_background'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .borderRadius($r('app.float.card_radius'))
   }
 
   @Builder
   private backupPanel() {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_small') }) {
       Text('导出为 JSON 文本；导入支持本应用导出的格式，无效条目会被跳过。')
-        .fontSize($r('app.float.p1_caption_font_size'))
+        .fontSize($r('app.float.caption_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
       TextArea({ text: this.backupInput, placeholder: '在此粘贴要导入的屏蔽词文本' })
-        .id('p3_blocking_backup_input')
+        .id('blocking_backup_input')
         .height(80)
         .maxLength(1048576)
         .onChange((value: string): void => {
           this.backupInput = value;
         })
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Button('导入')
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id('p3_blocking_import')
+          .id('blocking_import')
           .layoutWeight(1)
           .enabled(!this.viewState.busy && this.backupInput.trim().length > 0)
           .onClick((): void => this.importBackup())
         Button('导出')
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id('p3_blocking_export')
+          .id('blocking_export')
           .layoutWeight(1)
           .enabled(!this.viewState.busy)
           .onClick((): void => this.exportBackup())
@@ -710,29 +710,29 @@ export struct BlockingRulesPage {
       .width('100%')
       if (this.backupStatus.length > 0) {
         Text(this.backupStatus)
-          .id('p3_blocking_backup_status')
-          .fontSize($r('app.float.p1_caption_font_size'))
+          .id('blocking_backup_status')
+          .fontSize($r('app.float.caption_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .width('100%')
       }
     }
     .width('100%')
-    .padding($r('app.float.p1_spacing_medium'))
+    .padding($r('app.float.spacing_medium'))
     .backgroundColor($r('app.color.card_background'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .borderRadius($r('app.float.card_radius'))
   }
 
   @Builder
   private exportDialog() {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_small') }) {
       Text('导出的屏蔽词文本')
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .fontWeight(FontWeight.Medium)
         .width('100%')
       TextArea({ text: this.exportedText })
-        .id('p3_blocking_export_text')
+        .id('blocking_export_text')
         .height(160)
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Button('关闭')
           .backgroundColor($r('app.color.control_background'))
           .fontColor($r('app.color.primary_text'))
@@ -744,16 +744,16 @@ export struct BlockingRulesPage {
         Button('复制到剪贴板')
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id('p3_blocking_export_copy')
+          .id('blocking_export_copy')
           .layoutWeight(1)
           .onClick((): void => this.copyExportedText())
       }
       .width('100%')
     }
     .width('100%')
-    .padding($r('app.float.p1_spacing_medium'))
+    .padding($r('app.float.spacing_medium'))
     .backgroundColor($r('app.color.card_background'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .borderRadius($r('app.float.card_radius'))
   }
 
   private exportBackup(): void {

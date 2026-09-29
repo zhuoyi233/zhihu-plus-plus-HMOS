@@ -6,7 +6,7 @@ import {
   HttpFailure,
   HttpFailureKind
 } from 'data';
-import { P1Destination } from 'core';
+import { AppDestination } from 'core';
 
 export enum DailyStoryDetailPhase {
   IDLE = 'idle',
@@ -17,7 +17,7 @@ export enum DailyStoryDetailPhase {
 
 export interface DailyStoryDetailViewState {
   readonly phase: DailyStoryDetailPhase;
-  readonly destination?: P1Destination;
+  readonly destination?: AppDestination;
   readonly errorMessage?: string;
 }
 
@@ -29,7 +29,7 @@ export class DailyStoryDetailController {
   private active: boolean = false;
   private generation: number = 0;
   private phase: DailyStoryDetailPhase = DailyStoryDetailPhase.IDLE;
-  private destination?: P1Destination;
+  private destination?: AppDestination;
   private errorMessage?: string;
 
   constructor(repository: DailyStoryRepository,
@@ -77,7 +77,7 @@ export class DailyStoryDetailController {
     this.errorMessage = undefined;
     this.emit();
     try {
-      const destination = await this.repository.getDestination(storyId);
+      const destination: AppDestination | undefined = await this.repository.getDestination(storyId);
       if (!this.isCurrent(generation)) {
         return;
       }

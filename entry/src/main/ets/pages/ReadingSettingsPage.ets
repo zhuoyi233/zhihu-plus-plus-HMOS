@@ -44,9 +44,9 @@ export struct ReadingSettingsPage {
 
   build() {
     Scroll() {
-      Column({ space: $r('app.float.p1_spacing_large') }) {
+      Column({ space: $r('app.float.spacing_large') }) {
         Text('使用 HarmonyOS Core Speech Kit 离线朗读回答和文章。设置会在下次开始朗读时生效。')
-          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontSize($r('app.float.secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .width('100%')
 
@@ -54,13 +54,13 @@ export struct ReadingSettingsPage {
           this.sectionTitle('语音')
           Column() {
             this.sliderSetting('语速', `调整朗读速度（${this.preferences.speed.toFixed(1)}×）`, this.preferences.speed,
-              'p5_reading_speed', (value: number): void => {
+              'reading_speed', (value: number): void => {
                 this.save({ speed: value, pitch: this.preferences.pitch, person: this.preferences.person,
                   language: this.preferences.language, style: this.preferences.style });
               });
             Divider().color($r('app.color.divider_color'))
             this.sliderSetting('音调', `调整朗读音调（${this.preferences.pitch.toFixed(1)}）`, this.preferences.pitch,
-              'p5_reading_pitch', (value: number): void => {
+              'reading_pitch', (value: number): void => {
                 this.save({ speed: this.preferences.speed, pitch: value, person: this.preferences.person,
                   language: this.preferences.language, style: this.preferences.style });
               });
@@ -68,7 +68,7 @@ export struct ReadingSettingsPage {
             this.voiceSetting()
           }
           .width('100%')
-          .borderRadius($r('app.float.p1_card_radius'))
+          .borderRadius($r('app.float.card_radius'))
           .backgroundColor($r('app.color.surface_background'))
 
           this.sectionTitle('播放')
@@ -76,7 +76,7 @@ export struct ReadingSettingsPage {
             AppNavigationRow({
               title: this.playbackTitle(),
               description: this.playbackDescription(),
-              testId: 'p5_reading_stop',
+              testId: 'reading_stop',
               grouped: true,
               onRowClick: (): void => {
                 if (getSpeechPlaybackService().getSnapshot().status !== SpeechPlaybackStatus.IDLE) {
@@ -86,7 +86,7 @@ export struct ReadingSettingsPage {
             })
           }
           .width('100%')
-          .borderRadius($r('app.float.p1_card_radius'))
+          .borderRadius($r('app.float.card_radius'))
           .backgroundColor($r('app.color.surface_background'))
         } else {
           LoadingProgress().width(40).height(40).color(this.resolvedThemeColor)
@@ -94,17 +94,17 @@ export struct ReadingSettingsPage {
 
         if (this.statusMessage.length > 0) {
           Text(this.statusMessage)
-            .id('p5_reading_settings_status')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .id('reading_settings_status')
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
         }
       }
       .width('100%')
-      .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
+      .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
         top: FLOATING_TITLE_BAR_OFFSET, bottom: 40 })
     }
-    .id('p5_reading_settings_scroll')
+    .id('reading_settings_scroll')
     .width('100%')
     .height('100%')
     .scrollBar(BarState.Off)
@@ -113,28 +113,28 @@ export struct ReadingSettingsPage {
 
   @Builder
   private sectionTitle(title: string) {
-    Text(title).fontSize($r('app.float.p1_secondary_font_size'))
+    Text(title).fontSize($r('app.float.secondary_font_size'))
       .fontColor($r('app.color.secondary_text')).width('100%')
   }
 
   @Builder
   private sliderSetting(title: string, description: string, value: number, testId: string,
     onChange: (value: number) => void) {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_small') }) {
       Text(title)
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.primary_text'))
         .width('100%')
       Text(description)
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
       this.sliderControl(value, testId, onChange)
     }
     .alignItems(HorizontalAlign.Start)
     .width('100%')
-    .padding($r('app.float.p1_card_padding'))
+    .padding($r('app.float.card_padding'))
   }
 
   private sliderProgressPercent(value: number): number {
@@ -155,8 +155,8 @@ export struct ReadingSettingsPage {
           .backgroundColor($r('app.color.control_background'))
       }
       .width('calc(100% - 4vp)')
-      .height($r('app.float.p3_settings_slider_track_thickness'))
-      .borderRadius($r('app.float.p3_settings_slider_track_radius'))
+      .height($r('app.float.settings_slider_track_thickness'))
+      .borderRadius($r('app.float.settings_slider_track_radius'))
       .clip(true)
       .hitTestBehavior(HitTestMode.None)
 
@@ -165,65 +165,65 @@ export struct ReadingSettingsPage {
         Stack({ alignContent: Alignment.Center }) {
           Row()
             .width('100%')
-            .height($r('app.float.p3_settings_slider_track_thickness'))
+            .height($r('app.float.settings_slider_track_thickness'))
             .backgroundColor($r('app.color.surface_background'))
           Row()
-            .width($r('app.float.p3_settings_slider_thumb_width'))
-            .height($r('app.float.p3_settings_slider_thumb_height'))
-            .borderRadius($r('app.float.p3_settings_slider_thumb_radius'))
+            .width($r('app.float.settings_slider_thumb_width'))
+            .height($r('app.float.settings_slider_thumb_height'))
+            .borderRadius($r('app.float.settings_slider_thumb_radius'))
             .backgroundColor(this.resolvedThemeColor)
         }
-        .width($r('app.float.p3_settings_slider_thumb_gap_width'))
-        .height($r('app.float.p3_settings_slider_height'))
+        .width($r('app.float.settings_slider_thumb_gap_width'))
+        .height($r('app.float.settings_slider_height'))
         Blank().layoutWeight(Math.max(0, 2 - value))
       }
       .width('calc(100% + 12vp)')
-      .height($r('app.float.p3_settings_slider_height'))
+      .height($r('app.float.settings_slider_height'))
       .translate({ x: '-6vp' })
       .hitTestBehavior(HitTestMode.None)
 
       Slider({ value: value, min: 0.5, max: 2, step: 0.1, style: SliderStyle.OutSet })
         .id(testId)
         .width('100%')
-        .height($r('app.float.p3_settings_slider_height'))
+        .height($r('app.float.settings_slider_height'))
         .trackColor(Color.Transparent)
         .selectedColor(Color.Transparent)
         .blockColor(Color.Transparent)
         .blockSize({
-          width: $r('app.float.p3_settings_slider_thumb_width'),
-          height: $r('app.float.p3_settings_slider_thumb_height')
+          width: $r('app.float.settings_slider_thumb_width'),
+          height: $r('app.float.settings_slider_thumb_height')
         })
         .blockStyle({
           type: SliderBlockType.SHAPE,
           shape: new Rect({
-            width: $r('app.float.p3_settings_slider_thumb_width'),
-            height: $r('app.float.p3_settings_slider_thumb_height')
-          }).radius($r('app.float.p3_settings_slider_thumb_radius'))
+            width: $r('app.float.settings_slider_thumb_width'),
+            height: $r('app.float.settings_slider_thumb_height')
+          }).radius($r('app.float.settings_slider_thumb_radius'))
         })
         .showSteps(true)
         .onChange((next: number, _mode: SliderChangeMode): void => onChange(next))
     }
     .width('100%')
-    .height($r('app.float.p3_settings_slider_height'))
+    .height($r('app.float.settings_slider_height'))
   }
 
   @Builder
   private voiceSetting() {
-    Row({ space: $r('app.float.p1_spacing_medium') }) {
-      Column({ space: $r('app.float.p1_spacing_xsmall') }) {
+    Row({ space: $r('app.float.spacing_medium') }) {
+      Column({ space: $r('app.float.spacing_xsmall') }) {
         Text('音色')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.body_font_size'))
           .fontColor($r('app.color.primary_text'))
           .width('100%')
         Text(this.voicesLoading ? '正在查询系统可用音色…' : '由 Core Speech Kit 动态提供；未安装音色会在选择后请求下载。')
-          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontSize($r('app.float.secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .width('100%')
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
       Select(this.voiceSelectOptions())
-        .id('p5_reading_voice_select')
+        .id('reading_voice_select')
         .selected(this.selectedVoiceIndex())
         .value(this.selectedVoiceLabel())
         .fontColor($r('app.color.primary_text'))
@@ -232,7 +232,7 @@ export struct ReadingSettingsPage {
         .onSelect((index: number): void => this.selectVoice(index))
     }
     .width('100%')
-    .padding($r('app.float.p1_card_padding'))
+    .padding($r('app.float.card_padding'))
     .alignItems(VerticalAlign.Center)
   }
 

@@ -32,7 +32,7 @@ export const FLOATING_TITLE_BAR_OFFSET: number = 94;
 
 @Component
 export struct AppPageHeader {
-  /** 当前生效主题色（P1Shell 广播），驱动标题栏动作按钮强调色。 */
+  /** 当前生效主题色（AppShell 广播），驱动标题栏动作按钮强调色。 */
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   title: string = '';
   actionLabel: string = '';
@@ -43,9 +43,9 @@ export struct AppPageHeader {
   };
 
   build() {
-    Row({ space: $r('app.float.p1_spacing_small') }) {
+    Row({ space: $r('app.float.spacing_small') }) {
       Text(this.title)
-        .fontSize($r('app.float.p1_heading_font_size'))
+        .fontSize($r('app.float.heading_font_size'))
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.primary_text'))
         .maxLines(1)
@@ -55,7 +55,7 @@ export struct AppPageHeader {
       if (this.actionLabel.length > 0) {
         Button(this.actionLabel)
           .id(this.actionId)
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.body_font_size'))
           .fontColor(onThemeColor(this.resolvedThemeColor))
           .backgroundColor(this.resolvedThemeColor)
           .enabled(this.actionEnabled)
@@ -78,11 +78,11 @@ export struct AppPageStatusPanel {
   actionAccessibilityText: string = '';
   onAction: () => void = (): void => {
   };
-  /** 当前生效主题色（P1Shell 启动时广播），驱动加载指示器颜色。 */
+  /** 当前生效主题色（AppShell 启动时广播），驱动加载指示器颜色。 */
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
 
   build() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
+    Column({ space: $r('app.float.spacing_medium') }) {
       if (this.kind === AppPageStatusKind.LOADING) {
         LoadingProgress()
           .width(40)
@@ -91,14 +91,14 @@ export struct AppPageStatusPanel {
           .accessibilityText('正在加载')
       }
       Text(this.message)
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .textAlign(TextAlign.Center)
         .width('100%')
       if (this.actionLabel.length > 0) {
         Button(this.actionLabel)
           .id(this.actionId)
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.body_font_size'))
           .fontColor(onThemeColor(this.resolvedThemeColor))
           .backgroundColor(this.resolvedThemeColor)
           .accessibilityText(this.actionAccessibilityText.length > 0 ? this.actionAccessibilityText : this.actionLabel)
@@ -129,7 +129,7 @@ export struct AppNavigationRow {
 
   build() {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
-      Row({ space: $r('app.float.p1_spacing_medium') }) {
+      Row({ space: $r('app.float.spacing_medium') }) {
         if (this.showLeadingIcon) {
           if (this.leadingIconIsMedia) {
             Image(this.leadingIcon)
@@ -143,16 +143,16 @@ export struct AppNavigationRow {
               .fontColor([$r('app.color.primary_text')])
           }
         }
-        Column({ space: $r('app.float.p1_spacing_xsmall') }) {
+        Column({ space: $r('app.float.spacing_xsmall') }) {
           Text(this.title)
-            .fontSize($r('app.float.p1_body_font_size'))
+            .fontSize($r('app.float.body_font_size'))
             .fontColor($r('app.color.primary_text'))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%')
           if (this.description.length > 0) {
             Text(this.description)
-              .fontSize($r('app.float.p1_secondary_font_size'))
+              .fontSize($r('app.float.secondary_font_size'))
               .fontColor($r('app.color.secondary_text'))
               .maxLines(2)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -164,7 +164,7 @@ export struct AppNavigationRow {
 
         if (this.trailingText.length > 0) {
           Text(this.trailingText)
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .maxLines(1)
         }
@@ -177,9 +177,9 @@ export struct AppNavigationRow {
     }
     .id(this.testId)
     .width('100%')
-    .padding($r('app.float.p1_card_padding'))
+    .padding($r('app.float.card_padding'))
     .backgroundColor(this.grouped ? Color.Transparent : $r('app.color.surface_background'))
-    .borderRadius(this.grouped ? 0 : $r('app.float.p1_card_radius'))
+    .borderRadius(this.grouped ? 0 : $r('app.float.card_radius'))
     .accessibilityText(this.rowAccessibilityText.length > 0 ? this.rowAccessibilityText : this.title)
     .onClick((): void => this.onRowClick())
   }
@@ -217,7 +217,7 @@ struct FeedPullDownIndicatorView {
   /**
    * 主题色必须经 @StorageProp 订阅，不能在 feedPullDownIndicator 里直读 AppStorage：
    * 按值传参的 @Builder 只在首次渲染时求值、之后 params 不变就不再重算，而首次渲染时机
-   * 各页签不同——首页是启动那一帧就渲染的（此时 P1Shell 的 restoreThemeColor 仍在异步
+   * 各页签不同——首页是启动那一帧就渲染的（此时 AppShell 的 restoreThemeColor 仍在异步
    * 等待，生效色还是默认知乎蓝），圆圈因此永久停在默认色；其余页签首次渲染发生在主题
    * 恢复之后，看起来才"正常"（2026-09-25 主页下拉刷新不跟随主题色的根因）。
    */

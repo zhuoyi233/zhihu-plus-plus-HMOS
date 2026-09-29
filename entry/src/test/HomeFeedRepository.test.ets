@@ -165,13 +165,13 @@ class RecordingFeedBlockingMatcher implements ContentBlockingMatcher {
 }
 
 const FIRST_PAGE = '{"data":[{"id":"feed-1","target":{"type":"article",' +
-  '"id":"article-1","title":"第一�?","author":{"id":"author-1","name":"作�?"},' +
+  '"id":"article-1","title":"第一�?","author":{"id":"author-1","name":"作�?"},' +
   '"bound_topic_ids":[19551275]}}],"paging":{"is_end":false,"is_start":true,' +
   '"next":"https://www.zhihu.com/api/v3/feed/topstory/recommend?include=stale&%6fffset=2"}}';
 const SECOND_PAGE = '{"data":[{"id":"feed-1","target":{"type":"article",' +
-  '"id":"article-1","title":"重复�?"}},{"id":"feed-2","target":{"type":"question",' +
-  '"id":"question-2","title":"第二�?"}},{"id":"feed-1","target":{"type":"question",' +
-  '"id":"question-cross-kind","title":"�? Feed ID 的另一内容"}}],"paging":{"is_end":false,"is_start":false,' +
+  '"id":"article-1","title":"重复�?"}},{"id":"feed-2","target":{"type":"question",' +
+  '"id":"question-2","title":"第二�?"}},{"id":"feed-1","target":{"type":"question",' +
+  '"id":"question-cross-kind","title":"�? Feed ID 的另一内容"}}],"paging":{"is_end":false,"is_start":false,' +
   '"next":"https://www.zhihu.com/api/v3/feed/topstory/recommend?offset=2"}}';
 const MOBILE_PAGE = '{"data":[{"id":"mobile-card-1","type":"ComponentCard",' +
   '"action":{"parameter":"route_url=https%3A%2F%2Fwww.zhihu.com%2Fquestion%2F100%2Fanswer%2F200"},' +
@@ -179,7 +179,7 @@ const MOBILE_PAGE = '{"data":[{"id":"mobile-card-1","type":"ComponentCard",' +
   '{"id":"text_pin_summary","text":"移动摘要"},' +
   '{"type":"Line","elements":[{"reaction":"Vote","count":88},{"reaction":"Comment","count":7}]},' +
   '{"style":"RecommendAuthorLine_default","follower_count":200,"is_following":false,' +
-  '"elements":[{"type":"Text","text":"移动作�?"},' +
+  '"elements":[{"type":"Text","text":"移动作�?"},' +
   '{"style":"Avatar_default","image":{"url":"https://pic.zhimg.com/avatar.jpg"}}]}]}],' +
   '"paging":{"is_end":true,"is_start":true}}';
 const LOCAL_FOLLOWING_PAGE = '{"data":[{"id":"local-following","target":{"type":"article",' +
@@ -283,7 +283,7 @@ export default function homeFeedRepositoryTest(): void {
       const page = await repository.loadHomePage();
 
       expect(page.items.length).assertEqual(2);
-      expect(page.items[0].target.title).assertEqual('第一�?');
+      expect(page.items[0].target.title).assertEqual('第一�?');
       expect(page.items[1].target.title).assertEqual('移动推荐回答');
       expect(page.items[1].actionText).assertEqual('\u624b\u673a\u7248\u63a8\u8350');
       expect(mobileFactory.requests[0].headers.Cookie).assertUndefined();
@@ -301,7 +301,7 @@ export default function homeFeedRepositoryTest(): void {
         preferences, cache);
       const page = await repository.loadHomePage();
 
-      expect(page.items[0].target.title).assertEqual('第一�?');
+      expect(page.items[0].target.title).assertEqual('第一�?');
       expect(page.cursor.isEnd).assertTrue();
       expect(factory.requests.length).assertEqual(0);
     });
@@ -320,7 +320,7 @@ export default function homeFeedRepositoryTest(): void {
       expect(page.items[0].target.id).assertEqual('200');
       expect(page.items[0].target.voteupCount).assertEqual(88);
       expect(page.items[0].actionText).assertEqual('\u624b\u673a\u7248\u63a8\u8350');
-      expect(page.items[0].target.author?.name).assertEqual('移动作�?');
+      expect(page.items[0].target.author?.name).assertEqual('移动作�?');
       expect(page.items[0].target.authorFollowerCount).assertEqual(200);
       expect(page.items[0].target.authorIsFollowing).assertFalse();
     });
@@ -365,7 +365,7 @@ export default function homeFeedRepositoryTest(): void {
       const factory = new SequenceFeedTransportFactory([{ statusCode: 200, body: '{"data":[' +
         '{"id":"feed-1","target":{"type":"article","id":"1","title":"保留",' +
         '"voteup_count":2374,"comment_count":424,' +
-        '"author":{"id":"author-1","name":"作�?","follower_count":5000,"is_following":false},' +
+        '"author":{"id":"author-1","name":"作�?","follower_count":5000,"is_following":false},' +
         '"bound_topic_ids":[19551275]}},' +
         '{"id":"feed-2","target":{"type":"article","id":"2","title":"屏蔽内容",' +
         '"bound_topic_ids":[19551276]}}],"paging":{"is_end":true}}' }]);

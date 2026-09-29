@@ -1,11 +1,12 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
+  createLocalDraftImageReference,
   ImageTemporaryFile,
   ImageUploadFailureKind,
   PickedImageInspection,
   ValidatedPickedImage
 } from 'data';
-import { PickedImage } from '../main/ets/platform/P4PlatformServices';
+import { PickedImage } from '../main/ets/platform/PlatformServices';
 import {
   defaultMediaPickerRuntimePolicy,
   MediaPickerCoordinator,
@@ -17,6 +18,7 @@ import {
   PickedImageTemporaryStore,
   SystemPhotoPickerGateway
 } from '../main/ets/platform/MediaPickerCoordinator';
+import { restoreControlledPickedImages } from '../main/ets/platform/SystemPickedImageFileStore';
 
 const CACHE_DIR: string = '/data/storage/el2/base/cache';
 const NOW: number = 1770000000000;
@@ -203,6 +205,21 @@ export default function mediaPickerCoordinatorTest(): void {
       expect(released.images.length).assertEqual(0);
       expect(store.removed.length).assertEqual(1);
       expect(store.removed[0].includes('/p4-images/')).assertTrue();
+    });
+
+    it('restoresPickerStateFromSavedControlledFileReferences', 0, async () => {
+      const picker = new FixedPhotoPickerGateway(selectedResult());
+      const inspector = new FakePickedImageInspector();
+      inspector.inspections.set('file://media/Photo/123', validInspection());
+      const store = new MemoryTemporaryStore();
+      const ready = await coordinator(picker, inspector, store).pickExplicitly();
+      const reference = createLocalDraftImageReference(ready.images[0].lifecycle.file,
+        ready.images[0].image.descriptor);
+      const reconstructed = restoreControlledPickedImages(CACHE_DIR, [reference]);
+      const restored = coordinator(picker, inspector, store).restorePreparedImages(reconstructed);
+
+      expect(restored.phase).assertEqual(MediaPickerPhase.READY);
+      expect(restored.images.length).assertEqual(1);
     });
 
     it('clearSelectionPurgesPreparedCacheAndDoesNotRetainAnImageReference', 0, async () => {

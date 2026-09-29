@@ -1,4 +1,4 @@
-import { P1Destination, P1DestinationName } from 'core';
+import { AppDestination, AppDestinationName } from 'core';
 import {
   onThemeColor,
   CollectionContentItem,
@@ -19,7 +19,7 @@ export struct CollectionContentPage {
   collectionId: string = '';
   repository: CollectionRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
-  navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
+  navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {
   };
   onBack: () => void = (): void => {};
   @State private phase: CollectionContentPhase = CollectionContentPhase.IDLE;
@@ -62,37 +62,37 @@ export struct CollectionContentPage {
   }
 
   build() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
+    Column({ space: $r('app.float.spacing_medium') }) {
       if (this.phase === CollectionContentPhase.IDLE || this.phase === CollectionContentPhase.LOADING) {
-        this.statusPanel('正在加载收藏夹内容…', false, 'p3_collection_content_loading')
+        this.statusPanel('正在加载收藏夹内容…', false, 'collection_content_loading')
       } else if (this.phase === CollectionContentPhase.ERROR) {
-        this.statusPanel(this.errorMessage, true, 'p3_collection_content_error')
+        this.statusPanel(this.errorMessage, true, 'collection_content_error')
       } else if (this.phase === CollectionContentPhase.EMPTY) {
-        this.statusPanel('这个收藏夹还没有内容', true, 'p3_collection_content_empty')
+        this.statusPanel('这个收藏夹还没有内容', true, 'collection_content_empty')
       } else {
         if (this.errorMessage.length > 0) {
-          Row({ space: $r('app.float.p1_spacing_small') }) {
+          Row({ space: $r('app.float.spacing_small') }) {
             Text(this.errorMessage)
-              .fontSize($r('app.float.p1_secondary_font_size'))
+              .fontSize($r('app.float.secondary_font_size'))
               .fontColor($r('app.color.secondary_text'))
               .layoutWeight(1)
             if (this.requiresLogin) {
               Button('去登录')
                 .backgroundColor(this.resolvedThemeColor)
                 .fontColor(onThemeColor(this.resolvedThemeColor))
-                .id('p3_collection_content_login')
-                .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
+                .id('collection_content_login')
+                .onClick((): void => this.navigate({ name: AppDestinationName.LOGIN }))
             } else {
               Button('重试')
                 .backgroundColor(this.resolvedThemeColor)
                 .fontColor(onThemeColor(this.resolvedThemeColor))
-                .id('p3_collection_content_retry_more')
+                .id('collection_content_retry_more')
                 .onClick(() => this.controller?.retry())
             }
           }
           .width('100%')
-          .padding($r('app.float.p1_spacing_small'))
-          .borderRadius($r('app.float.p1_card_radius'))
+          .padding($r('app.float.spacing_small'))
+          .borderRadius($r('app.float.card_radius'))
           .backgroundColor($r('app.color.surface_background'))
         }
 
@@ -108,15 +108,15 @@ export struct CollectionContentPage {
               Button(this.loadingMore ? '正在加载更多…' : '加载更多')
                 .backgroundColor(this.resolvedThemeColor)
                 .fontColor(onThemeColor(this.resolvedThemeColor))
-                .id('p3_collection_content_load_more')
+                .id('collection_content_load_more')
                 .width('100%')
-                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontSize($r('app.float.secondary_font_size'))
                 .enabled(!this.loadingMore)
                 .onClick(() => this.controller?.loadMore())
             }
           }
         }
-        .id('p3_collection_content_list')
+        .id('collection_content_list')
         .width('100%')
         .scrollBar(BarState.Off)
         .layoutWeight(1)
@@ -124,28 +124,28 @@ export struct CollectionContentPage {
         .onReachEnd(() => this.controller?.loadMore())
       }
     }
-    .id('p3_collection_content_page')
+    .id('collection_content_page')
     .alignItems(HorizontalAlign.Start)
     .width('100%')
     .height('100%')
     .padding({
-      left: $r('app.float.p1_page_padding'),
-      right: $r('app.float.p1_page_padding'),
+      left: $r('app.float.page_padding'),
+      right: $r('app.float.page_padding'),
       top: 94,
-      bottom: $r('app.float.p1_page_padding')
+      bottom: $r('app.float.page_padding')
     })
     .backgroundColor($r('app.color.page_background'))
   }
 
   @Builder
   private pageHeader() {
-    Row({ space: $r('app.float.p1_spacing_small') }) {
+    Row({ space: $r('app.float.spacing_small') }) {
       Button({ type: ButtonType.Normal, stateEffect: true }) {
         SymbolGlyph($r('sys.symbol.chevron_left'))
           .fontSize(20)
           .fontColor([$r('app.color.primary_text')])
       }
-        .id('p3_collection_content_back')
+        .id('collection_content_back')
         .width(40)
         .height(40)
         .padding(0)
@@ -153,8 +153,8 @@ export struct CollectionContentPage {
         .accessibilityText('返回')
         .onClick((): void => this.onBack())
       Text('收藏夹内容')
-        .id('p3_collection_content_page_title')
-        .fontSize($r('app.float.p1_heading_font_size'))
+        .id('collection_content_page_title')
+        .fontSize($r('app.float.heading_font_size'))
         .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.primary_text'))
         .layoutWeight(1)
@@ -164,88 +164,88 @@ export struct CollectionContentPage {
 
   @Builder
   private header() {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_small') }) {
       Text(this.collection?.title ?? '收藏夹')
-        .id('p3_collection_content_title')
-        .fontSize($r('app.float.p1_heading_font_size'))
+        .id('collection_content_title')
+        .fontSize($r('app.float.heading_font_size'))
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.primary_text'))
         .width('100%')
       if ((this.collection?.description ?? '').trim().length > 0) {
         Text(this.collection?.description ?? '')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.body_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .width('100%')
           .maxLines(3)
       }
       Text(collectionStats(this.collection))
-        .id('p3_collection_content_stats')
-        .fontSize($r('app.float.p1_caption_font_size'))
+        .id('collection_content_stats')
+        .fontSize($r('app.float.caption_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
     }
     .alignItems(HorizontalAlign.Start)
     .width('100%')
-    .padding($r('app.float.p1_spacing_medium'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .padding($r('app.float.spacing_medium'))
+    .borderRadius($r('app.float.card_radius'))
     .backgroundColor($r('app.color.card_background'))
   }
 
   @Builder
   private contentCard(item: CollectionContentItem) {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
-      Column({ space: $r('app.float.p1_spacing_small') }) {
-        Row({ space: $r('app.float.p1_spacing_small') }) {
+      Column({ space: $r('app.float.spacing_small') }) {
+        Row({ space: $r('app.float.spacing_small') }) {
           Text(collectionContentKindLabel(item.kind))
-            .fontSize($r('app.float.p1_caption_font_size'))
+            .fontSize($r('app.float.caption_font_size'))
             .fontColor(this.resolvedThemeColor)
           if (item.authorName !== undefined) {
             Text(item.authorName)
-              .fontSize($r('app.float.p1_caption_font_size'))
+              .fontSize($r('app.float.caption_font_size'))
               .fontColor($r('app.color.secondary_text'))
           }
         }
         .width('100%')
         Text(item.title)
-          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontSize($r('app.float.heading_font_size'))
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.primary_text'))
           .width('100%')
         if (item.excerpt.trim().length > 0) {
           Text(item.excerpt)
-            .fontSize($r('app.float.p1_body_font_size'))
+            .fontSize($r('app.float.body_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
             .maxLines(3)
         }
         Text(item.details)
-          .fontSize($r('app.float.p1_caption_font_size'))
+          .fontSize($r('app.float.caption_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .width('100%')
       }
       .alignItems(HorizontalAlign.Start)
       .width('100%')
     }
-    .id(`p3_collection_content_${item.kind}_${item.id}`)
+    .id(`collection_content_${item.kind}_${item.id}`)
     .width('100%')
-    .padding($r('app.float.p1_card_padding'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .padding($r('app.float.card_padding'))
+    .borderRadius($r('app.float.card_radius'))
     .backgroundColor($r('app.color.card_background'))
     .onClick((): void => this.navigate(collectionContentDestination(item)))
   }
 
   @Builder
   private statusPanel(message: string, retry: boolean, testId: string) {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
-      if (testId === 'p3_collection_content_loading') {
+    Column({ space: $r('app.float.spacing_medium') }) {
+      if (testId === 'collection_content_loading') {
         LoadingProgress()
-          .id('p3_collection_content_loading_progress')
+          .id('collection_content_loading_progress')
           .width(40)
           .height(40)
           .color(this.resolvedThemeColor)
       }
       Text(message)
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .textAlign(TextAlign.Center)
         .width('100%')
@@ -254,15 +254,15 @@ export struct CollectionContentPage {
           Button('去登录')
             .backgroundColor(this.resolvedThemeColor)
             .fontColor(onThemeColor(this.resolvedThemeColor))
-            .id('p3_collection_content_status_login')
-            .fontSize($r('app.float.p1_body_font_size'))
-            .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
+            .id('collection_content_status_login')
+            .fontSize($r('app.float.body_font_size'))
+            .onClick((): void => this.navigate({ name: AppDestinationName.LOGIN }))
         } else {
           Button('重新加载')
             .backgroundColor(this.resolvedThemeColor)
             .fontColor(onThemeColor(this.resolvedThemeColor))
             .id(`${testId}_retry`)
-            .fontSize($r('app.float.p1_body_font_size'))
+            .fontSize($r('app.float.body_font_size'))
             .onClick(() => this.controller?.retry())
         }
       }
@@ -312,15 +312,15 @@ function collectionStats(collection: CollectionSummary | undefined): string {
   return parts.join(' · ');
 }
 
-function collectionContentDestination(item: CollectionContentItem): P1Destination {
+function collectionContentDestination(item: CollectionContentItem): AppDestination {
   if (item.kind === CollectionContentKind.ANSWER) {
-    return { name: P1DestinationName.ANSWER, id: item.id };
+    return { name: AppDestinationName.ANSWER, id: item.id };
   }
   if (item.kind === CollectionContentKind.ARTICLE) {
-    return { name: P1DestinationName.ARTICLE, id: item.id };
+    return { name: AppDestinationName.ARTICLE, id: item.id };
   }
   if (item.kind === CollectionContentKind.QUESTION) {
-    return { name: P1DestinationName.QUESTION, id: item.id };
+    return { name: AppDestinationName.QUESTION, id: item.id };
   }
-  return { name: P1DestinationName.PIN, id: item.id };
+  return { name: AppDestinationName.PIN, id: item.id };
 }

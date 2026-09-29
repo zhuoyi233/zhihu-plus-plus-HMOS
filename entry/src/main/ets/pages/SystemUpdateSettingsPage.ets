@@ -270,8 +270,8 @@ export struct SystemUpdateSettingsPage {
             Column({ space: 4 }) {
               Text('知乎++鸿蒙版').fontSize(20).fontWeight(FontWeight.Bold)
                 .fontColor($r('app.color.primary_text'))
-              Text(`已安装 ${this.installedVersionLabel}`).id('p5_system_installed_version')
-                .fontSize($r('app.float.p1_secondary_font_size'))
+              Text(`已安装 ${this.installedVersionLabel}`).id('system_installed_version')
+                .fontSize($r('app.float.secondary_font_size'))
                 .fontColor($r('app.color.secondary_text'))
             }.alignItems(HorizontalAlign.Start).layoutWeight(1)
             if (this.updateCheckBusy) {
@@ -279,20 +279,20 @@ export struct SystemUpdateSettingsPage {
             }
           }.width('100%').alignItems(VerticalAlign.Center)
           if (this.latestVersion.length > 0) {
-            Text(`最新发布 v${this.latestVersion}`).fontSize($r('app.float.p1_body_font_size'))
+            Text(`最新发布 v${this.latestVersion}`).fontSize($r('app.float.body_font_size'))
               .fontColor(this.resolvedThemeColor).width('100%')
           }
           Button(this.updateCheckBusy ? '正在检查…' : '检查更新')
-            .id('p5_system_check_update').width('100%').enabled(!this.updateCheckBusy)
+            .id('system_check_update').width('100%').enabled(!this.updateCheckBusy)
             .fontColor(onThemeColor(this.resolvedThemeColor))
             .backgroundColor(this.resolvedThemeColor)
             .onClick((): void => this.onCheckUpdate())
           if (this.updateCheckMessage.length > 0) {
-            Text(this.updateCheckMessage).id('p5_system_update_status')
-              .fontSize($r('app.float.p1_secondary_font_size'))
+            Text(this.updateCheckMessage).id('system_update_status')
+              .fontSize($r('app.float.secondary_font_size'))
               .fontColor($r('app.color.secondary_text')).width('100%')
           }
-        }.width('100%').padding(18).borderRadius($r('app.float.p1_card_radius'))
+        }.width('100%').padding(18).borderRadius($r('app.float.card_radius'))
           .backgroundColor($r('app.color.surface_background'))
 
         if (this.availableVersion.length > 0) {
@@ -300,12 +300,12 @@ export struct SystemUpdateSettingsPage {
             .fontColor($r('app.color.secondary_text')).width('100%')
           Button({ type: ButtonType.Normal, stateEffect: true }) {
             Row() {
-              Text(`查看 v${this.availableVersion} 更新内容`).fontSize($r('app.float.p1_body_font_size'))
+              Text(`查看 v${this.availableVersion} 更新内容`).fontSize($r('app.float.body_font_size'))
                 .fontColor($r('app.color.primary_text')).layoutWeight(1)
               SymbolGlyph($r('sys.symbol.doc_text')).fontSize(18)
                 .fontColor([$r('app.color.secondary_text')])
             }.width('100%')
-          }.id('p5_system_update_whats_new').width('100%').padding(16)
+          }.id('system_update_whats_new').width('100%').padding(16)
             .backgroundColor($r('app.color.surface_background'))
             .onClick((): void => this.onOpenUpdateWhatsNew())
         }
@@ -314,10 +314,10 @@ export struct SystemUpdateSettingsPage {
           Text(`未签名安装包 · v${this.latestVersion}`).fontSize(14).fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.secondary_text')).width('100%')
           Column({ space: 12 }) {
-            Text('选择下载源').fontSize($r('app.float.p1_body_font_size'))
+            Text('选择下载源').fontSize($r('app.float.body_font_size'))
               .fontWeight(FontWeight.Medium).fontColor($r('app.color.primary_text')).width('100%')
             Text('17 个代理源与 GitHub 官方源。下载后需自行签名安装。')
-              .fontSize($r('app.float.p1_secondary_font_size'))
+              .fontSize($r('app.float.secondary_font_size'))
               .fontColor($r('app.color.secondary_text')).width('100%')
             Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.SpaceBetween }) {
               ForEach(this.sources(), (source: AppUpdateDownloadSource, index: number) => {
@@ -327,22 +327,22 @@ export struct SystemUpdateSettingsPage {
                     Text(source.official ? '官方' : (source.resumable ? '支持续传' : '普通代理'))
                       .fontSize(11).fontColor($r('app.color.secondary_text'))
                   }.width('100%')
-                }.id(`p5_system_source_${index + 1}`).width('48%').height(56).margin({ bottom: 8 })
+                }.id(`system_source_${index + 1}`).width('48%').height(56).margin({ bottom: 8 })
                   .backgroundColor($r('app.color.page_background'))
                   .onClick((): void => { this.selectedSource = source; })
               }, (source: AppUpdateDownloadSource): string => source.url)
             }.width('100%')
-          }.width('100%').padding(16).borderRadius($r('app.float.p1_card_radius'))
+          }.width('100%').padding(16).borderRadius($r('app.float.card_radius'))
             .backgroundColor($r('app.color.surface_background'))
         } else if (this.latestVersion.length > 0) {
           Text('此版本暂无可用的未签名 HAP 附件，请在 GitHub 发布页查看。')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text')).width('100%')
         }
 
         if (this.downloadStatus.length > 0) {
-          Text(this.downloadStatus).id('p5_system_download_status')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+          Text(this.downloadStatus).id('system_download_status')
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text')).width('100%')
         }
 
@@ -350,13 +350,13 @@ export struct SystemUpdateSettingsPage {
           .fontColor($r('app.color.secondary_text')).width('100%')
         Button({ type: ButtonType.ROUNDED_RECTANGLE, stateEffect: true }) {
           Row() {
-            Text('本版本更新内容').fontSize($r('app.float.p1_body_font_size'))
+            Text('本版本更新内容').fontSize($r('app.float.body_font_size'))
               .fontColor($r('app.color.primary_text')).layoutWeight(1)
             SymbolGlyph($r('sys.symbol.doc_text')).fontSize(18)
               .fontColor([$r('app.color.secondary_text')])
           }.width('100%')
-        }.id('p5_system_open_whats_new').width('100%').padding(16)
-          .borderRadius($r('app.float.p1_card_radius'))
+        }.id('system_open_whats_new').width('100%').padding(16)
+          .borderRadius($r('app.float.card_radius'))
           .backgroundColor($r('app.color.surface_background'))
           .onClick((): void => this.onOpenWhatsNew())
 
@@ -364,21 +364,21 @@ export struct SystemUpdateSettingsPage {
           .fontColor($r('app.color.secondary_text')).width('100%')
         Button({ type: ButtonType.ROUNDED_RECTANGLE, stateEffect: true }) {
           Row() {
-            Text('GitHub 项目与问题反馈').fontSize($r('app.float.p1_body_font_size'))
+            Text('GitHub 项目与问题反馈').fontSize($r('app.float.body_font_size'))
               .fontColor($r('app.color.primary_text')).layoutWeight(1)
             SymbolGlyph($r('sys.symbol.arrow_up_right')).fontSize(18)
               .fontColor([$r('app.color.secondary_text')])
           }.width('100%')
-        }.id('p5_system_open_project').width('100%').padding(16)
-          .borderRadius($r('app.float.p1_card_radius'))
+        }.id('system_open_project').width('100%').padding(16)
+          .borderRadius($r('app.float.card_radius'))
           .backgroundColor($r('app.color.surface_background'))
           .onClick((): void => this.onOpenProject())
       }
       .width('100%')
-      .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
+      .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
         top: 81, bottom: 40 })
     }
-    .id('p5_system_update_scroll').width('100%').height('100%').scrollBar(BarState.Off)
+    .id('system_update_scroll').width('100%').height('100%').scrollBar(BarState.Off)
     .backgroundColor($r('app.color.page_background'))
     .bindPopup(this.selectedSource !== undefined, {
       builder: () => { this.sourcePopup() },
@@ -398,7 +398,7 @@ export struct SystemUpdateSettingsPage {
         .fontColor($r('app.color.secondary_text')).width('100%')
       Text('安装包为未签名 HAP，下载后需自行签名。')
         .fontSize(12).fontColor($r('app.color.secondary_text')).width('100%')
-      Button('系统下载').id('p5_system_source_system_download').width('100%')
+      Button('系统下载').id('system_source_system_download').width('100%')
         .enabled(!this.downloadBusy)
         .fontColor(onThemeColor(this.resolvedThemeColor)).backgroundColor(this.resolvedThemeColor)
         .onClick((): void => {
@@ -406,21 +406,21 @@ export struct SystemUpdateSettingsPage {
           if (source !== undefined) { void this.startSystemDownload(source); }
           this.selectedSource = undefined;
         })
-      Button('在浏览器下载').id('p5_system_source_open').width('100%')
+      Button('在浏览器下载').id('system_source_open').width('100%')
         .fontColor($r('app.color.primary_text')).backgroundColor($r('app.color.page_background'))
         .onClick((): void => {
           const source = this.selectedSource;
           if (source !== undefined) { this.onOpenDownload(source.url); }
           this.selectedSource = undefined;
         })
-      Button('复制链接').id('p5_system_source_copy').width('100%')
+      Button('复制链接').id('system_source_copy').width('100%')
         .backgroundColor($r('app.color.page_background')).fontColor($r('app.color.primary_text'))
         .onClick((): void => {
           const source = this.selectedSource;
           if (source !== undefined) { this.copySource(source.url); }
           this.selectedSource = undefined;
         })
-    }.width('100%').padding(20).borderRadius($r('app.float.p1_card_radius'))
+    }.width('100%').padding(20).borderRadius($r('app.float.card_radius'))
       .backgroundColor($r('app.color.surface_background'))
   }
 }

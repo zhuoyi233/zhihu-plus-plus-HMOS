@@ -1,4 +1,4 @@
-import { P1Destination, P1DestinationName } from 'core';
+import { AppDestination, AppDestinationName } from 'core';
 import {
   CommentItem,
   CommentRepository,
@@ -37,7 +37,7 @@ export struct CommentPage {
   contentId: string = '';
   repository: CommentRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
-  navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
+  navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {
   };
   @State private rootDraft: string = '';
   @State private replyDraft: string = '';
@@ -181,7 +181,7 @@ export struct CommentPage {
   private sortChip(order: CommentSortOrder, label: string, testId: string) {
     Button(label, { type: ButtonType.ROUNDED_RECTANGLE })
       .id(testId)
-      .fontSize($r('app.float.p1_secondary_font_size'))
+      .fontSize($r('app.float.secondary_font_size'))
       .fontColor(this.sortOrder === order ? this.resolvedThemeColor : $r('app.color.secondary_text'))
       .fontWeight(this.sortOrder === order ? FontWeight.Medium : FontWeight.Normal)
       .height(32)
@@ -208,30 +208,30 @@ export struct CommentPage {
       Column() {
         if (this.errorMessage.length > 0 && (this.phase === CommentPhase.READY ||
           (this.phase === CommentPhase.EMPTY && this.activeRoot !== undefined))) {
-          Row({ space: $r('app.float.p1_spacing_small') }) {
+          Row({ space: $r('app.float.spacing_small') }) {
             Text(this.errorMessage)
-              .fontSize($r('app.float.p1_secondary_font_size'))
+              .fontSize($r('app.float.secondary_font_size'))
               .fontColor($r('app.color.error_text'))
               .layoutWeight(1)
             if (this.requiresLogin) {
               Button('去登录')
                 .backgroundColor(this.resolvedThemeColor)
                 .fontColor(onThemeColor(this.resolvedThemeColor))
-                .id('p3_comments_login')
-                .fontSize($r('app.float.p1_secondary_font_size'))
-                .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
+                .id('comments_login')
+                .fontSize($r('app.float.secondary_font_size'))
+                .onClick((): void => this.navigate({ name: AppDestinationName.LOGIN }))
             } else {
               Button('重试')
                 .backgroundColor(this.resolvedThemeColor)
                 .fontColor(onThemeColor(this.resolvedThemeColor))
-                .id('p3_comments_retry_more')
-                .fontSize($r('app.float.p1_secondary_font_size'))
+                .id('comments_retry_more')
+                .fontSize($r('app.float.secondary_font_size'))
                 .onClick(() => this.controller?.retry())
             }
           }
           .width('100%')
-          .padding($r('app.float.p1_spacing_small'))
-          .borderRadius($r('app.float.p1_card_radius'))
+          .padding($r('app.float.spacing_small'))
+          .borderRadius($r('app.float.card_radius'))
           .backgroundColor($r('app.color.surface_background'))
         }
 
@@ -269,8 +269,8 @@ export struct CommentPage {
     List({ space: 16, scroller: this.rootScroller }) {
       ListItem() {
         Row({ space: 12 }) {
-          this.sortChip(CommentSortOrder.SCORE, '最热', 'p3_comments_sort_score')
-          this.sortChip(CommentSortOrder.TIME, '最新', 'p3_comments_sort_time')
+          this.sortChip(CommentSortOrder.SCORE, '最热', 'comments_sort_score')
+          this.sortChip(CommentSortOrder.TIME, '最新', 'comments_sort_time')
         }
         .width('100%')
         .justifyContent(FlexAlign.End)
@@ -284,7 +284,7 @@ export struct CommentPage {
         ListItem() {
           // 上拉加载更多：与首页一致的圆形加载动画（onReachEnd 自动触发）
           LoadingProgress()
-            .id('p3_comments_root_load_more')
+            .id('comments_root_load_more')
             .width(40)
             .height(40)
             .color(this.resolvedThemeColor)
@@ -293,7 +293,7 @@ export struct CommentPage {
         .padding({ top: 12, bottom: 12 })
       }
     }
-    .id('p3_comments_root_list')
+    .id('comments_root_list')
     .padding({ left: 16, right: 16, top: 8 })
     .width('100%')
     .height('100%')
@@ -330,7 +330,7 @@ export struct CommentPage {
         ListItem() {
           // 上拉加载更多：与首页一致的圆形加载动画（onReachEnd 自动触发）
           LoadingProgress()
-            .id('p3_comments_children_load_more')
+            .id('comments_children_load_more')
             .width(40)
             .height(40)
             .color(this.resolvedThemeColor)
@@ -339,7 +339,7 @@ export struct CommentPage {
         .padding({ top: 12, bottom: 12 })
       }
     }
-    .id('p3_comments_children_list')
+    .id('comments_children_list')
     .padding({ left: 16, right: 16, top: 8 })
     .width('100%')
     .height('100%')
@@ -351,17 +351,17 @@ export struct CommentPage {
 
   @Builder
   private statusPanel(message: string, retry: boolean) {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
+    Column({ space: $r('app.float.spacing_medium') }) {
       if (this.phase === CommentPhase.LOADING || this.phase === CommentPhase.IDLE) {
         LoadingProgress()
-          .id('p3_comments_loading_progress')
+          .id('comments_loading_progress')
           .width(40)
           .height(40)
           .color(this.resolvedThemeColor)
       }
       Text(message)
-        .id('p3_comments_status')
-        .fontSize($r('app.float.p1_body_font_size'))
+        .id('comments_status')
+        .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .textAlign(TextAlign.Center)
         .width('100%')
@@ -370,15 +370,15 @@ export struct CommentPage {
           Button('去登录')
             .backgroundColor(this.resolvedThemeColor)
             .fontColor(onThemeColor(this.resolvedThemeColor))
-            .id('p3_comments_status_login')
-            .fontSize($r('app.float.p1_body_font_size'))
-            .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
+            .id('comments_status_login')
+            .fontSize($r('app.float.body_font_size'))
+            .onClick((): void => this.navigate({ name: AppDestinationName.LOGIN }))
         } else {
           Button('重新加载')
             .backgroundColor(this.resolvedThemeColor)
             .fontColor(onThemeColor(this.resolvedThemeColor))
-            .id('p3_comments_status_retry')
-            .fontSize($r('app.float.p1_body_font_size'))
+            .id('comments_status_retry')
+            .fontSize($r('app.float.body_font_size'))
             .onClick(() => this.controller?.retry())
         }
       }
@@ -388,8 +388,8 @@ export struct CommentPage {
     .width('100%')
     .layoutWeight(1)
     .padding({
-      left: $r('app.float.p1_page_padding'),
-      right: $r('app.float.p1_page_padding'),
+      left: $r('app.float.page_padding'),
+      right: $r('app.float.page_padding'),
       top: FLOATING_TITLE_BAR_OFFSET,
       bottom: this.bottomChromeHeight()
     })
@@ -428,11 +428,11 @@ export struct CommentPage {
           lineHeight: 25.6,
           fontColor: $r('app.color.primary_text'),
           copyOption: CopyOptions.LocalDevice,
-          componentId: `p3_comments_content_${comment.id}`
+          componentId: `comments_content_${comment.id}`
         })
         if (commentImageUrl(comment.contentHtml).length > 0) {
           Image(commentImageUrl(comment.contentHtml))
-            .id(`p3_comments_image_${comment.id}`)
+            .id(`comments_image_${comment.id}`)
             .width(200)
             .height(100)
             .constraintSize({ maxWidth: '100%' })
@@ -441,7 +441,7 @@ export struct CommentPage {
             .margin({ top: 4 })
             .accessibilityText('查看评论图片')
             .onClick((): void => {
-              AppStorage.setOrCreate('p2ImagePreviewUrl', commentImageUrl(comment.contentHtml));
+              AppStorage.setOrCreate('imagePreviewUrl', commentImageUrl(comment.contentHtml));
               // 预览叠层仍由详情页持有，退出评论页后展示。
               this.onDismiss();
             })
@@ -471,7 +471,7 @@ export struct CommentPage {
         .backgroundColor(this.resolvedThemeColor)
       if (commentAvatarUrl(comment.author.avatarUrl).length > 0) {
         Image(commentAvatarUrl(comment.author.avatarUrl))
-          .id(`p3_comments_avatar_${comment.id}`)
+          .id(`comments_avatar_${comment.id}`)
           .width(36)
           .height(36)
           .objectFit(ImageFit.Cover)
@@ -489,7 +489,7 @@ export struct CommentPage {
   private authorRow(comment: CommentItem) {
     Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
       Text(comment.author.name)
-        .id(`p3_comments_author_${comment.id}`)
+        .id(`comments_author_${comment.id}`)
         .fontSize(16)
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.primary_text'))
@@ -515,7 +515,7 @@ export struct CommentPage {
           .onClick((): void => {
             const author = comment.replyToAuthor;
             if (author !== undefined) {
-              this.navigate({ name: P1DestinationName.PEOPLE,
+              this.navigate({ name: AppDestinationName.PEOPLE,
                 id: author.urlToken.length > 0 ? author.urlToken : author.id });
             }
           })
@@ -543,7 +543,7 @@ export struct CommentPage {
             .fontSize(16)
             .fontColor([$r('app.color.secondary_text')])
         }
-        .id(`p3_comments_more_button_${comment.id}`)
+        .id(`comments_more_button_${comment.id}`)
         .width(28)
         .height(28)
         .padding(0)
@@ -563,7 +563,7 @@ export struct CommentPage {
           }
         }
       }
-      .id(`p3_comments_reply_button_${comment.id}`)
+      .id(`comments_reply_button_${comment.id}`)
       .height(28)
       .padding({ left: 4, right: 4 })
       .backgroundColor(Color.Transparent)
@@ -582,7 +582,7 @@ export struct CommentPage {
   private commentMenu(comment: CommentItem) {
     Menu() {
       MenuItem(this.deleteMenuLabel())
-        .id(`p3_comments_delete_button_${comment.id}`)
+        .id(`comments_delete_button_${comment.id}`)
         .onClick((): void => {
           this.getUIContext().showAlertDialog({
             title: '删除评论',
@@ -621,7 +621,7 @@ export struct CommentPage {
             .fontColor($r('app.color.primary_text'))
         }
       }
-      .id(`p3_comments_child_button_${comment.id}`)
+      .id(`comments_child_button_${comment.id}`)
       .height(28)
       .padding({ left: 16, right: 16 })
       .backgroundColor($r('app.color.control_background'))
@@ -634,7 +634,7 @@ export struct CommentPage {
   }
 
   private openAuthor(comment: CommentItem): void {
-    this.navigate({ name: P1DestinationName.PEOPLE,
+    this.navigate({ name: AppDestinationName.PEOPLE,
       id: comment.author.urlToken.length > 0 ? comment.author.urlToken : comment.author.id });
   }
 
@@ -661,7 +661,7 @@ export struct CommentPage {
     Column() {
       if (emojiStore.placeholders().length === 0) {
         Text('暂无可用表情')
-          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontSize($r('app.float.secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .textAlign(TextAlign.Center)
           .width('100%')
@@ -678,7 +678,7 @@ export struct CommentPage {
                 .onClick((): void => this.insertEmoji(placeholder))
             }
             .height(48)
-            .id(`p3_comments_emoji_item_${index}`)
+            .id(`comments_emoji_item_${index}`)
           }, (placeholder: string): string => `${this.emojiTick}_${placeholder}`)
         }
           .columnsTemplate(this.emojiColumnsTemplate())
@@ -696,7 +696,7 @@ export struct CommentPage {
           })
       }
     }
-    .id('p3_comments_emoji_picker')
+    .id('comments_emoji_picker')
     .width('100%')
     .height(240)
     .backgroundColor($r('app.color.card_background'))
@@ -720,9 +720,9 @@ export struct CommentPage {
   private inputBar() {
     Column({ space: 8 }) {
       if (this.replyTarget !== undefined) {
-        Row({ space: $r('app.float.p1_spacing_small') }) {
+        Row({ space: $r('app.float.spacing_small') }) {
           Text(`回复 ${this.replyTarget.author.name}`)
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .layoutWeight(1)
           Button({ type: ButtonType.Normal }) {
@@ -730,41 +730,41 @@ export struct CommentPage {
               .fontSize(16)
               .fontColor([$r('app.color.secondary_text')])
           }
-            .id('p3_comments_cancel_reply')
+            .id('comments_cancel_reply')
             .width(28)
             .height(28)
             .padding(0)
             .backgroundColor(Color.Transparent)
             .accessibilityText('取消回复')
-            .fontSize($r('app.float.p1_caption_font_size'))
+            .fontSize($r('app.float.caption_font_size'))
             .onClick((): void => {
               this.controller?.setReplyTarget(undefined);
             })
         }
-        .id('p3_comments_reply_banner')
+        .id('comments_reply_banner')
         .width('100%')
-        .padding($r('app.float.p1_spacing_small'))
+        .padding($r('app.float.spacing_small'))
         .borderRadius(12)
         .backgroundColor($r('app.color.control_background'))
       }
       if (this.actionMessage.length > 0) {
-        Row({ space: $r('app.float.p1_spacing_small') }) {
+        Row({ space: $r('app.float.spacing_small') }) {
           Text(this.actionMessage)
-            .id('p3_comments_action_status')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .id('comments_action_status')
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.error_text'))
             .layoutWeight(1)
           if (this.actionRequiresLogin) {
             Button('去登录')
               .backgroundColor(this.resolvedThemeColor)
               .fontColor(onThemeColor(this.resolvedThemeColor))
-              .id('p3_comments_action_login')
-              .fontSize($r('app.float.p1_secondary_font_size'))
-              .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
+              .id('comments_action_login')
+              .fontSize($r('app.float.secondary_font_size'))
+              .onClick((): void => this.navigate({ name: AppDestinationName.LOGIN }))
           }
         }
         .width('100%')
-        .padding($r('app.float.p1_spacing_small'))
+        .padding($r('app.float.spacing_small'))
         .borderRadius(12)
         .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
       }
@@ -775,8 +775,8 @@ export struct CommentPage {
     }
     .width('100%')
     .padding({
-      left: $r('app.float.p1_page_padding'),
-      right: $r('app.float.p1_page_padding'),
+      left: $r('app.float.page_padding'),
+      right: $r('app.float.page_padding'),
       // 与 PR #23 详情页底栏同源：仅按系统手势条避让区抬高，0 时贴物理底边。
       bottom: Math.max(this.bottomRectHeightVp, 0)
     })
@@ -812,7 +812,7 @@ export struct CommentPage {
 
   @Builder
   private inputRow() {
-    Row({ space: $r('app.float.p1_spacing_small') }) {
+    Row({ space: $r('app.float.spacing_small') }) {
         Button({ type: ButtonType.Normal }) {
           SymbolGlyph(this.showEmojiPicker
             ? $r('sys.symbol.keyboard') : $r('sys.symbol.face_smiling'))
@@ -820,7 +820,7 @@ export struct CommentPage {
             .fontColor([this.showEmojiPicker
               ? this.resolvedThemeColor : $r('app.color.secondary_text')])
         }
-          .id('p3_comments_emoji_button')
+          .id('comments_emoji_button')
           .width(40)
           .height(40)
           .padding(0)
@@ -831,7 +831,7 @@ export struct CommentPage {
           .onClick((): void => {
             if (this.showEmojiPicker) {
               this.showEmojiPicker = false;
-              this.getUIContext().getFocusController().requestFocus('p3_comments_input');
+              this.getUIContext().getFocusController().requestFocus('comments_input');
               return;
             }
             // 对齐上游：开面板时清焦点、收软键盘，面板与键盘互斥。
@@ -846,7 +846,7 @@ export struct CommentPage {
             : (this.activeRoot !== undefined ? '写下你的回复...' : '写下你的评论...'),
           controller: this.inputController
         })
-          .id('p3_comments_input')
+          .id('comments_input')
           .layoutWeight(1)
           .maxLength(1000)
           .backgroundColor(Color.Transparent)
@@ -874,14 +874,14 @@ export struct CommentPage {
                 ? this.resolvedThemeColor : $r('app.color.secondary_text')])
           }
         }
-          .id('p3_comments_send_button')
+          .id('comments_send_button')
           .width(40)
           .height(40)
           .padding(0)
           .backgroundColor(Color.Transparent)
           .margin({ right: 12 })
           .accessibilityText(this.submitting ? '发送中' : '发送')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.body_font_size'))
           .enabled(!this.submitting && this.currentDraft().trim().length > 0)
           .onClick((): void => {
             this.submitCurrentDraft();

@@ -1,4 +1,4 @@
-import { P1Destination, P1DestinationName } from 'core';
+import { AppDestination, AppDestinationName } from 'core';
 import {
   onThemeColor,
   DEFAULT_THEME_COLOR,
@@ -48,7 +48,7 @@ export struct PrivateMessagePage {
   avatarUrl: string = '';
   repository: MobileNotificationRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
-  navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {};
+  navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {};
   @State private phase: PrivateMessagePhase = PrivateMessagePhase.IDLE;
   @State private items: Array<ZhihuPrivateMessage> = [];
   @State private sending: boolean = false;
@@ -89,18 +89,18 @@ export struct PrivateMessagePage {
   build() {
     Column() {
       if (this.phase === PrivateMessagePhase.IDLE || this.phase === PrivateMessagePhase.LOADING) {
-        this.statusPanel('正在加载私信…', false, 'p3_private_message_loading')
+        this.statusPanel('正在加载私信…', false, 'private_message_loading')
       } else if (this.phase === PrivateMessagePhase.ERROR) {
-        this.statusPanel(this.errorMessage, true, 'p3_private_message_error')
+        this.statusPanel(this.errorMessage, true, 'private_message_error')
       } else if (this.phase === PrivateMessagePhase.EMPTY && this.items.length === 0) {
-        this.statusPanel('还没有私信', false, 'p3_private_message_empty')
+        this.statusPanel('还没有私信', false, 'private_message_empty')
       } else {
         List({ space: 0, scroller: this.scroller }) {
           ForEach(this.items, (message: ZhihuPrivateMessage) => {
             ListItem() {
               this.messageBubble(message)
             }
-          }, (message: ZhihuPrivateMessage): string => `p3_private_message_${privateMessageStableId(message)}`)
+          }, (message: ZhihuPrivateMessage): string => `private_message_${privateMessageStableId(message)}`)
 
           if (this.loadingMore) {
             ListItem() {
@@ -110,11 +110,11 @@ export struct PrivateMessagePage {
                   .height(20)
                   .color(this.resolvedThemeColor)
                 Text('正在加载更早的消息…')
-                  .fontSize($r('app.float.p1_secondary_font_size'))
+                  .fontSize($r('app.float.secondary_font_size'))
                   .fontColor($r('app.color.secondary_text'))
                   .margin({ left: 8 })
               }
-              .id('p3_private_message_load_more')
+              .id('private_message_load_more')
               .justifyContent(FlexAlign.Center)
               .width('100%')
               .padding(12)
@@ -124,7 +124,7 @@ export struct PrivateMessagePage {
           if (this.sendError.length > 0) {
             ListItem() {
               Text(this.sendError)
-                .fontSize($r('app.float.p1_caption_font_size'))
+                .fontSize($r('app.float.caption_font_size'))
                 .fontColor($r('app.color.error_text'))
                 .width('100%')
                 .textAlign(TextAlign.Center)
@@ -132,7 +132,7 @@ export struct PrivateMessagePage {
             }
           }
         }
-        .id('p3_private_message_list')
+        .id('private_message_list')
         .width('100%')
         // 顶栏让位：内缩滚动内容起点，未滚动时首屏内容仍从标题栏下沿开始
         .contentStartOffset(FLOATING_TITLE_BAR_OFFSET)
@@ -156,8 +156,8 @@ export struct PrivateMessagePage {
             placeholder: '发私信'
           })
             .enabled(!this.sending)
-            .id('p3_private_message_input')
-            .fontSize($r('app.float.p1_body_font_size'))
+            .id('private_message_input')
+            .fontSize($r('app.float.body_font_size'))
             .layoutWeight(1)
             .maxLines(4)
             .borderRadius(12)
@@ -171,7 +171,7 @@ export struct PrivateMessagePage {
               .fontSize(20)
               .fontColor([Color.White])
           }
-            .id('p3_private_message_send')
+            .id('private_message_send')
             .width(40)
             .height(40)
             .margin({ left: 8 })
@@ -187,7 +187,7 @@ export struct PrivateMessagePage {
         .alignItems(VerticalAlign.Center)
       }
     }
-    .id('p3_private_message_page')
+    .id('private_message_page')
     .width('100%')
     .height('100%')
     // 覆盖式顶栏：容器不设 top padding，滚动视口延伸到屏幕顶；
@@ -219,7 +219,7 @@ export struct PrivateMessagePage {
                 .onClick((): void => this.openSegmentLink(segment))
             }, (segment: PrivateMessageSegment): string => `${segment.url}:${segment.text}`)
         }
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.body_font_size'))
           .width(this.isIncoming(message) ? '100%' : '88%')
           .padding({ left: 14, right: 14, top: 10, bottom: 10 })
           .borderRadius({
@@ -233,7 +233,7 @@ export struct PrivateMessagePage {
 
         if (relativeTime(message.createdTime).length > 0) {
           Text(relativeTime(message.createdTime))
-            .fontSize($r('app.float.p1_caption_font_size'))
+            .fontSize($r('app.float.caption_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .padding({ left: 4, right: 4, top: 2, bottom: 2 })
         }
@@ -241,7 +241,7 @@ export struct PrivateMessagePage {
       .alignItems(this.isIncoming(message) ? HorizontalAlign.Start : HorizontalAlign.End)
       .layoutWeight(1)
     }
-    .id(`p3_private_message_row_${privateMessageStableId(message)}`)
+    .id(`private_message_row_${privateMessageStableId(message)}`)
     .width('100%')
     .padding({ left: 14, right: 14, top: 5, bottom: 5 })
     .alignItems(VerticalAlign.Bottom)
@@ -249,16 +249,16 @@ export struct PrivateMessagePage {
 
   @Builder
   private statusPanel(message: string, retry: boolean, testId: string) {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
-      if (testId === 'p3_private_message_loading') {
+    Column({ space: $r('app.float.spacing_medium') }) {
+      if (testId === 'private_message_loading') {
         LoadingProgress()
-          .id('p3_private_message_loading_progress')
+          .id('private_message_loading_progress')
           .width(40)
           .height(40)
           .color(this.resolvedThemeColor)
       }
       Text(message)
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .textAlign(TextAlign.Center)
         .width('100%')
@@ -267,15 +267,15 @@ export struct PrivateMessagePage {
           Button('去登录')
             .backgroundColor(this.resolvedThemeColor)
             .fontColor(onThemeColor(this.resolvedThemeColor))
-            .id('p3_private_message_status_login')
-            .fontSize($r('app.float.p1_body_font_size'))
-            .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
+            .id('private_message_status_login')
+            .fontSize($r('app.float.body_font_size'))
+            .onClick((): void => this.navigate({ name: AppDestinationName.LOGIN }))
         } else {
           Button('重新加载')
             .backgroundColor(this.resolvedThemeColor)
             .fontColor(onThemeColor(this.resolvedThemeColor))
             .id(`${testId}_retry`)
-            .fontSize($r('app.float.p1_body_font_size'))
+            .fontSize($r('app.float.body_font_size'))
             .onClick(() => this.controller?.retry())
         }
       }

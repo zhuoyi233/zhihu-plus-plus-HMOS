@@ -1,4 +1,4 @@
-import { P1Destination } from 'core';
+import { AppDestination } from 'core';
 import {
   BlockedFeedHistoryGateway,
   BlockingRuleGateway,
@@ -23,7 +23,7 @@ export struct FollowingFeedPage {
   history: BlockedFeedHistoryGateway | undefined = undefined;
   @Prop reloadToken: number = 0;
   @Prop selectedTabIndex: number = 0;
-  navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
+  navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {
   };
   @State private activeTabIndex: number = 0;
   private readonly swiperController: SwiperController = new SwiperController();
@@ -68,7 +68,7 @@ export struct FollowingFeedPage {
         rules: this.rules,
         history: this.history
       })
-        .id('p2_following_recommend_content')
+        .id('following_recommend_content')
 
       ChannelFeedPage({
         source: ChannelFeedSource.FOLLOWING,
@@ -79,9 +79,9 @@ export struct FollowingFeedPage {
         rules: this.rules,
         history: this.history
       })
-        .id('p2_following_dynamic_content')
+        .id('following_dynamic_content')
     }
-    .id('p2_following_pager')
+    .id('following_pager')
     .index(this.activeTabIndex)
     .loop(false)
     .indicator(false)

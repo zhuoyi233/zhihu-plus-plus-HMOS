@@ -1,5 +1,5 @@
 import { Want } from '@kit.AbilityKit';
-import { P1Destination, P1DestinationName, isSafePeopleIdentifier } from 'core';
+import { AppDestination, AppDestinationName, isSafePeopleIdentifier } from 'core';
 import {
   onThemeColor,
   AppPreferencesStore,
@@ -95,7 +95,7 @@ export struct SearchPage {
   initialQuery: string = '';
   repository: SearchRepository | undefined = undefined;
   preferences: AppPreferencesStore | undefined = undefined;
-  navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
+  navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {
   };
   onBack: () => void = (): void => {
   };
@@ -258,7 +258,7 @@ export struct SearchPage {
   build() {
     Column() {
       if (this.repository === undefined) {
-        this.statusPanel('搜索数据源未配置', false, 'p2_search_unconfigured');
+        this.statusPanel('搜索数据源未配置', false, 'search_unconfigured');
       } else if (this.query.length === 0 && this.phase === SearchPhase.IDLE) {
         this.idlePanel();
       } else {
@@ -266,11 +266,11 @@ export struct SearchPage {
           this.resultTabs();
         }
         if (this.phase === SearchPhase.LOADING) {
-          this.statusPanel('正在搜索…', false, 'p2_search_loading');
+          this.statusPanel('正在搜索…', false, 'search_loading');
         } else if (this.phase === SearchPhase.ERROR) {
-          this.statusPanel(this.errorMessage, true, 'p2_search_error');
+          this.statusPanel(this.errorMessage, true, 'search_error');
         } else if (this.phase === SearchPhase.EMPTY) {
-          this.statusPanel('没有找到可显示的相关结果', false, 'p2_search_empty');
+          this.statusPanel('没有找到可显示的相关结果', false, 'search_empty');
         } else {
           this.resultList();
         }
@@ -280,11 +280,11 @@ export struct SearchPage {
     .width('100%')
     .height('100%')
     .padding({
-      left: $r('app.float.p1_page_padding'),
-      right: $r('app.float.p1_page_padding'),
+      left: $r('app.float.page_padding'),
+      right: $r('app.float.page_padding'),
       // 94vp 为标题栏（stackBuilder 注入的搜索框行）叠加预留，对齐详情页约定。
       top: 94,
-      bottom: $r('app.float.p1_page_padding')
+      bottom: $r('app.float.page_padding')
     })
     .backgroundColor($r('app.color.page_background'))
   }
@@ -296,7 +296,7 @@ export struct SearchPage {
         if (this.showSearchHistory && this.history.length > 0) {
           Row() {
             Text('搜索历史')
-              .fontSize($r('app.float.p1_body_font_size'))
+              .fontSize($r('app.float.body_font_size'))
               .fontWeight(FontWeight.Medium)
               .fontColor($r('app.color.secondary_text'))
             Blank()
@@ -305,7 +305,7 @@ export struct SearchPage {
                 .fontSize(18)
                 .fontColor([$r('app.color.secondary_text')])
             }
-            .id('p2_search_history_more')
+            .id('search_history_more')
             .width(36)
             .height(36)
             .padding(0)
@@ -327,12 +327,12 @@ export struct SearchPage {
                 .fontSize(16)
                 .fontColor([$r('app.color.secondary_text')])
               Text(item)
-                .fontSize($r('app.float.p1_body_font_size'))
+                .fontSize($r('app.float.body_font_size'))
                 .fontColor($r('app.color.primary_text'))
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
             }
-            .id(`p2_search_history_${item}`)
+            .id(`search_history_${item}`)
             .width('100%')
             .height(40)
             .onClick((): void => this.performSubmit(item))
@@ -345,7 +345,7 @@ export struct SearchPage {
 
         Row() {
           Text('热搜')
-            .fontSize($r('app.float.p1_body_font_size'))
+            .fontSize($r('app.float.body_font_size'))
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.secondary_text'))
           Blank()
@@ -354,7 +354,7 @@ export struct SearchPage {
               .fontSize(18)
               .fontColor([$r('app.color.secondary_text')])
           }
-          .id('p2_search_hot_refresh')
+          .id('search_hot_refresh')
           .width(36)
           .height(36)
           .padding(0)
@@ -368,7 +368,7 @@ export struct SearchPage {
 
         if (this.hotItems.length === 0) {
           Text('暂无热搜内容')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
             .padding(12)
@@ -376,22 +376,22 @@ export struct SearchPage {
           ForEach(this.hotItems, (item: SearchHotItem, index: number) => {
             Row({ space: 8 }) {
               Text(`${index + 1}`)
-                .fontSize($r('app.float.p1_body_font_size'))
+                .fontSize($r('app.float.body_font_size'))
                 .fontColor(index < 3 ? $r('app.color.error_text') : $r('app.color.secondary_text'))
                 .width(24)
               Text(item.query)
-                .fontSize($r('app.float.p1_body_font_size'))
+                .fontSize($r('app.float.body_font_size'))
                 .fontColor($r('app.color.primary_text'))
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
                 .layoutWeight(1)
               if (item.hotShow.length > 0) {
                 Text(item.hotShow)
-                  .fontSize($r('app.float.p1_secondary_font_size'))
+                  .fontSize($r('app.float.secondary_font_size'))
                   .fontColor($r('app.color.secondary_text'))
               }
             }
-            .id(`p2_search_hot_${index}`)
+            .id(`search_hot_${index}`)
             .width('100%')
             .height(40)
             .onClick((): void => this.performSubmit(item.query))
@@ -400,7 +400,7 @@ export struct SearchPage {
 
         if (this.history.length === 0 && this.hotItems.length === 0) {
           Text('暂无搜索历史，输入关键词搜索后会保存在这里')
-            .fontSize($r('app.float.p1_body_font_size'))
+            .fontSize($r('app.float.body_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
             .padding(12)
@@ -408,7 +408,7 @@ export struct SearchPage {
       }
       .width('100%')
     }
-    .id('p2_search_idle_panel')
+    .id('search_idle_panel')
     .width('100%')
     .layoutWeight(1)
     .align(Alignment.Top)
@@ -420,13 +420,13 @@ export struct SearchPage {
     // 用户主页那条选项栏是通栏 Scroll，靠 Row 内边距对齐内容；这里已在页面 12vp 内边距之内，
     // 再加就把第五个选项顶出可视区（360vp > 353vp）并让选项栏变成可横向拖动。
     Scroll() {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         ForEach(SEARCH_TABS, (tab: SearchTab) => {
           this.resultTab(tab)
         }, (tab: SearchTab): string => tab)
       }
     }
-    .id('p2_search_result_tabs')
+    .id('search_result_tabs')
     .scrollable(ScrollDirection.Horizontal)
     .scrollBar(BarState.Off)
     .width('100%')
@@ -437,10 +437,10 @@ export struct SearchPage {
   private resultTab(tab: SearchTab) {
     // 系统 Tabs 的选中色固定取系统强调色，不随应用主题色；这里改用与用户主页一致的自绘下划线选项栏。
     Button(searchTabLabel(tab), { type: ButtonType.Normal, stateEffect: true })
-      .id(`p2_search_tab_${tab}`)
+      .id(`search_tab_${tab}`)
       .height(44)
-      .padding({ left: $r('app.float.p1_spacing_medium'), right: $r('app.float.p1_spacing_medium') })
-      .fontSize($r('app.float.p1_body_font_size'))
+      .padding({ left: $r('app.float.spacing_medium'), right: $r('app.float.spacing_medium') })
+      .fontSize($r('app.float.body_font_size'))
       .fontWeight(this.isTabActive(tab) ? FontWeight.Medium : FontWeight.Regular)
       .fontColor(this.isTabActive(tab) ? this.resolvedThemeColor : $r('app.color.primary_text'))
       .backgroundColor(Color.Transparent)
@@ -464,7 +464,7 @@ export struct SearchPage {
             this.topicRow(entity.topic);
           }
         }
-        .margin({ top: $r('app.float.p1_spacing_medium') })
+        .margin({ top: $r('app.float.spacing_medium') })
       }, (entity: SearchEntity): string => entity.id)
 
       if (this.loadingMore || this.canLoadMore) {
@@ -472,16 +472,16 @@ export struct SearchPage {
           Button(this.loadingMore ? '正在加载更多…' : '加载更多')
             .backgroundColor(this.resolvedThemeColor)
             .fontColor(onThemeColor(this.resolvedThemeColor))
-            .id('p2_search_load_more')
+            .id('search_load_more')
             .width('100%')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .enabled(!this.loadingMore)
             .onClick(() => this.controller?.loadMore())
         }
-        .margin({ top: $r('app.float.p1_spacing_medium') })
+        .margin({ top: $r('app.float.spacing_medium') })
       }
     }
-    .id('p2_search_result_list')
+    .id('search_result_list')
     .width('100%')
     .scrollBar(BarState.Off)
     .layoutWeight(1)
@@ -491,16 +491,16 @@ export struct SearchPage {
 
   @Builder
   private statusPanel(message: string, retry: boolean, testId: string) {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
-      if (testId === 'p2_search_loading') {
+    Column({ space: $r('app.float.spacing_medium') }) {
+      if (testId === 'search_loading') {
         LoadingProgress()
-          .id('p2_search_loading_progress')
+          .id('search_loading_progress')
           .width(40)
           .height(40)
           .color(this.resolvedThemeColor)
       }
       Text(message)
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .textAlign(TextAlign.Center)
         .width('100%')
@@ -509,15 +509,15 @@ export struct SearchPage {
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
           .id(`${testId}_retry`)
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.body_font_size'))
           .onClick(() => this.controller?.retry())
       }
       if (this.requiresLogin) {
         Button('去登录')
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id('p2_search_error_login')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .id('search_error_login')
+          .fontSize($r('app.float.body_font_size'))
           .onClick(() => this.openLogin())
       }
     }
@@ -550,14 +550,14 @@ export struct SearchPage {
   @Builder
   private resultCard(item: SearchResultItem) {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
-      Column({ space: $r('app.float.p1_spacing_small') }) {
-        Row({ space: $r('app.float.p1_spacing_small') }) {
+      Column({ space: $r('app.float.spacing_small') }) {
+        Row({ space: $r('app.float.spacing_small') }) {
           Text(searchKindLabel(item.kind))
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor(this.resolvedThemeColor)
           if (item.authorName !== undefined) {
             Text(stripEmphasis(item.authorName))
-              .fontSize($r('app.float.p1_secondary_font_size'))
+              .fontSize($r('app.float.secondary_font_size'))
               .fontColor($r('app.color.secondary_text'))
               .layoutWeight(1)
           } else {
@@ -566,26 +566,26 @@ export struct SearchPage {
         }
         .width('100%')
 
-        this.highlightedText(item.title, $r('app.float.p1_heading_font_size'),
+        this.highlightedText(item.title, $r('app.float.heading_font_size'),
           $r('app.color.primary_text'), FontWeight.Medium)
 
         if (item.excerpt.trim().length > 0) {
-          this.highlightedText(item.excerpt, $r('app.float.p1_body_font_size'),
+          this.highlightedText(item.excerpt, $r('app.float.body_font_size'),
             $r('app.color.secondary_text'), FontWeight.Regular)
         }
 
         Text(`${item.voteupCount} 赞同 · ${item.commentCount} 评论`)
-          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontSize($r('app.float.secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .width('100%')
       }
       .alignItems(HorizontalAlign.Start)
       .width('100%')
     }
-    .id(`p2_search_result_${item.kind}_${item.contentId}`)
+    .id(`search_result_${item.kind}_${item.contentId}`)
     .width('100%')
-    .padding($r('app.float.p1_card_padding'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .padding($r('app.float.card_padding'))
+    .borderRadius($r('app.float.card_radius'))
     .backgroundColor($r('app.color.surface_background'))
     .accessibilityText(`打开${searchKindLabel(item.kind)}：${stripEmphasis(item.title)}`)
     .onClick(() => this.navigate(searchResultDestination(item)))
@@ -602,25 +602,25 @@ export struct SearchPage {
           .objectFit(ImageFit.Cover)
       }
       Column({ space: 4 }) {
-        this.highlightedText(item.name, $r('app.float.p1_heading_font_size'),
+        this.highlightedText(item.name, $r('app.float.heading_font_size'),
           $r('app.color.primary_text'), FontWeight.Medium)
         if (item.headline.length > 0) {
           Text(item.headline)
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .maxLines(2)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%')
         }
         Text(`${item.followerCount} 粉丝 · ${item.answerCount} 回答`)
-          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontSize($r('app.float.secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .width('100%')
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
     }
-    .id(`p2_search_person_${item.id}`)
+    .id(`search_person_${item.id}`)
     .width('100%')
     .padding({ top: 8, bottom: 8 })
     .alignItems(VerticalAlign.Center)
@@ -639,25 +639,25 @@ export struct SearchPage {
           .objectFit(ImageFit.Cover)
       }
       Column({ space: 4 }) {
-        this.highlightedText(item.name, $r('app.float.p1_heading_font_size'),
+        this.highlightedText(item.name, $r('app.float.heading_font_size'),
           $r('app.color.primary_text'), FontWeight.Medium)
         if (item.excerpt.length > 0) {
           Text(stripEmphasis(item.excerpt))
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .maxLines(2)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%')
         }
         Text(`${formatSearchCount(item.visitCount)} 浏览 · ${formatSearchCount(item.discussCount)} 讨论`)
-          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontSize($r('app.float.secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .width('100%')
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
     }
-    .id(`p2_search_topic_${item.id}`)
+    .id(`search_topic_${item.id}`)
     .width('100%')
     .padding({ top: 8, bottom: 8 })
     .alignItems(VerticalAlign.Center)
@@ -671,7 +671,7 @@ export struct SearchPage {
     if (identifier === undefined) {
       return;
     }
-    this.navigate({ name: P1DestinationName.PEOPLE, id: identifier });
+    this.navigate({ name: AppDestinationName.PEOPLE, id: identifier });
   }
 
   private async openTopicInBrowser(item: SearchTopicItem): Promise<void> {
@@ -691,7 +691,7 @@ export struct SearchPage {
   }
 
   private openLogin(): void {
-    this.navigate({ name: P1DestinationName.LOGIN });
+    this.navigate({ name: AppDestinationName.LOGIN });
   }
 }
 
@@ -705,14 +705,14 @@ function formatSearchCount(value: number): string {
   return `${value}`;
 }
 
-export function searchResultDestination(item: SearchResultItem): P1Destination {
+export function searchResultDestination(item: SearchResultItem): AppDestination {
   if (item.kind === FeedTargetKind.QUESTION) {
-    return { name: P1DestinationName.QUESTION, id: item.contentId };
+    return { name: AppDestinationName.QUESTION, id: item.contentId };
   }
   if (item.kind === FeedTargetKind.ANSWER) {
-    return { name: P1DestinationName.ANSWER, id: item.contentId };
+    return { name: AppDestinationName.ANSWER, id: item.contentId };
   }
-  return { name: P1DestinationName.ARTICLE, id: item.contentId };
+  return { name: AppDestinationName.ARTICLE, id: item.contentId };
 }
 
 export function searchKindLabel(kind: FeedTargetKind): string {

@@ -75,18 +75,18 @@ export struct ContentFilterSettingsPage {
 
   build() {
     Scroll() {
-      Column({ space: $r('app.float.p1_spacing_large') }) {
+      Column({ space: $r('app.float.spacing_large') }) {
         if (this.statusMessage.length > 0) {
           Text(this.statusMessage)
-            .id('p3_content_filter_status')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .id('content_filter_status')
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
         }
         if (!this.loaded) {
           Text('正在加载设置…')
-            .id('p3_content_filter_loading')
-            .fontSize($r('app.float.p1_body_font_size'))
+            .id('content_filter_loading')
+            .fontSize($r('app.float.body_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
         }
@@ -96,15 +96,15 @@ export struct ContentFilterSettingsPage {
           this.recommendationModeSetting()
           Divider().color($r('app.color.divider_color'))
           this.switchSetting('推荐内容时登录', '获取推荐内容时携带登录凭证', this.filter.loginForRecommendation,
-            true, 'p3_filter_login_recommendation', (value: boolean): void =>
+            true, 'filter_login_recommendation', (value: boolean): void =>
               this.updateFilterBoolean('loginForRecommendation', value))
           Divider().color($r('app.color.divider_color'))
           this.switchSetting('启动时自动刷新首页', '关闭后优先显示上次获取的一批首页推荐；没有缓存时仍会加载新推荐',
-            this.filter.autoRefreshHomeOnStartup, true, 'p3_filter_auto_refresh_startup', (value: boolean): void =>
+            this.filter.autoRefreshHomeOnStartup, true, 'filter_auto_refresh_startup', (value: boolean): void =>
               this.updateFilterBoolean('autoRefreshHomeOnStartup', value))
         }
         .width('100%')
-        .borderRadius($r('app.float.p1_card_radius'))
+        .borderRadius($r('app.float.card_radius'))
         .backgroundColor($r('app.color.surface_background'))
 
         this.sectionTitle('内容质量')
@@ -112,106 +112,106 @@ export struct ContentFilterSettingsPage {
           this.qualityModeSetting()
           Divider().color($r('app.color.divider_color'))
           this.thresholdSetting('回答最低赞数', '低于此赞同数的未关注作者回答会被过滤',
-            'answerVoteupThreshold', this.filter.answerVoteupThreshold, true, 'p3_filter_answer_vote_threshold')
+            'answerVoteupThreshold', this.filter.answerVoteupThreshold, true, 'filter_answer_vote_threshold')
           Divider().color($r('app.color.divider_color'))
           this.thresholdSetting('文章最低赞数', '低于此赞数或作者粉丝低于对应阈值的文章会被过滤',
-            'articleVoteupThreshold', this.filter.articleVoteupThreshold, true, 'p3_filter_article_vote_threshold')
+            'articleVoteupThreshold', this.filter.articleVoteupThreshold, true, 'filter_article_vote_threshold')
           Divider().color($r('app.color.divider_color'))
           this.thresholdSetting('文章最低粉丝数', '文章作者粉丝数低于此值时应用质量过滤',
-            'articleFollowersThreshold', this.filter.articleFollowersThreshold, true, 'p3_filter_article_follower_threshold')
+            'articleFollowersThreshold', this.filter.articleFollowersThreshold, true, 'filter_article_follower_threshold')
           Divider().color($r('app.color.divider_color'))
           this.thresholdSetting('视频最低赞数', '视频赞同数低于此值时应用质量过滤',
-            'videoVoteThreshold', this.filter.videoVoteThreshold, true, 'p3_filter_video_vote_threshold')
+            'videoVoteThreshold', this.filter.videoVoteThreshold, true, 'filter_video_vote_threshold')
           Divider().color($r('app.color.divider_color'))
           this.thresholdSetting('视频最低粉丝数', '视频作者粉丝数低于此值时应用质量过滤',
-            'videoFollowersThreshold', this.filter.videoFollowersThreshold, true, 'p3_filter_video_follower_threshold')
+            'videoFollowersThreshold', this.filter.videoFollowersThreshold, true, 'filter_video_follower_threshold')
           Divider().color($r('app.color.divider_color'))
           this.thresholdSetting('问题最低回答数', '问题回答数低于此值时应用质量过滤',
-            'questionAnswerThreshold', this.filter.questionAnswerThreshold, true, 'p3_filter_question_answer_threshold')
+            'questionAnswerThreshold', this.filter.questionAnswerThreshold, true, 'filter_question_answer_threshold')
           Divider().color($r('app.color.divider_color'))
           this.thresholdSetting('问题最低关注数', '问题关注数低于此值时应用质量过滤',
-            'questionFollowersThreshold', this.filter.questionFollowersThreshold, true, 'p3_filter_question_follower_threshold')
+            'questionFollowersThreshold', this.filter.questionFollowersThreshold, true, 'filter_question_follower_threshold')
         }
         .width('100%')
-        .borderRadius($r('app.float.p1_card_radius'))
+        .borderRadius($r('app.float.card_radius'))
         .backgroundColor($r('app.color.surface_background'))
 
         this.sectionTitle('智能与规则过滤')
         Column() {
           this.switchSetting('启用智能内容过滤', '自动过滤首页展示超过2次但用户未点击的内容，减少重复推荐',
-            this.filter.enableContentFilter, true, 'p3_filter_smart_enabled', (value: boolean): void =>
+            this.filter.enableContentFilter, true, 'filter_smart_enabled', (value: boolean): void =>
               this.updateFilterBoolean('enableContentFilter', value))
           Divider().color($r('app.color.divider_color'))
           this.switchSetting('过滤已关注用户内容', '关闭后，已关注作者的内容始终显示',
             this.filter.filterFollowedUserContent, this.filter.enableContentFilter,
-            'p3_filter_followed_user', (value: boolean): void =>
+            'filter_followed_user', (value: boolean): void =>
               this.updateFilterBoolean('filterFollowedUserContent', value))
           Divider().color($r('app.color.divider_color'))
           this.ruleSwitchSetting('启用关键词屏蔽', '屏蔽包含特定关键词的内容',
-            this.rules.keywordBlockingEnabled, 'keywordBlockingEnabled', 'p3_filter_keyword_enabled')
+            this.rules.keywordBlockingEnabled, 'keywordBlockingEnabled', 'filter_keyword_enabled')
           Divider().color($r('app.color.divider_color'))
           this.ruleSwitchSetting('启用用户屏蔽', '屏蔽特定用户发布的内容，以及由其提出的问题',
-            this.rules.userBlockingEnabled, 'userBlockingEnabled', 'p3_filter_user_enabled')
+            this.rules.userBlockingEnabled, 'userBlockingEnabled', 'filter_user_enabled')
           Divider().color($r('app.color.divider_color'))
           this.ruleSwitchSetting('启用主题屏蔽', '屏蔽包含特定主题的内容',
-            this.rules.topicBlockingEnabled, 'topicBlockingEnabled', 'p3_filter_topic_enabled')
+            this.rules.topicBlockingEnabled, 'topicBlockingEnabled', 'filter_topic_enabled')
           Divider().color($r('app.color.divider_color'))
           this.thresholdSetting('主题屏蔽阈值', '命中的已屏蔽主题数量达到此值时过滤内容',
             'topicBlockingThreshold', this.rules.topicBlockingThreshold, this.rules.topicBlockingEnabled,
-            'p3_filter_topic_threshold')
+            'filter_topic_threshold')
         }
         .width('100%')
-        .borderRadius($r('app.float.p1_card_radius'))
+        .borderRadius($r('app.float.card_radius'))
         .backgroundColor($r('app.color.surface_background'))
 
         this.sectionTitle('推广与付费内容')
         Column() {
           this.switchSetting('屏蔽知乎广告平台内容', '匹配并屏蔽包含 xg.zhihu.com 的推广内容',
-            this.filter.blockZhihuAdPlatform, true, 'p3_filter_zhihu_ad', (value: boolean): void =>
+            this.filter.blockZhihuAdPlatform, true, 'filter_zhihu_ad', (value: boolean): void =>
               this.updateFilterBoolean('blockZhihuAdPlatform', value))
           Divider().color($r('app.color.divider_color'))
           this.switchSetting('屏蔽知乎学堂内容', '匹配并屏蔽包含 d.zhihu.com 或 data-edu-card-id 的内容',
-            this.filter.blockZhihuSchool, true, 'p3_filter_zhihu_school', (value: boolean): void =>
+            this.filter.blockZhihuSchool, true, 'filter_zhihu_school', (value: boolean): void =>
               this.updateFilterBoolean('blockZhihuSchool', value))
           Divider().color($r('app.color.divider_color'))
           this.switchSetting('屏蔽微信公众号文章', '匹配并屏蔽包含 mp.weixin.qq.com 的外链文章',
-            this.filter.blockWeChatOfficialAccount, true, 'p3_filter_wechat', (value: boolean): void =>
+            this.filter.blockWeChatOfficialAccount, true, 'filter_wechat', (value: boolean): void =>
               this.updateFilterBoolean('blockWeChatOfficialAccount', value))
           Divider().color($r('app.color.divider_color'))
           this.switchSetting('屏蔽知乎盐选付费内容', '屏蔽知乎盐选会员专享的付费回答和文章',
-            this.filter.blockPaidContent, true, 'p3_filter_paid', (value: boolean): void =>
+            this.filter.blockPaidContent, true, 'filter_paid', (value: boolean): void =>
               this.updateFilterBoolean('blockPaidContent', value))
           Divider().color($r('app.color.divider_color'))
           this.switchSetting('反向屏蔽（吃💩模式）', '开启后首页只保留广告和付费内容，屏蔽其余内容',
-            this.filter.reverseBlock, true, 'p3_filter_reverse', (value: boolean): void =>
+            this.filter.reverseBlock, true, 'filter_reverse', (value: boolean): void =>
               this.updateFilterBoolean('reverseBlock', value))
         }
         .width('100%')
-        .borderRadius($r('app.float.p1_card_radius'))
+        .borderRadius($r('app.float.card_radius'))
         .backgroundColor($r('app.color.surface_background'))
 
         this.sectionTitle('管理与统计')
         Column() {
-          this.navigationSetting('内容屏蔽', '关键词、用户和主题精确规则', 'p3_filter_open_blocklist',
+          this.navigationSetting('内容屏蔽', '关键词、用户和主题精确规则', 'filter_open_blocklist',
             this.onOpenBlocklist)
           Divider().color($r('app.color.divider_color'))
-          this.navigationSetting('屏蔽记录', '查看最近被过滤或手动隐藏的内容', 'p3_filter_open_history',
+          this.navigationSetting('屏蔽记录', '查看最近被过滤或手动隐藏的内容', 'filter_open_history',
             this.onOpenBlockedHistory)
           Divider().color($r('app.color.divider_color'))
-          this.navigationSetting('过滤统计', '查看当前保留记录的过滤率，并清理或重置数据', 'p3_filter_statistics', (): void => {
+          this.navigationSetting('过滤统计', '查看当前保留记录的过滤率，并清理或重置数据', 'filter_statistics', (): void => {
             void this.openStats();
           })
         }
         .width('100%')
-        .borderRadius($r('app.float.p1_card_radius'))
+        .borderRadius($r('app.float.card_radius'))
         .backgroundColor($r('app.color.surface_background'))
         }
       }
       .width('100%')
-      .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'), top: 94,
-        bottom: $r('app.float.p1_page_padding') })
+      .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'), top: 94,
+        bottom: $r('app.float.page_padding') })
     }
-    .id('p3_content_filter_settings_page')
+    .id('content_filter_settings_page')
     .width('100%')
     .height('100%')
     .scrollBar(BarState.Off)
@@ -236,15 +236,15 @@ export struct ContentFilterSettingsPage {
 
   @Builder
   private sectionTitle(title: string) {
-    Text(title).fontSize($r('app.float.p1_secondary_font_size')).fontWeight(FontWeight.Medium)
-      .fontColor($r('app.color.secondary_text')).width('100%').padding({ left: $r('app.float.p1_spacing_xsmall') })
+    Text(title).fontSize($r('app.float.secondary_font_size')).fontWeight(FontWeight.Medium)
+      .fontColor($r('app.color.secondary_text')).width('100%').padding({ left: $r('app.float.spacing_xsmall') })
   }
 
   @Builder
   private recommendationModeSetting() {
     this.selectSetting('推荐算法', '选择首页推荐内容来源', recommendationModeLabel(this.filter.recommendationMode),
       [{ value: 'Web 端推荐' }, { value: '安卓端推荐' }, { value: '本地排序（实验性）' }, { value: '混合推荐' }],
-      this.recommendationModeIndex(), 'p3_filter_recommendation_mode', (index: number): void => {
+      this.recommendationModeIndex(), 'filter_recommendation_mode', (index: number): void => {
         const values: RecommendationMode[] = [RecommendationMode.WEB, RecommendationMode.ANDROID,
           RecommendationMode.LOCAL, RecommendationMode.MIXED];
         if (index >= 0 && index < values.length) {
@@ -261,7 +261,7 @@ export struct ContentFilterSettingsPage {
     this.selectSetting('质量屏蔽', '根据赞同数、关注数等指标处理低质量内容',
       qualityFilterModeLabel(this.filter.qualityFilterMode),
       [{ value: '不屏蔽' }, { value: '屏蔽规则' }, { value: '隐藏' }], this.qualityModeIndex(),
-      'p3_filter_quality_mode', (index: number): void => {
+      'filter_quality_mode', (index: number): void => {
         const values: QualityFilterMode[] = [QualityFilterMode.OFF, QualityFilterMode.RULES, QualityFilterMode.HIDE];
         if (index >= 0 && index < values.length) {
           const next = copyFilter(this.filter);
@@ -275,16 +275,16 @@ export struct ContentFilterSettingsPage {
   @Builder
   private switchSetting(title: string, description: string, checked: boolean, enabled: boolean, testId: string,
     onChange: (value: boolean) => void) {
-    Row({ space: $r('app.float.p1_spacing_medium') }) {
-      Column({ space: $r('app.float.p1_spacing_xsmall') }) {
-        Text(title).fontSize($r('app.float.p1_body_font_size')).fontColor($r('app.color.primary_text')).width('100%')
-        Text(description).fontSize($r('app.float.p1_secondary_font_size'))
+    Row({ space: $r('app.float.spacing_medium') }) {
+      Column({ space: $r('app.float.spacing_xsmall') }) {
+        Text(title).fontSize($r('app.float.body_font_size')).fontColor($r('app.color.primary_text')).width('100%')
+        Text(description).fontSize($r('app.float.secondary_font_size'))
           .fontColor($r('app.color.secondary_text')).width('100%')
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: checked }).id(testId).enabled(enabled)
         .selectedColor(this.resolvedThemeColor)
         .onChange((value: boolean): void => onChange(value))
-    }.width('100%').padding($r('app.float.p1_card_padding')).alignItems(VerticalAlign.Center)
+    }.width('100%').padding($r('app.float.card_padding')).alignItems(VerticalAlign.Center)
       .opacity(enabled ? 1 : 0.45)
   }
 
@@ -297,107 +297,107 @@ export struct ContentFilterSettingsPage {
   @Builder
   private selectSetting(title: string, description: string, value: string, options: SelectOption[], selected: number,
     testId: string, onSelect: (index: number) => void) {
-    Row({ space: $r('app.float.p1_spacing_medium') }) {
-      Column({ space: $r('app.float.p1_spacing_xsmall') }) {
-        Text(title).fontSize($r('app.float.p1_body_font_size')).fontColor($r('app.color.primary_text')).width('100%')
-        Text(description).fontSize($r('app.float.p1_secondary_font_size'))
+    Row({ space: $r('app.float.spacing_medium') }) {
+      Column({ space: $r('app.float.spacing_xsmall') }) {
+        Text(title).fontSize($r('app.float.body_font_size')).fontColor($r('app.color.primary_text')).width('100%')
+        Text(description).fontSize($r('app.float.secondary_font_size'))
           .fontColor($r('app.color.secondary_text')).width('100%')
       }.alignItems(HorizontalAlign.Start).layoutWeight(1)
       Select(options).id(testId).selected(selected).value(value).fontColor($r('app.color.primary_text'))
         .constraintSize({ maxWidth: 160 }).onSelect((index: number): void => onSelect(index))
-    }.width('100%').padding($r('app.float.p1_card_padding')).alignItems(VerticalAlign.Center)
+    }.width('100%').padding($r('app.float.card_padding')).alignItems(VerticalAlign.Center)
   }
 
   @Builder
   private thresholdSetting(title: string, description: string, key: ThresholdKey, value: number,
     enabled: boolean, testId: string) {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
-      Row({ space: $r('app.float.p1_spacing_medium') }) {
-        Column({ space: $r('app.float.p1_spacing_xsmall') }) {
-          Text(title).fontSize($r('app.float.p1_body_font_size')).fontColor($r('app.color.primary_text')).width('100%')
-          Text(description).fontSize($r('app.float.p1_secondary_font_size'))
+      Row({ space: $r('app.float.spacing_medium') }) {
+        Column({ space: $r('app.float.spacing_xsmall') }) {
+          Text(title).fontSize($r('app.float.body_font_size')).fontColor($r('app.color.primary_text')).width('100%')
+          Text(description).fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text')).width('100%')
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-        Text(`${value}`).fontSize($r('app.float.p1_body_font_size')).fontColor($r('app.color.secondary_text'))
+        Text(`${value}`).fontSize($r('app.float.body_font_size')).fontColor($r('app.color.secondary_text'))
         SymbolGlyph($r('sys.symbol.chevron_right')).fontSize(16).fontColor([$r('app.color.secondary_text')])
       }.width('100%').alignItems(VerticalAlign.Center)
-    }.id(testId).width('100%').padding($r('app.float.p1_card_padding')).backgroundColor(Color.Transparent)
+    }.id(testId).width('100%').padding($r('app.float.card_padding')).backgroundColor(Color.Transparent)
       .enabled(enabled).opacity(enabled ? 1 : 0.45).onClick((): void => this.openThreshold(key, value))
   }
 
   @Builder
   private navigationSetting(title: string, description: string, testId: string, action: () => void) {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
-      Row({ space: $r('app.float.p1_spacing_medium') }) {
-        Column({ space: $r('app.float.p1_spacing_xsmall') }) {
-          Text(title).fontSize($r('app.float.p1_body_font_size')).fontColor($r('app.color.primary_text')).width('100%')
-          Text(description).fontSize($r('app.float.p1_secondary_font_size'))
+      Row({ space: $r('app.float.spacing_medium') }) {
+        Column({ space: $r('app.float.spacing_xsmall') }) {
+          Text(title).fontSize($r('app.float.body_font_size')).fontColor($r('app.color.primary_text')).width('100%')
+          Text(description).fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text')).width('100%')
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
         SymbolGlyph($r('sys.symbol.chevron_right')).fontSize(16).fontColor([$r('app.color.secondary_text')])
       }.width('100%').alignItems(VerticalAlign.Center)
-    }.id(testId).width('100%').padding($r('app.float.p1_card_padding')).backgroundColor(Color.Transparent)
+    }.id(testId).width('100%').padding($r('app.float.card_padding')).backgroundColor(Color.Transparent)
       .onClick((): void => action())
   }
 
   @Builder
   private thresholdSheet() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
-      Text(`设置${this.thresholdTitle()}`).fontSize($r('app.float.p1_heading_font_size'))
+    Column({ space: $r('app.float.spacing_medium') }) {
+      Text(`设置${this.thresholdTitle()}`).fontSize($r('app.float.heading_font_size'))
         .fontWeight(FontWeight.Medium).fontColor($r('app.color.primary_text')).width('100%')
       if (this.thresholdKey === 'topicBlockingThreshold') {
         Text('当内容包含的被屏蔽主题数量达到或超过此阈值时，该内容将被屏蔽。')
-          .fontSize($r('app.float.p1_secondary_font_size')).fontColor($r('app.color.secondary_text')).width('100%')
+          .fontSize($r('app.float.secondary_font_size')).fontColor($r('app.color.secondary_text')).width('100%')
       }
-      TextInput({ text: this.thresholdInput, placeholder: '输入非负整数' }).id('p3_filter_threshold_input')
+      TextInput({ text: this.thresholdInput, placeholder: '输入非负整数' }).id('filter_threshold_input')
         .type(InputType.Number).maxLength(9).onChange((value: string): void => { this.thresholdInput = value; })
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Button('取消').layoutWeight(1).onClick((): void => { this.settingsSheetShown = false; })
           .backgroundColor($r('app.color.control_background'))
           .fontColor($r('app.color.primary_text'))
-        Button('确定').id('p3_filter_threshold_confirm').layoutWeight(1)
+        Button('确定').id('filter_threshold_confirm').layoutWeight(1)
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
           .enabled(this.validThresholdInput()).onClick((): void => this.confirmThreshold())
       }.width('100%')
-    }.width('100%').padding($r('app.float.p1_spacing_large'))
+    }.width('100%').padding($r('app.float.spacing_large'))
   }
 
   @Builder
   private statsSheet() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
-      Text('过滤统计详情').fontSize($r('app.float.p1_heading_font_size')).fontWeight(FontWeight.Medium)
+    Column({ space: $r('app.float.spacing_medium') }) {
+      Text('过滤统计详情').fontSize($r('app.float.heading_font_size')).fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.primary_text')).width('100%')
       Text('以下数据按当前保留的曝光和屏蔽记录计算。')
-        .fontSize($r('app.float.p1_secondary_font_size')).fontColor($r('app.color.secondary_text')).width('100%')
-      Text(`总记录数：${this.stats.totalSeen}`).fontSize($r('app.float.p1_body_font_size')).width('100%')
-      Text(`已过滤：${this.stats.totalFiltered}`).fontSize($r('app.float.p1_body_font_size')).width('100%')
+        .fontSize($r('app.float.secondary_font_size')).fontColor($r('app.color.secondary_text')).width('100%')
+      Text(`总记录数：${this.stats.totalSeen}`).fontSize($r('app.float.body_font_size')).width('100%')
+      Text(`已过滤：${this.stats.totalFiltered}`).fontSize($r('app.float.body_font_size')).width('100%')
       Text(`过滤率：${(this.stats.filterRate * 100).toFixed(1)}%`)
-        .fontSize($r('app.float.p1_body_font_size')).width('100%')
-      Button('清理 7 天前数据').id('p3_filter_cleanup_old').width('100%')
+        .fontSize($r('app.float.body_font_size')).width('100%')
+      Button('清理 7 天前数据').id('filter_cleanup_old').width('100%')
         .backgroundColor($r('app.color.control_background'))
         .fontColor($r('app.color.primary_text'))
         .onClick((): void => this.cleanupOldData())
       if (this.resetConfirmation) {
         Text('再次点击将重置所有曝光统计和屏蔽记录，此操作不可撤销。')
-          .fontSize($r('app.float.p1_secondary_font_size')).fontColor($r('app.color.error_text')).width('100%')
-        Button('确认重置所有数据').id('p3_filter_reset_confirm').width('100%')
+          .fontSize($r('app.float.secondary_font_size')).fontColor($r('app.color.error_text')).width('100%')
+        Button('确认重置所有数据').id('filter_reset_confirm').width('100%')
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor)).onClick((): void => this.clearAllData())
       } else {
-        Button('重置所有数据').id('p3_filter_reset_all').width('100%')
+        Button('重置所有数据').id('filter_reset_all').width('100%')
           .backgroundColor($r('app.color.control_background'))
           .fontColor($r('app.color.primary_text'))
           .fontColor($r('app.color.error_text')).onClick((): void => { this.resetConfirmation = true; })
       }
-      Button('关闭').id('p3_filter_stats_close').width('100%')
+      Button('关闭').id('filter_stats_close').width('100%')
         .fontColor($r('app.color.primary_text'))
         .backgroundColor($r('app.color.control_background'))
         .onClick((): void => {
         this.settingsSheetShown = false;
         this.resetConfirmation = false;
       })
-    }.width('100%').padding($r('app.float.p1_spacing_large'))
+    }.width('100%').padding($r('app.float.spacing_large'))
   }
 
   private async restore(): Promise<void> {

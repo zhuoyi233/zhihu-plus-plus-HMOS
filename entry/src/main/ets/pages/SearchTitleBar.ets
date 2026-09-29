@@ -124,21 +124,21 @@ export struct SearchTitleBar {
     }
     .width(180)
     .backgroundColor($r('app.color.surface_background'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .borderRadius($r('app.float.card_radius'))
   }
 
   build() {
     Row({ space: 8 }) {
-      // 返回键由 HDS 标题栏默认 backIcon 承载（P1Shell 传入 action），这里从其右侧起排，
+      // 返回键由 HDS 标题栏默认 backIcon 承载（AppShell 传入 action），这里从其右侧起排，
       // 避免自绘返回键与默认返回键重叠（28vp 错位的双箭头）。
       Row({ space: 4 }) {
         SymbolGlyph($r('sys.symbol.magnifyingglass'))
           .fontSize(18)
           .fontColor([$r('app.color.secondary_text')])
         TextInput({ text: this.inputValue, placeholder: '搜索知乎内容', controller: this.textController })
-          .id('p2_search_input')
+          .id('search_input')
           .layoutWeight(1)
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.body_font_size'))
           .maxLength(200)
           .enterKeyType(EnterKeyType.Search)
           .backgroundColor(Color.Transparent)
@@ -156,7 +156,7 @@ export struct SearchTitleBar {
               .fontSize(14)
               .fontColor([$r('app.color.secondary_text')])
           }
-          .id('p2_search_clear')
+          .id('search_clear')
           .width(28)
           .height(28)
           .padding(0)
@@ -167,7 +167,7 @@ export struct SearchTitleBar {
           })
         }
       }
-      .id('p2_search_input_container')
+      .id('search_input_container')
       .layoutWeight(1)
       .height(40)
       .padding({ left: 12, right: 6 })
@@ -181,7 +181,7 @@ export struct SearchTitleBar {
           .fontColor([$r('app.color.primary_text')])
           .opacity(this.filterEnabled ? 1 : 0.35)
       }
-      .id('p2_search_filter')
+      .id('search_filter')
       .width(40)
       .height(40)
       .padding(0)
@@ -199,7 +199,7 @@ export struct SearchTitleBar {
         }
       })
     }
-    .id('p2_search_title_bar')
+    .id('search_title_bar')
     .width('100%')
     .height(48)
     // 左侧 64vp 让出 HDS 默认返回键的区域（实测 36/48 会压到其触摸区）。

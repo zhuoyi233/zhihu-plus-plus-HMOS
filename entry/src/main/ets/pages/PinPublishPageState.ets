@@ -1,6 +1,7 @@
 import {
   ContentDraftIdentity,
   DraftRepository,
+  LoadedContentDraft,
   LoginSessionGateway,
   LocalDraftImageReference,
   PinPublishRepository,
@@ -81,6 +82,12 @@ export class PinPublishPageController {
     this.imageUploaders = imageUploaders;
     this.publish = new PinPublishController(repository, drafts, identity, traceIds, scheduler,
       (state: PinPublishViewState): void => this.handlePublishState(state));
+  }
+
+  restoreSavedDraft(draft: LoadedContentDraft): void {
+    if (!this.active) {
+      this.publish.restoreSavedDraft(draft);
+    }
   }
 
   activate(): void {

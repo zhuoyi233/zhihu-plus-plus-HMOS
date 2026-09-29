@@ -1,5 +1,5 @@
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
-import { PickedImage } from './P4PlatformServices';
+import { PickedImage } from './PlatformServices';
 import {
   PhotoPickerResult,
   PhotoPickerResultKind,

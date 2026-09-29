@@ -129,7 +129,7 @@ export default function shareServiceTest(): void {
       expect(prepared.title).assertEqual('鸿蒙迁移进展');
     });
 
-    it('allowsEveryP4ContentLinkFamily', 0, () => {
+    it('allowsEverySupportedContentLinkFamily', 0, () => {
       const urls: Array<string> = [
         'https://www.zhihu.com/question/1',
         'https://www.zhihu.com/pin/2',

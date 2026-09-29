@@ -1,4 +1,4 @@
-import { P1Destination, P1DestinationName } from 'core';
+import { AppDestination, AppDestinationName } from 'core';
 import {
   AppPreferencesStore,
   BlockedFeedHistoryStore,
@@ -65,7 +65,7 @@ import { BackgroundTaskProbePage } from './BackgroundTaskProbe';
 import { DatabaseProbePage } from './DatabaseProbe';
 import { DeepLinkProbePage } from './DeepLinkProbe';
 import { DomainFixtureProbe } from './DomainFixtureProbe';
-import { P1Shell } from './P1Shell';
+import { AppShell } from './AppShell';
 import { QrScanProbePage } from './QrScanProbe';
 import { QrDesktopLoginScanPage } from './QrDesktopLoginScanPage';
 import { ReaderProbe } from './ReaderProbe';
@@ -225,64 +225,64 @@ struct Index {
   build() {
     Stack() {
       if (this.compositionReady) {
-        P1Shell({
+        AppShell({
           session: this.session,
-          homeContent: (reloadToken: number, navigate: (destination: P1Destination) => void): void =>
+          homeContent: (reloadToken: number, navigate: (destination: AppDestination) => void): void =>
             this.homeContent(reloadToken, navigate),
-          followingContent: (reloadToken: number, navigate: (destination: P1Destination) => void,
+          followingContent: (reloadToken: number, navigate: (destination: AppDestination) => void,
             selectedTabIndex: number): void => this.followingContent(reloadToken, navigate, selectedTabIndex),
-          hotContent: (reloadToken: number, navigate: (destination: P1Destination) => void): void =>
+          hotContent: (reloadToken: number, navigate: (destination: AppDestination) => void): void =>
             this.hotContent(reloadToken, navigate),
           dailyContent: (reloadToken: number, dateCursor: string,
-            navigate: (destination: P1Destination) => void): void =>
+            navigate: (destination: AppDestination) => void): void =>
             this.dailyContent(reloadToken, dateCursor, navigate),
-          dailyStoryContent: (id: string, navigate: (destination: P1Destination) => void): void =>
+          dailyStoryContent: (id: string, navigate: (destination: AppDestination) => void): void =>
             this.dailyStoryContent(id, navigate),
-          searchContent: (query: string, navigate: (destination: P1Destination) => void, onBack: () => void): void =>
+          searchContent: (query: string, navigate: (destination: AppDestination) => void, onBack: () => void): void =>
             this.searchContent(query, navigate, onBack),
-          commentContent: (destination: P1Destination,
-            navigate: (destination: P1Destination) => void, onBack: () => void): void =>
+          commentContent: (destination: AppDestination,
+            navigate: (destination: AppDestination) => void, onBack: () => void): void =>
             this.commentContent(destination, navigate, onBack),
-          questionContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void): void =>
+          questionContent: (id: string, navigate: (destination: AppDestination) => void, onBack: () => void): void =>
             this.questionContent(id, navigate, onBack),
-          answerContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void): void =>
+          answerContent: (id: string, navigate: (destination: AppDestination) => void, onBack: () => void): void =>
             this.answerContent(id, navigate, onBack),
-          articleContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void): void =>
+          articleContent: (id: string, navigate: (destination: AppDestination) => void, onBack: () => void): void =>
             this.articleContent(id, navigate, onBack),
-          videoContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void): void =>
+          videoContent: (id: string, navigate: (destination: AppDestination) => void, onBack: () => void): void =>
             this.videoContent(id, navigate, onBack),
           writeAnswerContent: (questionId: string, answerId: string | undefined,
-            navigate: (destination: P1Destination) => void, onBack: () => void): void =>
+            navigate: (destination: AppDestination) => void, onBack: () => void): void =>
             this.writeAnswerContent(questionId, answerId, navigate, onBack),
-          writePinContent: (draftId: string, navigate: (destination: P1Destination) => void,
+          writePinContent: (draftId: string, navigate: (destination: AppDestination) => void,
             onBack: () => void): void => this.writePinContent(draftId, navigate, onBack),
-          pinDraftInboxContent: (navigate: (destination: P1Destination) => void, onBack: () => void): void =>
+          pinDraftInboxContent: (navigate: (destination: AppDestination) => void, onBack: () => void): void =>
             this.pinDraftInboxContent(navigate, onBack),
-          peopleContent: (id: string, navigate: (destination: P1Destination) => void,
+          peopleContent: (id: string, navigate: (destination: AppDestination) => void,
             onBack: () => void): void => this.peopleContent(id, navigate, onBack),
-          pinContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void): void =>
+          pinContent: (id: string, navigate: (destination: AppDestination) => void, onBack: () => void): void =>
             this.pinContent(id, navigate, onBack),
-          collectionsContent: (id: string, navigate: (destination: P1Destination) => void,
+          collectionsContent: (id: string, navigate: (destination: AppDestination) => void,
             onBack: () => void): void => this.collectionsContent(id, navigate, onBack),
-          collectionContentContent: (id: string, navigate: (destination: P1Destination) => void,
+          collectionContentContent: (id: string, navigate: (destination: AppDestination) => void,
             onBack: () => void): void => this.collectionContentContent(id, navigate, onBack),
-          notificationContent: (navigate: (destination: P1Destination) => void, onBack: () => void): void =>
+          notificationContent: (navigate: (destination: AppDestination) => void, onBack: () => void): void =>
             this.notificationContent(navigate, onBack),
-          notificationEntryContent: (entryName: string, title: string, navigate: (destination: P1Destination) => void): void =>
+          notificationEntryContent: (entryName: string, title: string, navigate: (destination: AppDestination) => void): void =>
             this.notificationEntryContent(entryName, title, navigate),
-          privateMessageContent: (peerId: string, peerName: string, avatarUrl: string, navigate: (destination: P1Destination) => void): void =>
+          privateMessageContent: (peerId: string, peerName: string, avatarUrl: string, navigate: (destination: AppDestination) => void): void =>
             this.privateMessageContent(peerId, peerName, avatarUrl, navigate),
-          notificationSettingsContent: (navigate: (destination: P1Destination) => void): void =>
+          notificationSettingsContent: (navigate: (destination: AppDestination) => void): void =>
             this.notificationSettingsContent(navigate),
           blockingRulesContent: (onBack: () => void): void => this.blockingRulesContent(onBack),
           blockedFeedHistoryContent: (onBack: () => void): void => this.blockedFeedHistoryContent(onBack),
-          readHistoryContent: (navigate: (destination: P1Destination) => void, onBack: () => void): void =>
+          readHistoryContent: (navigate: (destination: AppDestination) => void, onBack: () => void): void =>
             this.readHistoryContent(navigate, onBack),
-          localHistoryContent: (navigate: (destination: P1Destination) => void, onBack: () => void): void =>
+          localHistoryContent: (navigate: (destination: AppDestination) => void, onBack: () => void): void =>
             this.localHistoryContent(navigate, onBack),
           loginContent: (onBack: () => void, onAuthenticated: () => void, onScanDesktopLogin: () => void): void =>
             this.loginContent(onBack, onAuthenticated, onScanDesktopLogin),
-          technicalLabContent: (navigate: (destination: P1Destination) => void,
+          technicalLabContent: (navigate: (destination: AppDestination) => void,
             onDeveloperModeDisabled: () => void): void =>
             this.technicalLabContent(navigate, onDeveloperModeDisabled),
           readerProbeContent: (onBack: () => void): void => this.readerProbeContent(onBack),
@@ -303,7 +303,7 @@ struct Index {
   }
 
   @Builder
-  homeContent(reloadToken: number, navigate: (destination: P1Destination) => void) {
+  homeContent(reloadToken: number, navigate: (destination: AppDestination) => void) {
     HomeFeedPage({
       repository: this.homeRepository,
       reloadToken: reloadToken,
@@ -315,7 +315,7 @@ struct Index {
   }
 
   @Builder
-  followingContent(reloadToken: number, navigate: (destination: P1Destination) => void,
+  followingContent(reloadToken: number, navigate: (destination: AppDestination) => void,
     selectedTabIndex: number) {
     FollowingFeedPage({
       recommendRepository: this.followingRecommendRepository,
@@ -330,7 +330,7 @@ struct Index {
   }
 
   @Builder
-  hotContent(reloadToken: number, navigate: (destination: P1Destination) => void) {
+  hotContent(reloadToken: number, navigate: (destination: AppDestination) => void) {
     ChannelFeedPage({
       source: ChannelFeedSource.HOT,
       repository: this.hotRepository,
@@ -344,7 +344,7 @@ struct Index {
 
   @Builder
   dailyContent(reloadToken: number, dateCursor: string,
-    navigate: (destination: P1Destination) => void) {
+    navigate: (destination: AppDestination) => void) {
     ChannelFeedPage({
       source: ChannelFeedSource.DAILY,
       repository: this.dailyRepository,
@@ -358,12 +358,12 @@ struct Index {
   }
 
   @Builder
-  dailyStoryContent(id: string, navigate: (destination: P1Destination) => void) {
+  dailyStoryContent(id: string, navigate: (destination: AppDestination) => void) {
     DailyStoryDetailPage({ storyId: id, repository: this.dailyStoryRepository, navigate: navigate });
   }
 
   @Builder
-  searchContent(query: string, navigate: (destination: P1Destination) => void, onBack: () => void) {
+  searchContent(query: string, navigate: (destination: AppDestination) => void, onBack: () => void) {
     SearchPage({
       initialQuery: query,
       repository: this.searchRepository,
@@ -374,9 +374,9 @@ struct Index {
   }
 
   @Builder
-  commentContent(destination: P1Destination,
-    navigate: (destination: P1Destination) => void, onBack: () => void) {
-    if (destination.name === P1DestinationName.COMMENT) {
+  commentContent(destination: AppDestination,
+    navigate: (destination: AppDestination) => void, onBack: () => void) {
+    if (destination.name === AppDestinationName.COMMENT) {
       CommentPage({
         contentType: destination.contentType,
         contentId: destination.contentId,
@@ -400,7 +400,7 @@ struct Index {
   }
 
   @Builder
-  questionContent(id: string, navigate: (destination: P1Destination) => void, onBack: () => void) {
+  questionContent(id: string, navigate: (destination: AppDestination) => void, onBack: () => void) {
     QuestionDetailPage({
       contentId: id,
       repository: this.questionRepository,
@@ -420,7 +420,7 @@ struct Index {
   }
 
   @Builder
-  answerContent(id: string, navigate: (destination: P1Destination) => void, onBack: () => void) {
+  answerContent(id: string, navigate: (destination: AppDestination) => void, onBack: () => void) {
     AnswerDetailPage({
       contentId: id,
       repository: this.answerRepository,
@@ -440,7 +440,7 @@ struct Index {
   }
 
   @Builder
-  articleContent(id: string, navigate: (destination: P1Destination) => void, onBack: () => void) {
+  articleContent(id: string, navigate: (destination: AppDestination) => void, onBack: () => void) {
     ArticleDetailPage({
       contentId: id,
       repository: this.articleRepository,
@@ -459,13 +459,13 @@ struct Index {
   }
 
   @Builder
-  videoContent(id: string, _navigate: (destination: P1Destination) => void, onBack: () => void) {
+  videoContent(id: string, _navigate: (destination: AppDestination) => void, onBack: () => void) {
     VideoPlaybackPage({ contentId: id, repository: this.videoRepository, onBack: onBack });
   }
 
   @Builder
   writeAnswerContent(questionId: string, answerId: string | undefined,
-    navigate: (destination: P1Destination) => void, onBack: () => void) {
+    navigate: (destination: AppDestination) => void, onBack: () => void) {
     AnswerPublishPage({
       questionId: questionId,
       answerId: answerId,
@@ -473,45 +473,45 @@ struct Index {
       controllerFactory: this.answerPublishFactory,
       imageUploaderFactory: this.answerImageUploaderFactory,
       onGoLogin: (): void => {
-        navigate({ name: P1DestinationName.LOGIN });
+        navigate({ name: AppDestinationName.LOGIN });
       },
       onBack: onBack
     });
   }
 
   @Builder
-  writePinContent(draftId: string, navigate: (destination: P1Destination) => void, onBack: () => void) {
+  writePinContent(draftId: string, navigate: (destination: AppDestination) => void, onBack: () => void) {
     PinPublishPage({
       draftId: draftId,
       configurationFactory: this.pinPublishFactory,
       session: this.session,
       onBack: onBack,
       onLoginRequired: (): void => {
-        navigate({ name: P1DestinationName.LOGIN });
+        navigate({ name: AppDestinationName.LOGIN });
       },
       onPublished: (contentId: string): void => {
-        navigate({ name: P1DestinationName.PIN, id: contentId });
+        navigate({ name: AppDestinationName.PIN, id: contentId });
       }
     });
   }
 
   @Builder
-  pinDraftInboxContent(navigate: (destination: P1Destination) => void, onBack: () => void) {
+  pinDraftInboxContent(navigate: (destination: AppDestination) => void, onBack: () => void) {
     PinDraftInboxPage({
       gateway: this.pinDraftResumeGateway,
       session: this.session,
       onBack: onBack,
       onOpen: (draftId: string): void => {
-        navigate({ name: P1DestinationName.WRITE_PIN, draftId: draftId });
+        navigate({ name: AppDestinationName.WRITE_PIN, draftId: draftId });
       },
       onGoLogin: (): void => {
-        navigate({ name: P1DestinationName.LOGIN });
+        navigate({ name: AppDestinationName.LOGIN });
       }
     });
   }
 
   @Builder
-  peopleContent(id: string, navigate: (destination: P1Destination) => void, onBack: () => void) {
+  peopleContent(id: string, navigate: (destination: AppDestination) => void, onBack: () => void) {
     PeopleDetailPage({
       identifier: id,
       repository: this.peopleRepository,
@@ -526,7 +526,7 @@ struct Index {
   }
 
   @Builder
-  pinContent(id: string, navigate: (destination: P1Destination) => void, onBack: () => void) {
+  pinContent(id: string, navigate: (destination: AppDestination) => void, onBack: () => void) {
     PinDetailPage({
       contentId: id,
       repository: this.pinRepository,
@@ -541,7 +541,7 @@ struct Index {
   }
 
   @Builder
-  collectionsContent(id: string, navigate: (destination: P1Destination) => void, onBack: () => void) {
+  collectionsContent(id: string, navigate: (destination: AppDestination) => void, onBack: () => void) {
     CollectionPage({
       identifier: id,
       repository: this.collectionRepository,
@@ -552,7 +552,7 @@ struct Index {
   }
 
   @Builder
-  collectionContentContent(id: string, navigate: (destination: P1Destination) => void, onBack: () => void) {
+  collectionContentContent(id: string, navigate: (destination: AppDestination) => void, onBack: () => void) {
     CollectionContentPage({
       collectionId: id,
       repository: this.collectionRepository,
@@ -563,7 +563,7 @@ struct Index {
   }
 
   @Builder
-  notificationContent(navigate: (destination: P1Destination) => void, onBack: () => void) {
+  notificationContent(navigate: (destination: AppDestination) => void, onBack: () => void) {
     NotificationPage({
       repository: this.notificationRepository,
       settings: this.notificationSettings,
@@ -574,13 +574,13 @@ struct Index {
   }
 
   @Builder
-  notificationSettingsContent(_navigate: (destination: P1Destination) => void) {
+  notificationSettingsContent(_navigate: (destination: AppDestination) => void) {
     NotificationSettingsPage({
       settings: this.notificationSettings
     });
   }
   @Builder
-  notificationEntryContent(entryName: string, title: string, navigate: (destination: P1Destination) => void) {
+  notificationEntryContent(entryName: string, title: string, navigate: (destination: AppDestination) => void) {
     NotificationTimelinePage({
       entryName: entryName,
       repository: this.notificationRepository,
@@ -591,7 +591,7 @@ struct Index {
   }
 
   @Builder
-  privateMessageContent(peerId: string, peerName: string, avatarUrl: string, navigate: (destination: P1Destination) => void) {
+  privateMessageContent(peerId: string, peerName: string, avatarUrl: string, navigate: (destination: AppDestination) => void) {
     PrivateMessagePage({
       peerId: peerId,
       peerName: peerName,
@@ -613,7 +613,7 @@ struct Index {
   }
 
   @Builder
-  readHistoryContent(navigate: (destination: P1Destination) => void, _onBack: () => void) {
+  readHistoryContent(navigate: (destination: AppDestination) => void, _onBack: () => void) {
     ReadHistoryPage({
       history: this.openedContentStore,
       onlineHistory: this.onlineHistoryRepository,
@@ -622,16 +622,16 @@ struct Index {
         this.navigateReadHistoryTarget(navigate, target);
       },
       onGoLogin: (): void => {
-        navigate({ name: P1DestinationName.LOGIN });
+        navigate({ name: AppDestinationName.LOGIN });
       },
       onNavigateLocal: (): void => {
-        navigate({ name: P1DestinationName.LOCAL_HISTORY });
+        navigate({ name: AppDestinationName.LOCAL_HISTORY });
       }
     });
   }
 
   @Builder
-  localHistoryContent(navigate: (destination: P1Destination) => void, _onBack: () => void) {
+  localHistoryContent(navigate: (destination: AppDestination) => void, _onBack: () => void) {
     LocalHistoryPage({
       history: this.openedContentStore,
       onOpen: (target: ReadHistoryOpenTarget): void => {
@@ -640,16 +640,16 @@ struct Index {
     });
   }
 
-  private navigateReadHistoryTarget(navigate: (destination: P1Destination) => void,
+  private navigateReadHistoryTarget(navigate: (destination: AppDestination) => void,
     target: ReadHistoryOpenTarget): void {
     if (target.kind === ReadHistoryContentKind.QUESTION) {
-      navigate({ name: P1DestinationName.QUESTION, id: target.id });
+      navigate({ name: AppDestinationName.QUESTION, id: target.id });
     } else if (target.kind === ReadHistoryContentKind.ANSWER) {
-      navigate({ name: P1DestinationName.ANSWER, id: target.id });
+      navigate({ name: AppDestinationName.ANSWER, id: target.id });
     } else if (target.kind === ReadHistoryContentKind.ARTICLE) {
-      navigate({ name: P1DestinationName.ARTICLE, id: target.id });
+      navigate({ name: AppDestinationName.ARTICLE, id: target.id });
     } else {
-      navigate({ name: P1DestinationName.PIN, id: target.id });
+      navigate({ name: AppDestinationName.PIN, id: target.id });
     }
   }
 
@@ -663,7 +663,7 @@ struct Index {
   }
 
   @Builder
-  technicalLabContent(navigate: (destination: P1Destination) => void, onDeveloperModeDisabled: () => void) {
+  technicalLabContent(navigate: (destination: AppDestination) => void, onDeveloperModeDisabled: () => void) {
     TechnicalLabPage({ navigate: navigate, onDeveloperModeDisabled: onDeveloperModeDisabled });
   }
 

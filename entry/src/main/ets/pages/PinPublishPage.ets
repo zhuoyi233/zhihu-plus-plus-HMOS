@@ -4,11 +4,13 @@ import {
   ContentDraftIdentity,
   ContentDraftKind,
   ContentDraftMetadata,
+  ContentDraftLoadStatus,
   createPinDraftIdentity,
   createLocalDraftImageReference,
   DraftRepository,
   hashDraftAccountId,
   LoginSessionGateway,
+  LoadedContentDraft,
   LocalDraftImageReference,
   PinPublishInput,
   PinPublishRepository,
@@ -31,7 +33,7 @@ import {
 } from './PinPublishPageState';
 import { isSafeLocalDraftId } from 'core';
 import { PreparedPickedImage } from '../platform/MediaPickerCoordinator';
-import { P4ImagePickerPanel } from './P4ImagePickerPanel';
+import { ImagePickerPanel } from './ImagePickerPanel';
 
 export type PinPublishPageBackCallback = () => void;
 export type PinPublishPageLoginCallback = () => void;
@@ -187,9 +189,9 @@ export class SystemPinTopicSearchScheduler implements PinTopicSearchScheduler {
  */
 @Component
 export struct PinPublishPage {
-  /** 当前生效主题色（P1Shell 广播），驱动强调色控件。 */
+  /** 当前生效主题色（AppShell 广播），驱动强调色控件。 */
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
-  /** 仅用于 factory 模式；必须是经 P1Destination 校验的本地 UUID。 */
+  /** 仅用于 factory 模式；必须是经 AppDestination 校验的本地 UUID。 */
   draftId: string = '';
   configurationFactory: PinPublishPageConfigurationFactory | undefined = undefined;
   repository: PinPublishRepository | undefined = undefined;
@@ -253,7 +255,7 @@ export struct PinPublishPage {
         }
         return;
       }
-      this.installConfiguration(configuration);
+      void this.installLoadedConfiguration(configuration, generation);
     }, (_error: Error): void => {
       if (generation === this.configurationGeneration) {
         this.viewState = configurationFailureState();
@@ -261,12 +263,34 @@ export struct PinPublishPage {
     });
   }
 
-  private installConfiguration(configuration: PinPublishPageConfiguration): void {
+  private async installLoadedConfiguration(configuration: PinPublishPageConfiguration,
+    generation: number): Promise<void> {
+    try {
+      const loaded = await configuration.drafts.load(configuration.identity);
+      if (generation !== this.configurationGeneration) {
+        return;
+      }
+      if (loaded.status === ContentDraftLoadStatus.CORRUPT) {
+        this.viewState = configurationFailureState();
+        return;
+      }
+      this.installConfiguration(configuration, loaded.draft);
+    } catch (_error) {
+      if (generation === this.configurationGeneration) {
+        this.viewState = configurationFailureState();
+      }
+    }
+  }
+
+  private installConfiguration(configuration: PinPublishPageConfiguration, savedDraft?: LoadedContentDraft): void {
     this.controller = new PinPublishPageController(configuration.repository, configuration.drafts, configuration.session,
       configuration.identity, configuration.traceIds, configuration.topicScheduler,
       (state: PinPublishPageViewState): void => {
         this.viewState = state;
       }, this.onPublished, configuration.imageUploaders);
+    if (savedDraft !== undefined) {
+      this.controller.restoreSavedDraft(savedDraft);
+    }
     this.controller.activate();
   }
 
@@ -279,15 +303,17 @@ export struct PinPublishPage {
   }
 
   build() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
-      if (this.viewState.requiresLogin) {
+    Column({ space: $r('app.float.spacing_medium') }) {
+      if (this.viewState.phase === PinPublishPagePhase.SETUP) {
+        Blank()
+      } else if (this.viewState.requiresLogin) {
         this.loginRequired()
       } else {
         this.editor()
       }
       Text(this.viewState.message)
-        .id('p4_pin_publish_status')
-        .fontSize($r('app.float.p1_caption_font_size'))
+        .id('pin_publish_status')
+        .fontSize($r('app.float.caption_font_size'))
         .fontColor(this.viewState.requiresSecurityVerification ? $r('app.color.error_text') :
           $r('app.color.secondary_text'))
         .width('100%')
@@ -295,24 +321,24 @@ export struct PinPublishPage {
         this.publishConfirmation()
       }
     }
-    .id('p4_pin_publish_page')
+    .id('pin_publish_page')
     .alignItems(HorizontalAlign.Start)
     .width('100%')
     .height('100%')
-    .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
-      top: 94, bottom: $r('app.float.p1_page_padding') })
+    .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
+      top: 94, bottom: $r('app.float.page_padding') })
     .backgroundColor($r('app.color.page_background'))
   }
 
   @Builder
   private header() {
-    Row({ space: $r('app.float.p1_spacing_small') }) {
+    Row({ space: $r('app.float.spacing_small') }) {
       Button({ type: ButtonType.Normal, stateEffect: true }) {
         SymbolGlyph($r('sys.symbol.chevron_left'))
           .fontSize(20)
           .fontColor([$r('app.color.primary_text')])
       }
-        .id('p4_pin_publish_cancel')
+        .id('pin_publish_cancel')
         .width(40)
         .height(40)
         .padding(0)
@@ -324,11 +350,11 @@ export struct PinPublishPage {
           this.onBack();
         })
       Text('发想法')
-        .fontSize($r('app.float.p1_heading_font_size'))
+        .fontSize($r('app.float.heading_font_size'))
         .fontWeight(FontWeight.Medium)
         .layoutWeight(1)
       Button(this.publishLabel())
-        .id('p4_pin_publish_submit')
+        .id('pin_publish_submit')
         .fontColor(onThemeColor(this.resolvedThemeColor))
         .backgroundColor(this.resolvedThemeColor)
         .enabled(this.viewState.canPublish)
@@ -341,15 +367,15 @@ export struct PinPublishPage {
 
   @Builder
   private loginRequired() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
+    Column({ space: $r('app.float.spacing_medium') }) {
       Text(PIN_PAGE_LOGIN_REQUIRED_TEXT)
-        .id('p4_pin_publish_login_required')
-        .fontSize($r('app.float.p1_body_font_size'))
+        .id('pin_publish_login_required')
+        .fontSize($r('app.float.body_font_size'))
         .width('100%')
       Button('去登录')
         .backgroundColor(this.resolvedThemeColor)
         .fontColor(onThemeColor(this.resolvedThemeColor))
-        .id('p4_pin_publish_login')
+        .id('pin_publish_login')
         .width('100%')
         .onClick(this.onLoginRequired)
     }
@@ -358,19 +384,19 @@ export struct PinPublishPage {
 
   @Builder
   private editor() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
+    Column({ space: $r('app.float.spacing_medium') }) {
       TextInput({ text: this.viewState.content.title, placeholder: '标题（可选）' })
-        .id('p4_pin_publish_title')
+        .id('pin_publish_title')
         .maxLength(100)
         .enabled(this.viewState.canEdit)
         .onChange((value: string): void => this.controller?.updateTitle(value))
       TextArea({ text: this.viewState.content.html, placeholder: '分享你的想法' })
-        .id('p4_pin_publish_body')
+        .id('pin_publish_body')
         .maxLength(10000)
         .height(180)
         .enabled(this.viewState.canEdit)
         .onChange((value: string): void => this.controller?.updateHtml(value))
-      P4ImagePickerPanel({
+      ImagePickerPanel({
         onPreparedImagesChanged: (images: Array<PreparedPickedImage>): void => this.applyPreparedImages(images),
         retainPreparedImages: this.viewState.content.localImageReferences.length > 0,
         restoredLocalImageReferences: this.viewState.content.localImageReferences
@@ -379,7 +405,7 @@ export struct PinPublishPage {
       Button('保存草稿')
         .backgroundColor(this.resolvedThemeColor)
         .fontColor(onThemeColor(this.resolvedThemeColor))
-        .id('p4_pin_publish_save_draft')
+        .id('pin_publish_save_draft')
         .width('100%')
         .enabled(this.viewState.canSaveDraft)
         .onClick((): void => {
@@ -391,9 +417,9 @@ export struct PinPublishPage {
 
   @Builder
   private topicEditor() {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_small') }) {
       TextInput({ text: this.topicQuery, placeholder: '搜索话题（可选）' })
-        .id('p4_pin_publish_topic_query')
+        .id('pin_publish_topic_query')
         .enabled(this.viewState.canEdit)
         .onChange((value: string): void => {
           this.topicQuery = value;
@@ -408,14 +434,14 @@ export struct PinPublishPage {
               .fontColor($r('app.color.primary_text'))
               .onClick((): void => this.controller?.removeTopic(topic.topicId))
           }
-          .id(`p4_pin_publish_topic_${topic.topicId}`)
+          .id(`pin_publish_topic_${topic.topicId}`)
           .width('100%')
         }, (topic: PublishPinTopic): string => topic.topicId)
       }
       if (this.viewState.phase === PinPublishPagePhase.EDITING) {
         ForEach(this.viewState.topicSuggestions, (topic: PinTopicSuggestion) => {
           Button(`#${topic.displayName}`)
-            .id(`p4_pin_publish_topic_suggestion_${topic.topicId}`)
+            .id(`pin_publish_topic_suggestion_${topic.topicId}`)
             .width('100%')
             .fontColor($r('app.color.primary_text'))
             .backgroundColor($r('app.color.control_background'))
@@ -456,20 +482,20 @@ export struct PinPublishPage {
 
   @Builder
   private publishConfirmation() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
+    Column({ space: $r('app.float.spacing_medium') }) {
       Text('确认发布想法')
-        .id('p4_pin_publish_confirm_title')
-        .fontSize($r('app.float.p1_heading_font_size'))
+        .id('pin_publish_confirm_title')
+        .fontSize($r('app.float.heading_font_size'))
         .fontWeight(FontWeight.Medium)
       Text('确认后将先保存本地草稿、上传已选图片、同步知乎草稿，再发布想法。')
-        .id('p4_pin_publish_confirm_message')
-        .fontSize($r('app.float.p1_body_font_size'))
+        .id('pin_publish_confirm_message')
+        .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.secondary_text'))
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Button('继续编辑')
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id('p4_pin_publish_confirm_cancel')
+          .id('pin_publish_confirm_cancel')
           .layoutWeight(1)
           .onClick((): void => {
             this.publishConfirmationVisible = false;
@@ -477,7 +503,7 @@ export struct PinPublishPage {
         Button('确认发布')
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id('p4_pin_publish_confirm_submit')
+          .id('pin_publish_confirm_submit')
           .layoutWeight(1)
           .onClick((): void => {
             this.publishConfirmationVisible = false;
@@ -486,10 +512,10 @@ export struct PinPublishPage {
       }
       .width('100%')
     }
-    .id('p4_pin_publish_confirmation')
+    .id('pin_publish_confirmation')
     .width('100%')
-    .padding($r('app.float.p1_card_padding'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .padding($r('app.float.card_padding'))
+    .borderRadius($r('app.float.card_radius'))
     .backgroundColor($r('app.color.surface_background'))
   }
 }

@@ -43,7 +43,7 @@ export struct CommentTitleBar {
   }
 
   build() {
-    Row({ space: $r('app.float.p1_spacing_small') }) {
+    Row({ space: $r('app.float.spacing_small') }) {
       Stack({ alignContent: Alignment.Center }) {
         if (HarmonyOSCapabilities.supportsImmersiveMaterial()) {
           materialCanvas(52, 52)
@@ -53,7 +53,7 @@ export struct CommentTitleBar {
             .fontSize(20)
             .fontColor([$r('app.color.primary_text')])
         }
-          .id('p3_comments_back')
+          .id('comments_back')
           .width(40)
           .height(40)
           .padding(0)
@@ -71,7 +71,7 @@ export struct CommentTitleBar {
       .clip(true)
 
       Text(this.replying() ? '回复' : '评论')
-        .id('p3_comments_title')
+        .id('comments_title')
         .textAlign(TextAlign.Center)
         .fontSize(18)
         .fontWeight(FontWeight.Bold)
@@ -83,8 +83,8 @@ export struct CommentTitleBar {
     .width('100%')
     .height(48)
     .padding({
-      left: $r('app.float.p1_page_padding'),
-      right: $r('app.float.p1_page_padding')
+      left: $r('app.float.page_padding'),
+      right: $r('app.float.page_padding')
     })
     .alignItems(VerticalAlign.Center)
     .hitTestBehavior(HitTestMode.Transparent)

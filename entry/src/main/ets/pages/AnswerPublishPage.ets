@@ -21,7 +21,7 @@ import {
   AnswerPublishViewState
 } from './AnswerPublishState';
 import { takeAnswerEditSeed } from './AnswerEditSeedStore';
-import { P4ImagePickerPanel } from './P4ImagePickerPanel';
+import { ImagePickerPanel } from './ImagePickerPanel';
 import { PreparedPickedImage } from '../platform/MediaPickerCoordinator';
 
 export enum AnswerPublishPagePhase {
@@ -430,7 +430,7 @@ export class SystemAnswerPublishTraceIdFactory implements AnswerPublishTraceIdFa
 
 @Component
 export struct AnswerPublishPage {
-  /** 当前生效主题色（P1Shell 广播），驱动强调色控件。 */
+  /** 当前生效主题色（AppShell 广播），驱动强调色控件。 */
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   questionId: string = '';
   answerId?: string = undefined;
@@ -462,14 +462,14 @@ export struct AnswerPublishPage {
   }
 
   build() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_medium') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Button({ type: ButtonType.Normal, stateEffect: true }) {
           SymbolGlyph($r('sys.symbol.chevron_left'))
             .fontSize(20)
             .fontColor([$r('app.color.primary_text')])
         }
-          .id('p4_answer_page_exit')
+          .id('answer_page_exit')
           .width(40)
           .height(40)
           .padding(0)
@@ -477,35 +477,35 @@ export struct AnswerPublishPage {
           .accessibilityText('返回')
           .onClick((): void => this.exitEditor())
         Text(this.viewState.answerId === undefined ? '撰写回答' : '编辑回答')
-          .id('p4_answer_page_title')
+          .id('answer_page_title')
           .layoutWeight(1)
-          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontSize($r('app.float.heading_font_size'))
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.primary_text'))
         Button('发布')
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id('p4_answer_page_publish')
+          .id('answer_page_publish')
           .enabled(this.viewState.canPublish)
           .onClick((): void => this.requestPublishConfirmation())
       }
       .width('100%')
 
       Text(this.viewState.statusMessage)
-        .id('p4_answer_page_status')
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .id('answer_page_status')
+        .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
 
       if (this.viewState.phase === AnswerPublishPagePhase.LOGIN_REQUIRED) {
         Button('去登录')
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id('p4_answer_page_go_login')
+          .id('answer_page_go_login')
           .width('100%')
           .onClick((): void => this.onGoLogin())
       } else if (this.viewState.phase === AnswerPublishPagePhase.READY) {
         TextArea({ text: this.viewState.html, placeholder: '写下你的回答…' })
-          .id('p4_answer_page_editor')
+          .id('answer_page_editor')
           .width('100%')
           .layoutWeight(1)
           .maxLength(1048576)
@@ -513,18 +513,18 @@ export struct AnswerPublishPage {
             this.coordinator?.updateContent(value, this.viewState.tocEnabled);
           })
 
-        P4ImagePickerPanel({
+        ImagePickerPanel({
           onPreparedImagesChanged: (images: Array<PreparedPickedImage>): void => this.applyPreparedImages(images),
           retainPreparedImages: this.viewState.localImageReferences.length > 0,
           restoredLocalImageReferences: this.viewState.localImageReferences
         })
 
-        Row({ space: $r('app.float.p1_spacing_small') }) {
+        Row({ space: $r('app.float.spacing_small') }) {
           Text('显示目录')
-            .fontSize($r('app.float.p1_body_font_size'))
+            .fontSize($r('app.float.body_font_size'))
             .fontColor($r('app.color.primary_text'))
           Toggle({ type: ToggleType.Switch, isOn: this.viewState.tocEnabled })
-            .id('p4_answer_page_toc')
+            .id('answer_page_toc')
             .selectedColor(this.resolvedThemeColor)
             .onChange((value: boolean): void => {
               this.coordinator?.updateContent(this.viewState.html, value);
@@ -535,7 +535,7 @@ export struct AnswerPublishPage {
         Button('保存草稿')
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id('p4_answer_page_save_draft')
+          .id('answer_page_save_draft')
           .width('100%')
           .enabled(this.viewState.canSaveDraft)
           .onClick((): void => this.coordinator?.saveLocalDraft())
@@ -544,7 +544,7 @@ export struct AnswerPublishPage {
           Button('编辑已有回答')
             .backgroundColor(this.resolvedThemeColor)
             .fontColor(onThemeColor(this.resolvedThemeColor))
-            .id('p4_answer_page_continue_existing')
+            .id('answer_page_continue_existing')
             .width('100%')
             .onClick((): void => this.coordinator?.continueEditingExistingAnswer())
         }
@@ -556,7 +556,7 @@ export struct AnswerPublishPage {
     .alignItems(HorizontalAlign.Start)
     .width('100%')
     .height('100%')
-    .padding($r('app.float.p1_card_padding'))
+    .padding($r('app.float.card_padding'))
     .backgroundColor($r('app.color.page_background'))
   }
 
@@ -587,20 +587,20 @@ export struct AnswerPublishPage {
 
   @Builder
   private publishConfirmation() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
+    Column({ space: $r('app.float.spacing_medium') }) {
       Text('确认发布回答')
-        .id('p4_answer_page_publish_confirm_title')
-        .fontSize($r('app.float.p1_heading_font_size'))
+        .id('answer_page_publish_confirm_title')
+        .fontSize($r('app.float.heading_font_size'))
         .fontWeight(FontWeight.Medium)
       Text('确认后将先保存本地草稿、上传已选图片、同步知乎草稿，再提交回答。')
-        .id('p4_answer_page_publish_confirm_message')
-        .fontSize($r('app.float.p1_body_font_size'))
+        .id('answer_page_publish_confirm_message')
+        .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.secondary_text'))
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Button('继续编辑')
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id('p4_answer_page_publish_confirm_cancel')
+          .id('answer_page_publish_confirm_cancel')
           .layoutWeight(1)
           .onClick((): void => {
             this.publishConfirmationVisible = false;
@@ -608,7 +608,7 @@ export struct AnswerPublishPage {
         Button('确认发布')
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id('p4_answer_page_publish_confirm_submit')
+          .id('answer_page_publish_confirm_submit')
           .layoutWeight(1)
           .onClick((): void => {
             this.publishConfirmationVisible = false;
@@ -617,10 +617,10 @@ export struct AnswerPublishPage {
       }
       .width('100%')
     }
-    .id('p4_answer_page_publish_confirmation')
+    .id('answer_page_publish_confirmation')
     .width('100%')
-    .padding($r('app.float.p1_card_padding'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .padding($r('app.float.card_padding'))
+    .borderRadius($r('app.float.card_radius'))
     .backgroundColor($r('app.color.surface_background'))
   }
 }

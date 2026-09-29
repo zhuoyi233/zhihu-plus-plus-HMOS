@@ -18,7 +18,7 @@ class BackgroundProbeFailure extends Error {
 
 @Component
 export struct BackgroundTaskProbePage {
-  /** 当前生效主题色（P1Shell 广播），驱动探针页按钮强调色。 */
+  /** 当前生效主题色（AppShell 广播），驱动探针页按钮强调色。 */
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   onBack: () => void = () => {};
   @State private transientStatus: string = '短时任务配额尚未读取';

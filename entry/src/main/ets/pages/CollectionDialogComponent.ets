@@ -1,4 +1,4 @@
-import { P1Destination, P1DestinationName } from 'core';
+import { AppDestination, AppDestinationName } from 'core';
 import {
   onThemeColor,
   CollectionRepository,
@@ -19,7 +19,7 @@ export struct CollectionDialogComponent {
   contentId: string = '';
   repository: CollectionRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
-  navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
+  navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {
   };
   onDismiss: () => void = (): void => {
   };
@@ -62,10 +62,10 @@ export struct CollectionDialogComponent {
   }
 
   build() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_medium') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Text('选择收藏夹')
-          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontSize($r('app.float.heading_font_size'))
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
@@ -74,7 +74,7 @@ export struct CollectionDialogComponent {
             .fontSize(18)
             .fontColor([$r('app.color.primary_text')])
         }
-          .id('p3_favorite_dialog_close')
+          .id('favorite_dialog_close')
           .width(40)
           .height(40)
           .padding(0)
@@ -86,28 +86,28 @@ export struct CollectionDialogComponent {
 
       if (this.phase === CollectionFavoritePhase.LOADING || this.phase === CollectionFavoritePhase.IDLE) {
         LoadingProgress()
-          .id('p3_favorite_dialog_loading')
+          .id('favorite_dialog_loading')
           .width(40)
           .height(40)
           .color(this.resolvedThemeColor)
       } else if (this.phase === CollectionFavoritePhase.ERROR) {
-        Column({ space: $r('app.float.p1_spacing_small') }) {
+        Column({ space: $r('app.float.spacing_small') }) {
           Text(this.message)
-            .id('p3_favorite_dialog_error')
-            .fontSize($r('app.float.p1_body_font_size'))
+            .id('favorite_dialog_error')
+            .fontSize($r('app.float.body_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
           if (this.requiresLogin) {
             Button('去登录')
               .backgroundColor(this.resolvedThemeColor)
               .fontColor(onThemeColor(this.resolvedThemeColor))
-              .id('p3_favorite_dialog_login')
-              .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
+              .id('favorite_dialog_login')
+              .onClick((): void => this.navigate({ name: AppDestinationName.LOGIN }))
           } else {
             Button('重试')
               .backgroundColor(this.resolvedThemeColor)
               .fontColor(onThemeColor(this.resolvedThemeColor))
-              .id('p3_favorite_dialog_retry')
+              .id('favorite_dialog_retry')
               .onClick((): void => {
                 this.controller?.load(this.contentType, this.contentId);
               })
@@ -119,9 +119,9 @@ export struct CollectionDialogComponent {
           Button('新建收藏夹')
             .backgroundColor(this.resolvedThemeColor)
             .fontColor(onThemeColor(this.resolvedThemeColor))
-            .id('p3_favorite_dialog_create')
+            .id('favorite_dialog_create')
             .width('100%')
-            .fontSize($r('app.float.p1_body_font_size'))
+            .fontSize($r('app.float.body_font_size'))
             .enabled(this.busyCollectionId === undefined)
             .onClick((): void => {
               this.createTitle = '';
@@ -137,8 +137,8 @@ export struct CollectionDialogComponent {
 
         if (this.message.length > 0) {
           Text(this.message)
-            .id('p3_favorite_dialog_message')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .id('favorite_dialog_message')
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor(this.requiresLogin ? $r('app.color.error_text') : $r('app.color.secondary_text'))
             .width('100%')
         }
@@ -150,35 +150,35 @@ export struct CollectionDialogComponent {
             }
           }, (collection: CollectionSummary): string => collectionFavoriteRowKey(collection, this.busyCollectionId))
         }
-        .id('p3_favorite_dialog_list')
+        .id('favorite_dialog_list')
         .layoutWeight(1)
         .width('100%')
       }
     }
-    .id('p3_favorite_dialog')
+    .id('favorite_dialog')
     .alignItems(HorizontalAlign.Start)
     .width('100%')
     .height('100%')
-    .padding($r('app.float.p1_page_padding'))
+    .padding($r('app.float.page_padding'))
   }
 
   @Builder
   private collectionRow(collection: CollectionSummary) {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Column({ space: 2 }) {
           Text(collection.title)
-            .fontSize($r('app.float.p1_body_font_size'))
+            .fontSize($r('app.float.body_font_size'))
             .fontColor($r('app.color.primary_text'))
             .width('100%')
           Text(`${collection.itemCount} 篇内容`)
-            .fontSize($r('app.float.p1_caption_font_size'))
+            .fontSize($r('app.float.caption_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
         }
         .layoutWeight(1)
         SymbolGlyph(collection.isFavorited ? $r('sys.symbol.bookmark_fill') : $r('sys.symbol.bookmark'))
-          .id(`p3_favorite_dialog_item_${collection.id}`)
+          .id(`favorite_dialog_item_${collection.id}`)
           .fontSize(20)
           .fontColor([collection.isFavorited ? this.resolvedThemeColor : $r('app.color.secondary_text')])
           .accessibilityText(collection.isFavorited ? '已收藏' : '未收藏')
@@ -186,8 +186,8 @@ export struct CollectionDialogComponent {
       .width('100%')
     }
     .width('100%')
-    .padding($r('app.float.p1_card_padding'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .padding($r('app.float.card_padding'))
+    .borderRadius($r('app.float.card_radius'))
     .backgroundColor($r('app.color.card_background'))
     .enabled(this.busyCollectionId === undefined || this.busyCollectionId === collection.id)
     .onClick((): void => {
@@ -197,40 +197,40 @@ export struct CollectionDialogComponent {
 
   @Builder
   private createForm() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
+    Column({ space: $r('app.float.spacing_medium') }) {
       Text('新建收藏夹')
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.primary_text'))
         .width('100%')
       TextInput({ text: this.createTitle, placeholder: '收藏夹名称' })
-        .id('p3_favorite_dialog_create_title')
+        .id('favorite_dialog_create_title')
         .width('100%')
         .maxLength(50)
         .onChange((value: string): void => {
           this.createTitle = value;
         })
       TextInput({ text: this.createDescription, placeholder: '描述（可选）' })
-        .id('p3_favorite_dialog_create_description')
+        .id('favorite_dialog_create_description')
         .width('100%')
         .maxLength(200)
         .onChange((value: string): void => {
           this.createDescription = value;
         })
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Text('公开收藏夹')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.body_font_size'))
           .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
         Toggle({ type: ToggleType.Switch, isOn: this.createIsPublic })
-          .id('p3_favorite_dialog_create_public')
+          .id('favorite_dialog_create_public')
           .selectedColor(this.resolvedThemeColor)
           .onChange((value: boolean): void => {
             this.createIsPublic = value;
           })
       }
       .width('100%')
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Button('取消')
           .backgroundColor($r('app.color.control_background'))
           .fontColor($r('app.color.primary_text'))
@@ -242,7 +242,7 @@ export struct CollectionDialogComponent {
         Button(this.busyCollectionId === 'creating' ? '创建中…' : '创建并收藏')
           .fontColor(onThemeColor(this.resolvedThemeColor))
           .backgroundColor(this.resolvedThemeColor)
-          .id('p3_favorite_dialog_create_submit')
+          .id('favorite_dialog_create_submit')
           .layoutWeight(1)
           .enabled(this.busyCollectionId === undefined && this.createTitle.trim().length > 0)
           .onClick((): void => {
@@ -262,8 +262,8 @@ export struct CollectionDialogComponent {
       .width('100%')
     }
     .width('100%')
-    .padding($r('app.float.p1_spacing_medium'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .padding($r('app.float.spacing_medium'))
+    .borderRadius($r('app.float.card_radius'))
     .backgroundColor($r('app.color.page_background'))
   }
 

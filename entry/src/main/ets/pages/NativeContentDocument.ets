@@ -137,7 +137,7 @@ export struct ContentImagePreview {
   build() {
     Stack({ alignContent: Alignment.Center }) {
       Image(this.url)
-        .id('p2_content_image_preview')
+        .id('content_image_preview')
         .width('100%')
         .height('100%')
         .objectFit(ImageFit.Contain)
@@ -192,8 +192,8 @@ export struct ContentImagePreview {
         Column() {
           Blank()
           Text(this.actionStatus)
-            .id('p2_content_image_preview_status')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .id('content_image_preview_status')
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor(Color.White)
             .margin({ bottom: 64 })
         }
@@ -239,17 +239,17 @@ export struct ContentImagePreview {
   private imageContextMenu() {
     Menu() {
       MenuItem({ content: '保存图片' })
-        .id('p2_content_image_preview_menu_save')
+        .id('content_image_preview_menu_save')
         .onClick((): void => {
           this.saveImage();
         })
       MenuItem({ content: '分享图片' })
-        .id('p2_content_image_preview_menu_share')
+        .id('content_image_preview_menu_share')
         .onClick((): void => {
           this.shareImage();
         })
       MenuItem({ content: '在浏览器中打开' })
-        .id('p2_content_image_preview_menu_browser')
+        .id('content_image_preview_menu_browser')
         .onClick((): void => {
           this.openInBrowser();
         })
@@ -482,7 +482,7 @@ struct ContentInlineFormula {
           }
         } else {
           ImageSpan(this.pixelMaps.get(run.id) ?? run.text)
-            .id(`p2_content_inline_formula_${run.id}`)
+            .id(`content_inline_formula_${run.id}`)
             .width(this.formulaWidths.get(run.id) ?? 20)
             .height(24)
             .objectFit(ImageFit.Contain)
@@ -586,7 +586,7 @@ struct ContentBlockFormula {
     Column() {
       if (this.pixelMap !== undefined && !this.failed) {
         Image(this.pixelMap)
-          .id(`p2_content_formula_${this.item.id}`)
+          .id(`content_formula_${this.item.id}`)
           .width('100%')
           .aspectRatio(this.formulaAspectRatio)
           .objectFit(ImageFit.Contain)
@@ -596,8 +596,8 @@ struct ContentBlockFormula {
           })
       } else {
         Text(this.item.text)
-          .id(`p2_content_formula_fallback_${this.item.id}`)
-          .fontSize($r('app.float.p1_secondary_font_size'))
+          .id(`content_formula_fallback_${this.item.id}`)
+          .fontSize($r('app.float.secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .copyOption(CopyOptions.LocalDevice)
           .onTextSelectionChange((start: number, end: number): void => {
@@ -608,9 +608,9 @@ struct ContentBlockFormula {
       }
     }
     .width('100%')
-    .padding($r('app.float.p1_spacing_small'))
+    .padding($r('app.float.spacing_small'))
     .backgroundColor($r('app.color.surface_background'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .borderRadius($r('app.float.card_radius'))
   }
 
   private async loadFormula(generation: number): Promise<void> {
@@ -827,7 +827,7 @@ export struct NativeContentDocument {
             .fontSize(16)
             .fontColor([this.resolvedThemeColor])
           Text(this.detailExpanded ? '收起详情' : '展开详情')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor(this.resolvedThemeColor)
         }
         .padding({ left: 16, right: 16 }).height(40)
@@ -836,11 +836,11 @@ export struct NativeContentDocument {
         .onClick((): void => this.toggleDetailExpanded())
         .accessibilityText(this.detailExpanded ? '收起问题详情' : '展开问题详情')
       }
-      .id('p3_question_detail_toggle')
+      .id('question_detail_toggle')
       .width('100%')
       .padding({ left: 12, right: 12, bottom: 8 })
     }
-    .id('p3_question_detail_content')
+    .id('question_detail_content')
     .height(this.detailExpanded ? this.expandedViewportHeight() : this.collapsedViewportHeight())
     .clip(true)
     .width('100%')
@@ -901,7 +901,7 @@ export struct NativeContentDocument {
             })
           if (this.empty) {
             ListItem() {
-              Text(this.emptyMessage).id('p2_content_document_empty')
+              Text(this.emptyMessage).id('content_document_empty')
                 .fontColor($r('app.color.secondary_text')).padding(12)
             }
           }
@@ -928,8 +928,8 @@ export struct NativeContentDocument {
           if (this.showContentEndMarker && !this.empty) {
             ListItem() {
               Text('— 内容结束 —')
-                .id('p3_content_end_marker')
-                .fontSize($r('app.float.p1_secondary_font_size'))
+                .id('content_end_marker')
+                .fontSize($r('app.float.secondary_font_size'))
                 .fontColor($r('app.color.secondary_text'))
                 .width('100%')
                 .textAlign(TextAlign.Center)
@@ -944,14 +944,14 @@ export struct NativeContentDocument {
             this.reportChromeHeight('footer', newArea);
           })
         }
-        .id('p2_content_document_list')
+        .id('content_document_list')
         .width('100%')
         .height('100%')
         .scrollBar(BarState.Off)
         .padding({
-          left: $r('app.float.p1_page_padding'),
-          right: $r('app.float.p1_page_padding'),
-          top: $r('app.float.p1_spacing_medium')
+          left: $r('app.float.page_padding'),
+          right: $r('app.float.page_padding'),
+          top: $r('app.float.spacing_medium')
         })
         // 末尾避让随正文滚动，避免底部 padding 压缩视口、在悬浮操作栏下方形成固定留白。
         .contentEndOffset(100)
@@ -1028,7 +1028,7 @@ export struct NativeContentDocument {
 
       if (this.pageTurnGuideVisible && this.showPageTurnGuide) {
         Divider()
-          .id('p3_page_turn_guide')
+          .id('page_turn_guide')
           .color(this.resolvedThemeColor)
           .strokeWidth(1)
           .opacity(0.55)
@@ -1042,14 +1042,14 @@ export struct NativeContentDocument {
           Button({ type: ButtonType.Circle, stateEffect: true }) {
             SymbolGlyph($r('sys.symbol.chevron_up')).fontSize(20)
           }
-          .id('p3_page_turn_previous')
+          .id('page_turn_previous')
           .width(44).height(44)
           .backgroundColor($r('app.color.surface_background'))
           .onClick((): void => this.turnPage(-1))
           Button({ type: ButtonType.Circle, stateEffect: true }) {
             SymbolGlyph($r('sys.symbol.chevron_down')).fontSize(20)
           }
-          .id('p3_page_turn_next')
+          .id('page_turn_next')
           .width(44).height(44)
           .backgroundColor($r('app.color.surface_background'))
           .onClick((): void => this.turnPage(1))
@@ -1106,7 +1106,7 @@ export struct NativeContentDocument {
     return readerBlockSpacing(this.blockSpacingPercent);
   }
 
-  /** 标题字号（fp）：20 × 字号%，默认 20 == 改造前 p1_heading_font_size。 */
+  /** 标题字号（fp）：20 × 字号%，默认 20 == 改造前 heading_font_size。 */
   private headingFontSize(): number {
     return readerHeadingFontSize(this.fontSizePercent);
   }
@@ -1285,7 +1285,7 @@ export struct NativeContentDocument {
         onPreview: (url: string): void => {
           // 全屏查看器由详情页根 Stack 叠层渲染（AppStorage 广播）：正文组件处于列表
           // 惰性树内，本地渲染全屏层会受标题栏约束，且模态覆盖层树不响应状态更新。
-          AppStorage.setOrCreate('p2ImagePreviewUrl', url);
+          AppStorage.setOrCreate('imagePreviewUrl', url);
         }
       })
     } else if (item.kind === ReaderBlockKind.VIDEO) {
@@ -1309,7 +1309,7 @@ export struct NativeContentDocument {
           .backgroundColor('#B3000000')
           .accessibilityText('播放视频')
       }
-      .id(`p2_content_video_${item.targetId ?? 'invalid'}`)
+      .id(`content_video_${item.targetId ?? 'invalid'}`)
       .width('100%')
       .height(200)
       .borderRadius(12)

@@ -13,8 +13,8 @@ import {
   planDatabaseOpen
 } from 'data';
 
-export default function p1PersistenceTest(): void {
-  describe('p1PersistenceTest', () => {
+export default function persistenceTest(): void {
+  describe('persistenceTest', () => {
     it('defaultsUnknownThemeValuesToSystem', 0, () => {
       expect(decodeAppThemeMode(AppThemeMode.SYSTEM)).assertEqual(AppThemeMode.SYSTEM);
       expect(decodeAppThemeMode('dark')).assertEqual(AppThemeMode.SYSTEM);

@@ -1,4 +1,4 @@
-import { DeepLinkType, isSafePeopleIdentifier, parseAbsoluteUrl, P1Destination, P1DestinationName,
+import { DeepLinkType, isSafePeopleIdentifier, parseAbsoluteUrl, AppDestination, AppDestinationName,
   resolveZhihuLink } from 'core';
 import { MobileNotificationTimelineItem, mobileNotificationAvatarUrl } from 'data';
 
@@ -7,7 +7,7 @@ import { MobileNotificationTimelineItem, mobileNotificationAvatarUrl } from 'dat
  * content.targetLink → content.subTargetLink → targetSource.targetLink → head.targetLink，
  * 私信（inbox）优先，其次非个人主页链接，再次首个可解析链接，最后 target 人员兜底。
  */
-export function timelineItemDestination(item: MobileNotificationTimelineItem): P1Destination | undefined {
+export function timelineItemDestination(item: MobileNotificationTimelineItem): AppDestination | undefined {
   const links: Array<string> = [];
   const content = item.content;
   if (content !== undefined) {
@@ -26,20 +26,20 @@ export function timelineItemDestination(item: MobileNotificationTimelineItem): P
   if (headLink.trim().length > 0) {
     links.push(headLink);
   }
-  const resolved: Array<P1Destination> = [];
+  const resolved: Array<AppDestination> = [];
   links.forEach((link: string): void => {
     const destination = notificationLinkDestination(link);
     if (destination !== undefined) {
       resolved.push(destination);
     }
   });
-  const message = resolved.find((destination: P1Destination): boolean =>
-    destination.name === P1DestinationName.PRIVATE_MESSAGE);
+  const message = resolved.find((destination: AppDestination): boolean =>
+    destination.name === AppDestinationName.PRIVATE_MESSAGE);
   if (message !== undefined) {
     return message;
   }
-  const nonPerson = resolved.find((destination: P1Destination): boolean =>
-    destination.name !== P1DestinationName.PEOPLE);
+  const nonPerson = resolved.find((destination: AppDestination): boolean =>
+    destination.name !== AppDestinationName.PEOPLE);
   if (nonPerson !== undefined) {
     return nonPerson;
   }
@@ -50,7 +50,7 @@ export function timelineItemDestination(item: MobileNotificationTimelineItem): P
   if (target !== undefined && target.type === 'people') {
     const identifier = target.urlToken.trim().length > 0 ? target.urlToken : target.id;
     if (isSafePeopleIdentifier(identifier)) {
-      return { name: P1DestinationName.PEOPLE, id: identifier };
+      return { name: AppDestinationName.PEOPLE, id: identifier };
     }
   }
   return undefined;
@@ -60,7 +60,7 @@ export function timelineItemDestination(item: MobileNotificationTimelineItem): P
  * 单条通知链接解析。识别上游私有的 inbox / timeline-entry 路径，其余交给
  * `resolveZhihuLink`（question/answer/article/pin/people 等）。
  */
-export function notificationLinkDestination(link: string): P1Destination | undefined {
+export function notificationLinkDestination(link: string): AppDestination | undefined {
   if (link.length === 0 || link.length > 8192) {
     return undefined;
   }
@@ -81,7 +81,7 @@ export function notificationLinkDestination(link: string): P1Destination | undef
     }
     const title = parsed.params.get('title') ?? '';
     return {
-      name: P1DestinationName.PRIVATE_MESSAGE,
+      name: AppDestinationName.PRIVATE_MESSAGE,
       peerId: peerId,
       peerName: title.trim().length > 0 ? title : undefined
     };
@@ -94,7 +94,7 @@ export function notificationLinkDestination(link: string): P1Destination | undef
     }
     const title = parsed.params.get('title') ?? '';
     return {
-      name: P1DestinationName.NOTIFICATION_ENTRY,
+      name: AppDestinationName.NOTIFICATION_ENTRY,
       entryName: entryName,
       title: title.trim().length > 0 ? title : '消息'
     };
@@ -103,25 +103,25 @@ export function notificationLinkDestination(link: string): P1Destination | undef
 }
 
 /** 站内内容链接（question/answer/article/pin/people）→ 目的地。 */
-export function contentLinkDestination(link: string): P1Destination | undefined {
+export function contentLinkDestination(link: string): AppDestination | undefined {
   const deep = resolveZhihuLink(link);
   if (deep === undefined) {
     return undefined;
   }
   if (deep.type === DeepLinkType.QUESTION) {
-    return { name: P1DestinationName.QUESTION, id: deep.id };
+    return { name: AppDestinationName.QUESTION, id: deep.id };
   }
   if (deep.type === DeepLinkType.ANSWER) {
-    return { name: P1DestinationName.ANSWER, id: deep.id };
+    return { name: AppDestinationName.ANSWER, id: deep.id };
   }
   if (deep.type === DeepLinkType.ARTICLE) {
-    return { name: P1DestinationName.ARTICLE, id: deep.id };
+    return { name: AppDestinationName.ARTICLE, id: deep.id };
   }
   if (deep.type === DeepLinkType.PIN) {
-    return { name: P1DestinationName.PIN, id: deep.id };
+    return { name: AppDestinationName.PIN, id: deep.id };
   }
   if (deep.type === DeepLinkType.PERSON) {
-    return isSafePeopleIdentifier(deep.id) ? { name: P1DestinationName.PEOPLE, id: deep.id } : undefined;
+    return isSafePeopleIdentifier(deep.id) ? { name: AppDestinationName.PEOPLE, id: deep.id } : undefined;
   }
   return undefined;
 }

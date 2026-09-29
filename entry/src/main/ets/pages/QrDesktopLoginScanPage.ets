@@ -1,5 +1,5 @@
 import { ApplicationStateChangeCallback, common } from '@kit.AbilityKit';
-import { QrScanner } from '../platform/P4PlatformServices';
+import { QrScanner } from '../platform/PlatformServices';
 import { SystemQrScanner } from '../platform/SystemQrScanner';
 import {
   QrDesktopLoginScanController,
@@ -38,7 +38,7 @@ class QrDesktopLoginApplicationStateCallback extends ApplicationStateChangeCallb
 /** P4-6 生产入口：扫码后只在用户明确确认时打开受限的知乎电脑登录确认页。 */
 @Component
 export struct QrDesktopLoginScanPage {
-  /** 当前生效主题色（P1Shell 广播），驱动强调色控件。 */
+  /** 当前生效主题色（AppShell 广播），驱动强调色控件。 */
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   onBack: () => void = (): void => {
   };
@@ -89,33 +89,33 @@ export struct QrDesktopLoginScanPage {
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
     Scroll() {
-      Column({ space: $r('app.float.p1_spacing_large') }) {
+      Column({ space: $r('app.float.spacing_large') }) {
         Text('扫描电脑端登录码')
-          .id('p4_qr_desktop_login_title')
-          .fontSize($r('app.float.p1_display_font_size'))
+          .id('qr_desktop_login_title')
+          .fontSize($r('app.float.display_font_size'))
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.primary_text'))
 
         Text('仅识别知乎电脑端登录二维码。识别后必须由你明确确认；扫码本身不会登录电脑。')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.body_font_size'))
           .lineHeight(24)
           .fontColor($r('app.color.secondary_text'))
 
         Text(this.viewState.message)
-          .id('p4_qr_desktop_login_status')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .id('qr_desktop_login_status')
+          .fontSize($r('app.float.body_font_size'))
           .lineHeight(24)
           .fontColor($r('app.color.primary_text'))
 
         if (this.viewState.phase === QrDesktopLoginScanPhase.AWAITING_CONFIRMATION) {
-          Column({ space: $r('app.float.p1_spacing_small') }) {
+          Column({ space: $r('app.float.spacing_small') }) {
             Text('来源：www.zhihu.com')
-              .fontSize($r('app.float.p1_secondary_font_size'))
+              .fontSize($r('app.float.secondary_font_size'))
               .fontColor($r('app.color.secondary_text'))
             Button('确认登录电脑')
               .backgroundColor(this.resolvedThemeColor)
               .fontColor(onThemeColor(this.resolvedThemeColor))
-              .id('p4_qr_desktop_login_confirm')
+              .id('qr_desktop_login_confirm')
               .width('100%')
               .enabled(this.viewState.confirmEnabled)
               .onClick((): void => {
@@ -124,7 +124,7 @@ export struct QrDesktopLoginScanPage {
             Button('取消')
               .backgroundColor($r('app.color.control_background'))
               .fontColor($r('app.color.primary_text'))
-              .id('p4_qr_desktop_login_cancel')
+              .id('qr_desktop_login_cancel')
               .width('100%')
               .onClick((): void => {
                 this.controller?.cancel();
@@ -135,7 +135,7 @@ export struct QrDesktopLoginScanPage {
           Button(this.viewState.phase === QrDesktopLoginScanPhase.SCANNING ? '系统扫码中…' : '打开系统扫码')
             .backgroundColor(this.resolvedThemeColor)
             .fontColor(onThemeColor(this.resolvedThemeColor))
-            .id('p4_qr_desktop_login_scan')
+            .id('qr_desktop_login_scan')
             .width('100%')
             .enabled(this.viewState.scanEnabled)
             .onClick((): void => {
@@ -144,21 +144,21 @@ export struct QrDesktopLoginScanPage {
         }
 
         Text('不会显示、保存或记录二维码令牌；只有确认后才会打开受限的知乎确认页。')
-          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontSize($r('app.float.secondary_font_size'))
           .lineHeight(22)
           .fontColor($r('app.color.secondary_text'))
 
         Button('返回')
           .backgroundColor($r('app.color.control_background'))
           .fontColor($r('app.color.primary_text'))
-          .id('p4_qr_desktop_login_back')
+          .id('qr_desktop_login_back')
           .width('100%')
           .onClick((): void => this.onBack())
       }
       .alignItems(HorizontalAlign.Start)
       .width('100%')
-      .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
-        top: 94, bottom: $r('app.float.p1_page_padding') })
+      .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
+        top: 94, bottom: $r('app.float.page_padding') })
     }
     .scrollBar(BarState.Off)
     .width('100%')

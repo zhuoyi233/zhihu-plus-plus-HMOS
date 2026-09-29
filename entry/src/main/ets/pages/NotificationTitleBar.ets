@@ -1,4 +1,4 @@
-import { P1Destination, P1DestinationName } from 'core';
+import { AppDestination, AppDestinationName } from 'core';
 
 /**
  * 消息中心 HDS 标题栏注入内容：标题 + 右上角「已读/设置」（对齐上游
@@ -14,14 +14,14 @@ export const NOTIFICATION_HUB_MARK_READ_TICK_KEY = 'notificationHubMarkReadTick'
 export struct NotificationTitleBar {
   @StorageProp(NOTIFICATION_HUB_UNREAD_TOTAL_KEY) unreadTotal: number = 0;
   @StorageProp(NOTIFICATION_HUB_BUSY_KEY) busy: boolean = false;
-  navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {};
+  navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {};
 
   build() {
     Row({ space: 8 }) {
-      // 返回键由 HDS 标题栏默认 backIcon 承载（P1Shell 传入 action），这里从其右侧起排。
+      // 返回键由 HDS 标题栏默认 backIcon 承载（AppShell 传入 action），这里从其右侧起排。
       Text('消息')
-        .id('p3_notifications_title')
-        .fontSize($r('app.float.p1_heading_font_size'))
+        .id('notifications_title')
+        .fontSize($r('app.float.heading_font_size'))
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.primary_text'))
         .maxLines(1)
@@ -34,7 +34,7 @@ export struct NotificationTitleBar {
             .fontSize(20)
             .fontColor([$r('app.color.primary_text')])
         }
-          .id('p3_notifications_mark_all_read')
+          .id('notifications_mark_all_read')
           .width(40)
           .height(40)
           .padding(0)
@@ -49,14 +49,14 @@ export struct NotificationTitleBar {
           .fontSize(20)
           .fontColor([$r('app.color.primary_text')])
       }
-        .id('p3_notifications_settings_entry')
+        .id('notifications_settings_entry')
         .width(40)
         .height(40)
         .padding(0)
         .backgroundColor(Color.Transparent)
         .accessibilityText('打开通知设置')
         .onClick((): void => {
-          this.navigate({ name: P1DestinationName.NOTIFICATION_SETTINGS });
+          this.navigate({ name: AppDestinationName.NOTIFICATION_SETTINGS });
         })
     }
     .width('100%')

@@ -258,6 +258,37 @@ export default function pinPublishStateTest(): void {
       expect(repository.calls.length).assertEqual(0);
     });
 
+    it('restoresSavedMixedImageDraftBeforeActivation', 0, () => {
+      const controller = createController(new FakePinPublishRepository(), new FakeDraftRepository(),
+        new FakeScheduler());
+      const identity = pinIdentity();
+      const metadata: ContentDraftMetadata = {
+        draftKey: identity.draftKey,
+        accountKey: identity.accountKey,
+        kind: identity.kind,
+        targetId: identity.targetId,
+        title: '恢复测试',
+        plainTextLength: 2,
+        tocEnabled: false,
+        imageRefsJson: JSON.stringify([uploadedImage(), localImageReference()]),
+        topicRefsJson: '[{"topicId":"2","displayName":"HarmonyOS"}]',
+        dirty: true,
+        version: 1,
+        createdAt: 1,
+        updatedAt: 1
+      };
+      controller.restoreSavedDraft({ metadata: metadata, html: '正文' });
+      controller.activate();
+
+      const restored = controller.snapshot();
+      expect(restored.content.title).assertEqual('恢复测试');
+      expect(restored.content.html).assertEqual('正文');
+      expect(restored.content.images.length).assertEqual(1);
+      expect(restored.content.localImageReferences.length).assertEqual(1);
+      expect(restored.content.topics.length).assertEqual(1);
+      expect(restored.localDraftSaved).assertTrue();
+    });
+
     it('persistsTitleBodyImagesAndDeduplicatedTopicsBeforeRemoteDraftAndPublish', 0, async () => {
       const repository = new FakePinPublishRepository();
       const drafts = new FakeDraftRepository();

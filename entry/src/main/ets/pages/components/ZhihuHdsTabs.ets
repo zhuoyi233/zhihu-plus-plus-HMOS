@@ -27,7 +27,7 @@ export struct ZhihuHdsTabs {
     }) {
       this.content();
     }
-    .id('p1_hds_tabs')
+    .id('hds_tabs')
     .barMode(BarMode.Fixed)
     .barHeight(this.autoHideBottomBar && this.bottomBarHiddenByScroll ? 0 : 64)
     .barOverlap(true)

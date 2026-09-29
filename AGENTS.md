@@ -75,8 +75,8 @@ $hdc = "hdc"
 - 应用支持知乎链接直达：`aa start -a EntryAbility -b com.github.zhuoyi233.zhplus -U <zhihu url>`
   （经 `resolveZhihuLink` 路由），可跳过手动导航直接进入问题/回答/文章页。
 
-- 登录：重装/清数据后登录态丢失，首页出现 `p2_home_error_login` → 设置页“开发者选项”手动 Cookie 输入
-  （`ZHIHU_COOKIE` 环境变量）→ `developer_cookie_submit` → 首页 `p2_home_error_retry`。普通登录页只保留
+- 登录：重装/清数据后登录态丢失，首页出现 `home_error_login` → 设置页“开发者选项”手动 Cookie 输入
+  （`ZHIHU_COOKIE` 环境变量）→ `developer_cookie_submit` → 首页 `home_error_retry`。普通登录页只保留
   手机号、扫码、网页三种面向用户的登录方式。
 
 ## 提交规范
@@ -190,7 +190,7 @@ $hdc = "hdc"
 
 - 禁解构参数；`Object.entries(...).forEach` 的元组回调改用 `Object.keys`。
 
-- 跨页面状态通道：P1Shell 各 feed 页经 `@Builder` 参数传值（如 reloadToken）在 HdsTabs 的
+- 跨页面状态通道：AppShell 各 feed 页经 `@Builder` 参数传值（如 reloadToken）在 HdsTabs 的
   TabContent 构建树下**不会触发已挂载子组件更新**，`@Provide`/`@Consume` 在该树形下也实测
   **不链接**（页面各持本地兜底实例）。跨页面信号一律走 AppStorage 广播 + `@StorageProp`+`@Watch`
   （如 `loginFeedReloadTick`，同 `bottomRectHeight` 模式）；signal 处理需容忍控制器失活态
@@ -222,7 +222,7 @@ $hdc = "hdc"
   按桌面视口渲染、字体过小）。
 
 - **控件必须跟随主题色**（新建任何带强调色的控件时强制执行，否则默认系统蓝与主题脱节）：
-  - 生效色只读 `@StorageProp('resolvedThemeColor')`（P1Shell 广播的深浅色解析结果），
+  - 生效色只读 `@StorageProp('resolvedThemeColor')`（AppShell 广播的深浅色解析结果），
     **禁止**直接读 `themeColor` seed（未按主题模式解析，深色下会刺眼/失真）；
     页面原本没有该属性时要自行补声明。
   - `Button`：主操作必须 `.backgroundColor(resolvedThemeColor)` +

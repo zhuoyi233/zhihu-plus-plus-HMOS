@@ -54,8 +54,8 @@ export struct VideoPlaybackPage {
 
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
-      XComponent({ id: 'p4_video_surface', type: XComponentType.SURFACE, controller: this.surfaceController })
-        .id('p4_video_surface')
+      XComponent({ id: 'video_surface', type: XComponentType.SURFACE, controller: this.surfaceController })
+        .id('video_surface')
         .width('100%')
         .height('100%')
         .onLoad((): void => this.onSurfaceReady())
@@ -63,17 +63,17 @@ export struct VideoPlaybackPage {
         .onClick((): void => this.toggleControls())
       if (!this.surfaceReady) {
         Text('正在初始化视频画面')
-          .id('p4_video_surface_placeholder')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .id('video_surface_placeholder')
+          .fontSize($r('app.float.body_font_size'))
           .fontColor(Color.White)
           .textAlign(TextAlign.Center)
-          .padding($r('app.float.p1_card_padding'))
+          .padding($r('app.float.card_padding'))
           .align(Alignment.Center)
       }
 
       if (this.controlsVisible) {
         Column() {
-          Row({ space: $r('app.float.p1_spacing_small') }) {
+          Row({ space: $r('app.float.spacing_small') }) {
             Blank()
             Button({ type: ButtonType.Circle, stateEffect: true }) {
               SymbolGlyph(this.landscapeFullScreen
@@ -82,7 +82,7 @@ export struct VideoPlaybackPage {
                 .fontSize(21)
                 .fontColor([Color.White])
             }
-              .id('p4_video_fullscreen')
+              .id('video_fullscreen')
               .width(44)
               .height(44)
               .padding(0)
@@ -94,7 +94,7 @@ export struct VideoPlaybackPage {
                 .fontSize(21)
                 .fontColor([Color.White])
             }
-              .id('p4_video_back')
+              .id('video_back')
               .width(44)
               .height(44)
               .padding(0)
@@ -107,14 +107,14 @@ export struct VideoPlaybackPage {
 
           Blank()
 
-          Row({ space: $r('app.float.p1_spacing_small') }) {
+          Row({ space: $r('app.float.spacing_small') }) {
             Button({ type: ButtonType.Circle, stateEffect: true }) {
               SymbolGlyph(this.viewState.playback.phase === VideoPlaybackPhase.PLAYING
                 ? $r('sys.symbol.pause') : $r('sys.symbol.play_fill'))
                 .fontSize(24)
                 .fontColor([Color.White])
             }
-              .id('p4_video_playback_toggle')
+              .id('video_playback_toggle')
               .width(44)
               .height(44)
               .padding(0)
@@ -129,13 +129,13 @@ export struct VideoPlaybackPage {
                 max: this.viewState.playback.durationMs,
                 step: 1000
               })
-                .id('p4_video_playback_seek')
+                .id('video_playback_seek')
                 .layoutWeight(1)
                 .enabled(this.canSeek())
                 .onChange((value: number): void => this.controller?.seek(Math.floor(value)))
               Text(`${this.formatDuration(this.viewState.playback.positionMs)} / ${this.formatDuration(this.viewState.playback.durationMs)}`)
-                .id('p4_video_playback_progress')
-                .fontSize($r('app.float.p1_secondary_font_size'))
+                .id('video_playback_progress')
+                .fontSize($r('app.float.secondary_font_size'))
                 .fontColor(Color.White)
                 .maxLines(1)
             }
@@ -154,8 +154,8 @@ export struct VideoPlaybackPage {
 
       if (this.showPlaybackMessage()) {
         Text(this.viewState.message)
-          .id('p4_video_playback_status')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .id('video_playback_status')
+          .fontSize($r('app.float.body_font_size'))
           .fontColor(Color.White)
           .textAlign(TextAlign.Center)
           .padding({ left: 20, right: 20, top: 10, bottom: 10 })

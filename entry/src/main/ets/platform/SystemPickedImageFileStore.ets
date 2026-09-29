@@ -65,7 +65,7 @@ export class HarmonyPickedImageTemporaryStore implements PickedImageTemporarySto
     const finalPath = `${directory}/${fileName}`;
     try {
       await ensureDirectory(directory);
-      await fileIo.copyFile(selection.image.uri, temporaryPath, 0);
+      await copyPickedMediaToCache(selection.image.uri, temporaryPath, image.byteLength);
       const copied = await readImageInspection(temporaryPath, image.sourceUri);
       const verified = inspectPickedImage(copied);
       if (!sameValidatedImage(verified, image)) {
@@ -104,6 +104,37 @@ export class HarmonyPickedImageTemporaryStore implements PickedImageTemporarySto
 
   private directory(): string {
     return `${this.cacheDir}/p4-images`;
+  }
+}
+
+async function copyPickedMediaToCache(sourceUri: string, temporaryPath: string, expectedByteLength: number): Promise<void> {
+  let sourceFd: number = -1;
+  let destinationFd: number = -1;
+  try {
+    // Photo Picker URI 可由 open 解析，但 copyFile 的字符串参数只接受沙箱文件路径。
+    const source = await fileIo.open(sourceUri, fileIo.OpenMode.READ_ONLY);
+    sourceFd = source.fd;
+    const sourceStat = await fileIo.stat(sourceFd);
+    if (!sourceStat.isFile() || sourceStat.size !== expectedByteLength) {
+      throw new ImageUploadFailure(ImageUploadFailureKind.INVALID_INPUT);
+    }
+    const destination = await fileIo.open(temporaryPath,
+      fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC);
+    destinationFd = destination.fd;
+    await fileIo.copyFile(sourceFd, destinationFd, 0);
+  } finally {
+    if (destinationFd >= 0) {
+      try {
+        await fileIo.close(destinationFd);
+      } catch (_error) {
+      }
+    }
+    if (sourceFd >= 0) {
+      try {
+        await fileIo.close(sourceFd);
+      } catch (_error) {
+      }
+    }
   }
 }
 

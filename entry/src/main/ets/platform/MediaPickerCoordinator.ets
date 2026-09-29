@@ -12,7 +12,7 @@ import {
   transitionImageTemporaryLifecycle,
   validatePickedImageBatch
 } from 'data';
-import { PickedImage } from './P4PlatformServices';
+import { PickedImage } from './PlatformServices';
 
 /**
  * P4-2 系统选图的窄平台边界。生产实现只能在用户明确点击选图后调用此接口；

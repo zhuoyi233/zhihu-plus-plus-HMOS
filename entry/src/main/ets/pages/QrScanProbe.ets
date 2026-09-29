@@ -1,7 +1,7 @@
 import { BusinessError } from '@kit.BasicServicesKit';
 import { detectBarcode, scanCore } from '@kit.ScanKit';
 import { assessQrScanValue, QrScanDecision } from 'core';
-import { QrScanner } from '../platform/P4PlatformServices';
+import { QrScanner } from '../platform/PlatformServices';
 import { SystemQrScanner } from '../platform/SystemQrScanner';
 import { QR_FIXTURE_VALUE, writeQrScanFixture } from '../scan/QrScanFixture';
 import { DEFAULT_THEME_COLOR, onThemeColor } from 'data';
@@ -33,7 +33,7 @@ const POLICY_CASES: Array<QrPolicyCase> = [
 
 @Component
 export struct QrScanProbePage {
-  /** 当前生效主题色（P1Shell 广播），驱动强调色控件。 */
+  /** 当前生效主题色（AppShell 广播），驱动强调色控件。 */
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   onBack: () => void = () => {};
   @State private status: string = '尚未启动扫码';
