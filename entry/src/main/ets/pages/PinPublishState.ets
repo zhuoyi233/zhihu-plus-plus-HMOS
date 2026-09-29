@@ -1,6 +1,7 @@
 import {
   ContentDraftIdentity,
   ContentDraftKind,
+  LoadedContentDraft,
   ContentDraftSaveInput,
   buildPinPublishRequest,
   DraftRepository,
@@ -21,7 +22,8 @@ import {
   toPublishFailure,
   UploadedZhihuImage
 } from 'data';
-import { isSafeDecimalContentId } from 'core';
+import { isSafeDecimalContentId, JsonArrayValue, JsonNumberValue, JsonObjectValue, JsonStringValue,
+  parseStrictJson } from 'core';
 
 export const PIN_TOPIC_SEARCH_DEBOUNCE_MS: number = 350;
 export const MAX_PIN_TOPIC_SUGGESTION_COUNT: number = 20;
@@ -136,6 +138,22 @@ export class PinPublishController {
     }
     this.active = true;
     this.emit();
+  }
+
+  /** 在页面首次挂载前恢复草稿，让选图面板在 aboutToAppear 时拿到缓存引用。 */
+  restoreSavedDraft(draft: LoadedContentDraft): void {
+    if (this.active || draft.metadata.draftKey !== this.identity.draftKey) {
+      return;
+    }
+    this.content = normalizePinDraftContent({
+      title: draft.metadata.title,
+      html: draft.html,
+      images: parseUploadedDraftImages(draft.metadata.imageRefsJson),
+      localImageReferences: parseLocalDraftImageReferences(draft.metadata.imageRefsJson),
+      topics: parseDraftTopics(draft.metadata.topicRefsJson)
+    });
+    this.localDraftSaved = true;
+    this.remoteDraftSaved = draft.metadata.remoteContentId !== undefined;
   }
 
   deactivate(): void {
@@ -598,6 +616,84 @@ function serializeDraftImageReferences(images: Array<UploadedZhihuImage>,
     return uploaded;
   }
   return uploaded.substring(0, uploaded.length - 1) + ',' + local.substring(1);
+}
+
+function parseUploadedDraftImages(serialized: string): Array<UploadedZhihuImage> {
+  if (serialized.length > 65536) {
+    return [];
+  }
+  try {
+    const parsed = parseStrictJson(serialized);
+    if (!(parsed instanceof JsonArrayValue) || parsed.items.length > MAX_PIN_IMAGE_COUNT) {
+      return [];
+    }
+    const result: Array<UploadedZhihuImage> = [];
+    for (let index = 0; index < parsed.items.length; index += 1) {
+      const value = parsed.items[index];
+      if (!(value instanceof JsonObjectValue)) {
+        continue;
+      }
+      const imageId = value.get('imageId');
+      const url = value.get('url');
+      const originalUrl = value.get('originalUrl');
+      const width = value.get('width');
+      const height = value.get('height');
+      const watermark = value.get('watermark');
+      const watermarkUrl = value.get('watermarkUrl');
+      if (!(imageId instanceof JsonStringValue) || !(url instanceof JsonStringValue) ||
+        !(originalUrl instanceof JsonStringValue) || !(width instanceof JsonNumberValue) ||
+        !(height instanceof JsonNumberValue) ||
+        (watermark !== undefined && (!(watermark instanceof JsonStringValue) ||
+          (watermark.value !== 'watermark' && watermark.value !== 'original'))) ||
+        (watermarkUrl !== undefined && !(watermarkUrl instanceof JsonStringValue))) {
+        continue;
+      }
+      const image: UploadedZhihuImage = {
+        imageId: imageId.value,
+        url: url.value,
+        originalUrl: originalUrl.value,
+        width: width.value,
+        height: height.value,
+        watermark: watermark instanceof JsonStringValue ? watermark.value as 'watermark' | 'original' : undefined,
+        watermarkUrl: watermarkUrl instanceof JsonStringValue ? watermarkUrl.value : undefined
+      };
+      if (isSafeUploadedZhihuImage(image)) {
+        result.push(image);
+      }
+    }
+    return result;
+  } catch (_error) {
+    return [];
+  }
+}
+
+function parseDraftTopics(serialized: string): Array<PublishPinTopic> {
+  if (serialized.length > 65536) {
+    return [];
+  }
+  try {
+    const parsed = parseStrictJson(serialized);
+    if (!(parsed instanceof JsonArrayValue) || parsed.items.length > MAX_PIN_TOPIC_COUNT) {
+      return [];
+    }
+    const result: Array<PublishPinTopic> = [];
+    for (let index = 0; index < parsed.items.length; index += 1) {
+      const value = parsed.items[index];
+      if (!(value instanceof JsonObjectValue)) {
+        continue;
+      }
+      const topicId = value.get('topicId');
+      const displayName = value.get('displayName');
+      if (topicId instanceof JsonStringValue && displayName instanceof JsonStringValue &&
+        isSafeDecimalContentId(topicId.value) && displayName.value.trim().length > 0 &&
+        displayName.value.length <= 200 && !displayName.value.includes('#')) {
+        result.push({ topicId: topicId.value, displayName: displayName.value });
+      }
+    }
+    return dedupeTopics(result);
+  } catch (_error) {
+    return [];
+  }
 }
 
 function hasDraftContent(content: PinDraftContent): boolean {

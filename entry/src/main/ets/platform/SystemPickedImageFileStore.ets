@@ -2,6 +2,7 @@ import { fileIo } from '@kit.CoreFileKit';
 import {
   createImageTemporaryLifecycle,
   IMAGE_TEMPORARY_MAX_AGE_MILLIS,
+  IMAGE_UPLOAD_TEMPORARY_DIRECTORY,
   ImageBinaryDescriptor,
   ImageTemporaryFile,
   ImageTemporaryState,
@@ -11,6 +12,7 @@ import {
   LocalDraftImageReference,
   PickedImageFormat,
   PickedImageInspection,
+  sniffImageBinary,
   transitionImageTemporaryLifecycle,
   ValidatedPickedImage
 } from 'data';
@@ -44,7 +46,7 @@ export class HarmonyPickedImageInspector implements PickedImageInspector {
 }
 
 /**
- * 将已检查的系统媒体副本写入 cache/p4-images。目标文件名完全由应用生成；复制后再次按 magic bytes
+ * 将已检查的系统媒体副本写入 cache/picked-images。目标文件名完全由应用生成；复制后再次按 magic bytes
  * 校验，避免源文件在检查与复制之间变化。这里只保存短生命周期副本，绝不触发上传。
  */
 export class HarmonyPickedImageTemporaryStore implements PickedImageTemporaryStore {
@@ -65,7 +67,7 @@ export class HarmonyPickedImageTemporaryStore implements PickedImageTemporarySto
     const finalPath = `${directory}/${fileName}`;
     try {
       await ensureDirectory(directory);
-      await fileIo.copyFile(selection.image.uri, temporaryPath, 0);
+      await copyPickedMediaToCache(selection.image.uri, temporaryPath, image.byteLength);
       const copied = await readImageInspection(temporaryPath, image.sourceUri);
       const verified = inspectPickedImage(copied);
       if (!sameValidatedImage(verified, image)) {
@@ -103,7 +105,38 @@ export class HarmonyPickedImageTemporaryStore implements PickedImageTemporarySto
   }
 
   private directory(): string {
-    return `${this.cacheDir}/p4-images`;
+    return `${this.cacheDir}/${IMAGE_UPLOAD_TEMPORARY_DIRECTORY}`;
+  }
+}
+
+async function copyPickedMediaToCache(sourceUri: string, temporaryPath: string, expectedByteLength: number): Promise<void> {
+  let sourceFd: number = -1;
+  let destinationFd: number = -1;
+  try {
+    // Photo Picker URI 可由 open 解析，但 copyFile 的字符串参数只接受沙箱文件路径。
+    const source = await fileIo.open(sourceUri, fileIo.OpenMode.READ_ONLY);
+    sourceFd = source.fd;
+    const sourceStat = await fileIo.stat(sourceFd);
+    if (!sourceStat.isFile() || sourceStat.size !== expectedByteLength) {
+      throw new ImageUploadFailure(ImageUploadFailureKind.INVALID_INPUT);
+    }
+    const destination = await fileIo.open(temporaryPath,
+      fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC);
+    destinationFd = destination.fd;
+    await fileIo.copyFile(sourceFd, destinationFd, 0);
+  } finally {
+    if (destinationFd >= 0) {
+      try {
+        await fileIo.close(destinationFd);
+      } catch (_error) {
+      }
+    }
+    if (sourceFd >= 0) {
+      try {
+        await fileIo.close(sourceFd);
+      } catch (_error) {
+      }
+    }
   }
 }
 
@@ -125,59 +158,156 @@ export function isPickedMediaUri(value: string): boolean {
 
 export function isControlledImageTemporaryPath(cacheDir: string, path: string): boolean {
   try {
-    const directory = `${normalizeCacheDir(cacheDir)}/p4-images/`;
-    return path.startsWith(directory) && CONTROLLED_FILE_NAME.test(path.substring(directory.length));
+    const normalizedCacheDir = normalizeCacheDir(cacheDir);
+    return matchesControlledImageDirectory(normalizedCacheDir, IMAGE_UPLOAD_TEMPORARY_DIRECTORY, path);
   } catch (_error) {
     return false;
   }
+}
+
+function matchesControlledImageDirectory(cacheDir: string, directory: string, path: string): boolean {
+  const prefix = `${cacheDir}/${directory}/`;
+  return path.startsWith(prefix) && CONTROLLED_FILE_NAME.test(path.substring(prefix.length));
 }
 
 export function buildControlledImageTemporaryPath(cacheDir: string, fileName: string): string {
   if (!CONTROLLED_FILE_NAME.test(fileName)) {
     throw new ImageUploadFailure(ImageUploadFailureKind.INVALID_INPUT);
   }
-  return `${normalizeCacheDir(cacheDir)}/p4-images/${fileName}`;
+  return `${normalizeCacheDir(cacheDir)}/${IMAGE_UPLOAD_TEMPORARY_DIRECTORY}/${fileName}`;
+}
+
+const CONTROLLED_FILE_MISSING: string = 'missing';
+const CONTROLLED_FILE_INVALID: string = 'invalid';
+const CONTROLLED_FILE_VALID: string = 'valid';
+
+/**
+ * 草稿引用与上传共用的路径解析：校验新目录下受控文件的存在性与内容（尺寸、magic bytes），
+ * 一致则返回该文件；缺失或损坏返回 undefined，由调用方报告图片不可用，绝不静默丢弃草稿引用。
+ */
+export async function resolveControlledImageTemporaryFile(cacheDir: string,
+  reference: LocalDraftImageReference): Promise<ImageTemporaryFile | undefined> {
+  if (!CONTROLLED_FILE_NAME.test(reference.fileName)) {
+    return undefined;
+  }
+  let expected: ImageBinaryDescriptor;
+  try {
+    expected = descriptorForDraftReference(reference);
+  } catch (_error) {
+    return undefined;
+  }
+  const path = buildControlledImageTemporaryPath(cacheDir, reference.fileName);
+  const state = await inspectControlledImageFile(path, reference.byteLength, expected);
+  return state === CONTROLLED_FILE_VALID ? controlledImageFile(path, reference) : undefined;
+}
+
+function controlledImageFile(path: string, reference: LocalDraftImageReference): ImageTemporaryFile {
+  return {
+    path: path,
+    mimeType: reference.mimeType,
+    byteLength: reference.byteLength,
+    createdAtMillis: reference.createdAtMillis
+  };
+}
+
+/** 存在但内容与引用不符返回 invalid；打不开才视为 missing。链接等非普通文件同样按 invalid 处理。 */
+async function inspectControlledImageFile(path: string, byteLength: number,
+  expected: ImageBinaryDescriptor): Promise<string> {
+  let fd: number = -1;
+  try {
+    const opened = await fileIo.open(path, fileIo.OpenMode.READ_ONLY);
+    fd = opened.fd;
+  } catch (_error) {
+    return CONTROLLED_FILE_MISSING;
+  }
+  try {
+    const stat = await fileIo.stat(fd);
+    if (!stat.isFile() || stat.size !== byteLength) {
+      return CONTROLLED_FILE_INVALID;
+    }
+    const headerLength = Math.min(stat.size, INSPECTION_HEADER_BYTES);
+    const buffer = new ArrayBuffer(headerLength);
+    const read = await fileIo.read(fd, buffer, { offset: 0, length: headerLength });
+    if (read !== headerLength) {
+      return CONTROLLED_FILE_INVALID;
+    }
+    const descriptor = sniffImageBinary(bufferToBytes(buffer, read));
+    return sameDescriptor(descriptor, expected) ? CONTROLLED_FILE_VALID : CONTROLLED_FILE_INVALID;
+  } catch (_error) {
+    return CONTROLLED_FILE_INVALID;
+  } finally {
+    if (fd >= 0) {
+      try {
+        await fileIo.close(fd);
+      } catch (_error) {
+      }
+    }
+  }
+}
+
+function sameDescriptor(left: ImageBinaryDescriptor, right: ImageBinaryDescriptor): boolean {
+  return left.format === right.format && left.mimeType === right.mimeType && left.extension === right.extension &&
+    left.width === right.width && left.height === right.height && left.animated === right.animated;
+}
+
+function bufferToBytes(buffer: ArrayBuffer, count: number): Array<number> {
+  const bytes: Array<number> = [];
+  const view = new Uint8Array(buffer);
+  for (let index = 0; index < count; index += 1) {
+    bytes.push(view[index]);
+  }
+  return bytes;
+}
+
+export interface RestoredControlledImages {
+  readonly images: Array<PreparedPickedImage>;
+  /** 引用存在但新目录没有有效文件的图片数量；调用方需向用户明确报告，不得静默清空引用。 */
+  readonly unavailableCount: number;
 }
 
 /**
- * 草稿恢复时只用加密元数据中的随机文件名重建应用缓存对象；不会读取 Photo Picker URI，
- * 也不会在恢复阶段访问网络。实际上传前仍会由上传读取器重新校验文件大小和 magic bytes。
+ * 草稿恢复时只从受控缓存名重建应用缓存对象；不读取 Photo Picker URI，也不在恢复阶段访问网络。
+ * 恢复为异步解析：校验新目录候选的尺寸与 magic bytes 后才挂载面板。
+ * 实际上传前仍会由上传读取器重新校验文件大小和 magic bytes。
  */
-export function restoreControlledPickedImages(cacheDir: string,
-  references: Array<LocalDraftImageReference>): Array<PreparedPickedImage> {
-  const result: Array<PreparedPickedImage> = [];
+export async function restoreControlledPickedImages(cacheDir: string,
+  references: Array<LocalDraftImageReference>): Promise<RestoredControlledImages> {
   const normalizedCacheDir = normalizeCacheDir(cacheDir);
+  const result: Array<PreparedPickedImage> = [];
+  let unavailableCount = 0;
   for (let index = 0; index < references.length; index += 1) {
     const reference = references[index];
-    const file: ImageTemporaryFile = {
-      path: buildControlledImageTemporaryPath(normalizedCacheDir, reference.fileName),
-      mimeType: reference.mimeType,
-      byteLength: reference.byteLength,
-      createdAtMillis: reference.createdAtMillis
-    };
-    const selected = createImageTemporaryLifecycle(file, normalizedCacheDir);
+    const resolved = await resolveControlledImageTemporaryFile(normalizedCacheDir, reference);
+    if (resolved === undefined) {
+      unavailableCount += 1;
+      continue;
+    }
+    const selected = createImageTemporaryLifecycle(resolved, normalizedCacheDir);
     const processing = transitionImageTemporaryLifecycle(selected, ImageTemporaryState.PROCESSING);
     const ready = transitionImageTemporaryLifecycle(processing, ImageTemporaryState.READY);
     const image: ValidatedPickedImage = {
-      sourceUri: `file://${file.path}`,
+      sourceUri: `file://${resolved.path}`,
       byteLength: reference.byteLength,
       descriptor: descriptorForDraftReference(reference)
     };
     result.push({ image: image, lifecycle: ready });
   }
-  return result;
+  return { images: result, unavailableCount: unavailableCount };
 }
 
 /**
- * 页面进入时回收崩溃、系统回收或进程终止后遗留的受控缓存。仅匹配应用随机名；目录错误、文件错误
- * 和并发删除均安全忽略，不能影响选图流程或访问用户目录。
+ * 回收崩溃、系统回收或进程终止后遗留的受控缓存。仅匹配应用随机名；
+ * 已保存草稿引用的文件名必须经 protectedFileNames 排除，引用扫描不完整时调用方应完全跳过本次清理。
+ * 目录错误、文件错误和并发删除均安全忽略，不能影响选图流程或访问用户目录。
+ * 清理只在启动维护执行一次（此时编辑器未挂载），与恢复、上传无并发窗口。
  */
-export async function purgeExpiredControlledImageCache(cacheDir: string, nowMillis: number = Date.now()): Promise<number> {
+export async function purgeExpiredControlledImageCache(cacheDir: string, nowMillis: number = Date.now(),
+  protectedFileNames?: Set<string>): Promise<number> {
   const normalizedCacheDir = normalizeCacheDir(cacheDir);
   if (!Number.isSafeInteger(nowMillis) || nowMillis < 0) {
     throw new ImageUploadFailure(ImageUploadFailureKind.INVALID_INPUT);
   }
-  const directory = `${normalizedCacheDir}/p4-images`;
+  const directory = `${normalizedCacheDir}/${IMAGE_UPLOAD_TEMPORARY_DIRECTORY}`;
   let entries: Array<string>;
   try {
     entries = await fileIo.listFile(directory);
@@ -187,7 +317,8 @@ export async function purgeExpiredControlledImageCache(cacheDir: string, nowMill
   let removedCount = 0;
   for (let index = 0; index < entries.length; index += 1) {
     const entry = entries[index];
-    if (!shouldPurgeControlledImageTemporaryArtifact(entry, -1, nowMillis)) {
+    if ((protectedFileNames !== undefined && protectedFileNames.has(entry)) ||
+      !shouldPurgeControlledImageTemporaryArtifact(entry, -1, nowMillis)) {
       continue;
     }
     const path = `${directory}/${entry}`;

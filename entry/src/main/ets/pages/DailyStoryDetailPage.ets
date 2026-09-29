@@ -1,5 +1,5 @@
 import { onThemeColor, DailyStoryRepository, DEFAULT_THEME_COLOR, DefaultDailyStoryRepository } from 'data';
-import { P1Destination } from 'core';
+import { AppDestination } from 'core';
 import {
   DailyStoryDetailController,
   DailyStoryDetailPhase,
@@ -10,12 +10,12 @@ import {
 export struct DailyStoryDetailPage {
   storyId: string = '';
   repository: DailyStoryRepository | undefined = new DefaultDailyStoryRepository();
-  navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
+  navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {
   };
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   @State private phase: DailyStoryDetailPhase = DailyStoryDetailPhase.IDLE;
   @State private errorMessage: string = '';
-  private destination?: P1Destination;
+  private destination?: AppDestination;
   private controller?: DailyStoryDetailController;
   private navigated: boolean = false;
 
@@ -45,43 +45,43 @@ export struct DailyStoryDetailPage {
   }
 
   build() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
+    Column({ space: $r('app.float.spacing_medium') }) {
       if (this.phase === DailyStoryDetailPhase.IDLE || this.phase === DailyStoryDetailPhase.LOADING) {
         LoadingProgress()
-          .id('p2_daily_story_loading_progress')
+          .id('daily_story_loading_progress')
           .width(40)
           .height(40)
           .color(this.resolvedThemeColor)
         Text('正在打开日报原文…')
-          .id('p2_daily_story_loading_status')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .id('daily_story_loading_status')
+          .fontSize($r('app.float.body_font_size'))
           .fontColor($r('app.color.secondary_text'))
       } else if (this.phase === DailyStoryDetailPhase.READY) {
         Text('正在进入知乎正文…')
-          .id('p2_daily_story_ready_status')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .id('daily_story_ready_status')
+          .fontSize($r('app.float.body_font_size'))
           .fontColor($r('app.color.secondary_text'))
       } else {
         Text(this.errorMessage)
-          .id('p2_daily_story_error_status')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .id('daily_story_error_status')
+          .fontSize($r('app.float.body_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .textAlign(TextAlign.Center)
         Button('重新加载')
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id('p2_daily_story_retry')
+          .id('daily_story_retry')
           .onClick((): void => {
             this.controller?.load(this.storyId);
           })
       }
     }
-    .id('p2_daily_story_detail_page')
+    .id('daily_story_detail_page')
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
     .width('100%')
     .height('100%')
-    .padding($r('app.float.p1_page_padding'))
+    .padding($r('app.float.page_padding'))
     .backgroundColor($r('app.color.page_background'))
   }
 

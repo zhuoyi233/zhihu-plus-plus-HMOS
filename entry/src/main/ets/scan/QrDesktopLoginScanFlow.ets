@@ -1,5 +1,5 @@
 import { assessQrScanValue, QrScanDecision } from 'core';
-import { QrScanner } from '../platform/P4PlatformServices';
+import { QrScanner } from '../platform/PlatformServices';
 
 export enum QrDesktopLoginScanPhase {
   READY = 'ready',

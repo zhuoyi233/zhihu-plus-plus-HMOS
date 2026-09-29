@@ -15,12 +15,12 @@ export struct CommentLikeButton {
           .fontSize(16)
           .fontColor([this.state.liked ? this.resolvedThemeColor : $r('app.color.secondary_text')])
         Text(`${this.state.count}`)
-          .id(`p3_comments_like_count_${this.state.id}`)
+          .id(`comments_like_count_${this.state.id}`)
           .fontSize(12)
           .fontColor(this.state.liked ? this.resolvedThemeColor : $r('app.color.secondary_text'))
       }
     }
-    .id(`p3_comments_like_button_${this.state.id}`)
+    .id(`comments_like_button_${this.state.id}`)
     .height(28)
     .padding({ left: 4, right: 4 })
     .margin({ left: 8 })

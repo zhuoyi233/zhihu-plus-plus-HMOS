@@ -30,7 +30,7 @@ import {
 } from './ImageUploadContracts';
 
 const CONTROLLED_IMAGE_FILE_URI: RegExp =
-  /^file:\/\/(?:\/[A-Za-z0-9._~-]+)+\/p4-images\/[a-f0-9]{32}\.(?:jpg|png|webp|gif)$/;
+  /^file:\/\/(?:\/[A-Za-z0-9._~-]+)+\/picked-images\/[a-f0-9]{32}\.(?:jpg|png|webp|gif)$/;
 const SAFE_IMAGE_HASH: RegExp = /^[a-f0-9]{32}$/;
 const SAFE_OSS_UPLOAD_URL: RegExp =
   /^https:\/\/zhihu-pics-upload\.zhimg\.com\/v2-[a-f0-9]{32}(?:\?(?:uploads|uploadId=[A-Za-z0-9._~%=-]+|partNumber=[1-9][0-9]*&uploadId=[A-Za-z0-9._~%=-]+))?$/;
@@ -51,7 +51,7 @@ export interface ImageUploadBinary {
   close(): Promise<void>;
 }
 
-/** 组合根只可从 cache/p4-images 的应用生成 file:// URI 打开图片。 */
+/** 组合根只可从 cache/picked-images 的应用生成 file:// URI 打开图片。 */
 export interface ImageUploadBinaryReader {
   open(input: ImageUploadInput): Promise<ImageUploadBinary>;
   cancel(): void;

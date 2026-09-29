@@ -11,7 +11,7 @@ import {
   HttpFailure,
   HttpFailureKind
 } from 'data';
-import { P1DestinationName } from 'core';
+import { AppDestinationName } from 'core';
 import { channelFeedDestination } from '../main/ets/pages/ChannelFeedPage';
 import { dailyFeedDateAtIndex, dailyDateCursor, dailyPickerDate } from '../main/ets/pages/DailyFeedDates';
 import {
@@ -266,9 +266,9 @@ export default function channelFeedStateTest(): void {
       const question = channelFeedDestination(content('101', FeedTargetKind.QUESTION));
       const answer = channelFeedDestination(content('102', FeedTargetKind.ANSWER));
       const article = channelFeedDestination(content('103', FeedTargetKind.ARTICLE));
-      expect(question?.name).assertEqual(P1DestinationName.QUESTION);
-      expect(answer?.name).assertEqual(P1DestinationName.ANSWER);
-      expect(article?.name).assertEqual(P1DestinationName.ARTICLE);
+      expect(question?.name).assertEqual(AppDestinationName.QUESTION);
+      expect(answer?.name).assertEqual(AppDestinationName.ANSWER);
+      expect(article?.name).assertEqual(AppDestinationName.ARTICLE);
       expect(channelFeedDestination(content('not-decimal'))).assertUndefined();
     });
 

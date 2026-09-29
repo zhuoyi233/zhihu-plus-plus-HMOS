@@ -1,4 +1,4 @@
-import { P4ImagePickerPanel } from './P4ImagePickerPanel';
+import { ImagePickerPanel } from './ImagePickerPanel';
 import { DEFAULT_THEME_COLOR, onThemeColor } from 'data';
 
 const STATIC_IMAGE_URL = 'https://picx.zhimg.com/v2-7f36f391170ca2319d6b61239694e0ef_1440w.jpg';
@@ -7,7 +7,7 @@ const FAILURE_IMAGE_URL = 'https://picx.zhimg.com/probe-image-that-does-not-exis
 
 @Component
 export struct ImageProbe {
-  /** 当前生效主题色（P1Shell 广播），驱动强调色控件。 */
+  /** 当前生效主题色（AppShell 广播），驱动强调色控件。 */
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   onBack: () => void = () => {};
   @State private staticStatus: string = '静态图片等待加载';
@@ -117,7 +117,7 @@ export struct ImageProbe {
             .fontSize(19)
             .fontWeight(FontWeight.Medium)
             .width('100%')
-          P4ImagePickerPanel()
+          ImagePickerPanel()
         }
         .width('100%')
         .padding(20)

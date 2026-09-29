@@ -13,8 +13,8 @@ import { motion } from '@kit.MultimodalAwarenessKit';
 import { SegmentButton, SegmentButtonOptions, curves } from '@kit.ArkUI';
 import { contentLinkDestination } from './NotificationLinkResolver';
 import {
-  P1Destination,
-  P1DestinationName
+  AppDestination,
+  AppDestinationName
 } from 'core';
 import {
   AnswerDoubleTapAction,
@@ -147,7 +147,7 @@ struct ContentDetailPage {
   @StorageProp('loginFeedReloadTick') @Watch('onLoginChanged') private loginTick: number = 0;
   /** 全屏图片查看器：正文/评论图点击后经 AppStorage 广播，在页面根 Stack 叠层渲染
    *（正文列表惰性树与模态覆盖层树内均无法可靠驱动状态更新，见 NativeContentDocument 注释）。 */
-  @StorageProp('p2ImagePreviewUrl') @Watch('onImagePreviewChanged') private imagePreviewUrl: string = '';
+  @StorageProp('imagePreviewUrl') @Watch('onImagePreviewChanged') private imagePreviewUrl: string = '';
   @State private authenticated: boolean = false;
   private answerNavigator?: QuestionAnswerNavigator;
   private readonly answerDataSource: QuestionAnswerDataSource = new QuestionAnswerDataSource();
@@ -171,7 +171,7 @@ struct ContentDetailPage {
   collectionRepository: CollectionRepository | undefined = undefined;
   commentRepository: CommentRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
-  navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
+  navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {
   };
   questionAnswerFeedFactory: () => QuestionAnswerFeedRepository | undefined = () => undefined;
   onBack: () => void = (): void => {
@@ -254,9 +254,9 @@ struct ContentDetailPage {
   /** P3-9-C：菜单操作反馈（复制链接结果等）。 */
   @State private menuStatus: string = '';
   /** 沉浸式阅读仅收起页面 Chrome，不改变正文、互动或滚动状态。
-   * 变化经 AppStorage 广播给 P1Shell 隐藏/恢复 NavDestination 顶栏（对齐上游 topBar={}）。 */
+   * 变化经 AppStorage 广播给 AppShell 隐藏/恢复 NavDestination 顶栏（对齐上游 topBar={}）。 */
   @State @Watch('onImmersiveReadingChanged') private immersiveReading: boolean = false;
-  /** P1Shell Back 拦截发出的"先退沉浸式"信号（跨页面信号必须走 AppStorage 广播）。 */
+  /** AppShell Back 拦截发出的"先退沉浸式"信号（跨页面信号必须走 AppStorage 广播）。 */
   @StorageProp('detailImmersiveExitTick') @Watch('onImmersiveExitSignal') private immersiveExitTick: number = 0;
   /** 状态栏高度（vp，EntryAbility 广播）：沉浸式隐藏顶栏后正文的顶部留空。 */
   @StorageProp('statusBarHeight') private statusBarHeightVp: number = 0;
@@ -275,7 +275,7 @@ struct ContentDetailPage {
     this.authenticated = this.session?.getState().status === SessionStatus.AUTHENTICATED;
     // 双击动作偏好全局生效，返回栈重显时也刷新（可能刚在设置页改过）。
     void this.restoreAnswerDoubleTapAction();
-    // 同步沉浸式初始/保留态给 P1Shell（返回栈重显时实例与状态均保留）。
+    // 同步沉浸式初始/保留态给 AppShell（返回栈重显时实例与状态均保留）。
     AppStorage.setOrCreate('detailImmersiveActive', this.immersiveReading);
     this.indicator = new FeedPullDownIndicatorHost(this.getUIContext(), 0);
     if (this.kind === ContentDetailKind.ANSWER && this.answerNavigator === undefined) {
@@ -369,7 +369,7 @@ struct ContentDetailPage {
     this.immersiveReading = false;
     AppStorage.setOrCreate('detailImmersiveActive', false);
     AppStorage.setOrCreate('detailTitleHiddenByScroll', false);
-    AppStorage.setOrCreate('p2ImagePreviewUrl', '');
+    AppStorage.setOrCreate('imagePreviewUrl', '');
     // 对齐上游 LeaveImmersiveModeCleanup：页面销毁时确保状态栏恢复。
     setStatusBarHidden(false);
   }
@@ -519,21 +519,21 @@ struct ContentDetailPage {
    */
   @Builder
   private segmentActionSheet() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
+    Column({ space: $r('app.float.spacing_medium') }) {
       Text('划线片段')
-        .id('p3_segment_sheet_title')
-        .fontSize($r('app.float.p3_segment_sheet_title_font_size'))
+        .id('segment_sheet_title')
+        .fontSize($r('app.float.segment_sheet_title_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
       Text(`“${this.currentSegmentQuote()}”`)
-        .id('p3_segment_sheet_quote')
-        .fontSize($r('app.float.p3_segment_quote_font_size'))
-        .lineHeight($r('app.float.p3_segment_quote_line_height'))
+        .id('segment_sheet_quote')
+        .fontSize($r('app.float.segment_quote_font_size'))
+        .lineHeight($r('app.float.segment_quote_line_height'))
         .fontColor($r('app.color.primary_text'))
         .copyOption(CopyOptions.LocalDevice)
         .width('100%')
       if (this.currentSegmentMeta() !== undefined) {
-        Row({ space: $r('app.float.p1_spacing_small') }) {
+        Row({ space: $r('app.float.spacing_small') }) {
           // 点赞胶囊：图标 + 计数，已赞时图标与计数切到主题色（对齐上游段评点赞态）。
           Button({ type: ButtonType.Normal, stateEffect: true }) {
             Row({ space: 6 }) {
@@ -541,18 +541,18 @@ struct ContentDetailPage {
                 .fontSize(18)
                 .fontColor([this.currentSegmentMeta()!.isLike ? this.resolvedThemeColor : $r('app.color.primary_text')])
               Text(`${this.currentSegmentMeta()!.likeCount}`)
-                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontSize($r('app.float.secondary_font_size'))
                 .fontColor(this.currentSegmentMeta()!.isLike ? this.resolvedThemeColor : $r('app.color.primary_text'))
             }
             .justifyContent(FlexAlign.Center)
             .width('100%')
           }
-          .id('p3_segment_sheet_like')
+          .id('segment_sheet_like')
           .layoutWeight(1)
-          .height($r('app.float.p3_segment_action_button_height'))
+          .height($r('app.float.segment_action_button_height'))
           .padding(0)
           .backgroundColor($r('app.color.brand_primary_container'))
-          .borderRadius($r('app.float.p3_segment_action_button_radius'))
+          .borderRadius($r('app.float.segment_action_button_radius'))
           .accessibilityText(this.currentSegmentMeta()!.isLike ? '取消点赞该划线' : '点赞该划线')
           .onClick((): void => { void this.onSegmentLike(); })
 
@@ -563,18 +563,18 @@ struct ContentDetailPage {
                 .fontSize(18)
                 .fontColor([$r('app.color.primary_text')])
               Text(`${this.currentSegmentMeta()!.commentCount}`)
-                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontSize($r('app.float.secondary_font_size'))
                 .fontColor($r('app.color.primary_text'))
             }
             .justifyContent(FlexAlign.Center)
             .width('100%')
           }
-          .id('p3_segment_sheet_comment')
+          .id('segment_sheet_comment')
           .layoutWeight(1)
-          .height($r('app.float.p3_segment_action_button_height'))
+          .height($r('app.float.segment_action_button_height'))
           .padding(0)
           .backgroundColor($r('app.color.brand_primary_container'))
-          .borderRadius($r('app.float.p3_segment_action_button_radius'))
+          .borderRadius($r('app.float.segment_action_button_radius'))
           .accessibilityText('查看该划线的评论')
           .onClick((): void => {
             this.segmentSheetShown = false;
@@ -587,9 +587,9 @@ struct ContentDetailPage {
               .fontSize(20)
               .fontColor([$r('app.color.secondary_text')])
           }
-          .id('p3_segment_sheet_copy')
-          .width($r('app.float.p3_segment_action_button_height'))
-          .height($r('app.float.p3_segment_action_button_height'))
+          .id('segment_sheet_copy')
+          .width($r('app.float.segment_action_button_height'))
+          .height($r('app.float.segment_action_button_height'))
           .padding(0)
           .backgroundColor(Color.Transparent)
           .accessibilityText('复制划线内容')
@@ -598,7 +598,7 @@ struct ContentDetailPage {
         .width('100%')
       }
     }
-    .id('p3_segment_action_sheet')
+    .id('segment_action_sheet')
     .width('100%')
     .padding(20)
   }
@@ -650,7 +650,7 @@ struct ContentDetailPage {
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       Column() {
-        // 页面页头（返回 + 标题）由 P1Shell 的 HDS 标题栏 stackBuilder 承载。
+        // 页面页头（返回 + 标题）由 AppShell 的 HDS 标题栏 stackBuilder 承载。
         if (this.phase === ContentDetailPhase.LOADING || this.phase === ContentDetailPhase.IDLE) {
           this.statusPanel('正在加载内容…', false)
         } else if (this.phase === ContentDetailPhase.ERROR) {
@@ -673,7 +673,7 @@ struct ContentDetailPage {
           .layoutWeight(1)
         }
       }
-      .id(`p2_${this.kind}_detail_page`)
+      .id(`content_${this.kind}_detail_page`)
       .width('100%')
       .height('100%')
       // 覆盖式顶栏：视口不再为悬浮顶栏让位（padding 0），正文由 List 的
@@ -851,17 +851,17 @@ struct ContentDetailPage {
           }
         })
       // 全屏图片查看器叠层：置于根 Stack 最后一个子节点，盖住正文/底部操作栏；
-      // 标题栏由 P1Shell 监听同一 AppStorage 键隐藏（hideTitleBar）。
+      // 标题栏由 AppShell 监听同一 AppStorage 键隐藏（hideTitleBar）。
       if (this.imagePreviewUrl.length > 0) {
         Stack({ alignContent: Alignment.Center }) {
           ContentImagePreview({
             url: this.imagePreviewUrl,
             onClose: (): void => {
-              AppStorage.setOrCreate('p2ImagePreviewUrl', '');
+              AppStorage.setOrCreate('imagePreviewUrl', '');
             }
           })
         }
-        .id('p2_image_preview_overlay')
+        .id('image_preview_overlay')
         .width('100%')
         .height('100%')
       }
@@ -922,17 +922,17 @@ struct ContentDetailPage {
 
   @Builder
   private statusPanel(message: string, retry: boolean) {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
+    Column({ space: $r('app.float.spacing_medium') }) {
       if (!retry) {
         LoadingProgress()
-          .id(`p2_${this.kind}_detail_loading_progress`)
+          .id(`content_${this.kind}_detail_loading_progress`)
           .width(40)
           .height(40)
           .color(this.resolvedThemeColor)
       }
       Text(message)
-        .id(`p2_${this.kind}_detail_status`)
-        .fontSize($r('app.float.p1_body_font_size'))
+        .id(`content_${this.kind}_detail_status`)
+        .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .textAlign(TextAlign.Center)
         .width('100%')
@@ -941,15 +941,15 @@ struct ContentDetailPage {
           Button('去登录')
             .backgroundColor(this.resolvedThemeColor)
             .fontColor(onThemeColor(this.resolvedThemeColor))
-            .id(`p2_${this.kind}_detail_login`)
+            .id(`content_${this.kind}_detail_login`)
             .onClick((): void => {
-              this.navigate({ name: P1DestinationName.LOGIN });
+              this.navigate({ name: AppDestinationName.LOGIN });
             })
         } else {
           Button('重新加载')
             .backgroundColor(this.resolvedThemeColor)
             .fontColor(onThemeColor(this.resolvedThemeColor))
-            .id(`p2_${this.kind}_detail_retry`)
+            .id(`content_${this.kind}_detail_retry`)
             .onClick((): void => {
               this.controller?.load(this.kind, this.activeContentId);
             })
@@ -960,7 +960,7 @@ struct ContentDetailPage {
     .alignItems(HorizontalAlign.Center)
     .width('100%')
     .layoutWeight(1)
-    .padding($r('app.float.p1_page_padding'))
+    .padding($r('app.float.page_padding'))
   }
 
   @Builder
@@ -1077,15 +1077,15 @@ struct ContentDetailPage {
         // 问题标题属于其下方的正文信息头，不能提前塞进顶栏槽位。
         this.horizontalAnswerTitleBar()
 
-        Column({ space: $r('app.float.p1_spacing_small') }) {
+        Column({ space: $r('app.float.spacing_small') }) {
           Text(this.currentAnswerQuestionTitle())
-            .id(previous ? 'p2_answer_prev_horizontal_question' : 'p2_answer_next_horizontal_question')
-            .fontSize($r('app.float.p1_heading_font_size'))
+            .id(previous ? 'answer_prev_horizontal_question' : 'answer_next_horizontal_question')
+            .fontSize($r('app.float.heading_font_size'))
             .fontWeight(FontWeight.Bold)
             .fontColor($r('app.color.primary_text'))
             .width('100%')
 
-          Row({ space: $r('app.float.p1_spacing_small') }) {
+          Row({ space: $r('app.float.spacing_small') }) {
             Stack({ alignContent: Alignment.Center }) {
               Circle()
                 .width(40)
@@ -1099,7 +1099,7 @@ struct ContentDetailPage {
                   .objectFit(ImageFit.Cover)
               } else if (this.answerPreviewAuthorName(previous).length > 0) {
                 Text(this.answerPreviewAuthorName(previous).substring(0, 1))
-                  .fontSize($r('app.float.p1_body_font_size'))
+                  .fontSize($r('app.float.body_font_size'))
                   .fontColor($r('app.color.secondary_text'))
               }
             }
@@ -1109,14 +1109,14 @@ struct ContentDetailPage {
 
             Column({ space: 2 }) {
               Text(this.answerPreviewAuthorName(previous))
-                .fontSize($r('app.float.p1_body_font_size'))
+                .fontSize($r('app.float.body_font_size'))
                 .fontWeight(FontWeight.Medium)
                 .fontColor($r('app.color.primary_text'))
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
               if (this.answerPreviewAuthorHeadline(previous).length > 0) {
                 Text(this.answerPreviewAuthorHeadline(previous))
-                  .fontSize($r('app.float.p1_caption_font_size'))
+                  .fontSize($r('app.float.caption_font_size'))
                   .fontColor($r('app.color.secondary_text'))
                   .maxLines(1)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -1128,7 +1128,7 @@ struct ContentDetailPage {
           .width('100%')
 
           Text(`${this.answerPreviewVoteupCount(previous)} 赞同 · ${this.answerPreviewCommentCount(previous)} 条评论`)
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
 
@@ -1143,9 +1143,9 @@ struct ContentDetailPage {
         .width('100%')
         // 与 NativeContentDocument 的 List 统一：左右 pagePadding、顶部 spacingMedium。
         .padding({
-          left: $r('app.float.p1_page_padding'),
-          right: $r('app.float.p1_page_padding'),
-          top: $r('app.float.p1_spacing_medium')
+          left: $r('app.float.page_padding'),
+          right: $r('app.float.page_padding'),
+          top: $r('app.float.spacing_medium')
         })
         .clip(true)
       }
@@ -1160,14 +1160,14 @@ struct ContentDetailPage {
       .height('100%')
       .hitTestBehavior(HitTestMode.None)
     }
-    .id(previous ? 'p2_answer_prev_horizontal_page' : 'p2_answer_next_horizontal_page')
+    .id(previous ? 'answer_prev_horizontal_page' : 'answer_next_horizontal_page')
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.page_background'))
   }
 
   /** 与标准页同一份 AnswerTitleBar（answerId 置空恒为未折叠"回答"态）：预览模式下
-   * 组件自身不随过滑平移/淡出，整体在 64vp 顶栏槽位内居中，几何与 P1Shell 顶栏一致。 */
+   * 组件自身不随过滑平移/淡出，整体在 64vp 顶栏槽位内居中，几何与 AppShell 顶栏一致。 */
   @Builder
   private horizontalAnswerTitleBar() {
     Column() {
@@ -1182,7 +1182,7 @@ struct ContentDetailPage {
   @Builder
   private horizontalAnswerBottomBar(previous: boolean) {
     Column() {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
           Row({ space: 0 }) {
             Row({ space: 4 }) {
@@ -1191,7 +1191,7 @@ struct ContentDetailPage {
                 .fontColor([this.resolvedThemeColor])
                 .rotate({ x: 0, y: 0, z: 1, angle: 90 })
               Text(`${this.answerPreviewVoteupCount(previous)}`)
-                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontSize($r('app.float.secondary_font_size'))
                 .fontWeight(FontWeight.Medium)
                 .fontColor(this.resolvedThemeColor)
             }
@@ -1219,7 +1219,7 @@ struct ContentDetailPage {
                 .fontSize(20)
                 .fontColor([$r('app.color.secondary_text')])
               Text(`${this.answerPreviewCommentCount(previous)}`)
-                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontSize($r('app.float.secondary_font_size'))
                 .fontWeight(FontWeight.Medium)
                 .fontColor($r('app.color.secondary_text'))
             }
@@ -1234,8 +1234,8 @@ struct ContentDetailPage {
       }
       .width('100%')
       .padding({
-        left: $r('app.float.p1_page_padding'),
-        right: $r('app.float.p1_page_padding'),
+        left: $r('app.float.page_padding'),
+        right: $r('app.float.page_padding'),
         // 与标准底栏/主页导航栏同口径，保证横向切换预览与常规页悬浮高度一致
         bottom: Math.max(this.bottomRectHeightVp, 0)
       })
@@ -1257,13 +1257,13 @@ struct ContentDetailPage {
         this.answerPreviewLabelRow(previous)
       }
     }
-    .id(previous ? 'p2_answer_prev_preview_card' : 'p2_answer_next_preview_card')
+    .id(previous ? 'answer_prev_preview_card' : 'answer_next_preview_card')
     .width('100%')
     .padding(12)
-    .borderRadius($r('app.float.p1_card_radius'))
+    .borderRadius($r('app.float.card_radius'))
     .margin({
-      left: $r('app.float.p1_page_padding'),
-      right: $r('app.float.p1_page_padding'),
+      left: $r('app.float.page_padding'),
+      right: $r('app.float.page_padding'),
       // 上一答卡固定整页顶端、状态栏下方（对齐上游 systemBars 顶边距）；
       // 下一答卡固定整页底端、导航条上方 8vp（对齐上游 systemBars 底边距 + 8dp）。
       top: previous ? Math.max(this.statusBarHeightVp, 0) : 0,
@@ -1283,7 +1283,7 @@ struct ContentDetailPage {
         .fontColor([this.answerOverscrollTriggered()
           ? this.resolvedThemeColor : $r('app.color.secondary_text')])
       Text(this.answerOverscrollTriggered() ? '松手切换' : (previous ? '上一个回答' : '下一个回答'))
-        .fontSize($r('app.float.p1_caption_font_size'))
+        .fontSize($r('app.float.caption_font_size'))
         .fontWeight(this.answerOverscrollTriggered() ? FontWeight.Bold : FontWeight.Normal)
         .fontColor(this.answerOverscrollTriggered()
           ? this.resolvedThemeColor : $r('app.color.secondary_text'))
@@ -1302,14 +1302,14 @@ struct ContentDetailPage {
           .fill($r('app.color.control_background'))
         if (this.answerPreviewAvatarUrl(previous).length > 0) {
           Image(this.answerPreviewAvatarUrl(previous))
-            .id(previous ? 'p2_answer_prev_preview_avatar' : 'p2_answer_next_preview_avatar')
+            .id(previous ? 'answer_prev_preview_avatar' : 'answer_next_preview_avatar')
             .width(28)
             .height(28)
             .borderRadius(14)
             .objectFit(ImageFit.Cover)
         } else if (this.answerPreviewAuthorName(previous).length > 0) {
           Text(this.answerPreviewAuthorName(previous).substring(0, 1))
-            .fontSize($r('app.float.p1_caption_font_size'))
+            .fontSize($r('app.float.caption_font_size'))
             .fontColor($r('app.color.secondary_text'))
         }
       }
@@ -1320,8 +1320,8 @@ struct ContentDetailPage {
       Column({ space: 2 }) {
         if (this.answerPreviewAuthorName(previous).length > 0) {
           Text(this.answerPreviewAuthorName(previous))
-            .id(previous ? 'p2_answer_prev_preview_author' : 'p2_answer_next_preview_author')
-            .fontSize($r('app.float.p1_body_font_size'))
+            .id(previous ? 'answer_prev_preview_author' : 'answer_next_preview_author')
+            .fontSize($r('app.float.body_font_size'))
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.primary_text'))
             .maxLines(1)
@@ -1329,8 +1329,8 @@ struct ContentDetailPage {
         }
         if (this.answerPreviewExcerpt(previous).length > 0) {
           Text(this.answerPreviewExcerpt(previous))
-            .id(previous ? 'p2_answer_prev_preview_excerpt' : 'p2_answer_next_preview_excerpt')
-            .fontSize($r('app.float.p1_caption_font_size'))
+            .id(previous ? 'answer_prev_preview_excerpt' : 'answer_next_preview_excerpt')
+            .fontSize($r('app.float.caption_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .maxLines(2)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -1351,7 +1351,7 @@ struct ContentDetailPage {
         .fontSize(22)
         .fontColor([onThemeColor(this.resolvedThemeColor)])
     }
-    .id('p2_answer_next_floating')
+    .id('answer_next_floating')
     .width(44)
     .height(44)
     .padding(0)
@@ -1418,7 +1418,7 @@ struct ContentDetailPage {
     this.answerFabOffsetY = Math.min(this.answerFabMaxDownY(), Math.max(this.answerFabMinY(), this.answerFabOffsetY + deltaY));
   }
 
-  /** 水平下限：按钮左缘贴 pagePadding（与 p1_page_padding 12vp 一致）。 */
+  /** 水平下限：按钮左缘贴 pagePadding（与 page_padding 12vp 一致）。 */
   private answerFabMinX(): number {
     return this.answerFabWidthVp + 12 - this.answerFabOverlayWidthVp;
   }
@@ -1601,12 +1601,12 @@ struct ContentDetailPage {
       // 沉浸式：收起问题标题/时间/统计等完整信息头，仅留窄作者行（对齐上游 isImmersiveMode 分支）。
       this.immersiveAuthorRow(content)
     } else {
-      Column({ space: $r('app.float.p1_spacing_small') }) {
+      Column({ space: $r('app.float.spacing_small') }) {
         // 主标题保留在正文信息头：回答显示所属问题，文章显示文章标题，避免仅依赖通用路由标题。
         if (contentContextTitle(content).length > 0) {
           Text(contentContextTitle(content))
-            .id(`p2_${content.kind}_detail_context_title`)
-            .fontSize($r('app.float.p1_heading_font_size'))
+            .id(`${content.kind}_detail_context_title`)
+            .fontSize($r('app.float.heading_font_size'))
             .fontWeight(FontWeight.Bold)
             .fontColor($r('app.color.primary_text'))
             .copyOption(CopyOptions.LocalDevice)
@@ -1620,7 +1620,7 @@ struct ContentDetailPage {
             .accessibilityDescription(content.kind === ContentDetailKind.ANSWER ? '点击查看问题详情' : '')
             .onClick((): void => {
               if (content.kind === ContentDetailKind.ANSWER) {
-                this.navigate({ name: P1DestinationName.QUESTION, id: content.value.questionId });
+                this.navigate({ name: AppDestinationName.QUESTION, id: content.value.questionId });
               }
             })
         }
@@ -1634,32 +1634,32 @@ struct ContentDetailPage {
         if ((this.pinAnswerDate || content.kind === ContentDetailKind.QUESTION) &&
           contentCreatedAtText(content).length > 0) {
           Text(contentCreatedAtText(content))
-            .id(`p2_${content.kind}_detail_created_at`)
-            .fontSize($r('app.float.p1_caption_font_size'))
+            .id(`content_header_${content.kind}_created_at`)
+            .fontSize($r('app.float.caption_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
         }
         if ((this.pinAnswerDate || content.kind === ContentDetailKind.QUESTION) &&
           contentUpdatedAtText(content).length > 0) {
           Text(contentUpdatedAtText(content))
-            .id(`p2_${content.kind}_detail_updated_at`)
-            .fontSize($r('app.float.p1_caption_font_size'))
+            .id(`content_header_${content.kind}_updated_at`)
+            .fontSize($r('app.float.caption_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
         }
 
         if (content.kind === ContentDetailKind.QUESTION) {
-          Row({ space: $r('app.float.p1_spacing_medium') }) {
+          Row({ space: $r('app.float.spacing_medium') }) {
             this.questionStatItem($r('sys.symbol.eye'), `${content.value.visitCount ?? 0} 浏览`)
             this.questionStatItem($r('sys.symbol.heart'), `${this.followController === undefined ? content.value.followerCount : this.followerCount} 关注`)
             this.questionStatItem($r('sys.symbol.message'), `${content.value.commentCount} 评论`)
           }
-          .id(`p2_${content.kind}_detail_statistics`)
+          .id('question_detail_statistics')
           .width('100%')
         } else {
           Text(this.displayedContentStatistics(content))
-            .id(`p2_${content.kind}_detail_statistics`)
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .id(`${content.kind}_detail_statistics`)
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
         }
@@ -1678,16 +1678,16 @@ struct ContentDetailPage {
 
         if (this.blockingMessage.length > 0) {
           Text(this.blockingMessage)
-            .id(`p3_${content.kind}_blocking_status`)
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .id(`${content.kind}_blocking_status`)
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
         }
 
         if (this.openedRecordPhase === OpenedRecordPhase.FAILED) {
           Text('本次打开记录未能保存，阅读不受影响')
-            .id(`p2_${content.kind}_opened_record_failed`)
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .id(`${content.kind}_opened_record_failed`)
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
         }
@@ -1697,12 +1697,12 @@ struct ContentDetailPage {
       .padding({
         // 回答/文章页信息头在列表内滚动：左右与顶部留白由 List 统一提供，避免双重内边距。
         left: content.kind === ContentDetailKind.ANSWER || content.kind === ContentDetailKind.ARTICLE
-          ? 0 : $r('app.float.p1_page_padding'),
+          ? 0 : $r('app.float.page_padding'),
         right: content.kind === ContentDetailKind.ANSWER || content.kind === ContentDetailKind.ARTICLE
-          ? 0 : $r('app.float.p1_page_padding'),
+          ? 0 : $r('app.float.page_padding'),
         top: content.kind === ContentDetailKind.ANSWER || content.kind === ContentDetailKind.ARTICLE
-          ? 0 : $r('app.float.p1_spacing_medium'),
-        bottom: $r('app.float.p1_spacing_medium')
+          ? 0 : $r('app.float.spacing_medium'),
+        bottom: $r('app.float.spacing_medium')
       })
       .backgroundColor($r('app.color.surface_background'))
     }
@@ -1713,29 +1713,29 @@ struct ContentDetailPage {
     // 对齐上游正文尾部：未钉住日期时显示发布/编辑时间，IP 属地（接口有值时）始终显示；
     // 整块右对齐灰色小字（上游 footer Column horizontalAlignment = End）。
     if (content.kind === ContentDetailKind.ANSWER || content.kind === ContentDetailKind.ARTICLE) {
-      Column({ space: $r('app.float.p1_spacing_xsmall') }) {
+      Column({ space: $r('app.float.spacing_xsmall') }) {
         if (!this.pinAnswerDate && contentCreatedAtText(content).length > 0) {
           Text(contentCreatedAtText(content))
-            .id(`p2_${content.kind}_detail_created_at`)
-            .fontSize($r('app.float.p1_caption_font_size'))
+            .id(`content_footer_${content.kind}_created_at`)
+            .fontSize($r('app.float.caption_font_size'))
             .fontColor($r('app.color.secondary_text'))
         }
         if (!this.pinAnswerDate && contentUpdatedAtText(content).length > 0) {
           Text(contentUpdatedAtText(content))
-            .id(`p2_${content.kind}_detail_updated_at`)
-            .fontSize($r('app.float.p1_caption_font_size'))
+            .id(`content_footer_${content.kind}_updated_at`)
+            .fontSize($r('app.float.caption_font_size'))
             .fontColor($r('app.color.secondary_text'))
         }
         if (contentIpInfo(content).length > 0) {
           Text(`IP属地：${contentIpInfo(content)}`)
-            .id(`p2_${content.kind}_detail_ip`)
-            .fontSize($r('app.float.p1_caption_font_size'))
+            .id(`${content.kind}_detail_ip`)
+            .fontSize($r('app.float.caption_font_size'))
             .fontColor($r('app.color.secondary_text'))
         }
       }
       .width('100%')
       .alignItems(HorizontalAlign.End)
-      .padding({ top: $r('app.float.p1_spacing_medium') })
+      .padding({ top: $r('app.float.spacing_medium') })
     }
   }
 
@@ -1750,11 +1750,11 @@ struct ContentDetailPage {
             .height(24)
             .fill($r('app.color.control_background'))
           Text(contentAuthorName(content).substring(0, 1))
-            .fontSize($r('app.float.p1_caption_font_size'))
+            .fontSize($r('app.float.caption_font_size'))
             .fontColor($r('app.color.secondary_text'))
           if (contentAuthorAvatarUrl(content).length > 0) {
             Image(contentAuthorAvatarUrl(content))
-              .id(`p3_${content.kind}_immersive_author_avatar`)
+              .id(`${content.kind}_immersive_author_avatar`)
               .width(24)
               .height(24)
               .borderRadius(12)
@@ -1766,21 +1766,21 @@ struct ContentDetailPage {
           .clip(true)
 
         Text(contentAuthorName(content))
-          .id(`p3_${content.kind}_immersive_author_name`)
-          .fontSize($r('app.float.p1_body_font_size'))
+          .id(`${content.kind}_immersive_author_name`)
+          .fontSize($r('app.float.body_font_size'))
           .fontColor($r('app.color.primary_text'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
           .layoutWeight(1)
       }
-      .id(`p3_${content.kind}_immersive_author_row`)
+      .id(`${content.kind}_immersive_author_row`)
       .width('100%')
       .padding({ top: 8, bottom: 8 })
       .onClick((): void => {
         const author = content.value.author;
         if (author !== undefined && author.id.trim().length > 0) {
           const urlToken = author.urlToken ?? author.id;
-          this.navigate({ name: P1DestinationName.PEOPLE, id: urlToken });
+          this.navigate({ name: AppDestinationName.PEOPLE, id: urlToken });
         }
       })
     }
@@ -1790,18 +1790,18 @@ struct ContentDetailPage {
   @Builder
   private contentHeaderAuthorRow(content: LoadedContentDetail) {
     if (contentAuthorName(content).length > 0) {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Stack({ alignContent: Alignment.Center }) {
           Circle()
             .width(40)
             .height(40)
             .fill($r('app.color.control_background'))
           Text(contentAuthorName(content).substring(0, 1))
-            .fontSize($r('app.float.p1_body_font_size'))
+            .fontSize($r('app.float.body_font_size'))
             .fontColor($r('app.color.secondary_text'))
           if (contentAuthorAvatarUrl(content).length > 0) {
             Image(contentAuthorAvatarUrl(content))
-              .id(`p3_${content.kind}_detail_header_avatar`)
+              .id(`${content.kind}_detail_header_avatar`)
               .width(40)
               .height(40)
               .borderRadius(20)
@@ -1815,8 +1815,8 @@ struct ContentDetailPage {
         Column({ space: 2 }) {
           Row({ space: 4 }) {
             Text(contentAuthorName(content))
-              .id(`p3_${content.kind}_detail_header_author`)
-              .fontSize($r('app.float.p1_body_font_size'))
+              .id(`${content.kind}_detail_header_author`)
+              .fontSize($r('app.float.body_font_size'))
               .fontWeight(FontWeight.Medium)
               .fontColor($r('app.color.primary_text'))
               .maxLines(1)
@@ -1824,7 +1824,7 @@ struct ContentDetailPage {
             // 作者认证徽章（对齐上游 AuthorBadge：名称旁 18vp 图标）。
             if (contentAuthorBadge(content) !== undefined) {
               Image(contentAuthorBadge(content)?.iconUrl ?? '')
-                .id(`p3_${content.kind}_detail_header_author_badge`)
+                .id(`${content.kind}_detail_header_author_badge`)
                 .width(18)
                 .height(18)
                 .objectFit(ImageFit.Contain)
@@ -1834,7 +1834,7 @@ struct ContentDetailPage {
           .alignItems(VerticalAlign.Center)
           if (contentAuthorHeadline(content).length > 0) {
             Text(contentAuthorHeadline(content))
-              .fontSize($r('app.float.p1_caption_font_size'))
+              .fontSize($r('app.float.caption_font_size'))
               .fontColor($r('app.color.secondary_text'))
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -1843,13 +1843,13 @@ struct ContentDetailPage {
           .layoutWeight(1)
           .alignItems(HorizontalAlign.Start)
       }
-      .id(`p3_${content.kind}_detail_header_author_row`)
+      .id(`${content.kind}_detail_header_author_row`)
       .width('100%')
       .onClick((): void => {
         const author = content.value.author;
         if (author !== undefined && author.id.trim().length > 0) {
           const urlToken = author.urlToken ?? author.id;
-          this.navigate({ name: P1DestinationName.PEOPLE, id: urlToken });
+          this.navigate({ name: AppDestinationName.PEOPLE, id: urlToken });
         }
       })
     }
@@ -1964,7 +1964,7 @@ struct ContentDetailPage {
       contentId: this.activeContentId,
       contentType: contentType
     });
-    this.navigate({ name: P1DestinationName.VIDEO, id: videoId });
+    this.navigate({ name: AppDestinationName.VIDEO, id: videoId });
   }
 
   /** 正文内联链接：站内内容（问题/回答/文章/想法/用户）走应用内导航，其余 http(s) 交系统浏览器。 */
@@ -1995,14 +1995,14 @@ struct ContentDetailPage {
           Flex({ wrap: FlexWrap.Wrap }) {
             ForEach(content.value.topics, (topic: QuestionTopicSummary): void => {
               Button(`# ${topic.name}`, { type: ButtonType.Normal, stateEffect: true })
-                .id(`p3_question_topic_${topic.id}`)
+                .id(`question_topic_${topic.id}`)
                 .height(30)
-                .fontSize($r('app.float.p1_caption_font_size'))
+                .fontSize($r('app.float.caption_font_size'))
                 .fontColor($r('app.color.secondary_text'))
                 .backgroundColor($r('app.color.surface_background'))
                 .borderRadius(15)
                 .margin({ right: 8, bottom: 8 })
-                .onClick((): void => this.navigate({ name: P1DestinationName.SEARCH, query: topic.name }))
+                .onClick((): void => this.navigate({ name: AppDestinationName.SEARCH, query: topic.name }))
             }, (topic: QuestionTopicSummary): string => topic.id)
           }
           .width('100%')
@@ -2014,8 +2014,8 @@ struct ContentDetailPage {
         .fontColor(onThemeColor(this.resolvedThemeColor))
         .backgroundColor(this.resolvedThemeColor)
         .onClick((): void => this.navigate(this.authenticated
-          ? { name: P1DestinationName.WRITE_ANSWER, questionId: this.activeContentId }
-          : { name: P1DestinationName.LOGIN }))
+          ? { name: AppDestinationName.WRITE_ANSWER, questionId: this.activeContentId }
+          : { name: AppDestinationName.LOGIN }))
       Row() {
         Text(this.questionAnswerCount().toString() + ' 回答').fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.primary_text')).layoutWeight(1)
@@ -2035,15 +2035,15 @@ struct ContentDetailPage {
 
   @Builder
   private userBlockDialog() {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_small') }) {
       Text(`确定要屏蔽用户「${this.pendingUserBlock?.userName ?? ''}」吗？`)
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .width('100%')
       Text('屏蔽后，该作者的内容将不再显示。')
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Button('取消')
           .backgroundColor($r('app.color.control_background'))
           .fontColor($r('app.color.primary_text'))
@@ -2055,7 +2055,7 @@ struct ContentDetailPage {
         Button('确定屏蔽')
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id(`p3_${this.kind}_confirm_block_user`)
+          .id(`${this.kind}_confirm_block_user`)
           .layoutWeight(1)
           .enabled(!this.blockingBusy)
           .onClick((): void => this.confirmUserBlock())
@@ -2063,24 +2063,24 @@ struct ContentDetailPage {
       .width('100%')
     }
     .width('100%')
-    .padding($r('app.float.p1_spacing_medium'))
+    .padding($r('app.float.spacing_medium'))
     .backgroundColor($r('app.color.card_background'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .borderRadius($r('app.float.card_radius'))
   }
 
   @Builder
   private keywordBlockDialog() {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_small') }) {
       Text('输入要屏蔽的关键词（普通文本，不区分大小写）')
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .width('100%')
       TextInput({ text: this.keywordBlockInput, placeholder: '输入关键词' })
-        .id(`p3_${this.kind}_keyword_block_input`)
+        .id(`${this.kind}_keyword_block_input`)
         .maxLength(200)
         .onChange((value: string): void => {
           this.keywordBlockInput = value;
         })
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Button('取消')
           .backgroundColor($r('app.color.control_background'))
           .fontColor($r('app.color.primary_text'))
@@ -2093,7 +2093,7 @@ struct ContentDetailPage {
         Button('确认屏蔽')
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id(`p3_${this.kind}_confirm_block_keyword`)
+          .id(`${this.kind}_confirm_block_keyword`)
           .layoutWeight(1)
           .enabled(!this.blockingBusy && this.keywordBlockInput.trim().length > 0)
           .onClick((): void => this.confirmKeywordBlock())
@@ -2101,9 +2101,9 @@ struct ContentDetailPage {
       .width('100%')
     }
     .width('100%')
-    .padding($r('app.float.p1_spacing_medium'))
+    .padding($r('app.float.spacing_medium'))
     .backgroundColor($r('app.color.card_background'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .borderRadius($r('app.float.card_radius'))
   }
 
   private confirmUserBlock(): void {
@@ -2141,11 +2141,11 @@ struct ContentDetailPage {
   private bottomActionBar() {
     // 沉浸光感玻璃胶囊：左右两块独立悬浮胶囊（PR 的空 HdsTabs 材质画布方案），
     // 由全屏悬浮层单实例承载，正文从下方穿透直至物理底边（窗口为全屏布局，无避让空带）。
-    Column({ space: $r('app.float.p1_spacing_xsmall') }) {
+    Column({ space: $r('app.float.spacing_xsmall') }) {
       if (this.interactionErrorMessage.length > 0) {
         this.interactionStatusRow()
       }
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         if (this.kind === ContentDetailKind.QUESTION) {
           // 智感握姿对问题页同样生效：收藏/评论/更多等操作胶囊吸附握持侧，关注问题胶囊留在另一侧；
           // 右手判定走默认布局，与关闭开关时一致。
@@ -2225,8 +2225,8 @@ struct ContentDetailPage {
       }
       .width('100%')
       .padding({
-        left: $r('app.float.p1_page_padding'),
-        right: $r('app.float.p1_page_padding'),
+        left: $r('app.float.page_padding'),
+        right: $r('app.float.page_padding'),
         // 与主页导航栏同口径：ZhihuHdsTabs 的 barBottomMargin 取 bottomRectHeight，
         // 底栏离物理底边的高度随手势条避让区（0 时贴底）
         bottom: Math.max(this.bottomRectHeightVp, 0)
@@ -2262,9 +2262,9 @@ struct ContentDetailPage {
       Button('编辑')
         .backgroundColor(this.resolvedThemeColor)
         .fontColor(onThemeColor(this.resolvedThemeColor))
-        .id('p4_answer_edit_existing')
+        .id('answer_edit_existing')
         .height(36)
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontSize($r('app.float.secondary_font_size'))
         .onClick((): void => this.openExistingAnswerEditor())
     }
 
@@ -2273,7 +2273,7 @@ struct ContentDetailPage {
         .fontSize(20)
         .fontColor([this.contentFavorited ? this.resolvedThemeColor : $r('app.color.secondary_text')])
     }
-    .id(`p3_${this.kind}_detail_favorite_bar`)
+    .id(`content_${this.kind}_detail_favorite_bar`)
     .width(36)
     .height(36)
     .backgroundColor(Color.Transparent)
@@ -2282,7 +2282,7 @@ struct ContentDetailPage {
       if (this.collectionRepository !== undefined && this.session !== undefined) {
         this.favoriteDialogShown = true;
       } else {
-        this.navigate({ name: P1DestinationName.LOGIN });
+        this.navigate({ name: AppDestinationName.LOGIN });
       }
     })
 
@@ -2292,20 +2292,20 @@ struct ContentDetailPage {
           .fontSize(20)
           .fontColor([$r('app.color.secondary_text')])
         Text(`${this.content?.value.commentCount ?? 0}`)
-          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontSize($r('app.float.secondary_font_size'))
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.secondary_text'))
       }
       .padding({ left: 6, right: 6, top: 8, bottom: 8 })
     }
-    .id(`p3_${this.kind}_detail_comment_bar`)
+    .id(`content_${this.kind}_detail_comment_bar`)
     .height(36)
     .backgroundColor(Color.Transparent)
     .onClick((): void => {
       if (this.commentRepository !== undefined && this.session !== undefined) {
         this.openComments();
       } else {
-        this.navigate({ name: P1DestinationName.LOGIN });
+        this.navigate({ name: AppDestinationName.LOGIN });
       }
     })
 
@@ -2314,7 +2314,7 @@ struct ContentDetailPage {
         .fontSize(20)
         .fontColor([$r('app.color.secondary_text')])
     }
-    .id(`p3_${this.kind}_detail_more`)
+    .id(`content_${this.kind}_detail_more`)
     .width(36)
     .height(36)
     .backgroundColor(Color.Transparent)
@@ -2332,13 +2332,13 @@ struct ContentDetailPage {
           .fontSize(20)
           .fontColor([$r('app.color.secondary_text')])
         Text(`${this.content?.value.commentCount ?? 0}`)
-          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontSize($r('app.float.secondary_font_size'))
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.secondary_text'))
       }
       .padding({ left: 6, right: 6, top: 8, bottom: 8 })
     }
-    .id('p3_question_detail_comment_bar')
+    .id('question_detail_comment_bar')
     .height(36)
     .backgroundColor(Color.Transparent)
     .accessibilityText('问题评论')
@@ -2346,7 +2346,7 @@ struct ContentDetailPage {
       if (this.commentRepository !== undefined && this.session !== undefined) {
         this.openComments();
       } else {
-        this.navigate({ name: P1DestinationName.LOGIN });
+        this.navigate({ name: AppDestinationName.LOGIN });
       }
     })
 
@@ -2355,7 +2355,7 @@ struct ContentDetailPage {
         .fontSize(20)
         .fontColor([$r('app.color.secondary_text')])
     }
-    .id('p3_question_detail_more')
+    .id('question_detail_more')
     .width(36)
     .height(36)
     .backgroundColor(Color.Transparent)
@@ -2373,7 +2373,7 @@ struct ContentDetailPage {
         .fontSize(14)
         .fontColor([$r('app.color.secondary_text')])
       Text(text)
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
     }
     .alignItems(VerticalAlign.Center)
@@ -2391,21 +2391,21 @@ struct ContentDetailPage {
         if (!this.authenticated) {
           AppPageStatusPanel({ kind: AppPageStatusKind.EMPTY, message: '登录后即可查看全部回答',
             testId: 'question_answers_login', actionLabel: '去登录', actionId: 'question_answers_login_button',
-            onAction: (): void => this.navigate({ name: P1DestinationName.LOGIN }) })
+            onAction: (): void => this.navigate({ name: AppDestinationName.LOGIN }) })
         } else if (this.answersState.phase === QuestionAnswersPhase.INITIAL_LOADING) {
           AppPageStatusPanel({ message: '正在加载回答…', testId: 'question_answers_loading' })
         } else if (this.answersState.errorMessage.length > 0) {
           AppPageStatusPanel({ kind: AppPageStatusKind.ERROR, message: this.answersState.errorMessage,
             testId: 'question_answers_error', actionLabel: this.answersState.requiresLogin ? '去登录' : '重试',
             actionId: 'question_answers_retry', onAction: (): void => {
-              if (this.answersState.requiresLogin) { this.navigate({ name: P1DestinationName.LOGIN }); }
+              if (this.answersState.requiresLogin) { this.navigate({ name: AppDestinationName.LOGIN }); }
               else if (this.answersState.phase === QuestionAnswersPhase.ERROR) { this.answersController?.refresh(); }
               else { this.answersController?.loadMore(); }
             } })
         } else if (this.answersState.phase === QuestionAnswersPhase.EMPTY) {
           AppPageStatusPanel({ kind: AppPageStatusKind.EMPTY, message: '暂无可显示的回答', testId: 'question_answers_empty' })
         } else if (this.answersState.loadingMore) {
-          LoadingProgress().id('p3_question_answers_loading_more').width(40).height(40)
+          LoadingProgress().id('question_answers_loading_more').width(40).height(40)
             .color(this.resolvedThemeColor)
         } else if (this.answersState.canLoadMore) {
           Button('加载更多回答').id('question_answers_more')
@@ -2423,9 +2423,9 @@ struct ContentDetailPage {
   private answerFeedCard(item: ChannelContentItem) {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
       FeedContentSummary({ target: item.feedItem.target, showTitle: false })
-    }.id('p3_question_answers_card_' + item.feedItem.target.id)
-      .width('100%').padding($r('app.float.p1_card_padding'))
-      .borderRadius($r('app.float.p1_card_radius')).backgroundColor($r('app.color.surface_background'))
+    }.id('question_answers_card_' + item.feedItem.target.id)
+      .width('100%').padding($r('app.float.card_padding'))
+      .borderRadius($r('app.float.card_radius')).backgroundColor($r('app.color.surface_background'))
       .accessibilityText('打开回答').onClick((): void => {
         const repository = this.questionAnswerFeedFactory();
         const seed = this.answersController?.snapshot();
@@ -2433,7 +2433,7 @@ struct ContentDetailPage {
           stageQuestionAnswerNavigator(new QuestionAnswerNavigator(this.activeContentId,
             item.feedItem.target.id, seed, repository));
         }
-        this.navigate({ name: P1DestinationName.ANSWER, id: item.feedItem.target.id });
+        this.navigate({ name: AppDestinationName.ANSWER, id: item.feedItem.target.id });
       })
   }
 
@@ -2478,7 +2478,7 @@ struct ContentDetailPage {
     const contentType = this.kind === ContentDetailKind.ARTICLE ? 'article'
       : this.kind === ContentDetailKind.QUESTION ? 'question' : 'answer';
     this.navigate({
-      name: P1DestinationName.COMMENT,
+      name: AppDestinationName.COMMENT,
       contentType: contentType,
       contentId: this.activeContentId
     });
@@ -2495,7 +2495,7 @@ struct ContentDetailPage {
     const mark = this.segmentInfos.find((p: SegmentInfoParagraph): boolean => p.pid === this.segmentSheetPid)
       ?.marks[this.segmentSheetMarkIndex];
     this.navigate({
-      name: P1DestinationName.COMMENT,
+      name: AppDestinationName.COMMENT,
       contentType: this.kind === ContentDetailKind.ARTICLE ? 'article' : 'answer',
       contentId: this.activeContentId,
       segmentId: meta.segIds.join(','),
@@ -2739,7 +2739,7 @@ struct ContentDetailPage {
       return;
     }
     this.navigate({
-      name: P1DestinationName.WRITE_ANSWER,
+      name: AppDestinationName.WRITE_ANSWER,
       questionId: content.value.questionId,
       answerId: content.value.id
     });
@@ -2748,10 +2748,10 @@ struct ContentDetailPage {
   @Builder
   private actionMenuSheet() {
     // 分享、复制链接与屏蔽操作放入 API 26 系统半模态；尚未接线的能力不显示占位项。
-    Column({ space: $r('app.float.p1_spacing_small') }) {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Text('更多操作')
-          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontSize($r('app.float.heading_font_size'))
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
@@ -2760,7 +2760,7 @@ struct ContentDetailPage {
             .fontSize(18)
             .fontColor([$r('app.color.primary_text')])
         }
-          .id('p3_detail_menu_close')
+          .id('detail_menu_close')
           .width(40)
           .height(40)
           .padding(0)
@@ -2775,12 +2775,12 @@ struct ContentDetailPage {
       if (this.kind === ContentDetailKind.ANSWER || this.kind === ContentDetailKind.ARTICLE) {
         Button(this.isCurrentContentSpeaking() ? '停止朗读' : '朗读',
           { type: ButtonType.Normal, stateEffect: true })
-          .id('p5_detail_menu_speech')
+          .id('detail_menu_speech')
           .width('100%')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.body_font_size'))
           .fontColor($r('app.color.primary_text'))
           .backgroundColor($r('app.color.control_background'))
-          .borderRadius($r('app.float.p1_card_radius'))
+          .borderRadius($r('app.float.card_radius'))
           .onClick((): void => {
             this.actionMenuShown = false;
             void this.toggleSpeechPlayback();
@@ -2788,12 +2788,12 @@ struct ContentDetailPage {
       }
 
       Button('分享', { type: ButtonType.Normal, stateEffect: true })
-        .id('p3_detail_menu_share')
+        .id('detail_menu_share')
         .width('100%')
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.primary_text'))
         .backgroundColor($r('app.color.control_background'))
-        .borderRadius($r('app.float.p1_card_radius'))
+        .borderRadius($r('app.float.card_radius'))
         .onClick((): void => {
           this.actionMenuShown = false;
           if (this.shareActionMode === 'copy') {
@@ -2804,12 +2804,12 @@ struct ContentDetailPage {
         })
 
       Button('复制链接', { type: ButtonType.Normal, stateEffect: true })
-        .id('p3_detail_menu_copy_link')
+        .id('detail_menu_copy_link')
         .width('100%')
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.primary_text'))
         .backgroundColor($r('app.color.control_background'))
-        .borderRadius($r('app.float.p1_card_radius'))
+        .borderRadius($r('app.float.card_radius'))
         .onClick((): void => {
           this.actionMenuShown = false;
           this.copyContentLink();
@@ -2817,20 +2817,20 @@ struct ContentDetailPage {
 
       if (this.menuStatus.length > 0) {
         Text(this.menuStatus)
-          .id('p3_detail_menu_status')
-          .fontSize($r('app.float.p1_secondary_font_size'))
+          .id('detail_menu_status')
+          .fontSize($r('app.float.secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .width('100%')
       }
 
       if (this.kind === ContentDetailKind.ANSWER || this.kind === ContentDetailKind.ARTICLE) {
         Button('沉浸式阅读', { type: ButtonType.Normal, stateEffect: true })
-          .id(`p3_${this.kind}_detail_immersive`)
+          .id(`content_${this.kind}_detail_immersive`)
           .width('100%')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.body_font_size'))
           .fontColor($r('app.color.primary_text'))
           .backgroundColor($r('app.color.control_background'))
-          .borderRadius($r('app.float.p1_card_radius'))
+          .borderRadius($r('app.float.card_radius'))
           .onClick((): void => {
             this.actionMenuShown = false;
             this.immersiveReading = true;
@@ -2842,12 +2842,12 @@ struct ContentDetailPage {
 
       if (this.content !== undefined && contentAuthorName(this.content).length > 0) {
         Button('屏蔽作者', { type: ButtonType.Normal, stateEffect: true })
-          .id(`p3_${this.kind}_block_author`)
+          .id(`${this.kind}_block_author`)
           .width('100%')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.body_font_size'))
           .fontColor($r('app.color.primary_text'))
           .backgroundColor($r('app.color.control_background'))
-          .borderRadius($r('app.float.p1_card_radius'))
+          .borderRadius($r('app.float.card_radius'))
           .enabled(!this.blockingBusy && this.blockingAction !== undefined)
           .onClick((): void => {
             const content = this.content;
@@ -2860,12 +2860,12 @@ struct ContentDetailPage {
       }
 
       Button('屏蔽关键词', { type: ButtonType.Normal, stateEffect: true })
-        .id(`p3_${this.kind}_block_keyword`)
+        .id(`${this.kind}_block_keyword`)
         .width('100%')
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.primary_text'))
         .backgroundColor($r('app.color.control_background'))
-        .borderRadius($r('app.float.p1_card_radius'))
+        .borderRadius($r('app.float.card_radius'))
         .enabled(!this.blockingBusy && this.blockingAction !== undefined)
         .onClick((): void => {
           this.actionMenuShown = false;
@@ -2874,42 +2874,42 @@ struct ContentDetailPage {
         })
 
     }
-    .id('p3_detail_menu_sheet')
+    .id('detail_menu_sheet')
     .width('100%')
-    .padding($r('app.float.p1_spacing_medium'))
+    .padding($r('app.float.spacing_medium'))
   }
 
   /** 双击动作询问面板（对齐上游 showDoubleTapActionDialog）：每项保存偏好并立即执行该动作。 */
   @Builder
   private doubleTapAskSheet() {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_small') }) {
       Text('设置双击回答动作')
-        .fontSize($r('app.float.p1_heading_font_size'))
+        .fontSize($r('app.float.heading_font_size'))
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.primary_text'))
         .width('100%')
       Text('选择以后双击回答时默认执行的动作。选择后会立即保存到设置，你也可以稍后在设置中修改。')
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
       Button('设为无操作', { type: ButtonType.Normal, stateEffect: true })
-        .id('p3_answer_double_tap_none')
+        .id('answer_double_tap_none')
         .width('100%')
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.primary_text'))
         .backgroundColor($r('app.color.control_background'))
-        .borderRadius($r('app.float.p1_card_radius'))
+        .borderRadius($r('app.float.card_radius'))
         .onClick((): void => {
           this.doubleTapAskSheetShown = false;
           this.saveAnswerDoubleTapAction(AnswerDoubleTapAction.NONE);
         })
       Button('设为点赞', { type: ButtonType.Normal, stateEffect: true })
-        .id('p3_answer_double_tap_vote_up')
+        .id('answer_double_tap_vote_up')
         .width('100%')
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.primary_text'))
         .backgroundColor($r('app.color.control_background'))
-        .borderRadius($r('app.float.p1_card_radius'))
+        .borderRadius($r('app.float.card_radius'))
         .onClick((): void => {
           this.doubleTapAskSheetShown = false;
           this.saveAnswerDoubleTapAction(AnswerDoubleTapAction.VOTE_UP);
@@ -2917,12 +2917,12 @@ struct ContentDetailPage {
           void this.voteController?.voteUpFromDoubleTap();
         })
       Button('设为打开评论区', { type: ButtonType.Normal, stateEffect: true })
-        .id('p3_answer_double_tap_open_comments')
+        .id('answer_double_tap_open_comments')
         .width('100%')
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.primary_text'))
         .backgroundColor($r('app.color.control_background'))
-        .borderRadius($r('app.float.p1_card_radius'))
+        .borderRadius($r('app.float.card_radius'))
         .onClick((): void => {
           this.doubleTapAskSheetShown = false;
           this.saveAnswerDoubleTapAction(AnswerDoubleTapAction.OPEN_COMMENTS);
@@ -2930,21 +2930,21 @@ struct ContentDetailPage {
           this.openComments();
         })
       Button('设为开关沉浸式', { type: ButtonType.Normal, stateEffect: true })
-        .id('p3_answer_double_tap_toggle_immersive')
+        .id('answer_double_tap_toggle_immersive')
         .width('100%')
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.primary_text'))
         .backgroundColor($r('app.color.control_background'))
-        .borderRadius($r('app.float.p1_card_radius'))
+        .borderRadius($r('app.float.card_radius'))
         .onClick((): void => {
           this.doubleTapAskSheetShown = false;
           this.saveAnswerDoubleTapAction(AnswerDoubleTapAction.TOGGLE_IMMERSIVE);
           this.immersiveReading = !this.immersiveReading;
         })
     }
-    .id('p3_answer_double_tap_sheet')
+    .id('answer_double_tap_sheet')
     .width('100%')
-    .padding($r('app.float.p1_spacing_medium'))
+    .padding($r('app.float.spacing_medium'))
   }
 
   private copyContentLink(): void {
@@ -3029,18 +3029,18 @@ struct ContentDetailPage {
     Flex({ wrap: FlexWrap.Wrap }) {
       ForEach(topics, (topic: QuestionTopicSummary): void => {
         Button(`# ${topic.name}`, { type: ButtonType.Normal, stateEffect: true })
-          .id(`p3_article_topic_${topic.id}`)
+          .id(`article_topic_${topic.id}`)
           .height(30)
-          .fontSize($r('app.float.p1_caption_font_size'))
+          .fontSize($r('app.float.caption_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .backgroundColor($r('app.color.surface_background'))
           .borderRadius(15)
           .border({ width: 1, color: $r('app.color.secondary_text'), radius: 15 })
           .margin({ right: 8, bottom: 8 })
-          .onClick((): void => this.navigate({ name: P1DestinationName.SEARCH, query: topic.name }))
+          .onClick((): void => this.navigate({ name: AppDestinationName.SEARCH, query: topic.name }))
       }, (topic: QuestionTopicSummary): string => topic.id)
     }
-    .id('p3_article_detail_topics')
+    .id('article_detail_topics')
     .width('100%')
   }
 
@@ -3053,12 +3053,12 @@ struct ContentDetailPage {
           // 前导 # 图标（上游 zhicon_icon_24_chat_bubble_hash_fill → Tag 图标）。
           if ((endorsement.leadingIconKey ?? '').indexOf('hash') >= 0) {
             Text('#')
-              .fontSize($r('app.float.p1_caption_font_size'))
+              .fontSize($r('app.float.caption_font_size'))
               .fontWeight(FontWeight.Bold)
               .fontColor(endorsementTextColor(endorsement))
           }
           Text(endorsement.text)
-            .fontSize($r('app.float.p1_caption_font_size'))
+            .fontSize($r('app.float.caption_font_size'))
             .fontWeight(FontWeight.Medium)
             .fontColor(endorsementTextColor(endorsement))
             .maxLines(1)
@@ -3082,10 +3082,10 @@ struct ContentDetailPage {
         })
         .borderRadius(16)
         .backgroundColor(endorsementBackgroundColor(endorsement))
-        .margin({ right: $r('app.float.p1_spacing_small'), bottom: $r('app.float.p1_spacing_small') })
+        .margin({ right: $r('app.float.spacing_small'), bottom: $r('app.float.spacing_small') })
       }, (endorsement: AnswerEndorsementDisplay): string => endorsement.text)
     }
-    .id(`p3_${this.kind}_detail_endorsements`)
+    .id(`content_${this.kind}_detail_endorsements`)
     .width('100%')
   }
 
@@ -3101,13 +3101,13 @@ struct ContentDetailPage {
           .fontColor([this.resolvedThemeColor])
           .rotate({ x: 0, y: 0, z: 1, angle: 90 })
         Text(`${this.voteupCount}`)
-          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontSize($r('app.float.secondary_font_size'))
           .fontWeight(this.voteState === ContentVoteState.UP ? FontWeight.Bold : FontWeight.Medium)
           .fontColor(this.resolvedThemeColor)
       }
       .padding({ left: 8, right: 8, top: 8, bottom: 8 })
     }
-    .id(`p3_${this.kind}_vote_up`)
+    .id(`${this.kind}_vote_up`)
     .backgroundColor(Color.Transparent)
     .lightUpEffect(1)
     .enabled(!this.interactionPending)
@@ -3131,7 +3131,7 @@ struct ContentDetailPage {
       }
       .padding({ left: 8, right: 8, top: 8, bottom: 8 })
     }
-    .id(`p3_${this.kind}_vote_down`)
+    .id(`${this.kind}_vote_down`)
     .backgroundColor(Color.Transparent)
     .lightUpEffect(1)
     .enabled(!this.interactionPending)
@@ -3149,13 +3149,13 @@ struct ContentDetailPage {
           .fontSize(20)
           .fontColor([this.following ? this.resolvedThemeColor : $r('app.color.secondary_text')])
         Text(this.following ? `已关注 ${this.followerCount}` : `关注问题 ${this.followerCount}`)
-          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontSize($r('app.float.secondary_font_size'))
           .fontWeight(FontWeight.Medium)
           .fontColor(this.following ? this.resolvedThemeColor : $r('app.color.secondary_text'))
       }
       .padding({ left: 6, right: 6, top: 8, bottom: 8 })
     }
-      .id('p3_question_follow')
+      .id('question_follow')
       .height(36)
       .backgroundColor(Color.Transparent)
       .enabled(!this.interactionPending)
@@ -3166,20 +3166,20 @@ struct ContentDetailPage {
 
   @Builder
   private interactionStatusRow() {
-    Row({ space: $r('app.float.p1_spacing_small') }) {
+    Row({ space: $r('app.float.spacing_small') }) {
       Text(this.interactionErrorMessage)
-        .id(`p3_${this.kind}_interaction_status`)
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .id(`${this.kind}_interaction_status`)
+        .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.error_text'))
         .layoutWeight(1)
       if (this.interactionRequiresLogin) {
         Button('去登录')
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id(`p3_${this.kind}_interaction_login`)
-          .fontSize($r('app.float.p1_secondary_font_size'))
+          .id(`${this.kind}_interaction_login`)
+          .fontSize($r('app.float.secondary_font_size'))
           .onClick((): void => {
-            this.navigate({ name: P1DestinationName.LOGIN });
+            this.navigate({ name: AppDestinationName.LOGIN });
           })
       }
     }
@@ -3306,7 +3306,7 @@ export struct QuestionDetailPage {
   collectionRepository: CollectionRepository | undefined = undefined;
   commentRepository: CommentRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
-  navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
+  navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {
   };
   onBack: () => void = (): void => {
   };
@@ -3347,7 +3347,7 @@ export struct AnswerDetailPage {
   collectionRepository: CollectionRepository | undefined = undefined;
   commentRepository: CommentRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
-  navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
+  navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {
   };
   onBack: () => void = (): void => {
   };
@@ -3387,7 +3387,7 @@ export struct ArticleDetailPage {
   collectionRepository: CollectionRepository | undefined = undefined;
   commentRepository: CommentRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
-  navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
+  navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {
   };
   onBack: () => void = (): void => {
   };

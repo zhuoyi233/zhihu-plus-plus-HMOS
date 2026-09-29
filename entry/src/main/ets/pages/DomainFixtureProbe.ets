@@ -11,7 +11,7 @@ const DOMAIN_FIXTURE_COUNT = DOMAIN_FIXTURE_SPECS.length;
 
 @Component
 export struct DomainFixtureProbe {
-  /** 当前生效主题色（P1Shell 广播），驱动强调色控件。 */
+  /** 当前生效主题色（AppShell 广播），驱动强调色控件。 */
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   onBack: () => void = () => {};
   @State private status: string = `正在读取 ${DOMAIN_FIXTURE_COUNT} 份 rawfile fixture…`;
@@ -29,79 +29,79 @@ export struct DomainFixtureProbe {
 
   build() {
     Scroll() {
-      Column({ space: $r('app.float.p1_spacing_large') }) {
-        Row({ space: $r('app.float.p1_spacing_medium') }) {
+      Column({ space: $r('app.float.spacing_large') }) {
+        Row({ space: $r('app.float.spacing_medium') }) {
           Button('返回')
             .backgroundColor($r('app.color.control_background'))
             .fontColor($r('app.color.primary_text'))
-            .id('p1_domain_fixture_gate_back')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .id('domain_fixture_gate_back')
+            .fontSize($r('app.float.secondary_font_size'))
             .onClick(() => this.onBack())
 
           Text('Domain fixture 设备门禁')
-            .fontSize($r('app.float.p1_heading_font_size'))
+            .fontSize($r('app.float.heading_font_size'))
             .fontWeight(FontWeight.Bold)
             .fontColor($r('app.color.primary_text'))
             .layoutWeight(1)
         }
         .width('100%')
 
-        Column({ space: $r('app.float.p1_spacing_small') }) {
+        Column({ space: $r('app.float.spacing_small') }) {
           Text(this.status)
-            .id('p1_domain_fixture_gate_status')
-            .fontSize($r('app.float.p1_body_font_size'))
+            .id('domain_fixture_gate_status')
+            .fontSize($r('app.float.body_font_size'))
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.primary_text'))
             .width('100%')
 
           Text(`门禁由 API 24 ResourceManager 直接读取打包后的 ${DOMAIN_FIXTURE_COUNT} 份脱敏 JSON，并调用 data 模块 decoder。`)
-            .id('p1_domain_fixture_gate_description')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .id('domain_fixture_gate_description')
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
         }
         .alignItems(HorizontalAlign.Start)
         .width('100%')
-        .padding($r('app.float.p1_card_padding'))
-        .borderRadius($r('app.float.p1_card_radius'))
+        .padding($r('app.float.card_padding'))
+        .borderRadius($r('app.float.card_radius'))
         .backgroundColor($r('app.color.surface_background'))
 
         if (this.failures.length > 0) {
-          Column({ space: $r('app.float.p1_spacing_small') }) {
+          Column({ space: $r('app.float.spacing_small') }) {
             Text('失败项（仅显示文件名与安全类别）')
-              .fontSize($r('app.float.p1_secondary_font_size'))
+              .fontSize($r('app.float.secondary_font_size'))
               .fontWeight(FontWeight.Medium)
               .fontColor($r('app.color.primary_text'))
               .width('100%')
 
             ForEach(this.failures, (result: DomainFixtureCaseResult, index: number) => {
               Text(result.summary)
-                .id(`p1_domain_fixture_gate_failure_${index}`)
-                .fontSize($r('app.float.p1_secondary_font_size'))
+                .id(`domain_fixture_gate_failure_${index}`)
+                .fontSize($r('app.float.secondary_font_size'))
                 .fontColor($r('app.color.secondary_text'))
                 .width('100%')
             }, (result: DomainFixtureCaseResult): string => result.fileName)
           }
-          .id('p1_domain_fixture_gate_failures')
+          .id('domain_fixture_gate_failures')
           .alignItems(HorizontalAlign.Start)
           .width('100%')
-          .padding($r('app.float.p1_card_padding'))
-          .borderRadius($r('app.float.p1_card_radius'))
+          .padding($r('app.float.card_padding'))
+          .borderRadius($r('app.float.card_radius'))
           .backgroundColor($r('app.color.surface_background'))
         }
 
         Button(this.running ? '正在验证…' : '重新运行')
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id('p1_run_domain_fixture_gate')
+          .id('run_domain_fixture_gate')
           .enabled(!this.running)
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.body_font_size'))
           .width('100%')
           .onClick(() => this.runValidation())
       }
       .alignItems(HorizontalAlign.Start)
       .width('100%')
-      .padding($r('app.float.p1_page_padding'))
+      .padding($r('app.float.page_padding'))
     }
     .width('100%')
     .height('100%')

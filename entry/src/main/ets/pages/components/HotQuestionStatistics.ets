@@ -63,24 +63,24 @@ export struct HotQuestionStatistics {
   build() {
     Flex({ wrap: FlexWrap.Wrap }) {
       Text(`${this.question?.answerCount ?? this.target.answerCount ?? '—'} 回答`)
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .margin({ right: 12, bottom: 4 })
       Text(`${this.question?.visitCount ?? this.target.visitCount ?? '—'} 浏览`)
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .margin({ right: 12, bottom: 4 })
       Text(`${this.question?.commentCount ?? this.target.commentCount ?? '—'} 评论`)
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .margin({ right: 12, bottom: 4 })
       Text(`${this.question?.followerCount ?? this.target.followerCount ?? '—'} 关注`)
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .margin({ right: 12, bottom: 4 })
     }
     .width('100%')
-    .id(`p2_channel_hot_statistics_${this.target.id}`)
+    .id(`channel_hot_statistics_${this.target.id}`)
     // 使用正阈值，确保首次从完全不可见进入屏幕时触发补查。
     .onVisibleAreaChange([0.01], (visible: boolean): void => {
       this.visible = visible;

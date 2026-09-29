@@ -61,7 +61,7 @@ export struct WebLoginPage {
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       Web({ src: 'https://www.zhihu.com/signin?next=%2F', controller: this.controller })
-          .id('p3_web_login_web')
+          .id('web_login_web')
           .width('100%')
           .height('100%')
           .javaScriptAccess(true)
@@ -103,7 +103,7 @@ export struct WebLoginPage {
           })
 
       if (!this.ready || this.loadFailed) {
-        Column({ space: $r('app.float.p1_spacing_medium') }) {
+        Column({ space: $r('app.float.spacing_medium') }) {
           if (!this.loadFailed) {
             LoadingProgress()
               .width(40)
@@ -111,7 +111,7 @@ export struct WebLoginPage {
               .color(this.resolvedThemeColor)
           }
           Text(this.status)
-            .fontSize($r('app.float.p1_body_font_size'))
+            .fontSize($r('app.float.body_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .textAlign(TextAlign.Center)
             .width('100%')
@@ -119,7 +119,7 @@ export struct WebLoginPage {
             Button('重试')
               .backgroundColor(this.resolvedThemeColor)
               .fontColor(onThemeColor(this.resolvedThemeColor))
-              .id('p3_web_login_retry')
+              .id('web_login_retry')
               .onClick((): void => {
                 this.loadFailed = false;
                 this.ready = false;
@@ -135,7 +135,7 @@ export struct WebLoginPage {
         .backgroundColor($r('app.color.page_background'))
       }
     }
-      .id('p3_web_login_container')
+      .id('web_login_container')
       .width('100%')
       .height('100%')
       .backgroundColor($r('app.color.page_background'))

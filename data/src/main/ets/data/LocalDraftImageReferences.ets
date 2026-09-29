@@ -30,7 +30,7 @@ export interface LocalDraftImageReference {
 }
 
 const CONTROLLED_FILE_NAME: RegExp = /^[a-f0-9]{32}\.(?:jpg|png|webp|gif)$/;
-const CONTROLLED_FILE_PATH: RegExp = /(?:^|\/)p4-images\/([a-f0-9]{32}\.(?:jpg|png|webp|gif))$/;
+const CONTROLLED_FILE_PATH: RegExp = /(?:^|\/)picked-images\/([a-f0-9]{32}\.(?:jpg|png|webp|gif))$/;
 
 export function createLocalDraftImageReference(file: ImageTemporaryFile,
   descriptor: ImageBinaryDescriptor): LocalDraftImageReference {
@@ -94,6 +94,39 @@ export function cloneLocalDraftImageReferences(references: Array<LocalDraftImage
     result.push(cloneReference(references[index]));
   }
   return result;
+}
+
+/**
+ * 缓存维护专用：区分“可解析引用 JSON（含空数组）”与“损坏数据”。
+ * parseLocalDraftImageReferences 对两者都返回空数组；清理调度必须能据此停止破坏性回收。
+ */
+export function isParsableLocalDraftImageReferences(serialized: string): boolean {
+  if (typeof serialized !== 'string' || serialized.length > 65536) {
+    return false;
+  }
+  let parsed: JsonValue;
+  try {
+    parsed = parseStrictJson(serialized);
+  } catch (_error) {
+    return false;
+  }
+  if (!(parsed instanceof JsonArrayValue) || parsed.items.length > MAX_IMAGE_SELECTION_COUNT) {
+    return false;
+  }
+  const references: Array<LocalDraftImageReference> = [];
+  for (let index = 0; index < parsed.items.length; index += 1) {
+    const reference = parseReference(parsed.items[index]);
+    if (reference === undefined) {
+      return false;
+    }
+    references.push(reference);
+  }
+  try {
+    validateReferences(references);
+    return true;
+  } catch (_error) {
+    return false;
+  }
 }
 
 function parseReference(value: JsonValue): LocalDraftImageReference | undefined {

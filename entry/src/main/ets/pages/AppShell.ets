@@ -45,23 +45,23 @@ import { resourceManager } from '@kit.LocalizationKit';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { seedBundledUpdateCatalog } from './BundledUpdateCatalog';
 import {
-  decodeP1Destination,
-  findP1DestinationStackIndex,
+  decodeAppDestination,
+  findAppDestinationStackIndex,
   isInfrastructureDestination,
   LatestOperationGuard,
   NotificationEntryDestination,
-  P1Destination,
+  AppDestination,
   PrivateMessageDestination,
-  P1DestinationName,
+  AppDestinationName,
   shouldReloadAfterAuthentication,
   startupDestinationChannel,
   StartupDestinationListener
 } from 'core';
 import { AppNavigationRow } from './AppPageChrome';
 import {
-  P1TopLevelTab,
-  p1TopLevelTabForDestination
-} from './P1TopLevelTabs';
+  TopLevelTab,
+  topLevelTabForDestination
+} from './TopLevelTabs';
 import { DividerShowType, hdsMaterial, HdsNavDestination, HdsNavigation, HdsNavigationAttribute, HdsNavigationTitleMode, HdsTabsController } from '@kit.UIDesignKit';
 import { getImmersiveTitleBarStyle, getPersistentImmersiveTitleBarStyle } from '../common/style/NavStyles';
 import { ZhihuHdsTabs } from './components/ZhihuHdsTabs';
@@ -79,62 +79,62 @@ import { dailyDateCursor, dailyPickerDate, formatDailyDate } from './DailyFeedDa
 const PROJECT_HOME_URI: string = 'https://github.com/zhuoyi233/zhihu-plus-plus-HMOS';
 
 @Component
-export struct P1Shell {
-  @BuilderParam homeContent: (reloadToken: number, navigate: (destination: P1Destination) => void) => void =
+export struct AppShell {
+  @BuilderParam homeContent: (reloadToken: number, navigate: (destination: AppDestination) => void) => void =
     this.emptyReloadableHome;
-  @BuilderParam followingContent: (reloadToken: number, navigate: (destination: P1Destination) => void,
+  @BuilderParam followingContent: (reloadToken: number, navigate: (destination: AppDestination) => void,
     selectedTabIndex: number) => void =
     this.emptyReloadableHome;
-  @BuilderParam hotContent: (reloadToken: number, navigate: (destination: P1Destination) => void) => void =
+  @BuilderParam hotContent: (reloadToken: number, navigate: (destination: AppDestination) => void) => void =
     this.emptyReloadableHome;
   @BuilderParam dailyContent: (reloadToken: number, dateCursor: string,
-    navigate: (destination: P1Destination) => void) => void =
+    navigate: (destination: AppDestination) => void) => void =
     this.emptyReloadableDaily;
-  @BuilderParam dailyStoryContent: (id: string, navigate: (destination: P1Destination) => void) => void =
+  @BuilderParam dailyStoryContent: (id: string, navigate: (destination: AppDestination) => void) => void =
     this.emptyContent;
-  @BuilderParam technicalLabContent: (navigate: (destination: P1Destination) => void,
+  @BuilderParam technicalLabContent: (navigate: (destination: AppDestination) => void,
     onDeveloperModeDisabled: () => void) => void =
     this.emptyTechnicalLab;
-  @BuilderParam searchContent: (query: string, navigate: (destination: P1Destination) => void,
+  @BuilderParam searchContent: (query: string, navigate: (destination: AppDestination) => void,
     onBack: () => void) => void =
     this.emptySearch;
-  @BuilderParam commentContent: (destination: P1Destination,
-    navigate: (destination: P1Destination) => void, onBack: () => void) => void =
+  @BuilderParam commentContent: (destination: AppDestination,
+    navigate: (destination: AppDestination) => void, onBack: () => void) => void =
     this.emptyComment;
-  @BuilderParam questionContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void) => void =
+  @BuilderParam questionContent: (id: string, navigate: (destination: AppDestination) => void, onBack: () => void) => void =
     this.emptyDetailContent;
-  @BuilderParam answerContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void) => void =
+  @BuilderParam answerContent: (id: string, navigate: (destination: AppDestination) => void, onBack: () => void) => void =
     this.emptyDetailContent;
-  @BuilderParam articleContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void) => void =
+  @BuilderParam articleContent: (id: string, navigate: (destination: AppDestination) => void, onBack: () => void) => void =
     this.emptyDetailContent;
-  @BuilderParam videoContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void) => void =
+  @BuilderParam videoContent: (id: string, navigate: (destination: AppDestination) => void, onBack: () => void) => void =
     this.emptyDetailContent;
   @BuilderParam writeAnswerContent: (questionId: string, answerId: string | undefined,
-    navigate: (destination: P1Destination) => void, onBack: () => void) => void = this.emptyWriteAnswer;
-  @BuilderParam writePinContent: (draftId: string, navigate: (destination: P1Destination) => void,
+    navigate: (destination: AppDestination) => void, onBack: () => void) => void = this.emptyWriteAnswer;
+  @BuilderParam writePinContent: (draftId: string, navigate: (destination: AppDestination) => void,
     onBack: () => void) => void = this.emptyWritePin;
-  @BuilderParam pinDraftInboxContent: (navigate: (destination: P1Destination) => void, onBack: () => void) => void =
+  @BuilderParam pinDraftInboxContent: (navigate: (destination: AppDestination) => void, onBack: () => void) => void =
     this.emptyPinDraftInbox;
-  @BuilderParam peopleContent: (id: string, navigate: (destination: P1Destination) => void,
+  @BuilderParam peopleContent: (id: string, navigate: (destination: AppDestination) => void,
     onBack: () => void) => void = this.emptyPeople;
-  @BuilderParam pinContent: (id: string, navigate: (destination: P1Destination) => void, onBack: () => void) => void =
+  @BuilderParam pinContent: (id: string, navigate: (destination: AppDestination) => void, onBack: () => void) => void =
     this.emptyPinContent;
-  @BuilderParam collectionsContent: (id: string, navigate: (destination: P1Destination) => void,
+  @BuilderParam collectionsContent: (id: string, navigate: (destination: AppDestination) => void,
     onBack: () => void) => void = this.emptyCollections;
-  @BuilderParam collectionContentContent: (id: string, navigate: (destination: P1Destination) => void,
+  @BuilderParam collectionContentContent: (id: string, navigate: (destination: AppDestination) => void,
     onBack: () => void) => void = this.emptyCollectionContent;
-  @BuilderParam notificationContent: (navigate: (destination: P1Destination) => void, onBack: () => void) => void =
+  @BuilderParam notificationContent: (navigate: (destination: AppDestination) => void, onBack: () => void) => void =
     this.emptyHome;
-  @BuilderParam notificationEntryContent: (entryName: string, title: string, navigate: (destination: P1Destination) => void) => void =
+  @BuilderParam notificationEntryContent: (entryName: string, title: string, navigate: (destination: AppDestination) => void) => void =
     this.emptyNotificationEntry;
-  @BuilderParam privateMessageContent: (peerId: string, peerName: string, avatarUrl: string, navigate: (destination: P1Destination) => void) => void =
+  @BuilderParam privateMessageContent: (peerId: string, peerName: string, avatarUrl: string, navigate: (destination: AppDestination) => void) => void =
     this.emptyPrivateMessage;
-  @BuilderParam notificationSettingsContent: (navigate: (destination: P1Destination) => void) => void = this.emptyHome;
+  @BuilderParam notificationSettingsContent: (navigate: (destination: AppDestination) => void) => void = this.emptyHome;
   @BuilderParam blockingRulesContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam blockedFeedHistoryContent: (onBack: () => void) => void = this.emptyPage;
-  @BuilderParam readHistoryContent: (navigate: (destination: P1Destination) => void, onBack: () => void) => void =
+  @BuilderParam readHistoryContent: (navigate: (destination: AppDestination) => void, onBack: () => void) => void =
     this.emptyHome;
-  @BuilderParam localHistoryContent: (navigate: (destination: P1Destination) => void, onBack: () => void) => void =
+  @BuilderParam localHistoryContent: (navigate: (destination: AppDestination) => void, onBack: () => void) => void =
     this.emptyHome;
   @BuilderParam loginContent: (onBack: () => void, onAuthenticated: () => void,
     onScanDesktopLogin: () => void) => void = this.emptyLogin;
@@ -160,7 +160,7 @@ export struct P1Shell {
   @StorageProp('detailTitleHiddenByScroll') private detailTitleHiddenByScroll: boolean = false;
   @StorageProp('peopleTitleStates') private peopleTitleStates: PeopleTitleState[] = [];
   /** 全屏图片查看器打开中（详情页广播）：同样隐藏顶栏，使查看器真全屏。 */
-  @StorageProp('p2ImagePreviewUrl') private imagePreviewUrl: string = '';
+  @StorageProp('imagePreviewUrl') private imagePreviewUrl: string = '';
   @State private installedVersionLabel: string = '正在读取已安装版本…';
   @State private aboutVersionSheetShown: boolean = false;
   @State private developerModeEnabled: boolean = false;
@@ -191,9 +191,9 @@ export struct P1Shell {
   @State private dailyDateCursor: string = '';
   @Provide('channelFeedInteractionBridge') private channelFeedInteractionBridge: ChannelFeedInteractionBridge =
     new ChannelFeedInteractionBridge();
-  @State @Watch('onTopLevelTabIndexChanged') private topLevelTabIndex: number = P1TopLevelTab.HOME;
-  @State private bottomBarOrder: number[] = [P1TopLevelTab.HOME, P1TopLevelTab.FOLLOWING,
-    P1TopLevelTab.HOT, P1TopLevelTab.DAILY, P1TopLevelTab.ACCOUNT];
+  @State @Watch('onTopLevelTabIndexChanged') private topLevelTabIndex: number = TopLevelTab.HOME;
+  @State private bottomBarOrder: number[] = [TopLevelTab.HOME, TopLevelTab.FOLLOWING,
+    TopLevelTab.HOT, TopLevelTab.DAILY, TopLevelTab.ACCOUNT];
   @StorageProp('bottomBarItems') @Watch('onBottomBarItemsChanged') private bottomBarItems: string =
     'Home,Following,Hot,Daily,Settings';
   @StorageProp('tapToRefresh') private tapToRefresh: boolean = true;
@@ -204,7 +204,7 @@ export struct P1Shell {
     DEFAULT_THEME_COLOR;
   private startDestinationApplied: boolean = false;
   private readonly tabsController: HdsTabsController = new HdsTabsController();
-  @Provide('p1PathStack') pathStack: NavPathStack = new NavPathStack();
+  @Provide('appPathStack') pathStack: NavPathStack = new NavPathStack();
   private unsubscribeStartupDestination: (() => void) | undefined = undefined;
   private readonly themeOperationGuard: LatestOperationGuard = new LatestOperationGuard();
   private themeMounted: boolean = false;
@@ -230,7 +230,7 @@ export struct P1Shell {
     void this.restoreDeveloperMode();
     this.refreshInstalledVersionLabel();
     this.unsubscribeStartupDestination?.();
-    const listener: StartupDestinationListener = (destination: P1Destination): void => {
+    const listener: StartupDestinationListener = (destination: AppDestination): void => {
       this.startupDestinationArrived = true;
       this.navigate(destination);
     };
@@ -252,91 +252,91 @@ export struct P1Shell {
   }
 
   @Builder
-  emptyHome(_navigate: (destination: P1Destination) => void) {
+  emptyHome(_navigate: (destination: AppDestination) => void) {
     Blank();
   }
 
   @Builder
-  emptyNotificationEntry(_entryName: string, _title: string, _navigate: (destination: P1Destination) => void) {
+  emptyNotificationEntry(_entryName: string, _title: string, _navigate: (destination: AppDestination) => void) {
     Blank();
   }
 
   @Builder
-  emptyPrivateMessage(_peerId: string, _peerName: string, _avatarUrl: string, _navigate: (destination: P1Destination) => void) {
+  emptyPrivateMessage(_peerId: string, _peerName: string, _avatarUrl: string, _navigate: (destination: AppDestination) => void) {
     Blank();
   }
 
   @Builder
-  emptyReloadableHome(_reloadToken: number, _navigate: (destination: P1Destination) => void,
+  emptyReloadableHome(_reloadToken: number, _navigate: (destination: AppDestination) => void,
     _selectedTabIndex: number = 0) {
     Blank();
   }
 
   @Builder
   emptyReloadableDaily(_reloadToken: number, _dateCursor: string,
-    _navigate: (destination: P1Destination) => void) {
+    _navigate: (destination: AppDestination) => void) {
     Blank();
   }
 
   @Builder
-  emptyTechnicalLab(_navigate: (destination: P1Destination) => void, _onDeveloperModeDisabled: () => void) {
+  emptyTechnicalLab(_navigate: (destination: AppDestination) => void, _onDeveloperModeDisabled: () => void) {
     Blank();
   }
 
   @Builder
-  emptySearch(_query: string, _navigate: (destination: P1Destination) => void, _onBack: () => void) {
+  emptySearch(_query: string, _navigate: (destination: AppDestination) => void, _onBack: () => void) {
     Blank();
   }
 
   @Builder
-  emptyComment(_destination: P1Destination,
-    _navigate: (destination: P1Destination) => void, _onBack: () => void) {
+  emptyComment(_destination: AppDestination,
+    _navigate: (destination: AppDestination) => void, _onBack: () => void) {
     Blank();
   }
 
   @Builder
-  emptyContent(_id: string, _navigate: (destination: P1Destination) => void) {
+  emptyContent(_id: string, _navigate: (destination: AppDestination) => void) {
     Blank();
   }
 
   @Builder
-  emptyDetailContent(_id: string, _navigate: (destination: P1Destination) => void, _onBack: () => void) {
+  emptyDetailContent(_id: string, _navigate: (destination: AppDestination) => void, _onBack: () => void) {
     Blank();
   }
 
   @Builder
-  emptyPinContent(_id: string, _navigate: (destination: P1Destination) => void, _onBack: () => void) {
+  emptyPinContent(_id: string, _navigate: (destination: AppDestination) => void, _onBack: () => void) {
     Blank();
   }
 
   @Builder
   emptyWriteAnswer(_questionId: string, _answerId: string | undefined,
-    _navigate: (destination: P1Destination) => void, _onBack: () => void) {
+    _navigate: (destination: AppDestination) => void, _onBack: () => void) {
     Blank();
   }
 
   @Builder
-  emptyWritePin(_draftId: string, _navigate: (destination: P1Destination) => void, _onBack: () => void) {
+  emptyWritePin(_draftId: string, _navigate: (destination: AppDestination) => void, _onBack: () => void) {
     Blank();
   }
 
   @Builder
-  emptyPinDraftInbox(_navigate: (destination: P1Destination) => void, _onBack: () => void) {
+  emptyPinDraftInbox(_navigate: (destination: AppDestination) => void, _onBack: () => void) {
     Blank();
   }
 
   @Builder
-  emptyCollections(_id: string, _navigate: (destination: P1Destination) => void, _onBack: () => void) {
+  emptyCollections(_id: string, _navigate: (destination: AppDestination) => void, _onBack: () => void) {
     Blank();
   }
 
   @Builder
-  emptyCollectionContent(_id: string, _navigate: (destination: P1Destination) => void, _onBack: () => void) {
+  emptyCollectionContent(_id: string, _navigate: (destination: AppDestination) => void, _onBack: () => void) {
     Blank();
   }
 
   @Builder
-  emptyPeople(_id: string, _navigate: (destination: P1Destination) => void, _onBack: () => void) {
+  emptyPeople(_id: string, _navigate: (destination: AppDestination) => void, _onBack: () => void) {
     Blank();
   }
 
@@ -357,11 +357,11 @@ export struct P1Shell {
 
   @Builder
   destinationBuilder(name: string, param: Object) {
-    this.destinationContent(decodeP1Destination(name, param));
+    this.destinationContent(decodeAppDestination(name, param));
   }
 
   @Builder
-  private destinationContent(destination: P1Destination | undefined) {
+  private destinationContent(destination: AppDestination | undefined) {
     if (destination === undefined) {
       HdsNavDestination() {
         this.invalidDestinationPage();
@@ -369,34 +369,34 @@ export struct P1Shell {
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '无法打开页面' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.SETTINGS) {
+    } else if (destination.name === AppDestinationName.SETTINGS) {
       HdsNavDestination() {
         this.settingsPage();
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '我的' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.APPEARANCE_SETTINGS) {
+    } else if (destination.name === AppDestinationName.APPEARANCE_SETTINGS) {
       HdsNavDestination() {
         AppearanceSettingsPage({
           themeMode: this.themeMode,
           onThemeModeChange: (mode: AppThemeMode): void => {
             void this.selectThemeMode(mode);
           },
-          onOpenThemeColorSettings: (): void => this.navigate({ name: P1DestinationName.THEME_COLOR_SETTINGS })
+          onOpenThemeColorSettings: (): void => this.navigate({ name: AppDestinationName.THEME_COLOR_SETTINGS })
         });
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '外观与阅读体验' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.THEME_COLOR_SETTINGS) {
+    } else if (destination.name === AppDestinationName.THEME_COLOR_SETTINGS) {
       HdsNavDestination() {
         ThemeColorSettingsPage();
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '主题颜色' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.IDENTITY_MANAGEMENT) {
+    } else if (destination.name === AppDestinationName.IDENTITY_MANAGEMENT) {
       HdsNavDestination() {
         IdentityManagementPage();
       }
@@ -404,7 +404,7 @@ export struct P1Shell {
         content: { title: { mainTitle: '身份管理' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.READING_SETTINGS) {
+    } else if (destination.name === AppDestinationName.READING_SETTINGS) {
       HdsNavDestination() {
         ReadingSettingsPage();
       }
@@ -412,7 +412,7 @@ export struct P1Shell {
         content: { title: { mainTitle: '朗读与播放' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.SYSTEM_UPDATE_SETTINGS) {
+    } else if (destination.name === AppDestinationName.SYSTEM_UPDATE_SETTINGS) {
       HdsNavDestination() {
         SystemUpdateSettingsPage({
           installedVersionLabel: this.installedVersionLabel,
@@ -425,7 +425,7 @@ export struct P1Shell {
           onCheckUpdate: (): void => { void this.runUpdateCheck(true); },
           onOpenDownload: (url: string): void => this.openExternalUrl(url, '无法打开下载链接'),
           onOpenProject: (): void => this.openProjectHome(),
-          onOpenWhatsNew: (): void => this.navigate({ name: P1DestinationName.WHATS_NEW }),
+          onOpenWhatsNew: (): void => this.navigate({ name: AppDestinationName.WHATS_NEW }),
           onOpenUpdateWhatsNew: (): void => this.openUpdateWhatsNew()
         });
       }
@@ -433,13 +433,13 @@ export struct P1Shell {
         content: { title: { mainTitle: '系统与更新' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.WHATS_NEW) {
+    } else if (destination.name === AppDestinationName.WHATS_NEW) {
       HdsNavDestination() {
         WhatsNewPage({
           targetVersionName: destination.version ?? '',
           onClosed: (shownVersionName: string): void => this.markWhatsNewSeen(shownVersionName),
           onOpenLink: (url: string): void => this.openExternalUrl(url, '无法打开链接'),
-          onOpenDownload: (): void => this.navigate({ name: P1DestinationName.SYSTEM_UPDATE_SETTINGS })
+          onOpenDownload: (): void => this.navigate({ name: AppDestinationName.SYSTEM_UPDATE_SETTINGS })
         });
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
@@ -449,20 +449,20 @@ export struct P1Shell {
         } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.RECOMMENDATION_FILTER_SETTINGS) {
+    } else if (destination.name === AppDestinationName.RECOMMENDATION_FILTER_SETTINGS) {
       HdsNavDestination() {
         ContentFilterSettingsPage({
           preferences: this.createPreferencesStore(),
           runtime: this.createFilterRuntimeStore(),
-          onOpenBlocklist: (): void => this.navigate({ name: P1DestinationName.BLOCKING_RULES }),
-          onOpenBlockedHistory: (): void => this.navigate({ name: P1DestinationName.BLOCKED_FEED_HISTORY })
+          onOpenBlocklist: (): void => this.navigate({ name: AppDestinationName.BLOCKING_RULES }),
+          onOpenBlockedHistory: (): void => this.navigate({ name: AppDestinationName.BLOCKED_FEED_HISTORY })
         });
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
         content: { title: { mainTitle: '推荐系统与内容过滤' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.BLOCKING_RULES) {
+    } else if (destination.name === AppDestinationName.BLOCKING_RULES) {
       HdsNavDestination() {
         this.blockingRulesContent((): void => {
           this.pathStack.pop();
@@ -471,7 +471,7 @@ export struct P1Shell {
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '内容屏蔽' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.BLOCKED_FEED_HISTORY) {
+    } else if (destination.name === AppDestinationName.BLOCKED_FEED_HISTORY) {
       HdsNavDestination() {
         this.blockedFeedHistoryContent((): void => {
           this.pathStack.pop();
@@ -480,9 +480,9 @@ export struct P1Shell {
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '屏蔽记录' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.READ_HISTORY) {
+    } else if (destination.name === AppDestinationName.READ_HISTORY) {
       HdsNavDestination() {
-        this.readHistoryContent((nextDestination: P1Destination): void => this.navigate(nextDestination), (): void => {
+        this.readHistoryContent((nextDestination: AppDestination): void => this.navigate(nextDestination), (): void => {
           this.pathStack.pop();
         });
       }
@@ -498,9 +498,9 @@ export struct P1Shell {
       })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.LOCAL_HISTORY) {
+    } else if (destination.name === AppDestinationName.LOCAL_HISTORY) {
       HdsNavDestination() {
-        this.localHistoryContent((nextDestination: P1Destination): void => this.navigate(nextDestination),
+        this.localHistoryContent((nextDestination: AppDestination): void => this.navigate(nextDestination),
           (): void => {
             this.pathStack.pop();
           });
@@ -508,33 +508,33 @@ export struct P1Shell {
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '本地历史记录' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.TECHNICAL_LAB) {
+    } else if (destination.name === AppDestinationName.TECHNICAL_LAB) {
       HdsNavDestination() {
-        this.technicalLabContent((destination: P1Destination): void => this.navigate(destination), (): void => {
+        this.technicalLabContent((destination: AppDestination): void => this.navigate(destination), (): void => {
           this.disableDeveloperMode();
         });
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '开发者选项' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.LOGIN) {
+    } else if (destination.name === AppDestinationName.LOGIN) {
       HdsNavDestination() {
         this.loginContent((): void => {
           this.pathStack.pop();
         }, (): void => {
           this.returnFromSuccessfulLogin();
         }, (): void => {
-          this.navigate({ name: P1DestinationName.QR_DESKTOP_LOGIN_SCAN });
+          this.navigate({ name: AppDestinationName.QR_DESKTOP_LOGIN_SCAN });
         });
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '登录' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.SEARCH) {
+    } else if (destination.name === AppDestinationName.SEARCH) {
       HdsNavDestination() {
         this.searchContent(
           destination.query,
-          (destination: P1Destination): void => this.navigate(destination),
+          (destination: AppDestination): void => this.navigate(destination),
           (): void => {
             this.pathStack.pop();
           }
@@ -552,11 +552,11 @@ export struct P1Shell {
       })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.COMMENT) {
+    } else if (destination.name === AppDestinationName.COMMENT) {
       HdsNavDestination() {
         this.commentContent(
           destination,
-          (nextDestination: P1Destination): void => this.navigate(nextDestination),
+          (nextDestination: AppDestination): void => this.navigate(nextDestination),
           (): void => { this.pathStack.pop(); }
         );
       }
@@ -576,47 +576,47 @@ export struct P1Shell {
       })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.FOLLOWING) {
+    } else if (destination.name === AppDestinationName.FOLLOWING) {
       HdsNavDestination() {
         this.followingContent(this.followingReloadToken,
-          (destination: P1Destination): void => this.navigate(destination),
+          (destination: AppDestination): void => this.navigate(destination),
           this.followingTitleSelectedIndex);
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '关注' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.HOT) {
+    } else if (destination.name === AppDestinationName.HOT) {
       HdsNavDestination() {
-        this.hotContent(this.hotReloadToken, (destination: P1Destination): void => this.navigate(destination));
+        this.hotContent(this.hotReloadToken, (destination: AppDestination): void => this.navigate(destination));
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '热榜' }, divider: { showType: DividerShowType.OFF } } })
       .hideTitleBar(false)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.DAILY) {
+    } else if (destination.name === AppDestinationName.DAILY) {
       HdsNavDestination() {
         this.dailyContent(this.dailyReloadToken, this.dailyDateCursor,
-          (destination: P1Destination): void => this.navigate(destination));
+          (destination: AppDestination): void => this.navigate(destination));
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '知乎日报' }, divider: { showType: DividerShowType.OFF } } })
       .hideTitleBar(false)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.DAILY_STORY) {
+    } else if (destination.name === AppDestinationName.DAILY_STORY) {
       HdsNavDestination() {
         this.dailyStoryContent(
           destination.id,
-          (destination: P1Destination): void => this.navigate(destination)
+          (destination: AppDestination): void => this.navigate(destination)
         );
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '日报正文' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.QUESTION) {
+    } else if (destination.name === AppDestinationName.QUESTION) {
       HdsNavDestination() {
         this.questionContent(
           destination.id,
-          (destination: P1Destination): void => this.navigate(destination),
+          (destination: AppDestination): void => this.navigate(destination),
           (): void => {
             this.pathStack.pop();
           }
@@ -628,18 +628,18 @@ export struct P1Shell {
       .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll || this.imagePreviewUrl.length > 0)
       .onBackPressed((): boolean => {
         if (this.imagePreviewUrl.length > 0) {
-          AppStorage.setOrCreate('p2ImagePreviewUrl', '');
+          AppStorage.setOrCreate('imagePreviewUrl', '');
           return true;
         }
         return false;
       })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.ANSWER) {
+    } else if (destination.name === AppDestinationName.ANSWER) {
       HdsNavDestination() {
         this.answerContent(
           destination.id,
-          (destination: P1Destination): void => this.navigate(destination),
+          (destination: AppDestination): void => this.navigate(destination),
           (): void => {
             this.pathStack.pop();
           }
@@ -651,7 +651,7 @@ export struct P1Shell {
       .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll || this.imagePreviewUrl.length > 0)
       .onBackPressed((): boolean => {
         if (this.imagePreviewUrl.length > 0) {
-          AppStorage.setOrCreate('p2ImagePreviewUrl', '');
+          AppStorage.setOrCreate('imagePreviewUrl', '');
           return true;
         }
         if (this.detailImmersiveActive) {
@@ -663,11 +663,11 @@ export struct P1Shell {
       })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.ARTICLE) {
+    } else if (destination.name === AppDestinationName.ARTICLE) {
       HdsNavDestination() {
         this.articleContent(
           destination.id,
-          (destination: P1Destination): void => this.navigate(destination),
+          (destination: AppDestination): void => this.navigate(destination),
           (): void => {
             this.pathStack.pop();
           }
@@ -679,7 +679,7 @@ export struct P1Shell {
       .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll || this.imagePreviewUrl.length > 0)
       .onBackPressed((): boolean => {
         if (this.imagePreviewUrl.length > 0) {
-          AppStorage.setOrCreate('p2ImagePreviewUrl', '');
+          AppStorage.setOrCreate('imagePreviewUrl', '');
           return true;
         }
         if (this.detailImmersiveActive) {
@@ -691,11 +691,11 @@ export struct P1Shell {
       })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.VIDEO) {
+    } else if (destination.name === AppDestinationName.VIDEO) {
       HdsNavDestination() {
         this.videoContent(
           destination.id,
-          (destination: P1Destination): void => this.navigate(destination),
+          (destination: AppDestination): void => this.navigate(destination),
           (): void => {
             this.pathStack.pop();
           }
@@ -705,25 +705,27 @@ export struct P1Shell {
       .hideTitleBar(true)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.WRITE_ANSWER) {
+    } else if (destination.name === AppDestinationName.WRITE_ANSWER) {
       HdsNavDestination() {
         this.writeAnswerContent(
           destination.questionId,
           destination.answerId,
-          (destination: P1Destination): void => this.navigate(destination),
+          (destination: AppDestination): void => this.navigate(destination),
           (): void => {
             this.pathStack.pop();
           }
         );
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '写回答' }, divider: { showType: DividerShowType.OFF } } })
+      // 页面自带返回键/标题/发布按钮的完整头部，注入标题栏会与之重叠（同视频页先例）。
+      .hideTitleBar(true)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.WRITE_PIN) {
+    } else if (destination.name === AppDestinationName.WRITE_PIN) {
       HdsNavDestination() {
         this.writePinContent(
           destination.draftId,
-          (destination: P1Destination): void => this.navigate(destination),
+          (destination: AppDestination): void => this.navigate(destination),
           (): void => {
             this.pathStack.pop();
           }
@@ -732,10 +734,10 @@ export struct P1Shell {
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '发布想法' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.PIN_DRAFTS) {
+    } else if (destination.name === AppDestinationName.PIN_DRAFTS) {
       HdsNavDestination() {
         this.pinDraftInboxContent(
-          (destination: P1Destination): void => this.navigate(destination),
+          (destination: AppDestination): void => this.navigate(destination),
           (): void => {
             this.pathStack.pop();
           }
@@ -744,11 +746,11 @@ export struct P1Shell {
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '想法草稿' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.PEOPLE) {
+    } else if (destination.name === AppDestinationName.PEOPLE) {
       HdsNavDestination() {
         this.peopleContent(
           destination.id,
-          (destination: P1Destination): void => this.navigate(destination),
+          (destination: AppDestination): void => this.navigate(destination),
           (): void => {
             this.pathStack.pop();
           }
@@ -759,11 +761,11 @@ export struct P1Shell {
           divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.PIN) {
+    } else if (destination.name === AppDestinationName.PIN) {
       HdsNavDestination() {
         this.pinContent(
           destination.id,
-          (destination: P1Destination): void => this.navigate(destination),
+          (destination: AppDestination): void => this.navigate(destination),
           (): void => {
             this.pathStack.pop();
           }
@@ -772,11 +774,11 @@ export struct P1Shell {
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '想法' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.COLLECTIONS) {
+    } else if (destination.name === AppDestinationName.COLLECTIONS) {
       HdsNavDestination() {
         this.collectionsContent(
           destination.id,
-          (destination: P1Destination): void => this.navigate(destination),
+          (destination: AppDestination): void => this.navigate(destination),
           (): void => {
             this.pathStack.pop();
           }
@@ -785,11 +787,11 @@ export struct P1Shell {
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '收藏夹' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.COLLECTION) {
+    } else if (destination.name === AppDestinationName.COLLECTION) {
       HdsNavDestination() {
         this.collectionContentContent(
           destination.id,
-          (destination: P1Destination): void => this.navigate(destination),
+          (destination: AppDestination): void => this.navigate(destination),
           (): void => {
             this.pathStack.pop();
           }
@@ -798,10 +800,10 @@ export struct P1Shell {
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '收藏夹内容' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.NOTIFICATION) {
+    } else if (destination.name === AppDestinationName.NOTIFICATION) {
       HdsNavDestination() {
         this.notificationContent(
-          (destination: P1Destination): void => this.navigate(destination),
+          (destination: AppDestination): void => this.navigate(destination),
           (): void => {
             this.pathStack.pop();
           }
@@ -817,12 +819,12 @@ export struct P1Shell {
       })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.NOTIFICATION_ENTRY) {
+    } else if (destination.name === AppDestinationName.NOTIFICATION_ENTRY) {
       HdsNavDestination() {
         this.notificationEntryContent(
           (destination as NotificationEntryDestination).entryName,
           (destination as NotificationEntryDestination).title,
-          (destination: P1Destination): void => this.navigate(destination)
+          (destination: AppDestination): void => this.navigate(destination)
         );
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
@@ -830,13 +832,13 @@ export struct P1Shell {
           divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.PRIVATE_MESSAGE) {
+    } else if (destination.name === AppDestinationName.PRIVATE_MESSAGE) {
       HdsNavDestination() {
         this.privateMessageContent(
           (destination as PrivateMessageDestination).peerId,
           (destination as PrivateMessageDestination).peerName ?? '',
           (destination as PrivateMessageDestination).avatarUrl ?? '',
-          (destination: P1Destination): void => this.navigate(destination)
+          (destination: AppDestination): void => this.navigate(destination)
         );
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
@@ -846,14 +848,14 @@ export struct P1Shell {
           divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.NOTIFICATION_SETTINGS) {
+    } else if (destination.name === AppDestinationName.NOTIFICATION_SETTINGS) {
       HdsNavDestination() {
-        this.notificationSettingsContent((destination: P1Destination): void => this.navigate(destination));
+        this.notificationSettingsContent((destination: AppDestination): void => this.navigate(destination));
       }
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '通知设置' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.READER_PROBE) {
+    } else if (destination.name === AppDestinationName.READER_PROBE) {
       HdsNavDestination() {
         this.readerProbeContent((): void => {
           this.pathStack.pop();
@@ -863,7 +865,7 @@ export struct P1Shell {
         content: { title: { mainTitle: '阅读器诊断' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.IMAGE_PROBE) {
+    } else if (destination.name === AppDestinationName.IMAGE_PROBE) {
       HdsNavDestination() {
         this.imageProbeContent((): void => {
           this.pathStack.pop();
@@ -873,7 +875,7 @@ export struct P1Shell {
         content: { title: { mainTitle: '图片诊断' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.DATABASE_PROBE) {
+    } else if (destination.name === AppDestinationName.DATABASE_PROBE) {
       HdsNavDestination() {
         this.databaseProbeContent((): void => {
           this.pathStack.pop();
@@ -883,7 +885,7 @@ export struct P1Shell {
         content: { title: { mainTitle: '数据库诊断' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.DEEP_LINK_PROBE) {
+    } else if (destination.name === AppDestinationName.DEEP_LINK_PROBE) {
       HdsNavDestination() {
         this.deepLinkProbeContent((): void => {
           this.pathStack.pop();
@@ -893,7 +895,7 @@ export struct P1Shell {
         content: { title: { mainTitle: '深链诊断' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.QR_SCAN_PROBE) {
+    } else if (destination.name === AppDestinationName.QR_SCAN_PROBE) {
       HdsNavDestination() {
         this.qrScanProbeContent((): void => {
           this.pathStack.pop();
@@ -903,7 +905,7 @@ export struct P1Shell {
         content: { title: { mainTitle: '二维码诊断' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.QR_DESKTOP_LOGIN_SCAN) {
+    } else if (destination.name === AppDestinationName.QR_DESKTOP_LOGIN_SCAN) {
       HdsNavDestination() {
         this.qrDesktopLoginScanContent((): void => {
           this.pathStack.pop();
@@ -912,7 +914,7 @@ export struct P1Shell {
       .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '扫描电脑端登录码' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.BACKGROUND_TASK_PROBE) {
+    } else if (destination.name === AppDestinationName.BACKGROUND_TASK_PROBE) {
       HdsNavDestination() {
         this.backgroundTaskProbeContent((): void => {
           this.pathStack.pop();
@@ -922,7 +924,7 @@ export struct P1Shell {
         content: { title: { mainTitle: '后台任务诊断' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
-    } else if (destination.name === P1DestinationName.DOMAIN_FIXTURE_PROBE) {
+    } else if (destination.name === AppDestinationName.DOMAIN_FIXTURE_PROBE) {
       HdsNavDestination() {
         this.domainFixtureProbeContent((): void => {
           this.pathStack.pop();
@@ -951,7 +953,7 @@ export struct P1Shell {
         onTabDoubleTap: (index: number): void => {
           // 双击页签刷新对应 feed（“我的”除外）；跨页面信号经 AppStorage 广播。
           const tab = this.tabAtDisplayIndex(index);
-          if (tab < P1TopLevelTab.HOME || tab > P1TopLevelTab.DAILY) {
+          if (tab < TopLevelTab.HOME || tab > TopLevelTab.DAILY) {
             return;
           }
           const nextTick = (AppStorage.get<number>('tabRefreshTick') ?? 0) + 1;
@@ -960,7 +962,7 @@ export struct P1Shell {
         },
         onCurrentTabTap: (index: number): void => {
           const tab = this.tabAtDisplayIndex(index);
-          if (!this.tapToRefresh || tab < P1TopLevelTab.HOME || tab > P1TopLevelTab.DAILY) {
+          if (!this.tapToRefresh || tab < TopLevelTab.HOME || tab > TopLevelTab.DAILY) {
             return;
           }
           AppStorage.setOrCreate('tabScrollTopTabIndex', tab);
@@ -972,10 +974,10 @@ export struct P1Shell {
         // 实时变更后 TabContent 属性（id/tabBar）刷新但内容仍是旧顺序的页面。
         ForEach(this.bottomBarOrder, (tab: number): void => {
           TabContent() {
-            this.topLevelTabPage(tab as P1TopLevelTab)
+            this.topLevelTabPage(tab as TopLevelTab)
           }
-          .id(`p1_top_level_${this.tabKey(tab as P1TopLevelTab)}_content`)
-          .tabBar(this.topLevelTabBarStyle(tab as P1TopLevelTab))
+          .id(`top_level_${this.tabKey(tab as TopLevelTab)}_content`)
+          .tabBar(this.topLevelTabBarStyle(tab as TopLevelTab))
         }, (tab: number): string => `${tab}`)
       }
     }
@@ -998,20 +1000,20 @@ export struct P1Shell {
   }
 
   @Builder
-  private topLevelTabPage(tab: P1TopLevelTab) {
-    if (tab === P1TopLevelTab.HOME) {
-      this.homeContent(this.homeReloadToken, (destination: P1Destination): void => this.navigate(destination))
-    } else if (tab === P1TopLevelTab.FOLLOWING) {
+  private topLevelTabPage(tab: TopLevelTab) {
+    if (tab === TopLevelTab.HOME) {
+      this.homeContent(this.homeReloadToken, (destination: AppDestination): void => this.navigate(destination))
+    } else if (tab === TopLevelTab.FOLLOWING) {
       this.followingContent(this.followingReloadToken,
-        (destination: P1Destination): void => this.navigate(destination), this.followingTitleSelectedIndex)
-    } else if (tab === P1TopLevelTab.HOT) {
-      this.hotContent(this.hotReloadToken, (destination: P1Destination): void => this.navigate(destination))
-    } else if (tab === P1TopLevelTab.DAILY) {
+        (destination: AppDestination): void => this.navigate(destination), this.followingTitleSelectedIndex)
+    } else if (tab === TopLevelTab.HOT) {
+      this.hotContent(this.hotReloadToken, (destination: AppDestination): void => this.navigate(destination))
+    } else if (tab === TopLevelTab.DAILY) {
       this.dailyContent(this.dailyReloadToken, this.dailyDateCursor,
-        (destination: P1Destination): void => this.navigate(destination))
-    } else if (tab === P1TopLevelTab.HISTORY) {
-      this.readHistoryContent((destination: P1Destination): void => this.navigate(destination), (): void => {})
-    } else if (tab === P1TopLevelTab.COLLECTIONS) {
+        (destination: AppDestination): void => this.navigate(destination))
+    } else if (tab === TopLevelTab.HISTORY) {
+      this.readHistoryContent((destination: AppDestination): void => this.navigate(destination), (): void => {})
+    } else if (tab === TopLevelTab.COLLECTIONS) {
       this.topLevelCollectionsPage()
     } else {
       this.settingsPage()
@@ -1022,13 +1024,13 @@ export struct P1Shell {
   private topLevelCollectionsPage() {
     if (this.currentAccountIdentifier().length > 0) {
       this.collectionsContent(this.currentAccountIdentifier(),
-        (destination: P1Destination): void => this.navigate(destination), (): void => {})
+        (destination: AppDestination): void => this.navigate(destination), (): void => {})
     } else {
-      Column({ space: $r('app.float.p1_spacing_medium') }) {
+      Column({ space: $r('app.float.spacing_medium') }) {
         Text('登录后查看收藏夹')
-          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontSize($r('app.float.heading_font_size'))
           .fontColor($r('app.color.primary_text'))
-        Button('去登录').onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
+        Button('去登录').onClick((): void => this.navigate({ name: AppDestinationName.LOGIN }))
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
       }
@@ -1036,20 +1038,20 @@ export struct P1Shell {
     }
   }
 
-  private topLevelTabBarStyle(tab: P1TopLevelTab): BottomTabBarStyle {
+  private topLevelTabBarStyle(tab: TopLevelTab): BottomTabBarStyle {
     // 图标语义直白优先：house/person_2/flame/doc_text/person（经系统符号表核实）。
     let icon: Resource = $r('sys.symbol.house');
-    if (tab === P1TopLevelTab.FOLLOWING) {
+    if (tab === TopLevelTab.FOLLOWING) {
       icon = $r('sys.symbol.person_2');
-    } else if (tab === P1TopLevelTab.HOT) {
+    } else if (tab === TopLevelTab.HOT) {
       icon = $r('sys.symbol.flame');
-    } else if (tab === P1TopLevelTab.DAILY) {
+    } else if (tab === TopLevelTab.DAILY) {
       icon = $r('sys.symbol.doc_text');
-    } else if (tab === P1TopLevelTab.HISTORY) {
+    } else if (tab === TopLevelTab.HISTORY) {
       icon = $r('sys.symbol.clock');
-    } else if (tab === P1TopLevelTab.COLLECTIONS) {
+    } else if (tab === TopLevelTab.COLLECTIONS) {
       icon = $r('sys.symbol.bookmark');
-    } else if (tab === P1TopLevelTab.ACCOUNT) {
+    } else if (tab === TopLevelTab.ACCOUNT) {
       icon = $r('sys.symbol.person');
     }
 
@@ -1066,41 +1068,41 @@ export struct P1Shell {
       });
   }
 
-  private tabLabel(tab: P1TopLevelTab): string {
+  private tabLabel(tab: TopLevelTab): string {
     switch (tab) {
-      case P1TopLevelTab.HOME:
+      case TopLevelTab.HOME:
         return '首页';
-      case P1TopLevelTab.FOLLOWING:
+      case TopLevelTab.FOLLOWING:
         return '关注';
-      case P1TopLevelTab.HOT:
+      case TopLevelTab.HOT:
         return '热榜';
-      case P1TopLevelTab.DAILY:
+      case TopLevelTab.DAILY:
         return '日报';
-      case P1TopLevelTab.HISTORY:
+      case TopLevelTab.HISTORY:
         return '历史';
-      case P1TopLevelTab.COLLECTIONS:
+      case TopLevelTab.COLLECTIONS:
         return '收藏夹';
-      case P1TopLevelTab.ACCOUNT:
+      case TopLevelTab.ACCOUNT:
         return '我的';
     }
   }
 
-  private tabAtDisplayIndex(index: number): P1TopLevelTab {
+  private tabAtDisplayIndex(index: number): TopLevelTab {
     const value = this.bottomBarOrder[index];
-    return value === undefined ? P1TopLevelTab.HOME : value as P1TopLevelTab;
+    return value === undefined ? TopLevelTab.HOME : value as TopLevelTab;
   }
 
-  private activeTopLevelTab(): P1TopLevelTab {
+  private activeTopLevelTab(): TopLevelTab {
     return this.tabAtDisplayIndex(this.topLevelTabIndex);
   }
 
-  private tabKey(tab: P1TopLevelTab): string {
-    if (tab === P1TopLevelTab.FOLLOWING) return 'following';
-    if (tab === P1TopLevelTab.HOT) return 'hot';
-    if (tab === P1TopLevelTab.DAILY) return 'daily';
-    if (tab === P1TopLevelTab.HISTORY) return 'history';
-    if (tab === P1TopLevelTab.COLLECTIONS) return 'collections';
-    if (tab === P1TopLevelTab.ACCOUNT) return 'account';
+  private tabKey(tab: TopLevelTab): string {
+    if (tab === TopLevelTab.FOLLOWING) return 'following';
+    if (tab === TopLevelTab.HOT) return 'hot';
+    if (tab === TopLevelTab.DAILY) return 'daily';
+    if (tab === TopLevelTab.HISTORY) return 'history';
+    if (tab === TopLevelTab.COLLECTIONS) return 'collections';
+    if (tab === TopLevelTab.ACCOUNT) return 'account';
     return 'home';
   }
 
@@ -1153,7 +1155,7 @@ export struct P1Shell {
   /** 消息中心标题栏：标题「消息」+ 右上角已读/设置（对齐上游 CenterAlignedTopAppBar actions）。 */
   @Builder
   private notificationTitleBar() {
-    NotificationTitleBar({ navigate: (destination: P1Destination): void => this.navigate(destination) })
+    NotificationTitleBar({ navigate: (destination: AppDestination): void => this.navigate(destination) })
   }
 
   /** 回答页标题栏：滚动折叠时在返回键右侧显示问题单行 + 答主摘要（对齐上游折叠顶栏）。 */
@@ -1170,7 +1172,7 @@ export struct P1Shell {
 
   @Builder
   private detailTitleBar(title: string) {
-    Row({ space: $r('app.float.p1_spacing_small') }) {
+    Row({ space: $r('app.float.spacing_small') }) {
       Stack({ alignContent: Alignment.Center }) {
         if (this.supportsImmersiveMaterial()) {
           materialCanvas(52, 52)
@@ -1197,7 +1199,7 @@ export struct P1Shell {
         .borderRadius(22)
         .clip(true)
       Text(title)
-        .fontSize($r('app.float.p1_heading_font_size'))
+        .fontSize($r('app.float.heading_font_size'))
         .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.primary_text'))
         .layoutWeight(1)
@@ -1208,56 +1210,56 @@ export struct P1Shell {
         .height(40)
     }
     .width('100%')
-    .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding') })
+    .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding') })
     .hitTestBehavior(HitTestMode.Transparent)
   }
 
   @Builder
   private rootTitleBarContent() {
     Stack({ alignContent: Alignment.Center }) {
-    if (this.activeTopLevelTab() === P1TopLevelTab.HOME) {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+    if (this.activeTopLevelTab() === TopLevelTab.HOME) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Button({ type: ButtonType.Normal, stateEffect: true }) {
-          Row({ space: $r('app.float.p1_spacing_small') }) {
+          Row({ space: $r('app.float.spacing_small') }) {
             SymbolGlyph($r('sys.symbol.magnifyingglass'))
               .fontSize(18)
               .fontColor([$r('app.color.secondary_text')])
             Text('搜索内容')
-              .fontSize($r('app.float.p1_body_font_size'))
+              .fontSize($r('app.float.body_font_size'))
               .fontColor($r('app.color.secondary_text'))
           }
           .width('100%')
           .alignItems(VerticalAlign.Center)
         }
-        .id('p2_home_titlebar_search')
+        .id('home_titlebar_search')
         .layoutWeight(1)
         .height(40)
-        .padding($r('app.float.p1_spacing_small'))
+        .padding($r('app.float.spacing_small'))
         .backgroundColor(Color.Transparent)
         // uiMaterial 全家族为 API 26 专属；工程最低兼容 API 23，标题栏玻璃一律走模糊兜底
         .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
-        .borderRadius($r('app.float.p1_card_radius'))
+        .borderRadius($r('app.float.card_radius'))
         .accessibilityText('打开搜索')
-        .onClick((): void => this.navigate({ name: P1DestinationName.SEARCH, query: '' }))
+        .onClick((): void => this.navigate({ name: AppDestinationName.SEARCH, query: '' }))
 
         Button({ type: ButtonType.Circle, stateEffect: true }) {
           SymbolGlyph($r('sys.symbol.bell'))
             .fontSize(20)
             .fontColor([$r('app.color.primary_text')])
         }
-        .id('p2_home_titlebar_notifications')
+        .id('home_titlebar_notifications')
         .width(40)
         .height(40)
         .padding(0)
         .backgroundColor(Color.Transparent)
         .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
         .accessibilityText('打开通知')
-        .onClick((): void => this.navigate({ name: P1DestinationName.NOTIFICATION }))
+        .onClick((): void => this.navigate({ name: AppDestinationName.NOTIFICATION }))
       }
       .width('100%')
       .padding({ left: 12, right: 12 })
       .hitTestBehavior(HitTestMode.Transparent)
-    } else if (this.activeTopLevelTab() === P1TopLevelTab.FOLLOWING) {
+    } else if (this.activeTopLevelTab() === TopLevelTab.FOLLOWING) {
       Column() {
         Row() {
           this.followingTitleTabItem('推荐', 0)
@@ -1270,14 +1272,14 @@ export struct P1Shell {
       .height('100%')
       .justifyContent(FlexAlign.Center)
       .hitTestBehavior(HitTestMode.Transparent)
-    } else if (this.activeTopLevelTab() === P1TopLevelTab.HOT) {
+    } else if (this.activeTopLevelTab() === TopLevelTab.HOT) {
       Row() {
         Button({ type: ButtonType.Circle, stateEffect: true }) {
           SymbolGlyph($r('sys.symbol.arrow_clockwise'))
             .fontSize(20)
             .fontColor([$r('app.color.primary_text')])
         }
-        .id('p2_hot_titlebar_refresh')
+        .id('hot_titlebar_refresh')
         .width(40)
         .height(40)
         .padding(0)
@@ -1293,17 +1295,17 @@ export struct P1Shell {
       .justifyContent(FlexAlign.End)
       .padding({ right: 12 })
       .hitTestBehavior(HitTestMode.Transparent)
-    } else if (this.activeTopLevelTab() === P1TopLevelTab.DAILY) {
+    } else if (this.activeTopLevelTab() === TopLevelTab.DAILY) {
       Row() {
         Column({ space: 2 }) {
           Text('知乎日报')
-            .fontSize($r('app.float.p1_heading_font_size'))
+            .fontSize($r('app.float.heading_font_size'))
             .fontWeight(FontWeight.Bold)
             .fontColor($r('app.color.primary_text'))
           if (this.dailyViewingDate.length > 0) {
             Text(formatDailyDate(this.dailyViewingDate))
-              .id('p2_daily_titlebar_current_date')
-              .fontSize($r('app.float.p1_secondary_font_size'))
+              .id('daily_titlebar_current_date')
+              .fontSize($r('app.float.secondary_font_size'))
               .fontColor($r('app.color.secondary_text'))
               .maxLines(1)
           }
@@ -1315,7 +1317,7 @@ export struct P1Shell {
             .fontSize(20)
             .fontColor([$r('app.color.primary_text')])
         }
-        .id('p2_daily_titlebar_date')
+        .id('daily_titlebar_date')
         .width(40)
         .height(40)
         .padding(0)
@@ -1327,11 +1329,11 @@ export struct P1Shell {
         })
       }
       .width('100%')
-      .padding({ left: $r('app.float.p1_page_padding'), right: 12 })
+      .padding({ left: $r('app.float.page_padding'), right: 12 })
       .hitTestBehavior(HitTestMode.Transparent)
     }
     }
-    .id('p2_root_titlebar_content')
+    .id('root_titlebar_content')
     .width('100%')
     .height('100%')
     .monopolizeEvents(false)
@@ -1355,7 +1357,7 @@ export struct P1Shell {
         .backgroundColor(this.resolvedThemeColor)
         .animation({ duration: 250, curve: Curve.EaseInOut })
     }
-      .id(`p2_following_titlebar_tab_${index}`)
+      .id(`following_titlebar_tab_${index}`)
       .layoutWeight(1)
       .height(40)
       .justifyContent(FlexAlign.Center)
@@ -1391,29 +1393,29 @@ export struct P1Shell {
   settingsPage() {
     Stack({ alignContent: Alignment.TopStart }) {
       Scroll() {
-        Column({ space: $r('app.float.p1_spacing_large') }) {
+        Column({ space: $r('app.float.spacing_large') }) {
           this.accountOverview()
           this.accountQuickActions()
 
           Text('创作')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
           Column() {
-            AppNavigationRow({ title: '发布想法', description: '创建一条新的想法', testId: 'p4_open_pin_publish', grouped: true,
+            AppNavigationRow({ title: '发布想法', description: '创建一条新的想法', testId: 'open_pin_publish', grouped: true,
               showLeadingIcon: true, leadingIcon: $r('sys.symbol.square_and_pencil'),
               onRowClick: (): void => this.openPinComposer() });
             Divider().color($r('app.color.divider_color'))
-            AppNavigationRow({ title: '想法草稿', description: '继续编辑本地保存的草稿', testId: 'p4_open_pin_drafts', grouped: true,
+            AppNavigationRow({ title: '想法草稿', description: '继续编辑本地保存的草稿', testId: 'open_pin_drafts', grouped: true,
               showLeadingIcon: true, leadingIcon: $r('sys.symbol.doc_text'),
-              onRowClick: (): void => this.navigate({ name: P1DestinationName.PIN_DRAFTS }) });
+              onRowClick: (): void => this.navigate({ name: AppDestinationName.PIN_DRAFTS }) });
           }
           .width('100%')
-          .borderRadius($r('app.float.p1_card_radius'))
+          .borderRadius($r('app.float.card_radius'))
           .backgroundColor($r('app.color.surface_background'))
 
           TextInput({ text: this.settingsSearchQuery, placeholder: '搜索设置' })
-            .id('p3_settings_search')
+            .id('settings_search')
             .width('100%')
             .onChange((value: string): void => {
               this.settingsSearchQuery = value;
@@ -1423,53 +1425,53 @@ export struct P1Shell {
             this.settingsSearchResults()
           } else {
           Text('设置')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
-          Column({ space: $r('app.float.p1_spacing_small') }) {
+          Column({ space: $r('app.float.spacing_small') }) {
             if (this.sessionSnapshot?.status === SessionStatus.AUTHENTICATED) {
               AppNavigationRow({ title: '身份管理', description: '创建马甲号或切换当前身份',
-                testId: 'p5_open_identity_management', grouped: true,
+                testId: 'open_identity_management', grouped: true,
                 showLeadingIcon: true, leadingIcon: $r('sys.symbol.person_2'),
-                onRowClick: (): void => this.navigate({ name: P1DestinationName.IDENTITY_MANAGEMENT }) });
+                onRowClick: (): void => this.navigate({ name: AppDestinationName.IDENTITY_MANAGEMENT }) });
               Divider().color($r('app.color.divider_color'))
             }
             AppNavigationRow({ title: '外观与阅读体验', description: '主题、阅读排版与信息流显示',
-              testId: 'p3_open_appearance_settings', grouped: true,
+              testId: 'open_appearance_settings', grouped: true,
               showLeadingIcon: true, leadingIcon: $r('sys.symbol.eye'),
-              onRowClick: (): void => this.navigate({ name: P1DestinationName.APPEARANCE_SETTINGS }) });
+              onRowClick: (): void => this.navigate({ name: AppDestinationName.APPEARANCE_SETTINGS }) });
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '朗读与播放', description: '语音、语速与当前播放控制',
-              testId: 'p5_open_reading_settings', grouped: true,
+              testId: 'open_reading_settings', grouped: true,
               showLeadingIcon: true, leadingIcon: $r('sys.symbol.mic'),
-              onRowClick: (): void => this.navigate({ name: P1DestinationName.READING_SETTINGS }) });
+              onRowClick: (): void => this.navigate({ name: AppDestinationName.READING_SETTINGS }) });
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '推荐系统与内容过滤', description: '推荐来源、质量规则与内容屏蔽',
-              testId: 'p3_open_recommendation_filter_settings', grouped: true,
+              testId: 'open_recommendation_filter_settings', grouped: true,
               showLeadingIcon: true, leadingIcon: $r('sys.symbol.eye_slash'),
-              onRowClick: (): void => this.navigate({ name: P1DestinationName.RECOMMENDATION_FILTER_SETTINGS }) });
+              onRowClick: (): void => this.navigate({ name: AppDestinationName.RECOMMENDATION_FILTER_SETTINGS }) });
             Divider().color($r('app.color.divider_color'))
-            AppNavigationRow({ title: '通知设置', description: '设置提醒和推送偏好', testId: 'p3_open_notification_settings', grouped: true,
+            AppNavigationRow({ title: '通知设置', description: '设置提醒和推送偏好', testId: 'open_notification_settings', grouped: true,
               showLeadingIcon: true, leadingIcon: $r('sys.symbol.bell_badge_gearshape'),
-              onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION_SETTINGS }) });
+              onRowClick: (): void => this.navigate({ name: AppDestinationName.NOTIFICATION_SETTINGS }) });
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '系统与更新', description: '版本信息、检查更新与问题反馈',
-              testId: 'p5_open_system_update_settings', grouped: true,
+              testId: 'open_system_update_settings', grouped: true,
               showLeadingIcon: true, leadingIcon: $r('sys.symbol.arrow_clockwise'),
-              onRowClick: (): void => this.navigate({ name: P1DestinationName.SYSTEM_UPDATE_SETTINGS }) });
+              onRowClick: (): void => this.navigate({ name: AppDestinationName.SYSTEM_UPDATE_SETTINGS }) });
           }
           .width('100%')
-          .borderRadius($r('app.float.p1_card_radius'))
+          .borderRadius($r('app.float.card_radius'))
           .backgroundColor($r('app.color.surface_background'))
 
           Text('关于与诊断')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
           Column() {
             if (this.pendingUpdateRelease !== undefined) {
               AppNavigationRow({ title: this.pendingUpdateTitle(),
-                description: '点击前往 GitHub 下载新版 HAP', testId: 'p3_open_update_download', grouped: true,
+                description: '点击前往 GitHub 下载新版 HAP', testId: 'open_update_download', grouped: true,
                 showLeadingIcon: true, leadingIcon: $r('sys.symbol.arrow_clockwise'),
                 onRowClick: (): void => {
                   const release = this.pendingUpdateRelease;
@@ -1481,25 +1483,25 @@ export struct P1Shell {
               Divider().color($r('app.color.divider_color'))
             }
             AppNavigationRow({ title: '应用与版本', description: this.installedVersionLabel,
-              testId: 'p3_open_about_version', grouped: true,
+              testId: 'open_about_version', grouped: true,
               showLeadingIcon: true, leadingIcon: $r('sys.symbol.info_circle'),
               onRowClick: (): void => {
                 this.onVersionRowClicked();
               } });
             Divider().color($r('app.color.divider_color'))
-            AppNavigationRow({ title: 'GitHub', description: '查看项目主页', testId: 'p3_open_project_home', grouped: true,
+            AppNavigationRow({ title: 'GitHub', description: '查看项目主页', testId: 'open_project_home', grouped: true,
               showLeadingIcon: true, leadingIcon: $r('app.media.github_mark'), leadingIconIsMedia: true,
               onRowClick: (): void => this.openProjectHome() });
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '项目协议', description: 'GNU AGPL v3.0',
-              testId: 'p3_open_project_license', grouped: true,
+              testId: 'open_project_license', grouped: true,
               showLeadingIcon: true, leadingIcon: $r('sys.symbol.checkmark_square'),
               onRowClick: (): void => {
                 this.projectLicenseSheetShown = true;
               } });
             Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '开源许可', description: '3 个本地 HAR 模块 · GNU AGPL v3.0',
-              testId: 'p3_open_open_source_licenses', grouped: true,
+              testId: 'open_open_source_licenses', grouped: true,
               showLeadingIcon: true, leadingIcon: $r('sys.symbol.doc_text'),
               onRowClick: (): void => {
                 this.openSourceLicensesSheetShown = true;
@@ -1507,34 +1509,34 @@ export struct P1Shell {
             if (this.developerModeEnabled) {
               Divider().color($r('app.color.divider_color'))
               AppNavigationRow({ title: '开发者选项', description: 'Cookie、网络与调试工具',
-                testId: 'p1_open_developer_options', grouped: true,
+                testId: 'open_developer_options', grouped: true,
                 showLeadingIcon: true, leadingIcon: $r('sys.symbol.gearshape'),
-                onRowClick: (): void => this.navigate({ name: P1DestinationName.TECHNICAL_LAB }) });
+                onRowClick: (): void => this.navigate({ name: AppDestinationName.TECHNICAL_LAB }) });
             }
           }
           .width('100%')
-          .borderRadius($r('app.float.p1_card_radius'))
+          .borderRadius($r('app.float.card_radius'))
           .backgroundColor($r('app.color.surface_background'))
 
           Text('本软件仅供学习交流使用，应用内内容由知乎网站提供，著作权归其对应作者所有。')
-            .id('p3_account_disclaimer')
-            .fontSize($r('app.float.p1_caption_font_size'))
+            .id('account_disclaimer')
+            .fontSize($r('app.float.caption_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
-            .padding({ left: $r('app.float.p1_spacing_medium'), right: $r('app.float.p1_spacing_medium') })
+            .padding({ left: $r('app.float.spacing_medium'), right: $r('app.float.spacing_medium') })
         }
         }
       }
       .scrollBar(BarState.Off)
       .width('100%')
       .padding({
-        left: $r('app.float.p1_page_padding'),
-        right: $r('app.float.p1_page_padding'),
+        left: $r('app.float.page_padding'),
+        right: $r('app.float.page_padding'),
         top: 94,
         // HdsTabs 的悬浮底栏会覆盖滚动区末端；为最后一个设置项预留可点击空间。
         bottom: 96
       })
-      .id('p1_settings_scroll')
+      .id('settings_scroll')
       .width('100%')
       .height('100%')
       .align(Alignment.TopStart)
@@ -1593,7 +1595,7 @@ export struct P1Shell {
           }
         })
     }
-    .id('p1_settings_top_start_container')
+    .id('settings_top_start_container')
     .width('100%')
     .height('100%')
     .alignContent(Alignment.TopStart)
@@ -1603,33 +1605,33 @@ export struct P1Shell {
   @Builder
   private accountOverview() {
     if (this.accountSessionState()?.status === SessionStatus.AUTHENTICATED) {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Button({ type: ButtonType.Normal, stateEffect: true }) {
-          Row({ space: $r('app.float.p1_spacing_small') }) {
+          Row({ space: $r('app.float.spacing_small') }) {
             Stack({ alignContent: Alignment.Center }) {
               Text(this.accountAvatarLetter())
                 .width(56)
                 .height(56)
                 .borderRadius(28)
                 .backgroundColor(themeColorContainerColor(this.resolvedThemeColor))
-                .fontSize($r('app.float.p1_heading_font_size'))
+                .fontSize($r('app.float.heading_font_size'))
                 .fontWeight(FontWeight.Medium)
                 .fontColor(this.resolvedThemeColor)
                 .textAlign(TextAlign.Center)
               // 有头像地址时叠加真实头像；加载失败露出首字占位。
               if (this.accountAvatarUrl().length > 0) {
                 Image(this.accountAvatarUrl())
-                  .id('p3_account_overview_avatar')
+                  .id('account_overview_avatar')
                   .width(56)
                   .height(56)
                   .borderRadius(28)
                   .objectFit(ImageFit.Cover)
               }
             }
-            .id('p3_account_overview_avatar_box')
+            .id('account_overview_avatar_box')
             Text(this.accountTitle())
-              .id('p3_account_overview_title')
-              .fontSize($r('app.float.p1_heading_font_size'))
+              .id('account_overview_title')
+              .fontSize($r('app.float.heading_font_size'))
               .fontWeight(FontWeight.Medium)
               .fontColor($r('app.color.primary_text'))
               .maxLines(1)
@@ -1650,20 +1652,20 @@ export struct P1Shell {
             .fontSize(22)
             .fontColor([this.resolvedThemeColor])
         }
-          .id('p4_account_scan_desktop_login')
+          .id('account_scan_desktop_login')
           .width(44)
           .height(44)
           .padding(0)
           .backgroundColor(themeColorContainerColor(this.resolvedThemeColor))
           .accessibilityText('扫描电脑端登录二维码')
-          .onClick((): void => this.navigate({ name: P1DestinationName.QR_DESKTOP_LOGIN_SCAN }))
+          .onClick((): void => this.navigate({ name: AppDestinationName.QR_DESKTOP_LOGIN_SCAN }))
 
         Button({ type: ButtonType.Circle, stateEffect: true }) {
           SymbolGlyph($r('sys.symbol.arrow_right_and_square'))
             .fontSize(22)
             .fontColor([$r('app.color.error_text')])
         }
-          .id('p2_account_logout')
+          .id('account_logout')
           .width(44)
           .height(44)
           .padding(0)
@@ -1672,210 +1674,210 @@ export struct P1Shell {
           .accessibilityText('退出登录')
           .onClick((): void => this.confirmAccountLogout())
       }
-      .id('p3_account_overview')
+      .id('account_overview')
       .width('100%')
       .alignItems(VerticalAlign.Center)
     } else {
-      AppNavigationRow({ title: '登录知乎', description: '管理当前知乎账号的登录状态', testId: 'p2_open_login',
+      AppNavigationRow({ title: '登录知乎', description: '管理当前知乎账号的登录状态', testId: 'open_login',
         grouped: false, showLeadingIcon: true, leadingIcon: $r('sys.symbol.person'),
-        onRowClick: (): void => this.navigate({ name: P1DestinationName.LOGIN }) })
+        onRowClick: (): void => this.navigate({ name: AppDestinationName.LOGIN }) })
     }
   }
 
   @Builder
   private accountQuickActions() {
-    Row({ space: $r('app.float.p1_spacing_small') }) {
+    Row({ space: $r('app.float.spacing_small') }) {
       Button({ type: ButtonType.Normal, stateEffect: true }) {
-        Column({ space: $r('app.float.p1_spacing_xsmall') }) {
+        Column({ space: $r('app.float.spacing_xsmall') }) {
           SymbolGlyph($r('sys.symbol.bookmark'))
             .fontSize(20)
             .fontColor([this.resolvedThemeColor])
           Text('收藏夹')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.primary_text'))
         }
         .width('100%')
         .alignItems(HorizontalAlign.Center)
       }
-      .id('p3_open_my_collections')
+      .id('open_my_collections')
       .layoutWeight(1)
       .height(72)
       .backgroundColor($r('app.color.surface_background'))
-      .borderRadius($r('app.float.p1_card_radius'))
+      .borderRadius($r('app.float.card_radius'))
       .accessibilityText('打开我的收藏夹')
       .onClick((): void => this.openMyCollections())
 
       Button({ type: ButtonType.Normal, stateEffect: true }) {
-        Column({ space: $r('app.float.p1_spacing_xsmall') }) {
+        Column({ space: $r('app.float.spacing_xsmall') }) {
           SymbolGlyph($r('sys.symbol.arrow_counterclockwise_clock'))
             .fontSize(20)
             .fontColor([this.resolvedThemeColor])
           Text('历史')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.primary_text'))
         }
         .width('100%')
         .alignItems(HorizontalAlign.Center)
       }
-      .id('p3_account_quick_history')
+      .id('account_quick_history')
       .layoutWeight(1)
       .height(72)
       .backgroundColor($r('app.color.surface_background'))
-      .borderRadius($r('app.float.p1_card_radius'))
+      .borderRadius($r('app.float.card_radius'))
       .accessibilityText('打开历史')
-      .onClick((): void => this.navigate({ name: P1DestinationName.READ_HISTORY }))
+      .onClick((): void => this.navigate({ name: AppDestinationName.READ_HISTORY }))
 
       Button({ type: ButtonType.Normal, stateEffect: true }) {
-        Column({ space: $r('app.float.p1_spacing_xsmall') }) {
+        Column({ space: $r('app.float.spacing_xsmall') }) {
           SymbolGlyph($r('sys.symbol.bell'))
             .fontSize(20)
             .fontColor([this.resolvedThemeColor])
           Text('通知')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.primary_text'))
         }
         .width('100%')
         .alignItems(HorizontalAlign.Center)
       }
-      .id('p3_account_quick_notifications')
+      .id('account_quick_notifications')
       .layoutWeight(1)
       .height(72)
       .backgroundColor($r('app.color.surface_background'))
-      .borderRadius($r('app.float.p1_card_radius'))
+      .borderRadius($r('app.float.card_radius'))
       .accessibilityText('打开通知')
-      .onClick((): void => this.navigate({ name: P1DestinationName.NOTIFICATION }))
+      .onClick((): void => this.navigate({ name: AppDestinationName.NOTIFICATION }))
     }
-    .id('p3_account_quick_actions')
+    .id('account_quick_actions')
     .width('100%')
   }
 
   @Builder
   private settingsSearchResults() {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_small') }) {
       Text('搜索结果')
-        .id('p3_settings_search_result_title')
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .id('settings_search_result_title')
+        .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
       if (this.settingsSearchMatches('账号与登录', this.accountSummary())) {
-        AppNavigationRow({ title: '账号与登录', description: this.accountSummary(), testId: 'p2_open_login',
+        AppNavigationRow({ title: '账号与登录', description: this.accountSummary(), testId: 'settings_search_open_login',
           showLeadingIcon: true, leadingIcon: $r('sys.symbol.person'),
-          onRowClick: (): void => this.navigate({ name: P1DestinationName.LOGIN }) });
+          onRowClick: (): void => this.navigate({ name: AppDestinationName.LOGIN }) });
       }
       if (this.settingsSearchMatches('发布想法', '创建一条新的想法')) {
-        AppNavigationRow({ title: '发布想法', description: '创建一条新的想法', testId: 'p4_open_pin_publish',
+        AppNavigationRow({ title: '发布想法', description: '创建一条新的想法', testId: 'settings_search_open_pin_publish',
           showLeadingIcon: true, leadingIcon: $r('sys.symbol.square_and_pencil'),
           onRowClick: (): void => this.openPinComposer() });
       }
       if (this.settingsSearchMatches('想法草稿', '继续编辑本地保存的草稿')) {
-        AppNavigationRow({ title: '想法草稿', description: '继续编辑本地保存的草稿', testId: 'p4_open_pin_drafts',
+        AppNavigationRow({ title: '想法草稿', description: '继续编辑本地保存的草稿', testId: 'settings_search_open_pin_drafts',
           showLeadingIcon: true, leadingIcon: $r('sys.symbol.doc_text'),
-          onRowClick: (): void => this.navigate({ name: P1DestinationName.PIN_DRAFTS }) });
+          onRowClick: (): void => this.navigate({ name: AppDestinationName.PIN_DRAFTS }) });
       }
       if (this.settingsSearchMatches('我的收藏夹', '查看自己的知乎收藏夹')) {
-        AppNavigationRow({ title: '我的收藏夹', description: '查看自己的知乎收藏夹', testId: 'p3_open_my_collections',
+        AppNavigationRow({ title: '我的收藏夹', description: '查看自己的知乎收藏夹', testId: 'settings_search_open_my_collections',
           showLeadingIcon: true, leadingIcon: $r('sys.symbol.bookmark'),
           onRowClick: (): void => this.openMyCollections() });
       }
       if (this.settingsSearchMatches('内容屏蔽', '管理作者与关键词屏蔽规则')) {
-        AppNavigationRow({ title: '内容屏蔽', description: '管理作者与关键词屏蔽规则', testId: 'p2_open_blocking_rules',
+        AppNavigationRow({ title: '内容屏蔽', description: '管理作者与关键词屏蔽规则', testId: 'settings_search_open_blocking_rules',
           showLeadingIcon: true, leadingIcon: $r('sys.symbol.eye_slash'),
-          onRowClick: (): void => this.navigate({ name: P1DestinationName.BLOCKING_RULES }) });
+          onRowClick: (): void => this.navigate({ name: AppDestinationName.BLOCKING_RULES }) });
       }
       if (this.settingsSearchMatches('屏蔽记录', '查看最近隐藏的内容')) {
-        AppNavigationRow({ title: '屏蔽记录', description: '查看最近隐藏的内容', testId: 'p3_open_blocked_feed_history',
+        AppNavigationRow({ title: '屏蔽记录', description: '查看最近隐藏的内容', testId: 'settings_search_open_blocked_feed_history',
           showLeadingIcon: true, leadingIcon: $r('sys.symbol.arrow_counterclockwise_clock'),
-          onRowClick: (): void => this.navigate({ name: P1DestinationName.BLOCKED_FEED_HISTORY }) });
+          onRowClick: (): void => this.navigate({ name: AppDestinationName.BLOCKED_FEED_HISTORY }) });
       }
       if (this.settingsSearchMatches('通知设置', '设置提醒和推送偏好')) {
-        AppNavigationRow({ title: '通知设置', description: '设置提醒和推送偏好', testId: 'p3_open_notification_settings',
+        AppNavigationRow({ title: '通知设置', description: '设置提醒和推送偏好', testId: 'settings_search_open_notification_settings',
           showLeadingIcon: true, leadingIcon: $r('sys.symbol.bell_badge_gearshape'),
-          onRowClick: (): void => this.navigate({ name: P1DestinationName.NOTIFICATION_SETTINGS }) });
+          onRowClick: (): void => this.navigate({ name: AppDestinationName.NOTIFICATION_SETTINGS }) });
       }
       if (this.settingsSearchMatches('外观与阅读体验', '主题 阅读排版 信息流 字号 行高 段间距')) {
         AppNavigationRow({ title: '外观与阅读体验', description: '主题、阅读排版与信息流显示',
-          testId: 'p3_search_open_appearance_settings',
+          testId: 'settings_search_search_open_appearance_settings',
           showLeadingIcon: true, leadingIcon: $r('sys.symbol.eye'),
-          onRowClick: (): void => this.navigate({ name: P1DestinationName.APPEARANCE_SETTINGS }) });
+          onRowClick: (): void => this.navigate({ name: AppDestinationName.APPEARANCE_SETTINGS }) });
       }
       if (this.sessionSnapshot?.status === SessionStatus.AUTHENTICATED &&
         this.settingsSearchMatches('身份管理', '创建马甲号 切换当前身份')) {
         AppNavigationRow({ title: '身份管理', description: '创建马甲号或切换当前身份',
-          testId: 'p5_open_identity_management',
+          testId: 'settings_search_open_identity_management',
           showLeadingIcon: true, leadingIcon: $r('sys.symbol.person_2'),
-          onRowClick: (): void => this.navigate({ name: P1DestinationName.IDENTITY_MANAGEMENT }) });
+          onRowClick: (): void => this.navigate({ name: AppDestinationName.IDENTITY_MANAGEMENT }) });
       }
       if (this.settingsSearchMatches('朗读与播放', '语音 语速 音调 播放')) {
         AppNavigationRow({ title: '朗读与播放', description: '语音、语速与当前播放控制',
-          testId: 'p5_open_reading_settings',
+          testId: 'settings_search_open_reading_settings',
           showLeadingIcon: true, leadingIcon: $r('sys.symbol.mic'),
-          onRowClick: (): void => this.navigate({ name: P1DestinationName.READING_SETTINGS }) });
+          onRowClick: (): void => this.navigate({ name: AppDestinationName.READING_SETTINGS }) });
       }
       if (this.settingsSearchMatches('推荐系统与内容过滤', '推荐算法 质量过滤 智能过滤 关键词 用户 主题 广告 盐选')) {
         AppNavigationRow({ title: '推荐系统与内容过滤', description: '推荐来源、质量规则与内容屏蔽',
-          testId: 'p3_search_open_recommendation_filter_settings',
+          testId: 'settings_search_search_open_recommendation_filter_settings',
           showLeadingIcon: true, leadingIcon: $r('sys.symbol.eye_slash'),
-          onRowClick: (): void => this.navigate({ name: P1DestinationName.RECOMMENDATION_FILTER_SETTINGS }) });
+          onRowClick: (): void => this.navigate({ name: AppDestinationName.RECOMMENDATION_FILTER_SETTINGS }) });
       }
       if (this.settingsSearchMatches('系统与更新', '版本信息 检查更新 问题反馈')) {
         AppNavigationRow({ title: '系统与更新', description: '版本信息、检查更新与问题反馈',
-          testId: 'p5_open_system_update_settings',
+          testId: 'settings_search_open_system_update_settings',
           showLeadingIcon: true, leadingIcon: $r('sys.symbol.arrow_clockwise'),
-          onRowClick: (): void => this.navigate({ name: P1DestinationName.SYSTEM_UPDATE_SETTINGS }) });
+          onRowClick: (): void => this.navigate({ name: AppDestinationName.SYSTEM_UPDATE_SETTINGS }) });
       }
       if (this.settingsSearchMatches('应用与版本', this.installedVersionLabel)) {
         AppNavigationRow({ title: '应用与版本', description: this.installedVersionLabel,
-          testId: 'p3_open_about_version', showLeadingIcon: true, leadingIcon: $r('sys.symbol.info_circle'),
+          testId: 'settings_search_open_about_version', showLeadingIcon: true, leadingIcon: $r('sys.symbol.info_circle'),
           onRowClick: (): void => {
             this.onVersionRowClicked();
           } });
       }
       if (this.settingsSearchMatches('GitHub', '查看项目主页')) {
-        AppNavigationRow({ title: 'GitHub', description: '查看项目主页', testId: 'p3_open_project_home',
+        AppNavigationRow({ title: 'GitHub', description: '查看项目主页', testId: 'settings_search_open_project_home',
           showLeadingIcon: true, leadingIcon: $r('app.media.github_mark'), leadingIconIsMedia: true,
           onRowClick: (): void => this.openProjectHome() });
       }
       if (this.settingsSearchMatches('项目协议', 'GNU AGPL v3.0')) {
         AppNavigationRow({ title: '项目协议', description: 'GNU AGPL v3.0',
-          testId: 'p3_open_project_license', showLeadingIcon: true,
+          testId: 'settings_search_open_project_license', showLeadingIcon: true,
           leadingIcon: $r('sys.symbol.checkmark_square'), onRowClick: (): void => {
             this.projectLicenseSheetShown = true;
           } });
       }
       if (this.settingsSearchMatches('开源许可', '3 个本地 HAR 模块 GNU AGPL v3.0')) {
         AppNavigationRow({ title: '开源许可', description: '3 个本地 HAR 模块 · GNU AGPL v3.0',
-          testId: 'p3_open_open_source_licenses', showLeadingIcon: true,
+          testId: 'settings_search_open_open_source_licenses', showLeadingIcon: true,
           leadingIcon: $r('sys.symbol.doc_text'), onRowClick: (): void => {
             this.openSourceLicensesSheetShown = true;
           } });
       }
       if (this.developerModeEnabled &&
         this.settingsSearchMatches('开发者选项', 'Cookie 网络 调试工具 技术实验室')) {
-        AppNavigationRow({ title: '开发者选项', description: 'Cookie、网络与调试工具', testId: 'p1_open_developer_options',
+        AppNavigationRow({ title: '开发者选项', description: 'Cookie、网络与调试工具', testId: 'settings_search_open_developer_options',
           showLeadingIcon: true, leadingIcon: $r('sys.symbol.gearshape'),
-          onRowClick: (): void => this.navigate({ name: P1DestinationName.TECHNICAL_LAB }) });
+          onRowClick: (): void => this.navigate({ name: AppDestinationName.TECHNICAL_LAB }) });
       }
       if (!this.hasSettingsSearchResults()) {
         Text('没有匹配的设置项')
-          .id('p3_settings_search_empty')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .id('settings_search_empty')
+          .fontSize($r('app.float.body_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .width('100%')
-          .padding($r('app.float.p1_card_padding'))
-          .borderRadius($r('app.float.p1_card_radius'))
+          .padding($r('app.float.card_padding'))
+          .borderRadius($r('app.float.card_radius'))
           .backgroundColor($r('app.color.surface_background'))
       }
     }
-    .id('p3_settings_search_results')
+    .id('settings_search_results')
     .width('100%')
   }
 
   @Builder
   private aboutVersionSheet() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_medium') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Text('应用与版本')
-          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontSize($r('app.float.heading_font_size'))
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
@@ -1884,7 +1886,7 @@ export struct P1Shell {
             .fontSize(20)
             .fontColor([$r('app.color.primary_text')])
         }
-          .id('p3_about_version_close')
+          .id('about_version_close')
           .width(40)
           .height(40)
           .padding(0)
@@ -1896,36 +1898,36 @@ export struct P1Shell {
       }
       .width('100%')
       Text('知乎++鸿蒙版')
-        .id('p3_about_version_app_name')
-        .fontSize($r('app.float.p1_body_font_size'))
+        .id('about_version_app_name')
+        .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.primary_text'))
         .width('100%')
       Text(this.installedVersionLabel)
-        .id('p3_about_version_value')
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .id('about_version_value')
+        .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
         .onClick((): void => this.onVersionTapped())
       Text('版本信息来自当前已安装的 HAP，便于核对本机安装结果。')
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
       Text(this.developerModeEnabled ? '开发者选项已开启。检查更新已移至“系统与更新”。' :
         '连续点击“应用与版本”设置行 5 次可开启开发者选项。检查更新已移至“系统与更新”。')
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
     }
     .width('100%')
-    .padding($r('app.float.p1_page_padding'))
+    .padding($r('app.float.page_padding'))
   }
 
   @Builder
   private projectLicenseSheet() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_medium') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Text('项目协议')
-          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontSize($r('app.float.heading_font_size'))
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
@@ -1934,7 +1936,7 @@ export struct P1Shell {
             .fontSize(20)
             .fontColor([$r('app.color.primary_text')])
         }
-          .id('p3_project_license_close')
+          .id('project_license_close')
           .width(40)
           .height(40)
           .padding(0)
@@ -1946,30 +1948,30 @@ export struct P1Shell {
       }
       .width('100%')
       Text('GNU Affero General Public License v3.0')
-        .id('p3_project_license_name')
-        .fontSize($r('app.float.p1_body_font_size'))
+        .id('project_license_name')
+        .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.primary_text'))
         .width('100%')
       Text('本项目以 GNU AGPL v3.0 许可发布。使用、修改或分发时应遵守该协议；对修改后的版本提供网络服务时，也应按协议向相应用户提供源代码。')
-        .id('p3_project_license_summary')
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .id('project_license_summary')
+        .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
       Text('完整法律条款以项目随源代码分发的 LICENSE 文件为准。')
-        .fontSize($r('app.float.p1_caption_font_size'))
+        .fontSize($r('app.float.caption_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
     }
     .width('100%')
-    .padding($r('app.float.p1_page_padding'))
+    .padding($r('app.float.page_padding'))
   }
 
   @Builder
   private openSourceLicensesSheet() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_medium') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Text('开源许可')
-          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontSize($r('app.float.heading_font_size'))
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
@@ -1978,7 +1980,7 @@ export struct P1Shell {
             .fontSize(20)
             .fontColor([$r('app.color.primary_text')])
         }
-          .id('p3_open_source_licenses_close')
+          .id('open_source_licenses_close')
           .width(40)
           .height(40)
           .padding(0)
@@ -1990,8 +1992,8 @@ export struct P1Shell {
       }
       .width('100%')
       Text('当前 API 26 HAP 未打包第三方运行时 ohpm 依赖；以下是随应用打包的本地 HarmonyOS HAR 模块。')
-        .id('p3_open_source_licenses_summary')
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .id('open_source_licenses_summary')
+        .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
       Column() {
@@ -2001,25 +2003,25 @@ export struct P1Shell {
         Divider().color($r('app.color.divider_color'))
         this.openSourceLicenseRow('reader', '原生阅读、数据源与媒体加载 · GNU AGPL v3.0');
       }
-      .id('p3_open_source_licenses_list')
+      .id('open_source_licenses_list')
       .width('100%')
-      .borderRadius($r('app.float.p1_card_radius'))
+      .borderRadius($r('app.float.card_radius'))
       .backgroundColor($r('app.color.control_background'))
       Text('HarmonyOS 系统 Kit 为平台 API，不作为第三方打包依赖列入此处。许可名称以各模块 oh-package.json5 的声明为准。')
-        .fontSize($r('app.float.p1_caption_font_size'))
+        .fontSize($r('app.float.caption_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
     }
     .width('100%')
-    .padding($r('app.float.p1_page_padding'))
+    .padding($r('app.float.page_padding'))
   }
 
   @Builder
   private projectHomeHelpSheet() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_medium') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Text('项目主页')
-          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontSize($r('app.float.heading_font_size'))
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
@@ -2028,7 +2030,7 @@ export struct P1Shell {
             .fontSize(20)
             .fontColor([$r('app.color.primary_text')])
         }
-          .id('p3_project_home_close')
+          .id('project_home_close')
           .width(40)
           .height(40)
           .padding(0)
@@ -2040,35 +2042,35 @@ export struct P1Shell {
       }
       .width('100%')
       Text(PROJECT_HOME_URI)
-        .id('p3_project_home_url')
-        .fontSize($r('app.float.p1_body_font_size'))
+        .id('project_home_url')
+        .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.primary_text'))
         .width('100%')
       Text(this.projectHomeLaunchStatus)
-        .id('p3_project_home_status')
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .id('project_home_status')
+        .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
     }
     .width('100%')
-    .padding($r('app.float.p1_page_padding'))
+    .padding($r('app.float.page_padding'))
   }
 
   @Builder
   private openSourceLicenseRow(name: string, description: string) {
-    Column({ space: $r('app.float.p1_spacing_xsmall') }) {
+    Column({ space: $r('app.float.spacing_xsmall') }) {
       Text(name)
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.primary_text'))
         .width('100%')
       Text(description)
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
     }
     .alignItems(HorizontalAlign.Start)
     .width('100%')
-    .padding($r('app.float.p1_card_padding'))
+    .padding($r('app.float.card_padding'))
   }
 
   private refreshInstalledVersionLabel(): void {
@@ -2151,7 +2153,7 @@ export struct P1Shell {
       const shownVersion = await new AppPreferencesStore(context).loadWhatsNewShownVersion();
       if (!this.startupDestinationArrived &&
         shouldShowWhatsNewOnLaunch(shownVersion, this.installedVersionName)) {
-        this.navigate({ name: P1DestinationName.WHATS_NEW });
+        this.navigate({ name: AppDestinationName.WHATS_NEW });
       }
     } catch (_error) {
       // 偏好读取失败时静默跳过，不打扰启动流程。
@@ -2179,7 +2181,7 @@ export struct P1Shell {
     if (release === undefined) {
       return;
     }
-    this.navigate({ name: P1DestinationName.WHATS_NEW, version: release.versionName });
+    this.navigate({ name: AppDestinationName.WHATS_NEW, version: release.versionName });
   }
 
   private async shouldAutoCheckUpdateNow(): Promise<boolean> {
@@ -2371,7 +2373,7 @@ export struct P1Shell {
     const profile = state?.profile;
     const identifier = profile?.urlToken ?? profile?.id;
     if (state?.status === SessionStatus.AUTHENTICATED && identifier !== undefined && identifier.length > 0) {
-      this.navigate({ name: P1DestinationName.PEOPLE, id: identifier });
+      this.navigate({ name: AppDestinationName.PEOPLE, id: identifier });
     }
   }
 
@@ -2408,20 +2410,20 @@ export struct P1Shell {
   @Builder
   invalidDestinationPage() {
     Stack({ alignContent: Alignment.TopStart }) {
-      Column({ space: $r('app.float.p1_spacing_small') }) {
+      Column({ space: $r('app.float.spacing_small') }) {
         Text('导航参数无效')
-          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontSize($r('app.float.heading_font_size'))
           .fontColor($r('app.color.primary_text'))
         Text('页面参数未通过校验，请返回后重试。')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.body_font_size'))
           .fontColor($r('app.color.secondary_text'))
       }
       .alignItems(HorizontalAlign.Start)
       .width('100%')
-      .padding($r('app.float.p1_page_padding'))
+      .padding($r('app.float.page_padding'))
       .align(Alignment.TopStart)
     }
-    .id('p1_invalid_destination_top_start_container')
+    .id('invalid_destination_top_start_container')
     .width('100%')
     .height('100%')
     .alignContent(Alignment.TopStart)
@@ -2429,23 +2431,23 @@ export struct P1Shell {
   }
 
   @Builder
-  businessPlaceholder(destination: P1Destination) {
+  businessPlaceholder(destination: AppDestination) {
     Stack({ alignContent: Alignment.TopStart }) {
-      Column({ space: $r('app.float.p1_spacing_small') }) {
+      Column({ space: $r('app.float.spacing_small') }) {
         Text(destination.name)
-          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontSize($r('app.float.heading_font_size'))
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.primary_text'))
         Text(this.destinationDescription(destination))
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.body_font_size'))
           .fontColor($r('app.color.secondary_text'))
       }
       .alignItems(HorizontalAlign.Start)
       .width('100%')
-      .padding($r('app.float.p1_page_padding'))
+      .padding($r('app.float.page_padding'))
       .align(Alignment.TopStart)
     }
-    .id('p1_business_destination_top_start_container')
+    .id('business_destination_top_start_container')
     .width('100%')
     .height('100%')
     .alignContent(Alignment.TopStart)
@@ -2467,8 +2469,8 @@ export struct P1Shell {
     this.tabsController.changeIndex(this.topLevelTabIndex);
   }
 
-  private navigate(destination: P1Destination): void {
-    const topLevelTab = p1TopLevelTabForDestination(destination);
+  private navigate(destination: AppDestination): void {
+    const topLevelTab = topLevelTabForDestination(destination);
     if (topLevelTab !== undefined) {
       const displayIndex = this.bottomBarOrder.indexOf(topLevelTab);
       if (displayIndex >= 0) {
@@ -2482,7 +2484,7 @@ export struct P1Shell {
       // P3-7：同一目标（name+参数）已在返回栈任何位置时不再重复入栈，
       // 防止「返回时只是露出前一个重复页面」（CLAUDE.md 返回栈教训）。
       // 参数化页面不能使用按 name 匹配的 MOVE_TO_TOP_SINGLETON，必须按身份查重。
-      const existingIndex = findP1DestinationStackIndex(paths, destination);
+      const existingIndex = findAppDestinationStackIndex(paths, destination);
       if (existingIndex >= 0) {
         // 已在栈中时弹到栈顶（复用原页面实例与滚动状态），不能静默忽略——
         // 否则「答案页 → 问题页 → 点原答案」这类回访点击会无响应。
@@ -2506,15 +2508,15 @@ export struct P1Shell {
     const profile = state?.profile;
     const identifier = profile?.urlToken ?? profile?.id;
     if (session === undefined || state?.status !== SessionStatus.AUTHENTICATED || identifier === undefined) {
-      this.navigate({ name: P1DestinationName.LOGIN });
+      this.navigate({ name: AppDestinationName.LOGIN });
       return;
     }
-    this.navigate({ name: P1DestinationName.COLLECTIONS, id: identifier });
+    this.navigate({ name: AppDestinationName.COLLECTIONS, id: identifier });
   }
 
   /** 路由只持有随机本地草稿键；账号范围和正文均由目标页在认证后解析。 */
   private openPinComposer(): void {
-    this.navigate({ name: P1DestinationName.WRITE_PIN, draftId: this.createLocalDraftId() });
+    this.navigate({ name: AppDestinationName.WRITE_PIN, draftId: this.createLocalDraftId() });
   }
 
   private createLocalDraftId(): string {
@@ -2540,7 +2542,7 @@ export struct P1Shell {
     if (!(current.param instanceof Object)) {
       return;
     }
-    const destination = decodeP1Destination(current.name, current.param);
+    const destination = decodeAppDestination(current.name, current.param);
     if (destination === undefined || !shouldReloadAfterAuthentication(destination)) {
       return;
     }
@@ -2566,26 +2568,26 @@ export struct P1Shell {
     AppStorage.setOrCreate('sessionStateTick', nextSessionTick);
   }
 
-  private destinationDescription(destination: P1Destination): string {
+  private destinationDescription(destination: AppDestination): string {
     switch (destination.name) {
-      case P1DestinationName.SEARCH:
+      case AppDestinationName.SEARCH:
         return `搜索：${destination.query}`;
-      case P1DestinationName.COMMENT:
+      case AppDestinationName.COMMENT:
         return `内容：${destination.contentId}`;
-      case P1DestinationName.NOTIFICATION:
+      case AppDestinationName.NOTIFICATION:
         return '查看知乎账号的通知消息';
-      case P1DestinationName.NOTIFICATION_ENTRY:
+      case AppDestinationName.NOTIFICATION_ENTRY:
         return '查看知乎通知分类消息';
-      case P1DestinationName.PRIVATE_MESSAGE:
+      case AppDestinationName.PRIVATE_MESSAGE:
         return '查看知乎私信会话';
-      case P1DestinationName.QUESTION:
-      case P1DestinationName.ANSWER:
-      case P1DestinationName.ARTICLE:
-      case P1DestinationName.VIDEO:
-      case P1DestinationName.PIN:
-      case P1DestinationName.PEOPLE:
-      case P1DestinationName.COLLECTION:
-      case P1DestinationName.DAILY_STORY:
+      case AppDestinationName.QUESTION:
+      case AppDestinationName.ANSWER:
+      case AppDestinationName.ARTICLE:
+      case AppDestinationName.VIDEO:
+      case AppDestinationName.PIN:
+      case AppDestinationName.PEOPLE:
+      case AppDestinationName.COLLECTION:
+      case AppDestinationName.DAILY_STORY:
         return `内容 ID：${destination.id}`;
       default:
         return destination.name;
@@ -2685,14 +2687,14 @@ export struct P1Shell {
     }
   }
 
-  private topLevelTabFromPreference(value: string): P1TopLevelTab {
-    if (value === 'Following') return P1TopLevelTab.FOLLOWING;
-    if (value === 'Hot') return P1TopLevelTab.HOT;
-    if (value === 'Daily') return P1TopLevelTab.DAILY;
-    if (value === 'ReadHistory') return P1TopLevelTab.HISTORY;
-    if (value === 'Collections') return P1TopLevelTab.COLLECTIONS;
-    if (value === 'Settings') return P1TopLevelTab.ACCOUNT;
-    return P1TopLevelTab.HOME;
+  private topLevelTabFromPreference(value: string): TopLevelTab {
+    if (value === 'Following') return TopLevelTab.FOLLOWING;
+    if (value === 'Hot') return TopLevelTab.HOT;
+    if (value === 'Daily') return TopLevelTab.DAILY;
+    if (value === 'ReadHistory') return TopLevelTab.HISTORY;
+    if (value === 'Collections') return TopLevelTab.COLLECTIONS;
+    if (value === 'Settings') return TopLevelTab.ACCOUNT;
+    return TopLevelTab.HOME;
   }
 
   private broadcastExperiencePreferences(value: ExperiencePreferences): void {
@@ -2737,9 +2739,9 @@ export struct P1Shell {
         result.push(tab);
       }
     }
-    if (result.length < 3 || result.length > 5 || !result.includes(P1TopLevelTab.ACCOUNT)) {
-      return [P1TopLevelTab.HOME, P1TopLevelTab.FOLLOWING, P1TopLevelTab.HOT,
-        P1TopLevelTab.DAILY, P1TopLevelTab.ACCOUNT];
+    if (result.length < 3 || result.length > 5 || !result.includes(TopLevelTab.ACCOUNT)) {
+      return [TopLevelTab.HOME, TopLevelTab.FOLLOWING, TopLevelTab.HOT,
+        TopLevelTab.DAILY, TopLevelTab.ACCOUNT];
     }
     return result;
   }

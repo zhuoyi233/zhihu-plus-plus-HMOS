@@ -1,4 +1,4 @@
-import { P1Destination, P1DestinationName } from 'core';
+import { AppDestination, AppDestinationName } from 'core';
 import {
   onThemeColor,
   DEFAULT_THEME_COLOR,
@@ -61,7 +61,7 @@ export struct NotificationPage {
   repository: MobileNotificationRepository | undefined = undefined;
   settings: NotificationSettingsGateway | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
-  navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {};
+  navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {};
   onBack: () => void = (): void => {};
   @State private phase: NotificationPhase = NotificationPhase.IDLE;
   @State private items: Array<MobileNotificationTimelineItem> = [];
@@ -114,9 +114,9 @@ export struct NotificationPage {
   build() {
     Column() {
       if (this.phase === NotificationPhase.IDLE || this.phase === NotificationPhase.LOADING) {
-        this.statusPanel('正在加载消息…', false, 'p3_notifications_loading')
+        this.statusPanel('正在加载消息…', false, 'notifications_loading')
       } else if (this.phase === NotificationPhase.ERROR) {
-        this.statusPanel(this.errorMessage, true, 'p3_notifications_error')
+        this.statusPanel(this.errorMessage, true, 'notifications_error')
       } else {
         List({ space: 0 }) {
           ListItem() {
@@ -146,7 +146,7 @@ export struct NotificationPage {
               this.conversationRow(item)
             }
           }, (item: MobileNotificationTimelineItem): string =>
-            `p3_notifications_item_${item.uniqueId.length > 0 ? item.uniqueId : item.id}`)
+            `notifications_item_${item.uniqueId.length > 0 ? item.uniqueId : item.id}`)
 
           if (this.loadingMore) {
             ListItem() {
@@ -156,11 +156,11 @@ export struct NotificationPage {
                   .height(20)
                   .color(this.resolvedThemeColor)
                 Text('正在加载更多…')
-                  .fontSize($r('app.float.p1_secondary_font_size'))
+                  .fontSize($r('app.float.secondary_font_size'))
                   .fontColor($r('app.color.secondary_text'))
                   .margin({ left: 8 })
               }
-              .id('p3_notifications_load_more')
+              .id('notifications_load_more')
               .justifyContent(FlexAlign.Center)
               .width('100%')
               .padding(12)
@@ -170,7 +170,7 @@ export struct NotificationPage {
           if (this.errorMessage.length > 0 && this.phase === NotificationPhase.READY) {
             ListItem() {
               Text(this.errorMessage)
-                .fontSize($r('app.float.p1_secondary_font_size'))
+                .fontSize($r('app.float.secondary_font_size'))
                 .fontColor($r('app.color.secondary_text'))
                 .width('100%')
                 .padding(12)
@@ -178,7 +178,7 @@ export struct NotificationPage {
             }
           }
         }
-        .id('p3_notifications_list')
+        .id('notifications_list')
         .width('100%')
         // 顶栏让位：内缩滚动内容起点，未滚动时首屏内容仍从标题栏下沿开始
         .contentStartOffset(FLOATING_TITLE_BAR_OFFSET)
@@ -190,16 +190,16 @@ export struct NotificationPage {
         if (this.phase === NotificationPhase.EMPTY) {
           Column() {
             Text('暂无消息')
-              .fontSize($r('app.float.p1_body_font_size'))
+              .fontSize($r('app.float.body_font_size'))
               .fontColor($r('app.color.secondary_text'))
           }
-          .id('p3_notifications_empty')
+          .id('notifications_empty')
           .width('100%')
           .padding(24)
         }
       }
     }
-    .id('p3_notifications_page')
+    .id('notifications_page')
     .width('100%')
     .height('100%')
     // 覆盖式顶栏：容器不设 top padding，滚动视口延伸到屏幕顶；
@@ -231,27 +231,27 @@ export struct NotificationPage {
           }
 
           Text(mobileNotificationCategoryInfo(category).detailTitle)
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.primary_text'))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
-        .id(`p3_notifications_category_${mobileNotificationCategoryInfo(category).entryName}`)
+        .id(`notifications_category_${mobileNotificationCategoryInfo(category).entryName}`)
         .alignItems(HorizontalAlign.Center)
         .layoutWeight(1)
         .padding({ top: 4, bottom: 4 })
         .borderRadius(12)
         .onClick((): void => {
           this.navigate({
-            name: P1DestinationName.NOTIFICATION_ENTRY,
+            name: AppDestinationName.NOTIFICATION_ENTRY,
             entryName: mobileNotificationCategoryInfo(category).entryName,
             title: mobileNotificationCategoryInfo(category).detailTitle
           });
         })
       }, (category: MobileNotificationCategory): string => category)
     }
-    .id('p3_notifications_category_bar')
+    .id('notifications_category_bar')
     .width('100%')
     .padding({ left: 8, right: 8, top: 14, bottom: 14 })
   }
@@ -272,13 +272,13 @@ export struct NotificationPage {
 
       Column({ space: 3 }) {
         Text(invitation.title.trim().length > 0 ? invitation.title : '邀请回答')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.body_font_size'))
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.primary_text'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
         Text(`${invitation.textPrefix}${invitation.text}`)
-          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontSize($r('app.float.secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -296,13 +296,13 @@ export struct NotificationPage {
           .backgroundColor($r('app.color.error_text'))
       }
     }
-    .id('p3_notifications_invitation')
+    .id('notifications_invitation')
     .width('100%')
     .alignItems(VerticalAlign.Center)
     .padding({ left: 16, right: 16, top: 14, bottom: 14 })
     .onClick((): void => {
       this.navigate({
-        name: P1DestinationName.NOTIFICATION_ENTRY,
+        name: AppDestinationName.NOTIFICATION_ENTRY,
         entryName: 'invite',
         title: '邀请回答'
       });
@@ -335,7 +335,7 @@ export struct NotificationPage {
       Column({ space: 3 }) {
         Row() {
           Text(mobileNotificationDisplayTitle(item))
-            .fontSize($r('app.float.p1_body_font_size'))
+            .fontSize($r('app.float.body_font_size'))
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.primary_text'))
             .maxLines(1)
@@ -344,7 +344,7 @@ export struct NotificationPage {
 
           if (conversationDate(item).length > 0) {
             Text(conversationDate(item))
-              .fontSize($r('app.float.p1_caption_font_size'))
+              .fontSize($r('app.float.caption_font_size'))
               .fontColor($r('app.color.secondary_text'))
               .margin({ left: 8 })
           }
@@ -353,7 +353,7 @@ export struct NotificationPage {
         .alignItems(VerticalAlign.Center)
 
         Text(item.content?.text ?? '')
-          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontSize($r('app.float.secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -373,7 +373,7 @@ export struct NotificationPage {
           .margin({ left: 8 })
       }
     }
-    .id(`p3_notifications_message_${item.uniqueId.length > 0 ? item.uniqueId : item.id}`)
+    .id(`notifications_message_${item.uniqueId.length > 0 ? item.uniqueId : item.id}`)
     .width('100%')
     .alignItems(VerticalAlign.Center)
     .padding({ left: 16, right: 16, top: 12, bottom: 12 })
@@ -389,16 +389,16 @@ export struct NotificationPage {
 
   @Builder
   private statusPanel(message: string, retry: boolean, testId: string) {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
-      if (testId === 'p3_notifications_loading') {
+    Column({ space: $r('app.float.spacing_medium') }) {
+      if (testId === 'notifications_loading') {
         LoadingProgress()
-          .id('p3_notifications_loading_progress')
+          .id('notifications_loading_progress')
           .width(40)
           .height(40)
           .color(this.resolvedThemeColor)
       }
       Text(message)
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .textAlign(TextAlign.Center)
         .width('100%')
@@ -407,15 +407,15 @@ export struct NotificationPage {
           Button('去登录')
             .backgroundColor(this.resolvedThemeColor)
             .fontColor(onThemeColor(this.resolvedThemeColor))
-            .id('p3_notifications_status_login')
-            .fontSize($r('app.float.p1_body_font_size'))
-            .onClick((): void => this.navigate({ name: P1DestinationName.LOGIN }))
+            .id('notifications_status_login')
+            .fontSize($r('app.float.body_font_size'))
+            .onClick((): void => this.navigate({ name: AppDestinationName.LOGIN }))
         } else {
           Button('重新加载')
             .backgroundColor(this.resolvedThemeColor)
             .fontColor(onThemeColor(this.resolvedThemeColor))
             .id(`${testId}_retry`)
-            .fontSize($r('app.float.p1_body_font_size'))
+            .fontSize($r('app.float.body_font_size'))
             .onClick(() => this.controller?.retry())
         }
       }

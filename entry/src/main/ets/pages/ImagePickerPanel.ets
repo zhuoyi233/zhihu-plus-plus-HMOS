@@ -8,30 +8,31 @@ import {
 } from '../platform/MediaPickerCoordinator';
 import {
   createProductionMediaPickerCoordinator,
-  purgeExpiredControlledImageCache,
+  RestoredControlledImages,
   restoreControlledPickedImages
 } from '../platform/SystemPickedImageFileStore';
 
-export type P4ImagePickerSelectionCallback = (images: Array<PreparedPickedImage>) => void;
+export type ImagePickerSelectionCallback = (images: Array<PreparedPickedImage>) => void;
 
 /**
  * P4 创作页可复用的图片选择面板。它只展示应用 cache 中受控副本，不展示相册 URI、文件路径、原图名或
  * 上传协议状态；网络上传只能由后续的显式发布确认链路接管。
  */
 @Component
-export struct P4ImagePickerPanel {
-  /** 当前生效主题色（P1Shell 广播），驱动面板按钮强调色。 */
+export struct ImagePickerPanel {
+  /** 当前生效主题色（AppShell 广播），驱动面板按钮强调色。 */
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
-  onPreparedImagesChanged: P4ImagePickerSelectionCallback = (_images: Array<PreparedPickedImage>): void => {};
-  /**
-   * 编辑器在 DraftRepository 确认保存受控引用后设为 true，所有权随之移交给草稿；
-   * 面板离开时不得删除仍可恢复的缓存副本。未保存的选择仍按原逻辑立即清理。
-   */
-  retainPreparedImages: boolean = false;
+  onPreparedImagesChanged: ImagePickerSelectionCallback = (_images: Array<PreparedPickedImage>): void => {};
+  /** 编辑器持有本地图片引用时保留受控副本，供草稿重新打开；状态需随父页面更新。 */
+  @Prop retainPreparedImages: boolean = false;
   /** 已保存草稿的受控缓存引用；只用于恢复本地预览和移除操作，不包含系统相册 URI。 */
-  restoredLocalImageReferences: Array<LocalDraftImageReference> = [];
+  @Prop @Watch('onRestoredReferencesChanged') restoredLocalImageReferences: Array<LocalDraftImageReference> = [];
   @State private viewState: MediaPickerViewState = initialPickerViewState();
+  @State private unavailableImageCount: number = 0;
   private coordinator: MediaPickerCoordinator | undefined = undefined;
+  private cacheDir: string = '';
+  private restoreGeneration: number = 0;
+  private lastRestoredReferencesKey: string = '';
 
   aboutToAppear(): void {
     if (this.coordinator !== undefined) {
@@ -44,13 +45,59 @@ export struct P4ImagePickerPanel {
     }
     try {
       this.coordinator = createProductionMediaPickerCoordinator(context.cacheDir);
-      this.viewState = this.coordinator.restorePreparedImages(
-        restoreControlledPickedImages(context.cacheDir, this.restoredLocalImageReferences));
-      // 仅回收 24 小时前的应用缓存；失败不影响用户本次显式选择。
-      void purgeExpiredControlledImageCache(context.cacheDir);
     } catch (_error) {
       this.viewState = failedPickerViewState(ImageUploadFailureKind.INVALID_INPUT);
+      return;
     }
+    this.cacheDir = context.cacheDir;
+    // 恢复为异步解析：校验受控缓存文件的尺寸与 magic bytes，完成后再挂载预览；
+    // 24 小时缓存回收已移交启动维护（带草稿引用保护），面板内不再做无保护清理。
+    void this.restorePersistedImages();
+  }
+
+  /**
+   * 草稿恢复是异步流程：页面先进入 READY 挂载面板，引用在草稿元数据加载完成后才到达。
+   * 引用变化（含初次到达）都必须重新触发解析，否则恢复永远拿到空引用、草稿图片无法找回。
+   */
+  onRestoredReferencesChanged(): void {
+    if (this.coordinator === undefined) {
+      return;
+    }
+    if (this.lastRestoredReferencesKey === this.restoredReferencesKey()) {
+      return;
+    }
+    void this.restorePersistedImages();
+  }
+
+  private restoredReferencesKey(): string {
+    let key = '';
+    for (let index = 0; index < this.restoredLocalImageReferences.length; index += 1) {
+      key += (index > 0 ? ',' : '') + this.restoredLocalImageReferences[index].fileName;
+    }
+    return key;
+  }
+
+  private restorePersistedImages(): void {
+    const coordinator = this.coordinator;
+    if (coordinator === undefined) {
+      return;
+    }
+    this.restoreGeneration += 1;
+    const generation = this.restoreGeneration;
+    restoreControlledPickedImages(this.cacheDir, this.restoredLocalImageReferences)
+      .then((restored: RestoredControlledImages): void => {
+        if (this.coordinator !== coordinator || generation !== this.restoreGeneration) {
+          return;
+        }
+        this.lastRestoredReferencesKey = this.restoredReferencesKey();
+        this.unavailableImageCount = restored.unavailableCount;
+        this.viewState = coordinator.restorePreparedImages(restored.images);
+      })
+      .catch((_error: Error): void => {
+        if (this.coordinator === coordinator && generation === this.restoreGeneration) {
+          this.viewState = failedPickerViewState(ImageUploadFailureKind.INVALID_INPUT);
+        }
+      });
   }
 
   aboutToDisappear(): void {
@@ -62,14 +109,14 @@ export struct P4ImagePickerPanel {
   }
 
   build() {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Text('图片')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.body_font_size'))
           .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
         Button('从相册选择')
-          .id('p4_image_picker_select')
+          .id('image_picker_select')
           .fontColor(onThemeColor(this.resolvedThemeColor))
           .backgroundColor(this.resolvedThemeColor)
           .enabled(this.canSelect())
@@ -78,7 +125,7 @@ export struct P4ImagePickerPanel {
           Button('清空')
             .backgroundColor($r('app.color.control_background'))
             .fontColor($r('app.color.primary_text'))
-            .id('p4_image_picker_clear')
+            .id('image_picker_clear')
             .enabled(this.canClear())
             .onClick((): void => this.clear())
         }
@@ -86,11 +133,19 @@ export struct P4ImagePickerPanel {
       .width('100%')
 
       Text(this.statusMessage())
-        .id('p4_image_picker_status')
-        .fontSize($r('app.float.p1_caption_font_size'))
+        .id('image_picker_status')
+        .fontSize($r('app.float.caption_font_size'))
         .fontColor(this.viewState.phase === MediaPickerPhase.FAILED ? $r('app.color.error_text') :
           $r('app.color.secondary_text'))
         .width('100%')
+
+      if (this.unavailableImageCount > 0) {
+        Text(`有 ${this.unavailableImageCount} 张本地图片已不可用，草稿正文已保留。`)
+          .id('image_picker_unavailable_hint')
+          .fontSize($r('app.float.caption_font_size'))
+          .fontColor($r('app.color.error_text'))
+          .width('100%')
+      }
 
       if (this.viewState.images.length > 0) {
         ForEach(this.viewState.images, (item: PreparedPickedImage, index: number) => {
@@ -99,38 +154,38 @@ export struct P4ImagePickerPanel {
       }
 
       Text('所选图片仅复制到应用缓存；本组件不上传、不读取会话，也不会发送网络请求。')
-        .id('p4_image_picker_upload_gate')
-        .fontSize($r('app.float.p1_caption_font_size'))
+        .id('image_picker_upload_gate')
+        .fontSize($r('app.float.caption_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
     }
-    .id('p4_image_picker_panel')
+    .id('image_picker_panel')
     .alignItems(HorizontalAlign.Start)
     .width('100%')
   }
 
   @Builder
   private previewItem(item: PreparedPickedImage, index: number) {
-    Row({ space: $r('app.float.p1_spacing_small') }) {
+    Row({ space: $r('app.float.spacing_small') }) {
       Image(controlledPreviewUri(item.lifecycle.file.path))
-        .id(`p4_image_picker_preview_${index}`)
+        .id(`image_picker_preview_${index}`)
         .width(72)
         .height(72)
         .objectFit(ImageFit.Cover)
-        .borderRadius($r('app.float.p1_card_radius'))
+        .borderRadius($r('app.float.card_radius'))
         .onError((): void => {
           // 缓存副本被系统回收时，立即经协调器删除所有受控副本；不显示内部路径或平台错误。
           this.discardUnavailablePreview();
         })
       Text(previewDescription(item))
-        .id(`p4_image_picker_metadata_${index}`)
-        .fontSize($r('app.float.p1_caption_font_size'))
+        .id(`image_picker_metadata_${index}`)
+        .fontSize($r('app.float.caption_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .layoutWeight(1)
       Button('移除')
         .backgroundColor($r('app.color.control_background'))
         .fontColor($r('app.color.primary_text'))
-        .id(`p4_image_picker_remove_${index}`)
+        .id(`image_picker_remove_${index}`)
         .enabled(this.canClear())
         .onClick((): void => this.remove(index))
     }

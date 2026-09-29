@@ -29,7 +29,7 @@ const LIST_DEPTH_INDENT_VP: number = 18;
 /**
  * “新版本更新”页，两种模式：
  * 1. 版本说明（默认）：展示本机已装版本对应 GitHub Release 的描述，版本更迭后首次
- *    启动自动进入（P1Shell 推入），关闭时经 onClosed 通知 P1Shell 持久化“已看过本版本”；
+ *    启动自动进入（AppShell 推入），关闭时经 onClosed 通知 AppShell 持久化“已看过本版本”；
  * 2. 更新内容预览（targetVersionName 非空）：检查到更新后由主页更新卡片/设置页进入，
  *    展示更新目标版本（GitHub 最新 Release）的描述。此模式关闭不写“已看过”标记。
  * 链接点击经 onOpenLink 交由壳层拉起系统浏览器。
@@ -131,14 +131,14 @@ export struct WhatsNewPage {
           Column({ space: 12 }) {
             LoadingProgress().width(32).height(32).color(this.resolvedThemeColor)
             Text('正在获取更新说明…').id('p8_whats_new_loading')
-              .fontSize($r('app.float.p1_secondary_font_size')).fontColor($r('app.color.secondary_text'))
+              .fontSize($r('app.float.secondary_font_size')).fontColor($r('app.color.secondary_text'))
           }.width('100%').margin({ top: 48 })
         } else if (this.errorMessage.length > 0) {
           Column({ space: 12 }) {
             SymbolGlyph($r('sys.symbol.info_circle')).fontSize(36)
               .fontColor([$r('app.color.secondary_text')])
             Text(this.errorMessage).id('p8_whats_new_error_message')
-              .fontSize($r('app.float.p1_body_font_size')).fontColor($r('app.color.secondary_text'))
+              .fontSize($r('app.float.body_font_size')).fontColor($r('app.color.secondary_text'))
               .textAlign(TextAlign.Center).width('100%')
             Button('重试').id('p8_whats_new_retry')
               .fontColor(onThemeColor(this.resolvedThemeColor))
@@ -158,7 +158,7 @@ export struct WhatsNewPage {
         }
       }
       .width('100%')
-      .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
+      .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
         top: TITLE_BAR_CLEARANCE_VP + 16, bottom: 48 })
     }
     .id('p8_whats_new_scroll')
@@ -184,20 +184,20 @@ export struct WhatsNewPage {
         if (this.targetVersionName.length > 0 && this.installedVersionName.length > 0) {
           Text(`当前 v${this.installedVersionName}  →  新版 v${this.targetVersionName}`)
             .id('p8_whats_new_upgrade_hint')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor(this.resolvedThemeColor)
         }
         if (this.detail !== undefined && formatReleaseDate(this.detail.publishedAt).length > 0) {
           Text(`发布于 ${formatReleaseDate(this.detail.publishedAt)}`)
-            .fontSize($r('app.float.p1_secondary_font_size')).fontColor($r('app.color.secondary_text'))
+            .fontSize($r('app.float.secondary_font_size')).fontColor($r('app.color.secondary_text'))
         }
       }.width('100%').alignItems(HorizontalAlign.Start)
-        .padding(20).borderRadius($r('app.float.p1_card_radius'))
+        .padding(20).borderRadius($r('app.float.card_radius'))
         .backgroundColor($r('app.color.surface_background'))
 
       Button({ type: ButtonType.Normal, stateEffect: true }) {
         Row() {
-          Text('在 GitHub 查看完整发布说明').fontSize($r('app.float.p1_body_font_size'))
+          Text('在 GitHub 查看完整发布说明').fontSize($r('app.float.body_font_size'))
             .fontColor($r('app.color.primary_text'))
           SymbolGlyph($r('sys.symbol.arrow_up_right')).fontSize(18)
             .fontColor([$r('app.color.secondary_text')])
@@ -217,7 +217,7 @@ export struct WhatsNewPage {
       Text('准备升级？').fontSize(18).fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.primary_text')).width('100%')
       Text('前往「系统与更新」获取未签名安装包，支持系统下载与多下载源')
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text')).width('100%')
       Button('下载新版本').id('p8_whats_new_download').width('100%').height(48)
         .fontColor(onThemeColor(this.resolvedThemeColor))
@@ -236,7 +236,7 @@ export struct WhatsNewPage {
         `${index}:${block.kind}:${block.level}:${block.alert}:${block.spans.length}:${block.items.length}`)
       if (this.visibleBlocks().length === 0) {
         Text('本次更新没有填写发布说明').id('p8_whats_new_empty')
-          .fontSize($r('app.float.p1_body_font_size')).fontColor($r('app.color.secondary_text'))
+          .fontSize($r('app.float.body_font_size')).fontColor($r('app.color.secondary_text'))
       }
     }.width('100%')
   }
@@ -247,7 +247,7 @@ export struct WhatsNewPage {
       this.headingBlock(block)
     } else if (block.kind === ReleaseMarkdownBlockKind.PARAGRAPH) {
       Text() {
-        this.inlineSpans(block.spans, $r('app.float.p1_body_font_size'), false)
+        this.inlineSpans(block.spans, $r('app.float.body_font_size'), false)
       }.width('100%')
     } else if (block.kind === ReleaseMarkdownBlockKind.LIST) {
       this.listRows(flattenReleaseMarkdownList(block.items, block.ordered, block.startNumber))
@@ -289,7 +289,7 @@ export struct WhatsNewPage {
               .width(20).textAlign(TextAlign.End)
           }
           Text() {
-            this.inlineSpans(row.spans, $r('app.float.p1_body_font_size'), false)
+            this.inlineSpans(row.spans, $r('app.float.body_font_size'), false)
           }.layoutWeight(1)
         }
         .width('100%')
@@ -308,7 +308,7 @@ export struct WhatsNewPage {
     Column({ space: 8 }) {
       if (releaseAlertLabel(quote.alert).length > 0) {
         Text(releaseAlertLabel(quote.alert))
-          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontSize($r('app.float.secondary_font_size'))
           .fontWeight(FontWeight.Bold)
           .fontColor(this.resolvedThemeColor)
       }
@@ -318,8 +318,8 @@ export struct WhatsNewPage {
         `${index}:${inner.kind}:${inner.level}:${inner.spans.length}:${inner.items.length}`)
     }
     .width('100%')
-    .padding($r('app.float.p1_card_padding'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .padding($r('app.float.card_padding'))
+    .borderRadius($r('app.float.card_radius'))
     .backgroundColor($r('app.color.surface_background'))
     .border({
       width: { left: 4 },
@@ -331,17 +331,17 @@ export struct WhatsNewPage {
   private quoteInnerBlock(inner: ReleaseMarkdownBlock) {
     if (inner.kind === ReleaseMarkdownBlockKind.HEADING) {
       Text() {
-        this.inlineSpans(inner.spans, $r('app.float.p1_body_font_size'), true)
+        this.inlineSpans(inner.spans, $r('app.float.body_font_size'), true)
       }.width('100%')
     } else if (inner.kind === ReleaseMarkdownBlockKind.PARAGRAPH) {
       Text() {
-        this.inlineSpans(inner.spans, $r('app.float.p1_body_font_size'), false)
+        this.inlineSpans(inner.spans, $r('app.float.body_font_size'), false)
       }.width('100%')
     } else if (inner.kind === ReleaseMarkdownBlockKind.LIST) {
       this.listRows(flattenReleaseMarkdownList(inner.items, inner.ordered, inner.startNumber))
     } else {
       Text() {
-        this.inlineSpans(inner.spans, $r('app.float.p1_body_font_size'), false)
+        this.inlineSpans(inner.spans, $r('app.float.body_font_size'), false)
       }.width('100%')
     }
   }

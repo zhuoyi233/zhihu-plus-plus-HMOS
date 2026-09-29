@@ -111,21 +111,21 @@ export struct ReadHistoryPage {
 
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
-      Column({ space: $r('app.float.p1_spacing_medium') }) {
+      Column({ space: $r('app.float.spacing_medium') }) {
         if (this.viewState.requiresLogin) {
           this.loginBanner()
         }
         if (this.viewState.phase === ReadHistoryPhase.LOADING && this.viewState.items.length === 0) {
           LoadingProgress()
-            .id('p2_read_history_loading')
+            .id('read_history_loading')
             .width(40)
             .height(40)
             .color(this.resolvedThemeColor)
         } else if (this.viewState.items.length === 0) {
-          Column({ space: $r('app.float.p1_spacing_medium') }) {
+          Column({ space: $r('app.float.spacing_medium') }) {
             Text(this.viewState.message)
-              .id('p2_read_history_empty')
-              .fontSize($r('app.float.p1_body_font_size'))
+              .id('read_history_empty')
+              .fontSize($r('app.float.body_font_size'))
               .fontColor($r('app.color.secondary_text'))
               .textAlign(TextAlign.Center)
               .width('100%')
@@ -133,7 +133,7 @@ export struct ReadHistoryPage {
               Button('重新加载')
                 .backgroundColor(this.resolvedThemeColor)
                 .fontColor(onThemeColor(this.resolvedThemeColor))
-                .id('p2_read_history_retry')
+                .id('read_history_retry')
                 .enabled(!this.viewState.busy)
                 .onClick((): void => {
                   void this.controller?.reload();
@@ -161,7 +161,7 @@ export struct ReadHistoryPage {
               if (this.viewState.loadingMore) {
                 ListItem() {
                   LoadingProgress()
-                    .id('p3_read_history_load_more')
+                    .id('read_history_load_more')
                     .width(40)
                     .height(40)
                     .color(this.resolvedThemeColor)
@@ -171,8 +171,8 @@ export struct ReadHistoryPage {
               } else if (!this.viewState.canLoadMore) {
                 ListItem() {
                   Text('已经到底啦')
-                    .id('p2_read_history_end')
-                    .fontSize($r('app.float.p1_secondary_font_size'))
+                    .id('read_history_end')
+                    .fontSize($r('app.float.secondary_font_size'))
                     .fontColor($r('app.color.secondary_text'))
                     .textAlign(TextAlign.Center)
                     .width('100%')
@@ -180,7 +180,7 @@ export struct ReadHistoryPage {
                 }
               }
             }
-            .id('p2_read_history_list')
+            .id('read_history_list')
             .width('100%')
             .scrollBar(BarState.Off)
             .edgeEffect(EdgeEffect.Spring)
@@ -188,7 +188,7 @@ export struct ReadHistoryPage {
               void this.controller?.loadMore();
             })
           }
-          .id('p2_read_history_pull_refresh')
+          .id('read_history_pull_refresh')
           .width('100%')
           .layoutWeight(1)
           .onRefreshing((): void => {
@@ -201,8 +201,8 @@ export struct ReadHistoryPage {
       .height('100%')
       // 让位统一约定：内容容器 padding top = FLOATING_TITLE_BAR_OFFSET，刷新指示区域
       // 从悬浮标题栏下沿开始（对齐上游 FeedPullToRefresh 的 indicator padding）
-      .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
-        top: FLOATING_TITLE_BAR_OFFSET, bottom: $r('app.float.p1_page_padding') })
+      .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
+        top: FLOATING_TITLE_BAR_OFFSET, bottom: $r('app.float.page_padding') })
       .backgroundColor($r('app.color.page_background'))
 
       Column()
@@ -219,7 +219,7 @@ export struct ReadHistoryPage {
           }
         })
     }
-    .id('p2_read_history_page')
+    .id('read_history_page')
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.page_background'))
@@ -229,10 +229,10 @@ export struct ReadHistoryPage {
   @Builder
   private historyCard(item: ReadHistoryItem) {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
-      Column({ space: $r('app.float.p1_spacing_small') }) {
-        Row({ space: $r('app.float.p1_spacing_xsmall') }) {
+      Column({ space: $r('app.float.spacing_small') }) {
+        Row({ space: $r('app.float.spacing_xsmall') }) {
           Text(`${readHistoryKindLabel(item.kind)} · ${readHistoryTimeLabel(item.openedAt)}`)
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -242,7 +242,7 @@ export struct ReadHistoryPage {
               .fontSize(18)
               .fontColor([$r('app.color.secondary_text')])
           }
-          .id(`p3_read_history_item_menu_${item.contentKey}`)
+          .id(`read_history_item_menu_${item.contentKey}`)
           .width(32)
           .height(32)
           .padding(0)
@@ -254,7 +254,7 @@ export struct ReadHistoryPage {
         .width('100%')
 
         Text(this.itemTitle(item))
-          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontSize($r('app.float.heading_font_size'))
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.primary_text'))
           .maxLines(2)
@@ -263,7 +263,7 @@ export struct ReadHistoryPage {
 
         if (item.authorName !== undefined && item.authorName.length > 0) {
           Text(item.authorName)
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -272,7 +272,7 @@ export struct ReadHistoryPage {
 
         if (item.summary.trim().length > 0) {
           Text(item.summary)
-            .fontSize($r('app.float.p1_body_font_size'))
+            .fontSize($r('app.float.body_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .maxLines(3)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -282,10 +282,10 @@ export struct ReadHistoryPage {
       .alignItems(HorizontalAlign.Start)
       .width('100%')
     }
-    .id(`p2_read_history_card_${item.contentKey}`)
+    .id(`read_history_card_${item.contentKey}`)
     .width('100%')
-    .padding($r('app.float.p1_card_padding'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .padding($r('app.float.card_padding'))
+    .borderRadius($r('app.float.card_radius'))
     .backgroundColor($r('app.color.surface_background'))
     .accessibilityText(`打开${readHistoryKindLabel(item.kind)}：${this.itemTitle(item)}`)
     .onClick((): void => this.onOpen({ kind: item.kind, id: item.id }))
@@ -302,42 +302,42 @@ export struct ReadHistoryPage {
 
   @Builder
   private loginBanner() {
-    Row({ space: $r('app.float.p1_spacing_small') }) {
+    Row({ space: $r('app.float.spacing_small') }) {
       Text('登录后可同步查看知乎账号的浏览历史')
-        .id('p3_read_history_online_notice')
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .id('read_history_online_notice')
+        .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .layoutWeight(1)
       Button('去登录')
         .backgroundColor(this.resolvedThemeColor)
         .fontColor(onThemeColor(this.resolvedThemeColor))
-        .id('p3_read_history_go_login')
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .id('read_history_go_login')
+        .fontSize($r('app.float.secondary_font_size'))
         .onClick((): void => this.onGoLogin())
     }
     .width('100%')
-    .padding($r('app.float.p1_spacing_medium'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .padding($r('app.float.spacing_medium'))
+    .borderRadius($r('app.float.card_radius'))
     .backgroundColor($r('app.color.surface_background'))
   }
 
   /** 对齐上游清除确认对话框：一次清除当前账号在线 + 本地全部历史记录。 */
   @Builder
   private clearConfirmation() {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_small') }) {
       Text('确认清除历史记录')
-        .fontSize($r('app.float.p1_heading_font_size'))
+        .fontSize($r('app.float.heading_font_size'))
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.primary_text'))
         .width('100%')
       Text('此操作会清除当前账号的在线和本地的全部历史记录。')
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .width('100%')
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Button('我再想想')
           .backgroundColor($r('app.color.control_background'))
           .fontColor($r('app.color.primary_text'))
-          .id('p3_read_history_clear_cancel')
+          .id('read_history_clear_cancel')
           .layoutWeight(1)
           .onClick((): void => {
             this.confirmClear = false;
@@ -345,7 +345,7 @@ export struct ReadHistoryPage {
         Button('确认')
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id('p2_read_history_clear_confirm')
+          .id('read_history_clear_confirm')
           .layoutWeight(1)
           .enabled(!this.viewState.busy)
           .onClick((): void => {
@@ -356,7 +356,7 @@ export struct ReadHistoryPage {
       .width('100%')
     }
     .width('100%')
-    .padding($r('app.float.p1_spacing_medium'))
+    .padding($r('app.float.spacing_medium'))
   }
 
   private itemTitle(item: ReadHistoryItem): string {

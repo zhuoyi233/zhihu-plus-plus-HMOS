@@ -47,25 +47,25 @@ export struct NotificationSettingsPage {
 
   build() {
     Scroll() {
-      Column({ space: $r('app.float.p1_spacing_medium') }) {
+      Column({ space: $r('app.float.spacing_medium') }) {
         if (this.saveStatus.length > 0) {
           Text(this.saveStatus)
-            .id('p3_notifications_settings_status')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .id('notifications_settings_status')
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
         }
 
-        Column({ space: $r('app.float.p1_spacing_small') }) {
+        Column({ space: $r('app.float.spacing_small') }) {
           Text('阅读行为')
-            .fontSize($r('app.float.p1_heading_font_size'))
+            .fontSize($r('app.float.heading_font_size'))
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.primary_text'))
           this.settingRow(
             '打开通知自动已读',
             '进入通知页后自动把当前批次标记为已读',
             this.preferences.autoMarkAsRead,
-            'p3_notifications_settings_auto_read',
+            'notifications_settings_auto_read',
             (checked: boolean): void => {
               this.updatePreferences(withAutoMarkAsRead(this.preferences, checked));
             }
@@ -74,7 +74,7 @@ export struct NotificationSettingsPage {
             '显示未读红点',
             '在通知分类上显示未读数量',
             this.preferences.unreadBadge,
-            'p3_notifications_settings_unread_badge',
+            'notifications_settings_unread_badge',
             (checked: boolean): void => {
               this.updatePreferences(withUnreadBadge(this.preferences, checked));
             }
@@ -82,28 +82,28 @@ export struct NotificationSettingsPage {
         }
         .alignItems(HorizontalAlign.Start)
         .width('100%')
-        .padding($r('app.float.p1_card_padding'))
-        .borderRadius($r('app.float.p1_card_radius'))
+        .padding($r('app.float.card_padding'))
+        .borderRadius($r('app.float.card_radius'))
         .backgroundColor($r('app.color.surface_background'))
 
-        Column({ space: $r('app.float.p1_spacing_small') }) {
+        Column({ space: $r('app.float.spacing_small') }) {
           Text('系统通知')
-            .fontSize($r('app.float.p1_heading_font_size'))
+            .fontSize($r('app.float.heading_font_size'))
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.primary_text'))
           Text('通知授权和提醒方式由 HarmonyOS 在应用级统一管理，不按消息类型复制 Android 通知渠道。')
-            .fontSize($r('app.float.p1_caption_font_size'))
+            .fontSize($r('app.float.caption_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
           Text(this.systemNotificationStatus)
-            .id('p3_notifications_settings_system_status')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .id('notifications_settings_system_status')
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
           Button(this.systemNotificationSettingsOpening ? '正在打开系统通知设置…' : '管理系统通知')
-            .id('p3_notifications_settings_system_open')
+            .id('notifications_settings_system_open')
             .width('100%')
-            .fontSize($r('app.float.p1_body_font_size'))
+            .fontSize($r('app.float.body_font_size'))
             .fontColor(onThemeColor(this.resolvedThemeColor))
             .backgroundColor(this.resolvedThemeColor)
             .enabled(!this.systemNotificationSettingsOpening)
@@ -113,17 +113,17 @@ export struct NotificationSettingsPage {
         }
         .alignItems(HorizontalAlign.Start)
         .width('100%')
-        .padding($r('app.float.p1_card_padding'))
-        .borderRadius($r('app.float.p1_card_radius'))
+        .padding($r('app.float.card_padding'))
+        .borderRadius($r('app.float.card_radius'))
         .backgroundColor($r('app.color.surface_background'))
 
-        Column({ space: $r('app.float.p1_spacing_small') }) {
+        Column({ space: $r('app.float.spacing_small') }) {
           Text('应用内显示')
-            .fontSize($r('app.float.p1_heading_font_size'))
+            .fontSize($r('app.float.heading_font_size'))
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.primary_text'))
           Text('选择在通知页面显示哪些通知；默认策略与上游一致（邀请回答默认关闭）')
-            .fontSize($r('app.float.p1_caption_font_size'))
+            .fontSize($r('app.float.caption_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
           ForEach(NOTIFICATION_KINDS, (kind: NotificationKind) => {
@@ -131,7 +131,7 @@ export struct NotificationSettingsPage {
               notificationKindInfo(kind).displayName,
               '',
               this.displayEnabled(kind),
-              `p3_notifications_settings_display_${kind}`,
+              `notifications_settings_display_${kind}`,
               (checked: boolean): void => {
                 this.updatePreferences(this.withDisplay(kind, checked));
               }
@@ -140,15 +140,15 @@ export struct NotificationSettingsPage {
         }
         .alignItems(HorizontalAlign.Start)
         .width('100%')
-        .padding($r('app.float.p1_card_padding'))
-        .borderRadius($r('app.float.p1_card_radius'))
+        .padding($r('app.float.card_padding'))
+        .borderRadius($r('app.float.card_radius'))
         .backgroundColor($r('app.color.surface_background'))
       }
       .width('100%')
-      .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
-        top: 94, bottom: $r('app.float.p1_page_padding') })
+      .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
+        top: 94, bottom: $r('app.float.page_padding') })
     }
-    .id('p3_notifications_settings_page')
+    .id('notifications_settings_page')
     .width('100%')
     .height('100%')
     .scrollBar(BarState.Off)
@@ -158,15 +158,15 @@ export struct NotificationSettingsPage {
   @Builder
   private settingRow(title: string, description: string, checked: boolean, testId: string,
     onChange: (checked: boolean) => void) {
-    Row({ space: $r('app.float.p1_spacing_small') }) {
+    Row({ space: $r('app.float.spacing_small') }) {
       Column({ space: 2 }) {
         Text(title)
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.body_font_size'))
           .fontColor($r('app.color.primary_text'))
           .width('100%')
         if (description.length > 0) {
           Text(description)
-            .fontSize($r('app.float.p1_caption_font_size'))
+            .fontSize($r('app.float.caption_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
         }

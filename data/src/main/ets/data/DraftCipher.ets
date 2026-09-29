@@ -6,6 +6,8 @@ import { utf8Encode } from '../network/Utf8';
 const TRANSFORMATION: string = 'AES256|GCM|PKCS7';
 const KEY_ALGORITHM: string = 'AES256';
 const DRAFT_AAD: string = 'com.github.zhuoyi233.zhplus:content-draft:v1';
+// DraftModels rejects NUL in HTML, so this byte can represent an empty body inside the encrypted envelope.
+const EMPTY_DRAFT_SENTINEL: string = '\u0000';
 
 class DraftCipherEnvelope {
   readonly version: number;
@@ -40,7 +42,8 @@ export async function encryptDraftHtml(plainText: string, keyData: Uint8Array): 
     const iv = cryptoFramework.createRandom().generateRandomSync(12).data;
     const cipher = cryptoFramework.createCipher(TRANSFORMATION);
     await cipher.init(cryptoFramework.CryptoMode.ENCRYPT_MODE, key, createParams(iv, new Uint8Array(16)));
-    const cipherText = await cipher.update({ data: new Uint8Array(utf8Encode(plainText)) });
+    const cipherText = await cipher.update({ data: new Uint8Array(utf8Encode(
+      plainText.length === 0 ? EMPTY_DRAFT_SENTINEL : plainText)) });
     const authTag = await cipher.doFinal(null);
     return JSON.stringify(new DraftCipherEnvelope(1, encodeBase64(iv), encodeBase64(cipherText.data),
       encodeBase64(authTag.data)));
@@ -61,7 +64,8 @@ export async function decryptDraftHtml(serialized: string, keyData: Uint8Array):
       createParams(decodeBase64(envelope.iv), decodeBase64(envelope.authTag)));
     const plainText = await cipher.update({ data: decodeBase64(envelope.cipherText) });
     await cipher.doFinal(null);
-    return new util.TextDecoder('utf-8').decodeToString(plainText.data);
+    const html = new util.TextDecoder('utf-8').decodeToString(plainText.data);
+    return html === EMPTY_DRAFT_SENTINEL ? '' : html;
   } catch (_error) {
     throw new Error('Draft decryption failed');
   } finally {

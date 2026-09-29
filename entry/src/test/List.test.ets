@@ -15,8 +15,8 @@ import appStartupTest from './AppStartup.test';
 import domainModelTest from './DomainModel.test';
 import domainFixtureGateTest from './DomainFixtureGate.test';
 import zhihuHttpClientTest from './ZhihuHttpClient.test';
-import p1PersistenceTest from './P1Persistence.test';
-import p1NavigationTest from './P1Navigation.test';
+import persistenceTest from './Persistence.test';
+import appNavigationTest from './AppNavigation.test';
 import homeFeedRepositoryTest from './HomeFeedRepository.test';
 import homeFeedStateTest from './HomeFeedState.test';
 import sessionRepositoryTest from './SessionRepository.test';
@@ -82,6 +82,7 @@ import appearancePreferencesTest from './AppearancePreferences.test';
 import recommendationFilterPolicyTest from './RecommendationFilterPolicy.test';
 import identitySpeechSettingsTest from './IdentitySpeechSettings.test';
 import themeColorsTest from './ThemeColors.test';
+import draftImageReferenceScanTest from './DraftImageReferenceScan.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -101,8 +102,8 @@ export default function testsuite(): void {
   domainModelTest();
   domainFixtureGateTest();
   zhihuHttpClientTest();
-  p1PersistenceTest();
-  p1NavigationTest();
+  persistenceTest();
+  appNavigationTest();
   homeFeedRepositoryTest();
   homeFeedStateTest();
   sessionRepositoryTest();
@@ -168,4 +169,5 @@ export default function testsuite(): void {
   recommendationFilterPolicyTest();
   identitySpeechSettingsTest();
   themeColorsTest();
+  draftImageReferenceScanTest();
 }

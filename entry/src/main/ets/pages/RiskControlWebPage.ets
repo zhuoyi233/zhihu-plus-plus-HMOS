@@ -74,7 +74,7 @@ export struct RiskControlWebPage {
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       Web({ src: this.targetUrl(), controller: this.controller })
-        .id('p3_risk_control_web')
+        .id('risk_control_web')
         .width('100%')
         .height('100%')
         .javaScriptAccess(true)
@@ -99,7 +99,7 @@ export struct RiskControlWebPage {
         })
 
       if (!this.ready || this.loadFailed) {
-        Column({ space: $r('app.float.p1_spacing_medium') }) {
+        Column({ space: $r('app.float.spacing_medium') }) {
           if (!this.loadFailed) {
             LoadingProgress()
               .width(40)
@@ -107,7 +107,7 @@ export struct RiskControlWebPage {
               .color(this.resolvedThemeColor)
           }
           Text(this.status)
-            .fontSize($r('app.float.p1_body_font_size'))
+            .fontSize($r('app.float.body_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .textAlign(TextAlign.Center)
             .width('100%')
@@ -115,7 +115,7 @@ export struct RiskControlWebPage {
             Button('重试')
               .backgroundColor(this.resolvedThemeColor)
               .fontColor(onThemeColor(this.resolvedThemeColor))
-              .id('p3_risk_control_retry')
+              .id('risk_control_retry')
               .onClick((): void => {
                 this.loadFailed = false;
                 this.ready = false;
@@ -134,14 +134,14 @@ export struct RiskControlWebPage {
       Button('取消验证')
         .backgroundColor($r('app.color.control_background'))
         .fontColor($r('app.color.primary_text'))
-        .id('p3_risk_control_dismiss')
-        .margin({ left: $r('app.float.p1_spacing_medium'), top: $r('app.float.p1_spacing_medium') })
+        .id('risk_control_dismiss')
+        .margin({ left: $r('app.float.spacing_medium'), top: $r('app.float.spacing_medium') })
         .opacity(0.9)
         .onClick((): void => {
           this.onDismiss();
         })
     }
-    .id('p3_risk_control_container')
+    .id('risk_control_container')
     .width('100%')
     .height('100%')
     // 让位统一约定：验证页叠层下移到悬浮标题栏下方，顶栏不再覆盖网页文字与按钮

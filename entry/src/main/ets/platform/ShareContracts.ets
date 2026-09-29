@@ -8,7 +8,7 @@
 export const MAX_SHARE_TITLE_LENGTH: number = 120;
 export const MAX_SHARE_SUMMARY_LENGTH: number = 1000;
 export const MAX_SHARE_URL_LENGTH: number = 2048;
-export const SHARE_TEMPORARY_DIRECTORY: string = 'p4-share';
+export const SHARE_TEMPORARY_DIRECTORY: string = 'share';
 export const SHARE_PANEL_GRACE_MILLIS: number = 30 * 60 * 1000;
 export const SHARE_TEMPORARY_MAX_AGE_MILLIS: number = 24 * 60 * 60 * 1000;
 
@@ -53,7 +53,7 @@ export interface ShareTextPayload {
 }
 
 export interface ShareTemporaryFile {
-  /** 应用沙箱 cache 下 p4-share 目录中的绝对路径，而不是 URI。 */
+  /** 应用沙箱 cache 下 share 目录中的绝对路径，而不是 URI。 */
   readonly path: string;
   readonly mimeType: string;
   readonly createdAtMillis: number;

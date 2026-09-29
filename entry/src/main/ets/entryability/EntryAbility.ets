@@ -1,9 +1,12 @@
 import { AbilityConstant, Configuration, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { display, window } from '@kit.ArkUI';
 import { resourceManager } from '@kit.LocalizationKit';
-import { AppSessionOwner, AppThemeMode, closeAppDatabase, DEFAULT_THEME_COLOR, formulaForegroundColorForColorMode,
-  getAppDatabase, getAppSessionOwner, normalizeThemeColor, resolveThemeColorForDark } from 'data';
+import { AppSessionOwner, AppThemeMode, closeAppDatabase, ContentDraftStore, DEFAULT_THEME_COLOR,
+  formulaForegroundColorForColorMode, getAppDatabase, getAppSessionOwner, normalizeThemeColor,
+  resolveThemeColorForDark } from 'data';
 import { clearAbilityContext, setAbilityContext } from './AbilityContextHolder';
+import { maintainControlledImageCaches } from '../platform/ControlledImageCacheMaintenance';
+import { purgeExpiredShareTemporaryFiles } from '../platform/SystemShareTemporaryCleaner';
 import {
   AppLogEvent,
   AppLogger,
@@ -12,7 +15,7 @@ import {
   resolveZhihuLink,
   startupDestinationChannel,
   SystemStartupClock,
-  toP1Destination,
+  toAppDestination,
   StartupPhase,
   StartupPhaseStatus,
   StartupTask
@@ -48,6 +51,19 @@ export default class EntryAbility extends UIAbility {
         run: (): Promise<void> => {
           this.routeIncomingLink(want);
           return Promise.resolve();
+        }
+      },
+      {
+        name: 'cache-maintenance',
+        phase: StartupPhase.DEFERRED,
+        dependencies: ['deep-link-routing'],
+        run: (): Promise<void> => {
+          // 先完成全账号草稿引用扫描，再回收无引用的过期受控缓存；失败不影响启动。
+          return Promise.all([
+            maintainControlledImageCaches(this.context.cacheDir, new ContentDraftStore(getAppDatabase(this.context))),
+            purgeExpiredShareTemporaryFiles(this.context.cacheDir)
+          ]).then((): void => {
+          });
         }
       },
       {
@@ -94,7 +110,7 @@ export default class EntryAbility extends UIAbility {
       return;
     }
     this.lastObservedIsDark = isDark;
-    // P1Shell 主题恢复前 appThemeMode 未广播，默认按跟随系统处理（与其初始广播值一致）。
+    // AppShell 主题恢复前 appThemeMode 未广播，默认按跟随系统处理（与其初始广播值一致）。
     const themeMode = AppStorage.get<AppThemeMode>('appThemeMode') ?? AppThemeMode.SYSTEM;
     if (themeMode !== AppThemeMode.SYSTEM) {
       return;
@@ -162,7 +178,7 @@ export default class EntryAbility extends UIAbility {
         return;
       }
       // 完全沉浸：窗口全屏布局，彻底移除状态栏/导航条避让区（布局直达物理底边）；
-      // 状态栏高度存入 AppStorage，由 P1Shell 根 Navigation 统一做顶部补偿。
+      // 状态栏高度存入 AppStorage，由 AppShell 根 Navigation 统一做顶部补偿。
       try {
         const mainWindow = windowStage.getMainWindowSync();
         mainWindow.setWindowLayoutFullScreen(true).catch((_error: Error): void => {
@@ -191,7 +207,7 @@ export default class EntryAbility extends UIAbility {
       AppLogger.info(AppLogEvent.DEEP_LINK_UNSUPPORTED);
       return;
     }
-    startupDestinationChannel.publish(toP1Destination(destination));
+    startupDestinationChannel.publish(toAppDestination(destination));
     AppLogger.info(AppLogEvent.DEEP_LINK_RESOLVED);
   }
 

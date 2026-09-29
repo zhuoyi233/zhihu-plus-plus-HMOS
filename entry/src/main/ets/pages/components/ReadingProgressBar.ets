@@ -107,7 +107,7 @@ export struct ReadingProgressBar {
   build() {
     Stack({ alignContent: Alignment.Top }) {
       Column()
-        .id('p2_reading_progress_track')
+        .id('reading_progress_track')
         .width(TRACK_BAR_WIDTH_VP)
         // 显式长度而非 height('100%')：保证轨道长度就等于几何计算所用的轨道高，
         // 不依赖容器百分比是否扣掉 padding。
@@ -116,7 +116,7 @@ export struct ReadingProgressBar {
         .backgroundColor($r('app.color.divider_color'))
         .opacity(0.45)
       Column()
-        .id('p2_reading_progress_thumb')
+        .id('reading_progress_thumb')
         .width(THUMB_WIDTH_VP)
         .height(this.thumbHeightVp())
         .borderRadius(THUMB_WIDTH_VP / 2)
@@ -124,7 +124,7 @@ export struct ReadingProgressBar {
         .opacity(0.88)
         .translate({ y: this.thumbOffsetVp() })
     }
-    .id('p2_reading_progress_bar')
+    .id('reading_progress_bar')
     .width(READING_PROGRESS_BAR_HIT_WIDTH_VP)
     .height('100%')
     .padding({ top: this.topInsetVp, bottom: this.bottomInset() })

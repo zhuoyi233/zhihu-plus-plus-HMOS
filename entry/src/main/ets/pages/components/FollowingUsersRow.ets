@@ -1,4 +1,4 @@
-import { P1Destination, P1DestinationName } from 'core';
+import { AppDestination, AppDestinationName } from 'core';
 import { RecentFollowingUser, RecentFollowingUsersRepository } from 'data';
 
 /**
@@ -8,7 +8,7 @@ import { RecentFollowingUser, RecentFollowingUsersRepository } from 'data';
 @Component
 export struct FollowingUsersRow {
   repository: RecentFollowingUsersRepository | undefined = undefined;
-  navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
+  navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {
   };
   @State private users: Array<RecentFollowingUser> = [];
   private loaded: boolean = false;
@@ -63,16 +63,16 @@ export struct FollowingUsersRow {
                 .width(60)
                 .textAlign(TextAlign.Center)
             }
-            .id(`p2_following_users_item_${user.actor.id}`)
+            .id(`following_users_item_${user.actor.id}`)
             .alignItems(HorizontalAlign.Center)
             .onClick((): void => {
-              this.navigate({ name: P1DestinationName.PEOPLE, id: user.actor.urlToken });
+              this.navigate({ name: AppDestinationName.PEOPLE, id: user.actor.urlToken });
             })
           }, (user: RecentFollowingUser): string => user.actor.id)
         }
         .padding({ left: 12, right: 12, top: 8, bottom: 8 })
       }
-      .id('p2_following_users_row')
+      .id('following_users_row')
       .width('100%')
       .scrollable(ScrollDirection.Horizontal)
       .scrollBar(BarState.Off)

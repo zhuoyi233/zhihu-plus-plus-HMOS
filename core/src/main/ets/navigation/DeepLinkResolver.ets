@@ -1,5 +1,5 @@
 import { parseAbsoluteUrl, ParsedAbsoluteUrl } from './AbsoluteUrlParser';
-import { isSafeDecimalContentId, isSafeSearchDestinationQuery } from './P1Destination';
+import { isSafeDecimalContentId, isSafeSearchDestinationQuery } from './AppDestination';
 
 export enum DeepLinkType {
   ANSWER = 'answer',

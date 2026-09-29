@@ -3,11 +3,11 @@ import {
   DeepLinkType,
   JsonObjectValue,
   JsonStringValue,
-  P1Destination,
+  AppDestination,
   parseStrictJson,
   resolveZhihuLink,
   StrictJsonError,
-  toP1Destination
+  toAppDestination
 } from 'core';
 import { DomainDecodeError, DomainDecodeFailureKind } from './ZhihuDomainDecoder';
 
@@ -38,7 +38,7 @@ function classIncludes(tag: string, name: string): boolean {
   return attributeValue(tag, 'class').split(/\\s+/).includes(name);
 }
 
-function resolveNativeDestination(url: string): P1Destination | undefined {
+function resolveNativeDestination(url: string): AppDestination | undefined {
   const link: DeepLinkDestination | undefined = resolveZhihuLink(url.trim());
   if (link === undefined) {
     return undefined;
@@ -47,13 +47,13 @@ function resolveNativeDestination(url: string): P1Destination | undefined {
     case DeepLinkType.ANSWER:
     case DeepLinkType.QUESTION:
     case DeepLinkType.ARTICLE:
-      return toP1Destination(link);
+      return toAppDestination(link);
     default:
       return undefined;
   }
 }
 
-function originUrlDestination(html: string): P1Destination | undefined {
+function originUrlDestination(html: string): AppDestination | undefined {
   const anchorTags = html.match(/<a\b[^>]*>/gi) ?? [];
   for (let index = 0; index < anchorTags.length; index += 1) {
     const tag = anchorTags[index];
@@ -83,7 +83,7 @@ function originUrlDestination(html: string): P1Destination | undefined {
   return undefined;
 }
 
-export function decodeDailyStoryDestination(json: string): P1Destination | undefined {
+export function decodeDailyStoryDestination(json: string): AppDestination | undefined {
   const root = parseRoot(json);
   const body = root.get('body');
   if (!(body instanceof JsonStringValue)) {

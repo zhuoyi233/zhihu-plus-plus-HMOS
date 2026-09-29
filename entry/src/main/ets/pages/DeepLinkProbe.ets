@@ -132,7 +132,7 @@ const PROBE_CASES: Array<DeepLinkProbeCase> = [
 
 @Component
 export struct DeepLinkProbePage {
-  /** 当前生效主题色（P1Shell 广播），驱动强调色控件。 */
+  /** 当前生效主题色（AppShell 广播），驱动强调色控件。 */
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   onBack: () => void = () => {};
   @State private input: string = 'zhihu://answers/2040633177593619876';

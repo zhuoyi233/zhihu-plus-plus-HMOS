@@ -1,4 +1,4 @@
-import { P1Destination, P1DestinationName } from 'core';
+import { AppDestination, AppDestinationName } from 'core';
 import {
   onThemeColor,
   BlockedFeedHistoryGateway,
@@ -50,13 +50,13 @@ export struct HomeFeedPage {
   @StorageProp('feedCardStyle') private feedCardStyle: string = 'divider';
   @StorageProp('fabOpacity') private fabOpacity: number = 100;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
-  // 首页更新卡片（对齐上游 HomeScreen 顶部 AnnouncementCard）：P1Shell 启动检查到新版本后经
+  // 首页更新卡片（对齐上游 HomeScreen 顶部 AnnouncementCard）：AppShell 启动检查到新版本后经
   // AppStorage 广播（HdsTabs 树下跨页面信号唯一可靠通道）。“以后”仅本次会话内忽略，对齐上游。
   @StorageProp('homeUpdateAnnouncementVersion') private pendingUpdateVersion: string = '';
   @State private dismissedUpdateVersion: string = '';
   // 下拉刷新自定义加载圆圈（refreshingContent 需 ComponentContent，随页面销毁释放）
   private indicator?: FeedPullDownIndicatorHost = undefined;
-  navigate: (destination: P1Destination) => void = (_destination: P1Destination): void => {
+  navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {
   };
   @State private phase: HomeFeedPhase = HomeFeedPhase.IDLE;
   @State private items: Array<FeedItem> = [];
@@ -152,13 +152,13 @@ export struct HomeFeedPage {
 
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
-      Column({ space: $r('app.float.p1_spacing_medium') }) {
+      Column({ space: $r('app.float.spacing_medium') }) {
         if (this.phase === HomeFeedPhase.INITIAL_LOADING || this.phase === HomeFeedPhase.IDLE) {
-          this.centeredStatus('正在加载首页…', false, 'p2_home_initial_loading');
+          this.centeredStatus('正在加载首页…', false, 'home_initial_loading');
         } else if (this.phase === HomeFeedPhase.ERROR) {
-          this.centeredStatus(this.errorMessage, true, 'p2_home_error');
+          this.centeredStatus(this.errorMessage, true, 'home_error');
         } else if (this.phase === HomeFeedPhase.EMPTY) {
-          this.centeredStatus('暂时没有可显示的内容', true, 'p2_home_empty');
+          this.centeredStatus('暂时没有可显示的内容', true, 'home_empty');
         } else {
           Refresh({
             refreshing: this.refreshing,
@@ -171,45 +171,45 @@ export struct HomeFeedPage {
               // 就是状态栏区域，只有 List 内容项才被 contentStartOffset 内缩让位到标题栏下沿
               if (this.errorMessage.length > 0) {
                 ListItem() {
-                  Row({ space: $r('app.float.p1_spacing_small') }) {
+                  Row({ space: $r('app.float.spacing_small') }) {
                     Text(this.errorMessage)
-                      .id('p2_home_recoverable_error_text')
-                      .fontSize($r('app.float.p1_secondary_font_size'))
+                      .id('home_recoverable_error_text')
+                      .fontSize($r('app.float.secondary_font_size'))
                       .fontColor($r('app.color.secondary_text'))
                       .layoutWeight(1)
                     Button('重试')
                       .backgroundColor(this.resolvedThemeColor)
                       .fontColor(onThemeColor(this.resolvedThemeColor))
-                      .id('p2_home_recoverable_error_retry')
+                      .id('home_recoverable_error_retry')
                       .onClick(() => this.controller?.retry())
                   }
                   .width('100%')
-                  .padding($r('app.float.p1_spacing_small'))
-                  .borderRadius($r('app.float.p1_card_radius'))
+                  .padding($r('app.float.spacing_small'))
+                  .borderRadius($r('app.float.card_radius'))
                   .backgroundColor($r('app.color.surface_background'))
                 }
-                .margin({ bottom: $r('app.float.p1_spacing_medium') })
+                .margin({ bottom: $r('app.float.spacing_medium') })
               }
 
               if (isUpdateAnnouncementVisible(this.pendingUpdateVersion, this.dismissedUpdateVersion)) {
                 ListItem() {
                   this.updateAnnouncementCard()
                 }
-                .margin({ bottom: $r('app.float.p1_spacing_medium') })
+                .margin({ bottom: $r('app.float.spacing_medium') })
               }
 
               ForEach(this.items, (item: FeedItem) => {
                 ListItem() {
                   this.feedCard(item);
                 }
-                .margin({ bottom: this.feedCardStyle === 'card' ? $r('app.float.p1_spacing_medium') : 0 })
+                .margin({ bottom: this.feedCardStyle === 'card' ? $r('app.float.spacing_medium') : 0 })
               }, (item: FeedItem): string => feedItemIdentity(item))
 
               if (this.loadingMore) {
                 // 上拉加载更多：与下拉刷新一致的圆形加载动画（onReachEnd 自动触发）
                 ListItem() {
                   LoadingProgress()
-                    .id('p2_home_load_more')
+                    .id('home_load_more')
                     .width(40)
                     .height(40)
                     .color(this.resolvedThemeColor)
@@ -227,7 +227,7 @@ export struct HomeFeedPage {
                 AppStorage.setOrCreate('bottomBarHiddenByScroll', false);
               }
             })
-            .id('p2_home_feed_list')
+            .id('home_feed_list')
             .width('100%')
             // 顶栏让位：内缩滚动内容起点，未滚动时首条卡片仍从标题栏下沿开始
             .contentStartOffset(FLOATING_TITLE_BAR_OFFSET)
@@ -236,7 +236,7 @@ export struct HomeFeedPage {
             .edgeEffect(EdgeEffect.Spring)
             .onReachEnd(() => this.controller?.loadMore())
           }
-          .id('p2_home_pull_refresh')
+          .id('home_pull_refresh')
           .width('100%')
           .layoutWeight(1)
           .onRefreshing(() => this.controller?.refresh())
@@ -245,8 +245,8 @@ export struct HomeFeedPage {
 
         if (this.blockingMessage.length > 0) {
           Text(this.blockingMessage)
-            .id('p3_home_blocking_status')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .id('home_blocking_status')
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
         }
@@ -263,14 +263,14 @@ export struct HomeFeedPage {
       // 覆盖式顶栏：容器不设 top padding，滚动视口一直延伸到屏幕顶，卡片滚起来后
       // 穿过玻璃标题栏形成沉浸光感；首屏起始位置由列表的 contentStartOffset 内缩。
       .padding({
-        left: $r('app.float.p1_page_padding'),
-        right: $r('app.float.p1_page_padding'),
-        bottom: $r('app.float.p1_page_padding')
+        left: $r('app.float.page_padding'),
+        right: $r('app.float.page_padding'),
+        bottom: $r('app.float.page_padding')
       })
 
       if (this.showRefreshFab && this.phase === HomeFeedPhase.READY) {
         DraggableRefreshButton({
-          elementId: 'p3_home_refresh_fab',
+          elementId: 'home_refresh_fab',
           accessibilityLabel: '刷新首页',
           fabOpacity: this.fabOpacity,
           loading: this.refreshing,
@@ -280,7 +280,7 @@ export struct HomeFeedPage {
         })
       }
     }
-    .id('p2_home_top_start_container')
+    .id('home_top_start_container')
     .width('100%')
     .height('100%')
     .alignContent(Alignment.TopStart)
@@ -290,8 +290,8 @@ export struct HomeFeedPage {
   @Builder
   private updateAnnouncementCard() {
     // 对齐上游 AnnouncementCard colorsImportant：主色底、圆形图标位、右侧“以后/查看更新”操作区。
-    Column({ space: $r('app.float.p1_spacing_small') }) {
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Row() {
           SymbolGlyph($r('sys.symbol.arrow_up'))
             .fontSize(16)
@@ -304,8 +304,8 @@ export struct HomeFeedPage {
           .justifyContent(FlexAlign.Center)
           .alignItems(VerticalAlign.Center)
         Text(`发现新版本：${this.pendingUpdateVersion}`)
-          .id('p2_home_update_card_title')
-          .fontSize($r('app.float.p1_heading_font_size'))
+          .id('home_update_card_title')
+          .fontSize($r('app.float.heading_font_size'))
           .fontWeight(FontWeight.Medium)
           .fontColor(Color.White)
           .maxLines(1)
@@ -315,10 +315,10 @@ export struct HomeFeedPage {
         .width('100%')
         .alignItems(VerticalAlign.Center)
 
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Button('以后', { type: ButtonType.ROUNDED_RECTANGLE, stateEffect: true })
-          .id('p2_home_update_card_dismiss')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .id('home_update_card_dismiss')
+          .fontSize($r('app.float.body_font_size'))
           .fontColor(Color.White)
           .backgroundColor(Color.Transparent)
           .borderRadius(12)
@@ -326,22 +326,22 @@ export struct HomeFeedPage {
             this.dismissedUpdateVersion = this.pendingUpdateVersion;
           })
         Button('查看更新', { type: ButtonType.ROUNDED_RECTANGLE, stateEffect: true })
-          .id('p2_home_update_card_whats_new')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .id('home_update_card_whats_new')
+          .fontSize($r('app.float.body_font_size'))
           .fontColor(this.resolvedThemeColor)
           .backgroundColor(Color.White)
           .borderRadius(12)
           .onClick((): void => {
             // 应用内查看待更新版本的说明与下载入口（非跳浏览器）。
-            this.navigate({ name: P1DestinationName.WHATS_NEW, version: this.pendingUpdateVersion });
+            this.navigate({ name: AppDestinationName.WHATS_NEW, version: this.pendingUpdateVersion });
           })
       }
         .width('100%')
         .justifyContent(FlexAlign.End)
     }
       .width('100%')
-      .padding($r('app.float.p1_card_padding'))
-      .borderRadius($r('app.float.p1_card_radius'))
+      .padding($r('app.float.card_padding'))
+      .borderRadius($r('app.float.card_radius'))
       .backgroundColor(this.resolvedThemeColor)
       .accessibilityText('发现新版本，可查看更新或稍后忽略')
   }
@@ -355,10 +355,10 @@ export struct HomeFeedPage {
       message: message,
       testId: testId,
       actionLabel: retry ? (this.requiresLogin ? '去登录' : '重新加载') : '',
-      actionId: this.requiresLogin ? 'p2_home_error_login' : `${testId}_retry`,
+      actionId: this.requiresLogin ? 'home_error_login' : `${testId}_retry`,
       onAction: (): void => {
         if (this.requiresLogin) {
-          this.navigate({ name: P1DestinationName.LOGIN });
+          this.navigate({ name: AppDestinationName.LOGIN });
           return;
         }
         this.controller?.retry();
@@ -369,16 +369,16 @@ export struct HomeFeedPage {
   @Builder
   private feedCard(item: FeedItem) {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
-      Column({ space: $r('app.float.p1_spacing_small') }) {
-        Row({ space: $r('app.float.p1_spacing_xsmall') }) {
+      Column({ space: $r('app.float.spacing_small') }) {
+        Row({ space: $r('app.float.spacing_xsmall') }) {
           Text(homeFeedActionLabel(item))
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .layoutWeight(1)
           Text(feedKindLabel(item.target.kind))
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor(this.resolvedThemeColor)
 
           // 对齐上游 FeedCardMenuBox：右上角紧凑“更多”符号图标，屏蔽等操作收进菜单。
@@ -387,7 +387,7 @@ export struct HomeFeedPage {
               .fontSize(18)
               .fontColor([$r('app.color.secondary_text')])
           }
-          .id(`p3_home_feed_block_${item.target.kind}_${item.target.id}`)
+          .id(`home_feed_block_${item.target.kind}_${item.target.id}`)
           .width(32)
           .height(32)
           .padding(0)
@@ -400,7 +400,7 @@ export struct HomeFeedPage {
 
         // 对齐上游 FeedCard：标题 2 行、摘要 3 行、作者与元信息各 1 行，控制一屏卡片数量。
         Text(item.target.title)
-          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontSize($r('app.float.heading_font_size'))
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.primary_text'))
           .maxLines(2)
@@ -409,8 +409,8 @@ export struct HomeFeedPage {
 
         if ((item.target.qualityFilterReason ?? '').length > 0) {
           Text(`质量屏蔽规则：${item.target.qualityFilterReason}`)
-            .id(`p3_home_quality_rule_${item.target.kind}_${item.target.id}`)
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .id(`home_quality_rule_${item.target.kind}_${item.target.id}`)
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor(this.resolvedThemeColor)
             .width('100%')
         }
@@ -419,24 +419,24 @@ export struct HomeFeedPage {
           Image(item.target.thumbnailUrl)
             .width('100%')
             .height(128)
-            .borderRadius($r('app.float.p1_spacing_small'))
+            .borderRadius($r('app.float.spacing_small'))
             .objectFit(ImageFit.Cover)
             .alt('内容缩略图')
         }
 
         if (item.target.excerpt.trim().length > 0) {
           Text(item.target.excerpt)
-            .fontSize($r('app.float.p1_body_font_size'))
+            .fontSize($r('app.float.body_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .maxLines(3)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%')
         }
 
-        Row({ space: $r('app.float.p1_spacing_medium') }) {
+        Row({ space: $r('app.float.spacing_medium') }) {
           if (item.target.author !== undefined) {
             Text(item.target.author.name)
-              .fontSize($r('app.float.p1_secondary_font_size'))
+              .fontSize($r('app.float.secondary_font_size'))
               .fontColor($r('app.color.secondary_text'))
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -445,10 +445,10 @@ export struct HomeFeedPage {
             Blank().layoutWeight(1)
           }
           Text(`${item.target.voteupCount ?? '—'} 赞同`)
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
           Text(`${item.target.commentCount ?? '—'} 评论`)
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
         }
         .width('100%')
@@ -456,17 +456,17 @@ export struct HomeFeedPage {
       .alignItems(HorizontalAlign.Start)
       .width('100%')
     }
-    .id(`p2_home_feed_card_${item.target.kind}_${item.target.id}`)
+    .id(`home_feed_card_${item.target.kind}_${item.target.id}`)
     .width('100%')
-    .padding($r('app.float.p1_card_padding'))
-    .borderRadius(this.feedCardStyle === 'card' ? $r('app.float.p1_card_radius') : 0)
+    .padding($r('app.float.card_padding'))
+    .borderRadius(this.feedCardStyle === 'card' ? $r('app.float.card_radius') : 0)
     .backgroundColor(this.feedCardStyle === 'card' ? $r('app.color.surface_background') : Color.Transparent)
     // border 的 radius 优先级高于 borderRadius 属性（未指定时按 0 处理），
     // 卡片模式必须把圆角同步写进 border，否则背景圆角被重置成直角。
     .border({
       width: { bottom: this.feedCardStyle === 'divider' ? 1 : 0 },
       color: $r('app.color.divider_color'),
-      radius: this.feedCardStyle === 'card' ? $r('app.float.p1_card_radius') : 0
+      radius: this.feedCardStyle === 'card' ? $r('app.float.card_radius') : 0
     })
     .accessibilityText(`打开${feedKindLabel(item.target.kind)}：${item.target.title}`)
     .onClick((): void => this.openFeedItem(item))
@@ -550,15 +550,15 @@ export struct HomeFeedPage {
 
   @Builder
   private userBlockDialog() {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_small') }) {
       Text(`确定要屏蔽用户「${this.pendingUserBlock?.userName ?? ''}」吗？`)
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .width('100%')
       Text('屏蔽后，该作者的内容将不再显示。')
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Button('取消')
           .backgroundColor($r('app.color.control_background'))
           .fontColor($r('app.color.primary_text'))
@@ -570,7 +570,7 @@ export struct HomeFeedPage {
         Button('确定屏蔽')
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id('p3_home_confirm_block_user')
+          .id('home_confirm_block_user')
           .layoutWeight(1)
           .enabled(!this.blockingBusy)
           .onClick((): void => this.confirmUserBlock())
@@ -578,24 +578,24 @@ export struct HomeFeedPage {
       .width('100%')
     }
     .width('100%')
-    .padding($r('app.float.p1_spacing_medium'))
+    .padding($r('app.float.spacing_medium'))
     .backgroundColor($r('app.color.card_background'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .borderRadius($r('app.float.card_radius'))
   }
 
   @Builder
   private keywordBlockDialog() {
-    Column({ space: $r('app.float.p1_spacing_small') }) {
+    Column({ space: $r('app.float.spacing_small') }) {
       Text('输入要屏蔽的关键词（普通文本，不区分大小写）')
-        .fontSize($r('app.float.p1_body_font_size'))
+        .fontSize($r('app.float.body_font_size'))
         .width('100%')
       TextInput({ text: this.keywordBlockInput, placeholder: '输入关键词' })
-        .id('p3_home_keyword_block_input')
+        .id('home_keyword_block_input')
         .maxLength(200)
         .onChange((value: string): void => {
           this.keywordBlockInput = value;
         })
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Button('取消')
           .backgroundColor($r('app.color.control_background'))
           .fontColor($r('app.color.primary_text'))
@@ -608,7 +608,7 @@ export struct HomeFeedPage {
         Button('确认屏蔽')
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id('p3_home_confirm_block_keyword')
+          .id('home_confirm_block_keyword')
           .layoutWeight(1)
           .enabled(!this.blockingBusy && this.keywordBlockInput.trim().length > 0)
           .onClick((): void => this.confirmKeywordBlock())
@@ -616,9 +616,9 @@ export struct HomeFeedPage {
       .width('100%')
     }
     .width('100%')
-    .padding($r('app.float.p1_spacing_medium'))
+    .padding($r('app.float.spacing_medium'))
     .backgroundColor($r('app.color.card_background'))
-    .borderRadius($r('app.float.p1_card_radius'))
+    .borderRadius($r('app.float.card_radius'))
   }
 
   private applyState(state: HomeFeedViewState): void {
@@ -633,16 +633,16 @@ export struct HomeFeedPage {
   }
 }
 
-export function homeFeedDestination(item: FeedItem): P1Destination {
+export function homeFeedDestination(item: FeedItem): AppDestination {
   switch (item.target.kind) {
     case FeedTargetKind.QUESTION:
-      return { name: P1DestinationName.QUESTION, id: item.target.id };
+      return { name: AppDestinationName.QUESTION, id: item.target.id };
     case FeedTargetKind.ANSWER:
-      return { name: P1DestinationName.ANSWER, id: item.target.id };
+      return { name: AppDestinationName.ANSWER, id: item.target.id };
     case FeedTargetKind.ARTICLE:
-      return { name: P1DestinationName.ARTICLE, id: item.target.id };
+      return { name: AppDestinationName.ARTICLE, id: item.target.id };
     case FeedTargetKind.VIDEO:
-      return { name: P1DestinationName.VIDEO, id: item.target.id };
+      return { name: AppDestinationName.VIDEO, id: item.target.id };
   }
 }
 

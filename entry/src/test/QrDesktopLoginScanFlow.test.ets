@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@ohos/hypium';
-import { QrScanner } from '../main/ets/platform/P4PlatformServices';
+import { QrScanner } from '../main/ets/platform/PlatformServices';
 import {
   QrDesktopLoginScanController,
   QrDesktopLoginScanPhase,

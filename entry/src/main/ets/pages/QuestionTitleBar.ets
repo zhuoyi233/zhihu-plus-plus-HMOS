@@ -64,12 +64,12 @@ export struct QuestionTitleBar {
         .id('question_back').accessibilityText('返回').onClick((): void => this.onBack())
       Stack({ alignContent: Alignment.Start }) {
         Text('问题').id('question_top_label')
-          .fontSize($r('app.float.p1_heading_font_size'))
+          .fontSize($r('app.float.heading_font_size'))
           .fontColor($r('app.color.primary_text')).fontWeight(FontWeight.Medium)
           .opacity(this.state()?.scrolled ? 0 : 1)
           .translate({ y: this.state()?.scrolled ? -8 : 0 })
         Text(this.state()?.title ?? '')
-          .id('question_top_title').fontSize($r('app.float.p1_heading_font_size'))
+          .id('question_top_title').fontSize($r('app.float.heading_font_size'))
           .fontColor($r('app.color.primary_text')).fontWeight(FontWeight.Medium)
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
           .opacity(this.state()?.scrolled ? 1 : 0)
@@ -84,6 +84,6 @@ export struct QuestionTitleBar {
       }.id('question_share').width(40).height(40).backgroundColor(Color.Transparent)
         .enabled(this.state() !== undefined).accessibilityText('分享问题')
         .onClick((): void => { void this.share(); })
-    }.width('100%').padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding') })
+    }.width('100%').padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding') })
   }
 }

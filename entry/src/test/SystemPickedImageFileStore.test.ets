@@ -19,12 +19,15 @@ export default function systemPickedImageFileStoreTest(): void {
       expect(isPickedMediaUri('file://media/Photo/1/file name.png')).assertFalse();
     });
 
-    it('buildsAndRecognizesOnlyAppGeneratedCacheImagePaths', 0, () => {
+    it('buildsAndRecognizesOnlyCurrentPickedImagesPaths', 0, () => {
       const path = buildControlledImageTemporaryPath(CACHE_DIR, FILE_NAME);
-      expect(path).assertEqual(`${CACHE_DIR}/p4-images/${FILE_NAME}`);
+      expect(path).assertEqual(`${CACHE_DIR}/picked-images/${FILE_NAME}`);
       expect(isControlledImageTemporaryPath(CACHE_DIR, path)).assertTrue();
-      expect(isControlledImageTemporaryPath(CACHE_DIR, `${CACHE_DIR}/p4-images/user-name.png`)).assertFalse();
-      expect(isControlledImageTemporaryPath(CACHE_DIR, '/data/storage/el2/base/files/p4-images/' + FILE_NAME)).assertFalse();
+      // 阶段目录兼容层已退役：旧目录路径不再被识别为受控路径。
+      expect(isControlledImageTemporaryPath(CACHE_DIR, `${CACHE_DIR}/p4-images/${FILE_NAME}`)).assertFalse();
+      expect(isControlledImageTemporaryPath(CACHE_DIR, `${CACHE_DIR}/picked-images/user-name.png`)).assertFalse();
+      expect(isControlledImageTemporaryPath(CACHE_DIR, '/data/storage/el2/base/files/picked-images/' + FILE_NAME))
+        .assertFalse();
     });
 
     it('purgesOnlyExpiredAppGeneratedFinalOrInterruptedCacheArtifacts', 0, () => {

@@ -1,10 +1,10 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
   ContentDestination,
-  findP1DestinationStackIndex,
+  findAppDestinationStackIndex,
   InfrastructureDestination,
-  P1DestinationName,
-  P1StackEntry,
+  AppDestinationName,
+  NavigationStackEntry,
   SearchDestination
 } from 'core';
 import {
@@ -190,21 +190,21 @@ interface TestDestinationParam {
   query?: string;
 }
 
-function contentEntry(name: P1DestinationName, id: string): P1StackEntry {
+function contentEntry(name: AppDestinationName, id: string): NavigationStackEntry {
   const param: TestDestinationParam = { name: name, id: id };
   return { name: name, param: param };
 }
 
 function question(id: string): ContentDestination {
-  return { name: P1DestinationName.QUESTION, id: id };
+  return { name: AppDestinationName.QUESTION, id: id };
 }
 
 function answer(id: string): ContentDestination {
-  return { name: P1DestinationName.ANSWER, id: id };
+  return { name: AppDestinationName.ANSWER, id: id };
 }
 
 function people(id: string): ContentDestination {
-  return { name: P1DestinationName.PEOPLE, id: id };
+  return { name: AppDestinationName.PEOPLE, id: id };
 }
 
 function feedItem(id: string, kind: FeedTargetKind = FeedTargetKind.ANSWER): FeedItem {
@@ -297,62 +297,62 @@ function contentItem(kind: CollectionContentKind, id: string, title: string): Co
 export default function backStackStateTest(): void {
   describe('backStackStateTest', () => {
     it('deduplicatesSameTargetAtAnyStackPosition', 0, () => {
-      const entries: Array<P1StackEntry> = [
-        contentEntry(P1DestinationName.QUESTION, '111'),
-        contentEntry(P1DestinationName.ANSWER, '222'),
-        contentEntry(P1DestinationName.PEOPLE, 'alice')
+      const entries: Array<NavigationStackEntry> = [
+        contentEntry(AppDestinationName.QUESTION, '111'),
+        contentEntry(AppDestinationName.ANSWER, '222'),
+        contentEntry(AppDestinationName.PEOPLE, 'alice')
       ];
-      expect(findP1DestinationStackIndex(entries, question('111'))).assertEqual(0);
-      expect(findP1DestinationStackIndex(entries, answer('222'))).assertEqual(1);
-      expect(findP1DestinationStackIndex(entries, people('alice'))).assertEqual(2);
+      expect(findAppDestinationStackIndex(entries, question('111'))).assertEqual(0);
+      expect(findAppDestinationStackIndex(entries, answer('222'))).assertEqual(1);
+      expect(findAppDestinationStackIndex(entries, people('alice'))).assertEqual(2);
     });
 
     it('allowsDifferentParameterizedTargets', 0, () => {
-      const entries: Array<P1StackEntry> = [
-        contentEntry(P1DestinationName.PEOPLE, 'alice'),
-        contentEntry(P1DestinationName.QUESTION, '111')
+      const entries: Array<NavigationStackEntry> = [
+        contentEntry(AppDestinationName.PEOPLE, 'alice'),
+        contentEntry(AppDestinationName.QUESTION, '111')
       ];
-      expect(findP1DestinationStackIndex(entries, people('bob'))).assertEqual(-1);
-      expect(findP1DestinationStackIndex(entries, question('222'))).assertEqual(-1);
-      expect(findP1DestinationStackIndex(entries, answer('111'))).assertEqual(-1);
+      expect(findAppDestinationStackIndex(entries, people('bob'))).assertEqual(-1);
+      expect(findAppDestinationStackIndex(entries, question('222'))).assertEqual(-1);
+      expect(findAppDestinationStackIndex(entries, answer('111'))).assertEqual(-1);
     });
 
     it('distinguishesSearchQueriesByIdentity', 0, () => {
-      const arktsParam: TestDestinationParam = { name: P1DestinationName.SEARCH, query: 'arkts' };
-      const entries: Array<P1StackEntry> = [
-        { name: P1DestinationName.SEARCH, param: arktsParam }
+      const arktsParam: TestDestinationParam = { name: AppDestinationName.SEARCH, query: 'arkts' };
+      const entries: Array<NavigationStackEntry> = [
+        { name: AppDestinationName.SEARCH, param: arktsParam }
       ];
-      const arkts: SearchDestination = { name: P1DestinationName.SEARCH, query: 'arkts' };
-      const harmonyos: SearchDestination = { name: P1DestinationName.SEARCH, query: 'harmonyos' };
-      expect(findP1DestinationStackIndex(entries, arkts)).assertEqual(0);
-      expect(findP1DestinationStackIndex(entries, harmonyos)).assertEqual(-1);
+      const arkts: SearchDestination = { name: AppDestinationName.SEARCH, query: 'arkts' };
+      const harmonyos: SearchDestination = { name: AppDestinationName.SEARCH, query: 'harmonyos' };
+      expect(findAppDestinationStackIndex(entries, arkts)).assertEqual(0);
+      expect(findAppDestinationStackIndex(entries, harmonyos)).assertEqual(-1);
     });
 
     it('ignoresUndecodableStackEntries', 0, () => {
-      const malformedParam: TestDestinationParam = { name: P1DestinationName.ANSWER };
-      const entries: Array<P1StackEntry> = [
-        { name: P1DestinationName.ANSWER, param: malformedParam },
-        contentEntry(P1DestinationName.QUESTION, '111')
+      const malformedParam: TestDestinationParam = { name: AppDestinationName.ANSWER };
+      const entries: Array<NavigationStackEntry> = [
+        { name: AppDestinationName.ANSWER, param: malformedParam },
+        contentEntry(AppDestinationName.QUESTION, '111')
       ];
-      expect(findP1DestinationStackIndex(entries, answer('missing'))).assertEqual(-1);
-      expect(findP1DestinationStackIndex(entries, question('111'))).assertEqual(1);
+      expect(findAppDestinationStackIndex(entries, answer('missing'))).assertEqual(-1);
+      expect(findAppDestinationStackIndex(entries, question('111'))).assertEqual(1);
     });
 
     it('deduplicatesStatelessInfrastructureDestinations', 0, () => {
-      const settingsParam: TestDestinationParam = { name: P1DestinationName.SETTINGS };
-      const loginParam: TestDestinationParam = { name: P1DestinationName.LOGIN };
-      const entries: Array<P1StackEntry> = [
-        { name: P1DestinationName.SETTINGS, param: settingsParam },
-        { name: P1DestinationName.LOGIN, param: loginParam }
+      const settingsParam: TestDestinationParam = { name: AppDestinationName.SETTINGS };
+      const loginParam: TestDestinationParam = { name: AppDestinationName.LOGIN };
+      const entries: Array<NavigationStackEntry> = [
+        { name: AppDestinationName.SETTINGS, param: settingsParam },
+        { name: AppDestinationName.LOGIN, param: loginParam }
       ];
-      const settings: InfrastructureDestination = { name: P1DestinationName.SETTINGS };
-      const login: InfrastructureDestination = { name: P1DestinationName.LOGIN };
-      expect(findP1DestinationStackIndex(entries, settings)).assertEqual(0);
-      expect(findP1DestinationStackIndex(entries, login)).assertEqual(1);
+      const settings: InfrastructureDestination = { name: AppDestinationName.SETTINGS };
+      const login: InfrastructureDestination = { name: AppDestinationName.LOGIN };
+      expect(findAppDestinationStackIndex(entries, settings)).assertEqual(0);
+      expect(findAppDestinationStackIndex(entries, login)).assertEqual(1);
     });
 
     it('returnsMinusOneForEmptyOrClearedStack', 0, () => {
-      expect(findP1DestinationStackIndex([], question('111'))).assertEqual(-1);
+      expect(findAppDestinationStackIndex([], question('111'))).assertEqual(-1);
     });
 
     it('keepsHomeFeedItemsAcrossReappearanceWithoutReload', 0, async () => {

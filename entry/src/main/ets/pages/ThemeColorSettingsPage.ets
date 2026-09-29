@@ -13,7 +13,7 @@ import { getAbilityContext } from '../entryability/AbilityContextHolder';
 
 /**
  * 主题颜色配置页：12 个预设色（2 排 × 6 列）+ 自定义取色（色盘 + 亮度条）。
- * 选择写入 AppStorage 'themeColor' 并持久化；全局生效色由 P1Shell 解析为
+ * 选择写入 AppStorage 'themeColor' 并持久化；全局生效色由 AppShell 解析为
  * 'resolvedThemeColor' 广播，深浅色模式自动适配。
  */
 interface PresetColorItem {
@@ -94,11 +94,11 @@ export struct ThemeColorSettingsPage {
 
   build() {
     Scroll() {
-      Column({ space: $r('app.float.p1_spacing_large') }) {
+      Column({ space: $r('app.float.spacing_large') }) {
         if (this.statusMessage.length > 0) {
           Text(this.statusMessage)
-            .id('p3_themecolor_status')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .id('themecolor_status')
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
         }
@@ -112,49 +112,49 @@ export struct ThemeColorSettingsPage {
             }, (item: PresetColorItem): string => item.name)
           }
           .columnsTemplate('1fr 1fr 1fr 1fr 1fr 1fr')
-          .rowsGap($r('app.float.p1_spacing_medium'))
+          .rowsGap($r('app.float.spacing_medium'))
           .width('100%')
-          .padding($r('app.float.p1_card_padding'))
+          .padding($r('app.float.card_padding'))
         }
         .width('100%')
-        .borderRadius($r('app.float.p1_card_radius'))
+        .borderRadius($r('app.float.card_radius'))
         .backgroundColor($r('app.color.surface_background'))
 
         Column() {
           Row() {
             Text('16进制')
-              .fontSize($r('app.float.p1_body_font_size'))
+              .fontSize($r('app.float.body_font_size'))
               .fontColor($r('app.color.primary_text'))
             Text(this.currentHex())
-              .id('p3_themecolor_hex')
-              .fontSize($r('app.float.p1_body_font_size'))
+              .id('themecolor_hex')
+              .fontSize($r('app.float.body_font_size'))
               .fontColor(this.resolvedThemeColor)
               .fontWeight(FontWeight.Medium)
             Blank().layoutWeight(1)
             Text('RGB')
-              .fontSize($r('app.float.p1_body_font_size'))
+              .fontSize($r('app.float.body_font_size'))
               .fontColor($r('app.color.primary_text'))
             Text(this.currentRgbLabel())
-              .id('p3_themecolor_rgb')
-              .fontSize($r('app.float.p1_body_font_size'))
+              .id('themecolor_rgb')
+              .fontSize($r('app.float.body_font_size'))
               .fontColor(this.resolvedThemeColor)
               .fontWeight(FontWeight.Medium)
           }
           .width('100%')
-          .padding($r('app.float.p1_card_padding'))
+          .padding($r('app.float.card_padding'))
         }
         .width('100%')
-        .borderRadius($r('app.float.p1_card_radius'))
+        .borderRadius($r('app.float.card_radius'))
         .backgroundColor($r('app.color.surface_background'))
 
-        Column({ space: $r('app.float.p1_spacing_medium') }) {
+        Column({ space: $r('app.float.spacing_medium') }) {
           Text('自定义颜色')
-            .fontSize($r('app.float.p1_body_font_size'))
+            .fontSize($r('app.float.body_font_size'))
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.primary_text'))
             .width('100%')
           Text('拖动色盘调整色相与饱和度，拖动亮度条调整明暗')
-            .fontSize($r('app.float.p1_secondary_font_size'))
+            .fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
           this.colorPalette()
@@ -162,19 +162,19 @@ export struct ThemeColorSettingsPage {
         }
         .alignItems(HorizontalAlign.Start)
         .width('100%')
-        .padding($r('app.float.p1_card_padding'))
-        .borderRadius($r('app.float.p1_card_radius'))
+        .padding($r('app.float.card_padding'))
+        .borderRadius($r('app.float.card_radius'))
         .backgroundColor($r('app.color.surface_background'))
       }
       .width('100%')
       .padding({
-        left: $r('app.float.p1_page_padding'),
-        right: $r('app.float.p1_page_padding'),
+        left: $r('app.float.page_padding'),
+        right: $r('app.float.page_padding'),
         top: 94,
-        bottom: $r('app.float.p1_page_padding')
+        bottom: $r('app.float.page_padding')
       })
     }
-    .id('p3_themecolor_settings_page')
+    .id('themecolor_settings_page')
     .width('100%')
     .height('100%')
     .scrollBar(BarState.Off)
@@ -184,7 +184,7 @@ export struct ThemeColorSettingsPage {
 
   @Builder
   private colorCell(item: PresetColorItem) {
-    Column({ space: $r('app.float.p1_spacing_xsmall') }) {
+    Column({ space: $r('app.float.spacing_xsmall') }) {
       Stack() {
         if (item.hex.length === 0) {
           Row()
@@ -233,19 +233,19 @@ export struct ThemeColorSettingsPage {
       Row()
         .width('100%')
         .height('100%')
-        .borderRadius($r('app.float.p1_card_radius'))
+        .borderRadius($r('app.float.card_radius'))
         .linearGradient({ angle: 90, colors: HUE_GRADIENT_COLORS })
       // 上层：纵向 白→透明（顶部饱和度 0，底部饱和度 1）
       Row()
         .width('100%')
         .height('100%')
-        .borderRadius($r('app.float.p1_card_radius'))
+        .borderRadius($r('app.float.card_radius'))
         .linearGradient({ angle: 180, colors: [['#FFFFFFFF', 0], ['#00FFFFFF', 1]] })
       // 亮度遮罩：随亮度条变暗（不拦截触摸）
       Row()
         .width('100%')
         .height('100%')
-        .borderRadius($r('app.float.p1_card_radius'))
+        .borderRadius($r('app.float.card_radius'))
         .backgroundColor(Color.Black)
         .opacity(1 - this.colorValue)
         .hitTestBehavior(HitTestMode.None)
@@ -264,7 +264,7 @@ export struct ThemeColorSettingsPage {
         .translate({ x: '-50%', y: '-50%' })
         .hitTestBehavior(HitTestMode.None)
     }
-    .id('p3_themecolor_palette')
+    .id('themecolor_palette')
     .width('100%')
     .height(180)
     .onAreaChange((_oldValue: Area, newValue: Area): void => {
@@ -280,8 +280,8 @@ export struct ThemeColorSettingsPage {
       // 渐变轨道：左黑 → 右当前色相满亮度色
       Row()
         .width('calc(100% - 4vp)')
-        .height($r('app.float.p3_settings_slider_track_thickness'))
-        .borderRadius($r('app.float.p3_settings_slider_track_radius'))
+        .height($r('app.float.settings_slider_track_thickness'))
+        .borderRadius($r('app.float.settings_slider_track_radius'))
         .linearGradient({
           angle: 90,
           colors: [['#FF000000', 0], [this.fullBrightnessHex(), 1]]
@@ -293,40 +293,40 @@ export struct ThemeColorSettingsPage {
         Stack({ alignContent: Alignment.Center }) {
           Row()
             .width('100%')
-            .height($r('app.float.p3_settings_slider_track_thickness'))
+            .height($r('app.float.settings_slider_track_thickness'))
             .backgroundColor($r('app.color.surface_background'))
           Row()
-            .width($r('app.float.p3_settings_slider_thumb_width'))
-            .height($r('app.float.p3_settings_slider_thumb_height'))
-            .borderRadius($r('app.float.p3_settings_slider_thumb_radius'))
+            .width($r('app.float.settings_slider_thumb_width'))
+            .height($r('app.float.settings_slider_thumb_height'))
+            .borderRadius($r('app.float.settings_slider_thumb_radius'))
             .backgroundColor(this.currentHex())
         }
-        .width($r('app.float.p3_settings_slider_thumb_gap_width'))
-        .height($r('app.float.p3_settings_slider_height'))
+        .width($r('app.float.settings_slider_thumb_gap_width'))
+        .height($r('app.float.settings_slider_height'))
         Blank().layoutWeight(Math.max(0, (1 - this.colorValue) * 100))
       }
       .width('calc(100% + 12vp)')
-      .height($r('app.float.p3_settings_slider_height'))
+      .height($r('app.float.settings_slider_height'))
       .translate({ x: '-6vp' })
       .hitTestBehavior(HitTestMode.None)
 
       Slider({ value: this.colorValue * 100, min: 0, max: 100, step: 1, style: SliderStyle.OutSet })
-        .id('p3_themecolor_brightness')
+        .id('themecolor_brightness')
         .width('100%')
-        .height($r('app.float.p3_settings_slider_height'))
+        .height($r('app.float.settings_slider_height'))
         .trackColor(Color.Transparent)
         .selectedColor(Color.Transparent)
         .blockColor(Color.Transparent)
         .blockSize({
-          width: $r('app.float.p3_settings_slider_thumb_width'),
-          height: $r('app.float.p3_settings_slider_thumb_height')
+          width: $r('app.float.settings_slider_thumb_width'),
+          height: $r('app.float.settings_slider_thumb_height')
         })
         .blockStyle({
           type: SliderBlockType.SHAPE,
           shape: new Rect({
-            width: $r('app.float.p3_settings_slider_thumb_width'),
-            height: $r('app.float.p3_settings_slider_thumb_height')
-          }).radius($r('app.float.p3_settings_slider_thumb_radius'))
+            width: $r('app.float.settings_slider_thumb_width'),
+            height: $r('app.float.settings_slider_thumb_height')
+          }).radius($r('app.float.settings_slider_thumb_radius'))
         })
         .onChange((next: number, mode: SliderChangeMode): void => {
           this.colorValue = Math.min(1, Math.max(0, next / 100));
@@ -339,7 +339,7 @@ export struct ThemeColorSettingsPage {
         })
     }
     .width('100%')
-    .height($r('app.float.p3_settings_slider_height'))
+    .height($r('app.float.settings_slider_height'))
   }
 
   /** 当前编辑色（HSV 合成），同时也是持久化/广播的值。 */

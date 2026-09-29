@@ -8,7 +8,7 @@ import { hmacSha1Base64 } from '../network/ZhihuHmacSha1';
 import { ZhihuHttpMethod } from '../network/ZhihuHttpClient';
 
 /** P4-2 图片选择与上传的纯函数合同；这里绝不读取 URI、文件或网络。 */
-export const IMAGE_UPLOAD_TEMPORARY_DIRECTORY: string = 'p4-images';
+export const IMAGE_UPLOAD_TEMPORARY_DIRECTORY: string = 'picked-images';
 export const MAX_IMAGE_SELECTION_COUNT: number = 9;
 export const MAX_IMAGE_SINGLE_BYTES: number = 20 * 1024 * 1024;
 export const MAX_IMAGE_BATCH_BYTES: number = 50 * 1024 * 1024;
@@ -115,7 +115,7 @@ export interface ImageSelectionLimits {
 }
 
 export interface ImageTemporaryFile {
-  /** cacheDir/p4-images 下由应用生成的唯一文件名；不是用户可控 URI。 */
+  /** cacheDir/picked-images 下由应用生成的唯一文件名；不是用户可控 URI。 */
   readonly path: string;
   readonly mimeType: string;
   readonly byteLength: number;

@@ -1,7 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { scanBarcode, scanCore } from '@kit.ScanKit';
-import { QrScanner } from './P4PlatformServices';
+import { QrScanner } from './PlatformServices';
 
 /** 仅在平台适配层调用 Scan Kit；页面只依赖 QrScanner。 */
 export class QrScannerServiceFailure extends Error {

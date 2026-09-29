@@ -20,8 +20,11 @@
 # 编译 + Hypium 测试（最常用；跳过依赖安装与 HAP 构建）
 pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall -SkipBuild
 
-# 完整构建（assembleHap + 签名 + 测试）
+# 完整构建（assembleHap + 签名 + 测试；默认 Debug 验证包）
 pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall
+
+# Release 出包（发行 HAP：构建 + Hypium + 元数据校验 + 版本命名产物复制 + 源码映射归档）
+pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall -BuildMode release
 ```
 
 - **必须用 pwsh 7**：Windows PowerShell 5.1 对 UTF-8 无 BOM 中文会乱码，导致脚本失败。
@@ -75,8 +78,8 @@ $hdc = "hdc"
 - 应用支持知乎链接直达：`aa start -a EntryAbility -b com.github.zhuoyi233.zhplus -U <zhihu url>`
   （经 `resolveZhihuLink` 路由），可跳过手动导航直接进入问题/回答/文章页。
 
-- 登录：重装/清数据后登录态丢失，首页出现 `p2_home_error_login` → 设置页“开发者选项”手动 Cookie 输入
-  （`ZHIHU_COOKIE` 环境变量）→ `developer_cookie_submit` → 首页 `p2_home_error_retry`。普通登录页只保留
+- 登录：重装/清数据后登录态丢失，首页出现 `home_error_login` → 设置页“开发者选项”手动 Cookie 输入
+  （`ZHIHU_COOKIE` 环境变量）→ `developer_cookie_submit` → 首页 `home_error_retry`。普通登录页只保留
   手机号、扫码、网页三种面向用户的登录方式。
 
 ## 提交规范
@@ -104,15 +107,18 @@ $hdc = "hdc"
   发版顺序：改 `versionName`/`versionCode` → 写发布说明文稿（建议存 `docs/release-notes/HMOSv<x.y.z>.md`）→
   `pwsh -NoProfile -File scripts/update-release-catalog.ps1 -SeedPending -Version <x.y.z> -NotesFile <文稿>`
   预置本版本说明进两份清单（**构建必须在其后**，发行 HAP 才能自带"本版本更新内容"；发布说明经
-  `gh release create --notes-file` 复用同一文稿）→ 完整验证 → 提交（`chore(harmony): 应用版本号升至 x.y.z`）→
+  `gh release create --notes-file` 复用同一文稿）→ 完整验证（发行 HAP 以 `-BuildMode release` 出包）→
+  提交（`chore(harmony): 应用版本号升至 x.y.z`）→
   附注 tag（`git tag -a HMOSv0.2.1 -m "<一句里程碑中文摘要>"`）→ 推送仅在用户明确要求时执行
   （`git push origin dev` + 显式列出 HMOS tag）。仓库继承的上游 `0.x`/`nightly` tag 是 zly2006 的
   发布记录，**不要推送**，远端只保留 `HMOS*` tag。发版后续（GitHub 发布 Release、更新静态清单）
   见「发版说明（Release Notes）框架」。
 
 - 发布产物命名：`ZhihuPlusPlus-HMOS-v<version>-unsigned.hap`（如 `ZhihuPlusPlus-HMOS-v0.2.0-unsigned.hap`）。
-  `verify-harmony.ps1` 构建校验通过后会自动从 `entry-default-unsigned/signed.hap` 复制出该命名的
-  产物（同目录，含 `-signed` 后缀版），无需手动重命名；签名包仅限本机调试，不要分发。
+  版本命名产物**仅由 Release 出包生成**：`verify-harmony.ps1 -BuildMode release` 构建 + Hypium 全部通过后，
+  从 `entry-default-unsigned/signed.hap` 经哈希核对复制（同目录，含 `-signed` 后缀版）；Debug 验证构建
+  不产出也不覆盖版本命名产物。源码映射不入发行包，Release 构建后自动归档到
+  `entry/build/default/outputs/default/mapping-archive/v<version>-<产物SHA-256前8位>/`；签名包仅限本机调试，不要分发。
 
 ## PR 撰写规范（标题与正文模板）
 
@@ -150,7 +156,7 @@ $hdc = "hdc"
 - **正文主题节**：若干 `## <emoji> <主题>` 二级标题，每节内为无序列表，一条一句、点到
   行为粒度（不逐文件流水账）；按功能主题分组，与 PR 正文"主要内容"的分组风格一致。
   常用主题 emoji 参考：🪪 应用名称与图标 / 📨 消息 / 📖 阅读 / 🛡️ 过滤与屏蔽 /
-  🎨 外观与导航 / 🔐 登录与账户 / ✨ 详情与首页 / 🐛 问题修复（按当期实际内容取舍增删，
+  🎨 外观与导航 / 🔐 登录与账户 / ✨ 详情与首页 / 🐞 问题修复（按当期实际内容取舍增删，
   大版本主题多可 6~8 节，小版本可合并为 2~3 节 + 修复）。
 
 - **固定节 `## 📥 下载与安装`**（三步，文案固定）：
@@ -190,7 +196,7 @@ $hdc = "hdc"
 
 - 禁解构参数；`Object.entries(...).forEach` 的元组回调改用 `Object.keys`。
 
-- 跨页面状态通道：P1Shell 各 feed 页经 `@Builder` 参数传值（如 reloadToken）在 HdsTabs 的
+- 跨页面状态通道：AppShell 各 feed 页经 `@Builder` 参数传值（如 reloadToken）在 HdsTabs 的
   TabContent 构建树下**不会触发已挂载子组件更新**，`@Provide`/`@Consume` 在该树形下也实测
   **不链接**（页面各持本地兜底实例）。跨页面信号一律走 AppStorage 广播 + `@StorageProp`+`@Watch`
   （如 `loginFeedReloadTick`，同 `bottomRectHeight` 模式）；signal 处理需容忍控制器失活态
@@ -222,7 +228,7 @@ $hdc = "hdc"
   按桌面视口渲染、字体过小）。
 
 - **控件必须跟随主题色**（新建任何带强调色的控件时强制执行，否则默认系统蓝与主题脱节）：
-  - 生效色只读 `@StorageProp('resolvedThemeColor')`（P1Shell 广播的深浅色解析结果），
+  - 生效色只读 `@StorageProp('resolvedThemeColor')`（AppShell 广播的深浅色解析结果），
     **禁止**直接读 `themeColor` seed（未按主题模式解析，深色下会刺眼/失真）；
     页面原本没有该属性时要自行补声明。
   - `Button`：主操作必须 `.backgroundColor(resolvedThemeColor)` +

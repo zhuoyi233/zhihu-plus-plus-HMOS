@@ -9,16 +9,16 @@
  *
  * 单位（与改造前完全同义，故默认档零视觉变化）：
  * - 字号/行高返回值交给 `Text.fontSize` / `Text.lineHeight`，number 单位是 **fp**
- *   （旧值 `$r('app.float.p1_body_font_size')` = 16fp、`.lineHeight(30)` = 30fp）；
+ *   （旧值 `$r('app.float.body_font_size')` = 16fp、`.lineHeight(30)` = 30fp）；
  * - 段间距返回值交给 `List({ space })` / `Column({ space })`，number 单位是 **vp**
  *   （旧值 `space: 12`）。
  *
  * 抽成独立模块便于单测（NativeContentDocument 与行内公式子组件共用同一套换算）。
  */
 
-/** 正文字号基线（fp）：改造前 `app.float.p1_body_font_size` = 16fp。 */
+/** 正文字号基线（fp）：改造前 `app.float.body_font_size` = 16fp。 */
 export const BODY_FONT_SIZE_BASE_FP = 16;
-/** 标题字号基线（fp）：改造前 `app.float.p1_heading_font_size` = 20fp。 */
+/** 标题字号基线（fp）：改造前 `app.float.heading_font_size` = 20fp。 */
 export const HEADING_FONT_SIZE_BASE_FP = 20;
 /** 段间距基线（vp）：改造前 `List({ space: 12 })`。 */
 export const BLOCK_SPACING_BASE_VP = 12;

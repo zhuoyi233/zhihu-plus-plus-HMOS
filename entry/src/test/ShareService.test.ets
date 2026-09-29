@@ -64,7 +64,7 @@ function policy(): ShareRuntimePolicy {
 }
 
 function temporaryFile(
-  path: string = `${CACHE_DIR}/p4-share/image-123.png`,
+  path: string = `${CACHE_DIR}/share/image-123.png`,
   mimeType: string = 'image/png',
   createdAtMillis: number = NOW - 1000
 ): ShareTemporaryFile {
@@ -129,7 +129,7 @@ export default function shareServiceTest(): void {
       expect(prepared.title).assertEqual('鸿蒙迁移进展');
     });
 
-    it('allowsEveryP4ContentLinkFamily', 0, () => {
+    it('allowsEverySupportedContentLinkFamily', 0, () => {
       const urls: Array<string> = [
         'https://www.zhihu.com/question/1',
         'https://www.zhihu.com/pin/2',
@@ -180,19 +180,26 @@ export default function shareServiceTest(): void {
 
       expect(prepared.dispatchKind).assertEqual(ShareDispatchKind.TEMPORARY_FILE);
       expect(prepared.mimeType).assertEqual('image/png');
-      expect(prepared.source).assertEqual(`${CACHE_DIR}/p4-share/image-123.png`);
+      expect(prepared.source).assertEqual(`${CACHE_DIR}/share/image-123.png`);
     });
 
     it('rejectsInternalPathsTraversalExpiredFilesAndUnexpectedMime', 0, () => {
       const outside = temporaryFile(`${CACHE_DIR}/drafts/secret.png`);
-      const traversal = temporaryFile(`${CACHE_DIR}/p4-share/../secret.png`);
-      const expired = temporaryFile(`${CACHE_DIR}/p4-share/image-123.png`, 'image/png', NOW - 24 * 60 * 60 * 1000 - 1);
-      const html = temporaryFile(`${CACHE_DIR}/p4-share/image-123.png`, 'text/html');
+      const traversal = temporaryFile(`${CACHE_DIR}/share/../secret.png`);
+      const expired = temporaryFile(`${CACHE_DIR}/share/image-123.png`, 'image/png', NOW - 24 * 60 * 60 * 1000 - 1);
+      const html = temporaryFile(`${CACHE_DIR}/share/image-123.png`, 'text/html');
 
       expect((): void => { prepareSharePayload(filePayload(outside), policy()); }).assertThrowError('分享内容不受支持');
       expect((): void => { prepareSharePayload(filePayload(traversal), policy()); }).assertThrowError('分享内容不受支持');
       expect((): void => { prepareSharePayload(filePayload(expired), policy()); }).assertThrowError('分享文件已不可用');
       expect((): void => { prepareSharePayload(filePayload(html), policy()); }).assertThrowError('分享内容不受支持');
+    });
+
+    it('noLongerAcceptsLegacyPhaseDirectorySharePayloads', 0, () => {
+      // 阶段目录兼容层已退役：旧 p4-share 路径不属于任何受控目录，一律拒绝。
+      const legacy = temporaryFile(`${CACHE_DIR}/p4-share/image-123.png`);
+
+      expect((): void => { prepareSharePayload(filePayload(legacy), policy()); }).assertThrowError('分享内容不受支持');
     });
 
     it('usesDelayedAndBoundedTemporaryFileCleanup', 0, () => {
@@ -224,15 +231,15 @@ export default function shareServiceTest(): void {
       const imagePrepared = prepareSharePayload(temporaryImagePayload(temporaryFile()), policy());
       const imageRecords = createSystemShareRecords(imagePrepared, new FixedFileUriResolver());
       const filePrepared = prepareSharePayload(filePayload(temporaryFile(
-        `${CACHE_DIR}/p4-share/export-123.pdf`, 'application/pdf', NOW
+        `${CACHE_DIR}/share/export-123.pdf`, 'application/pdf', NOW
       )), policy());
       const fileRecords = createSystemShareRecords(filePrepared, new FixedFileUriResolver());
 
       expect(imageRecords.length).assertEqual(1);
       expect(imageRecords[0].utd).assertEqual('general.image');
-      expect(imageRecords[0].uri).assertEqual(`file://sandbox${CACHE_DIR}/p4-share/image-123.png`);
+      expect(imageRecords[0].uri).assertEqual(`file://sandbox${CACHE_DIR}/share/image-123.png`);
       expect(fileRecords[0].utd).assertEqual('general.file');
-      expect(fileRecords[0].uri).assertEqual(`file://sandbox${CACHE_DIR}/p4-share/export-123.pdf`);
+      expect(fileRecords[0].uri).assertEqual(`file://sandbox${CACHE_DIR}/share/export-123.pdf`);
     });
 
     it('validatesOptionalTrustedThumbnailUrlOnTextPayload', 0, () => {

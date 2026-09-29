@@ -17,7 +17,7 @@ enum PinDraftInboxPhase {
  */
 @Component
 export struct PinDraftInboxPage {
-  /** 当前生效主题色（P1Shell 广播），驱动强调色控件。 */
+  /** 当前生效主题色（AppShell 广播），驱动强调色控件。 */
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   gateway: PinDraftResumeListGateway | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
@@ -38,37 +38,37 @@ export struct PinDraftInboxPage {
   }
 
   build() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
+    Column({ space: $r('app.float.spacing_medium') }) {
       Text(this.statusMessage())
-        .id('p4_pin_drafts_status')
+        .id('pin_drafts_status')
         .width('100%')
-        .fontSize($r('app.float.p1_secondary_font_size'))
+        .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
 
       if (this.phase === PinDraftInboxPhase.LOGIN_REQUIRED) {
         Button('去登录')
           .backgroundColor(this.resolvedThemeColor)
           .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id('p4_pin_drafts_login')
+          .id('pin_drafts_login')
           .width('100%')
           .onClick((): void => this.onGoLogin())
       } else if (this.phase === PinDraftInboxPhase.UNAVAILABLE) {
         Text('草稿服务暂不可用，请返回后重试。')
-          .id('p4_pin_drafts_unavailable')
+          .id('pin_drafts_unavailable')
           .width('100%')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.body_font_size'))
           .fontColor($r('app.color.secondary_text'))
       } else if (this.phase === PinDraftInboxPhase.LOADING) {
         Text('正在读取本地草稿…')
-          .id('p4_pin_drafts_loading')
+          .id('pin_drafts_loading')
           .width('100%')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.body_font_size'))
           .fontColor($r('app.color.secondary_text'))
       } else if (this.items.length === 0) {
         Text('当前账号没有可恢复的想法草稿。')
-          .id('p4_pin_drafts_empty')
+          .id('pin_drafts_empty')
           .width('100%')
-          .fontSize($r('app.float.p1_body_font_size'))
+          .fontSize($r('app.float.body_font_size'))
           .fontColor($r('app.color.secondary_text'))
       } else {
         List({ space: 8 }) {
@@ -77,25 +77,25 @@ export struct PinDraftInboxPage {
               Button(item.title)
                 .backgroundColor(this.resolvedThemeColor)
                 .fontColor(onThemeColor(this.resolvedThemeColor))
-                .id(`p4_pin_draft_open_${item.draftId}`)
+                .id(`pin_draft_open_${item.draftId}`)
                 .width('100%')
-                .fontSize($r('app.float.p1_body_font_size'))
+                .fontSize($r('app.float.body_font_size'))
                 .onClick((): void => this.onOpen(item.draftId))
             }
           }, (item: PinDraftResumeItem): string => item.draftId)
         }
-        .id('p4_pin_drafts_list')
+        .id('pin_drafts_list')
         .width('100%')
         .layoutWeight(1)
         .scrollBar(BarState.Off)
       }
     }
-    .id('p4_pin_drafts_page')
+    .id('pin_drafts_page')
     .alignItems(HorizontalAlign.Start)
     .width('100%')
     .height('100%')
-    .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
-      top: 94, bottom: $r('app.float.p1_page_padding') })
+    .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
+      top: 94, bottom: $r('app.float.page_padding') })
     .backgroundColor($r('app.color.page_background'))
   }
 

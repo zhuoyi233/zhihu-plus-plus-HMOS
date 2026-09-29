@@ -58,7 +58,7 @@ export struct ArticleTitleBar {
   }
 
   build() {
-    Row({ space: $r('app.float.p1_spacing_small') }) {
+    Row({ space: $r('app.float.spacing_small') }) {
       Stack({ alignContent: Alignment.Center }) {
         if (this.supportsImmersiveMaterial()) {
           materialCanvas(52, 52)
@@ -91,7 +91,7 @@ export struct ArticleTitleBar {
         Column() {
           Text('文章')
             .id('article_top_label')
-            .fontSize($r('app.float.p1_heading_font_size'))
+            .fontSize($r('app.float.heading_font_size'))
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.primary_text'))
         }
@@ -103,7 +103,7 @@ export struct ArticleTitleBar {
         Column({ space: 2 }) {
           Text(this.state()?.title ?? '')
             .id('article_top_title')
-            .fontSize($r('app.float.p1_body_font_size'))
+            .fontSize($r('app.float.body_font_size'))
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.primary_text'))
             .maxLines(1)
@@ -124,7 +124,7 @@ export struct ArticleTitleBar {
                   .objectFit(ImageFit.Cover)
               } else if ((this.state()?.authorName ?? '').length > 0) {
                 Text((this.state()?.authorName ?? '').substring(0, 1))
-                  .fontSize($r('app.float.p1_caption_font_size'))
+                  .fontSize($r('app.float.caption_font_size'))
                   .fontColor($r('app.color.secondary_text'))
               }
             }
@@ -135,7 +135,7 @@ export struct ArticleTitleBar {
             Row({ space: 4 }) {
               Text(this.state()?.authorName ?? '')
                 .id('article_top_author')
-                .fontSize($r('app.float.p1_caption_font_size'))
+                .fontSize($r('app.float.caption_font_size'))
                 .fontColor($r('app.color.secondary_text'))
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -169,8 +169,8 @@ export struct ArticleTitleBar {
     .width('100%')
     .height(48)
     .padding({
-      left: $r('app.float.p1_page_padding'),
-      right: $r('app.float.p1_page_padding')
+      left: $r('app.float.page_padding'),
+      right: $r('app.float.page_padding')
     })
     .alignItems(VerticalAlign.Center)
     .hitTestBehavior(HitTestMode.Transparent)

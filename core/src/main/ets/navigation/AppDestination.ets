@@ -1,6 +1,6 @@
 import { JsonObjectValue, JsonNumberValue, JsonStringValue, parseStrictJson } from './StrictJson';
 
-export enum P1DestinationName {
+export enum AppDestinationName {
   HOME = 'Home',
   FOLLOWING = 'Following',
   HOT = 'Hot',
@@ -48,40 +48,40 @@ export enum P1DestinationName {
 }
 
 export interface StatelessDestination {
-  readonly name: P1DestinationName.HOME | P1DestinationName.FOLLOWING | P1DestinationName.HOT |
-    P1DestinationName.DAILY | P1DestinationName.NOTIFICATION;
+  readonly name: AppDestinationName.HOME | AppDestinationName.FOLLOWING | AppDestinationName.HOT |
+    AppDestinationName.DAILY | AppDestinationName.NOTIFICATION;
 }
 
 /** WHATS_NEW 不在本联合内：它有独立接口 WhatsNewDestination（带可选 version 参数），
  * isInfrastructureDestination 对其单独返回 true。 */
 export interface InfrastructureDestination {
-  readonly name: P1DestinationName.LOGIN | P1DestinationName.SETTINGS | P1DestinationName.APPEARANCE_SETTINGS |
-    P1DestinationName.THEME_COLOR_SETTINGS |
-    P1DestinationName.IDENTITY_MANAGEMENT | P1DestinationName.READING_SETTINGS |
-    P1DestinationName.SYSTEM_UPDATE_SETTINGS |
-    P1DestinationName.RECOMMENDATION_FILTER_SETTINGS |
-    P1DestinationName.BLOCKING_RULES |
-    P1DestinationName.BLOCKED_FEED_HISTORY | P1DestinationName.READ_HISTORY | P1DestinationName.LOCAL_HISTORY |
-    P1DestinationName.TECHNICAL_LAB |
-    P1DestinationName.NOTIFICATION_SETTINGS | P1DestinationName.NOTIFICATION_ENTRY |
-    P1DestinationName.PRIVATE_MESSAGE |
-    P1DestinationName.READER_PROBE | P1DestinationName.IMAGE_PROBE |
-    P1DestinationName.DATABASE_PROBE | P1DestinationName.DEEP_LINK_PROBE |
-    P1DestinationName.QR_SCAN_PROBE | P1DestinationName.QR_DESKTOP_LOGIN_SCAN |
-    P1DestinationName.BACKGROUND_TASK_PROBE |
-    P1DestinationName.DOMAIN_FIXTURE_PROBE | P1DestinationName.PIN_DRAFTS;
+  readonly name: AppDestinationName.LOGIN | AppDestinationName.SETTINGS | AppDestinationName.APPEARANCE_SETTINGS |
+    AppDestinationName.THEME_COLOR_SETTINGS |
+    AppDestinationName.IDENTITY_MANAGEMENT | AppDestinationName.READING_SETTINGS |
+    AppDestinationName.SYSTEM_UPDATE_SETTINGS |
+    AppDestinationName.RECOMMENDATION_FILTER_SETTINGS |
+    AppDestinationName.BLOCKING_RULES |
+    AppDestinationName.BLOCKED_FEED_HISTORY | AppDestinationName.READ_HISTORY | AppDestinationName.LOCAL_HISTORY |
+    AppDestinationName.TECHNICAL_LAB |
+    AppDestinationName.NOTIFICATION_SETTINGS | AppDestinationName.NOTIFICATION_ENTRY |
+    AppDestinationName.PRIVATE_MESSAGE |
+    AppDestinationName.READER_PROBE | AppDestinationName.IMAGE_PROBE |
+    AppDestinationName.DATABASE_PROBE | AppDestinationName.DEEP_LINK_PROBE |
+    AppDestinationName.QR_SCAN_PROBE | AppDestinationName.QR_DESKTOP_LOGIN_SCAN |
+    AppDestinationName.BACKGROUND_TASK_PROBE |
+    AppDestinationName.DOMAIN_FIXTURE_PROBE | AppDestinationName.PIN_DRAFTS;
 }
 
 export interface ContentDestination {
-  readonly name: P1DestinationName.QUESTION | P1DestinationName.ANSWER |
-    P1DestinationName.ARTICLE | P1DestinationName.VIDEO | P1DestinationName.PIN |
-    P1DestinationName.PEOPLE | P1DestinationName.COLLECTION | P1DestinationName.COLLECTIONS |
-    P1DestinationName.DAILY_STORY;
+  readonly name: AppDestinationName.QUESTION | AppDestinationName.ANSWER |
+    AppDestinationName.ARTICLE | AppDestinationName.VIDEO | AppDestinationName.PIN |
+    AppDestinationName.PEOPLE | AppDestinationName.COLLECTION | AppDestinationName.COLLECTIONS |
+    AppDestinationName.DAILY_STORY;
   readonly id: string;
 }
 
 export interface CommentDestination {
-  readonly name: P1DestinationName.COMMENT;
+  readonly name: AppDestinationName.COMMENT;
   readonly contentType: 'answer' | 'article' | 'question' | 'pin';
   readonly contentId: string;
   readonly commentId?: string;
@@ -94,31 +94,31 @@ export interface CommentDestination {
 }
 
 export interface SearchDestination {
-  readonly name: P1DestinationName.SEARCH;
+  readonly name: AppDestinationName.SEARCH;
   readonly query: string;
 }
 
 export interface WriteAnswerDestination {
-  readonly name: P1DestinationName.WRITE_ANSWER;
+  readonly name: AppDestinationName.WRITE_ANSWER;
   readonly questionId: string;
   readonly answerId?: string;
 }
 
 export interface WritePinDestination {
-  readonly name: P1DestinationName.WRITE_PIN;
+  readonly name: AppDestinationName.WRITE_PIN;
   readonly draftId: string;
 }
 
 /** 通知分类/邀请回答时间线入口（对齐上游 `Notification.Entry`）。 */
 export interface NotificationEntryDestination {
-  readonly name: P1DestinationName.NOTIFICATION_ENTRY;
+  readonly name: AppDestinationName.NOTIFICATION_ENTRY;
   readonly entryName: string;
   readonly title: string;
 }
 
 /** 私信会话页（对齐上游 `Notification.Message`）。 */
 export interface PrivateMessageDestination {
-  readonly name: P1DestinationName.PRIVATE_MESSAGE;
+  readonly name: AppDestinationName.PRIVATE_MESSAGE;
   readonly peerId: string;
   readonly peerName?: string;
   readonly avatarUrl?: string;
@@ -127,11 +127,11 @@ export interface PrivateMessageDestination {
 /** “新版本更新”页：version 缺省时展示本机已装版本的 Release；携带时展示该目标版本
  * 的 Release（检查到更新后的“更新内容预览”，对齐主页更新卡片与设置页入口）。 */
 export interface WhatsNewDestination {
-  readonly name: P1DestinationName.WHATS_NEW;
+  readonly name: AppDestinationName.WHATS_NEW;
   readonly version?: string;
 }
 
-export type P1Destination = StatelessDestination | InfrastructureDestination | ContentDestination |
+export type AppDestination = StatelessDestination | InfrastructureDestination | ContentDestination |
   CommentDestination | SearchDestination | WriteAnswerDestination | WritePinDestination |
   NotificationEntryDestination | PrivateMessageDestination | WhatsNewDestination;
 
@@ -163,60 +163,60 @@ export function isSafeLocalDraftId(value: string | undefined): boolean {
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
 }
 
-export function isP1DestinationName(name: string): boolean {
+export function isAppDestinationName(name: string): boolean {
   switch (name) {
-    case P1DestinationName.HOME:
-    case P1DestinationName.FOLLOWING:
-    case P1DestinationName.HOT:
-    case P1DestinationName.DAILY:
-    case P1DestinationName.DAILY_STORY:
-    case P1DestinationName.QUESTION:
-    case P1DestinationName.ANSWER:
-    case P1DestinationName.ARTICLE:
-    case P1DestinationName.VIDEO:
-    case P1DestinationName.PIN:
-    case P1DestinationName.PEOPLE:
-    case P1DestinationName.COMMENT:
-    case P1DestinationName.SEARCH:
-    case P1DestinationName.COLLECTION:
-    case P1DestinationName.COLLECTIONS:
-    case P1DestinationName.NOTIFICATION:
-    case P1DestinationName.NOTIFICATION_ENTRY:
-    case P1DestinationName.NOTIFICATION_SETTINGS:
-    case P1DestinationName.PRIVATE_MESSAGE:
-    case P1DestinationName.LOGIN:
-    case P1DestinationName.SETTINGS:
-    case P1DestinationName.APPEARANCE_SETTINGS:
-    case P1DestinationName.THEME_COLOR_SETTINGS:
-    case P1DestinationName.IDENTITY_MANAGEMENT:
-    case P1DestinationName.READING_SETTINGS:
-    case P1DestinationName.SYSTEM_UPDATE_SETTINGS:
-    case P1DestinationName.WHATS_NEW:
-    case P1DestinationName.RECOMMENDATION_FILTER_SETTINGS:
-    case P1DestinationName.BLOCKING_RULES:
-    case P1DestinationName.BLOCKED_FEED_HISTORY:
-    case P1DestinationName.READ_HISTORY:
-    case P1DestinationName.LOCAL_HISTORY:
-    case P1DestinationName.TECHNICAL_LAB:
-    case P1DestinationName.READER_PROBE:
-    case P1DestinationName.IMAGE_PROBE:
-    case P1DestinationName.DATABASE_PROBE:
-    case P1DestinationName.DEEP_LINK_PROBE:
-    case P1DestinationName.QR_SCAN_PROBE:
-    case P1DestinationName.QR_DESKTOP_LOGIN_SCAN:
-    case P1DestinationName.BACKGROUND_TASK_PROBE:
-    case P1DestinationName.DOMAIN_FIXTURE_PROBE:
-    case P1DestinationName.WRITE_ANSWER:
-    case P1DestinationName.WRITE_PIN:
-    case P1DestinationName.PIN_DRAFTS:
+    case AppDestinationName.HOME:
+    case AppDestinationName.FOLLOWING:
+    case AppDestinationName.HOT:
+    case AppDestinationName.DAILY:
+    case AppDestinationName.DAILY_STORY:
+    case AppDestinationName.QUESTION:
+    case AppDestinationName.ANSWER:
+    case AppDestinationName.ARTICLE:
+    case AppDestinationName.VIDEO:
+    case AppDestinationName.PIN:
+    case AppDestinationName.PEOPLE:
+    case AppDestinationName.COMMENT:
+    case AppDestinationName.SEARCH:
+    case AppDestinationName.COLLECTION:
+    case AppDestinationName.COLLECTIONS:
+    case AppDestinationName.NOTIFICATION:
+    case AppDestinationName.NOTIFICATION_ENTRY:
+    case AppDestinationName.NOTIFICATION_SETTINGS:
+    case AppDestinationName.PRIVATE_MESSAGE:
+    case AppDestinationName.LOGIN:
+    case AppDestinationName.SETTINGS:
+    case AppDestinationName.APPEARANCE_SETTINGS:
+    case AppDestinationName.THEME_COLOR_SETTINGS:
+    case AppDestinationName.IDENTITY_MANAGEMENT:
+    case AppDestinationName.READING_SETTINGS:
+    case AppDestinationName.SYSTEM_UPDATE_SETTINGS:
+    case AppDestinationName.WHATS_NEW:
+    case AppDestinationName.RECOMMENDATION_FILTER_SETTINGS:
+    case AppDestinationName.BLOCKING_RULES:
+    case AppDestinationName.BLOCKED_FEED_HISTORY:
+    case AppDestinationName.READ_HISTORY:
+    case AppDestinationName.LOCAL_HISTORY:
+    case AppDestinationName.TECHNICAL_LAB:
+    case AppDestinationName.READER_PROBE:
+    case AppDestinationName.IMAGE_PROBE:
+    case AppDestinationName.DATABASE_PROBE:
+    case AppDestinationName.DEEP_LINK_PROBE:
+    case AppDestinationName.QR_SCAN_PROBE:
+    case AppDestinationName.QR_DESKTOP_LOGIN_SCAN:
+    case AppDestinationName.BACKGROUND_TASK_PROBE:
+    case AppDestinationName.DOMAIN_FIXTURE_PROBE:
+    case AppDestinationName.WRITE_ANSWER:
+    case AppDestinationName.WRITE_PIN:
+    case AppDestinationName.PIN_DRAFTS:
       return true;
     default:
       return false;
   }
 }
 
-export function decodeP1Destination(name: string, param: Object): P1Destination | undefined {
-  if (!isP1DestinationName(name)) {
+export function decodeAppDestination(name: string, param: Object): AppDestination | undefined {
+  if (!isAppDestinationName(name)) {
     return undefined;
   }
   let wire: JsonObjectValue;
@@ -235,91 +235,91 @@ export function decodeP1Destination(name: string, param: Object): P1Destination 
   }
 
   switch (name) {
-    case P1DestinationName.HOME:
-      return hasNoParameters(wire) ? { name: P1DestinationName.HOME } : undefined;
-    case P1DestinationName.FOLLOWING:
-      return hasNoParameters(wire) ? { name: P1DestinationName.FOLLOWING } : undefined;
-    case P1DestinationName.HOT:
-      return hasNoParameters(wire) ? { name: P1DestinationName.HOT } : undefined;
-    case P1DestinationName.DAILY:
-      return hasNoParameters(wire) ? { name: P1DestinationName.DAILY } : undefined;
-    case P1DestinationName.DAILY_STORY:
-      return decodeContent(wire, P1DestinationName.DAILY_STORY);
-    case P1DestinationName.NOTIFICATION:
-      return hasNoParameters(wire) ? { name: P1DestinationName.NOTIFICATION } : undefined;
-    case P1DestinationName.NOTIFICATION_ENTRY:
+    case AppDestinationName.HOME:
+      return hasNoParameters(wire) ? { name: AppDestinationName.HOME } : undefined;
+    case AppDestinationName.FOLLOWING:
+      return hasNoParameters(wire) ? { name: AppDestinationName.FOLLOWING } : undefined;
+    case AppDestinationName.HOT:
+      return hasNoParameters(wire) ? { name: AppDestinationName.HOT } : undefined;
+    case AppDestinationName.DAILY:
+      return hasNoParameters(wire) ? { name: AppDestinationName.DAILY } : undefined;
+    case AppDestinationName.DAILY_STORY:
+      return decodeContent(wire, AppDestinationName.DAILY_STORY);
+    case AppDestinationName.NOTIFICATION:
+      return hasNoParameters(wire) ? { name: AppDestinationName.NOTIFICATION } : undefined;
+    case AppDestinationName.NOTIFICATION_ENTRY:
       return decodeNotificationEntry(wire);
-    case P1DestinationName.PRIVATE_MESSAGE:
+    case AppDestinationName.PRIVATE_MESSAGE:
       return decodePrivateMessage(wire);
-    case P1DestinationName.NOTIFICATION_SETTINGS:
-      return hasNoParameters(wire) ? { name: P1DestinationName.NOTIFICATION_SETTINGS } : undefined;
-    case P1DestinationName.APPEARANCE_SETTINGS:
-      return hasNoParameters(wire) ? { name: P1DestinationName.APPEARANCE_SETTINGS } : undefined;
-    case P1DestinationName.THEME_COLOR_SETTINGS:
-      return hasNoParameters(wire) ? { name: P1DestinationName.THEME_COLOR_SETTINGS } : undefined;
-    case P1DestinationName.IDENTITY_MANAGEMENT:
-      return hasNoParameters(wire) ? { name: P1DestinationName.IDENTITY_MANAGEMENT } : undefined;
-    case P1DestinationName.READING_SETTINGS:
-      return hasNoParameters(wire) ? { name: P1DestinationName.READING_SETTINGS } : undefined;
-    case P1DestinationName.SYSTEM_UPDATE_SETTINGS:
-      return hasNoParameters(wire) ? { name: P1DestinationName.SYSTEM_UPDATE_SETTINGS } : undefined;
-    case P1DestinationName.WHATS_NEW:
+    case AppDestinationName.NOTIFICATION_SETTINGS:
+      return hasNoParameters(wire) ? { name: AppDestinationName.NOTIFICATION_SETTINGS } : undefined;
+    case AppDestinationName.APPEARANCE_SETTINGS:
+      return hasNoParameters(wire) ? { name: AppDestinationName.APPEARANCE_SETTINGS } : undefined;
+    case AppDestinationName.THEME_COLOR_SETTINGS:
+      return hasNoParameters(wire) ? { name: AppDestinationName.THEME_COLOR_SETTINGS } : undefined;
+    case AppDestinationName.IDENTITY_MANAGEMENT:
+      return hasNoParameters(wire) ? { name: AppDestinationName.IDENTITY_MANAGEMENT } : undefined;
+    case AppDestinationName.READING_SETTINGS:
+      return hasNoParameters(wire) ? { name: AppDestinationName.READING_SETTINGS } : undefined;
+    case AppDestinationName.SYSTEM_UPDATE_SETTINGS:
+      return hasNoParameters(wire) ? { name: AppDestinationName.SYSTEM_UPDATE_SETTINGS } : undefined;
+    case AppDestinationName.WHATS_NEW:
       return decodeWhatsNew(wire);
-    case P1DestinationName.RECOMMENDATION_FILTER_SETTINGS:
-      return hasNoParameters(wire) ? { name: P1DestinationName.RECOMMENDATION_FILTER_SETTINGS } : undefined;
-    case P1DestinationName.LOGIN:
-      return hasNoParameters(wire) ? { name: P1DestinationName.LOGIN } : undefined;
-    case P1DestinationName.SETTINGS:
-      return hasNoParameters(wire) ? { name: P1DestinationName.SETTINGS } : undefined;
-    case P1DestinationName.BLOCKING_RULES:
-      return hasNoParameters(wire) ? { name: P1DestinationName.BLOCKING_RULES } : undefined;
-    case P1DestinationName.BLOCKED_FEED_HISTORY:
-      return hasNoParameters(wire) ? { name: P1DestinationName.BLOCKED_FEED_HISTORY } : undefined;
-    case P1DestinationName.READ_HISTORY:
-      return hasNoParameters(wire) ? { name: P1DestinationName.READ_HISTORY } : undefined;
-    case P1DestinationName.LOCAL_HISTORY:
-      return hasNoParameters(wire) ? { name: P1DestinationName.LOCAL_HISTORY } : undefined;
-    case P1DestinationName.TECHNICAL_LAB:
-      return hasNoParameters(wire) ? { name: P1DestinationName.TECHNICAL_LAB } : undefined;
-    case P1DestinationName.READER_PROBE:
-      return hasNoParameters(wire) ? { name: P1DestinationName.READER_PROBE } : undefined;
-    case P1DestinationName.IMAGE_PROBE:
-      return hasNoParameters(wire) ? { name: P1DestinationName.IMAGE_PROBE } : undefined;
-    case P1DestinationName.DATABASE_PROBE:
-      return hasNoParameters(wire) ? { name: P1DestinationName.DATABASE_PROBE } : undefined;
-    case P1DestinationName.DEEP_LINK_PROBE:
-      return hasNoParameters(wire) ? { name: P1DestinationName.DEEP_LINK_PROBE } : undefined;
-    case P1DestinationName.QR_SCAN_PROBE:
-      return hasNoParameters(wire) ? { name: P1DestinationName.QR_SCAN_PROBE } : undefined;
-    case P1DestinationName.QR_DESKTOP_LOGIN_SCAN:
-      return hasNoParameters(wire) ? { name: P1DestinationName.QR_DESKTOP_LOGIN_SCAN } : undefined;
-    case P1DestinationName.BACKGROUND_TASK_PROBE:
-      return hasNoParameters(wire) ? { name: P1DestinationName.BACKGROUND_TASK_PROBE } : undefined;
-    case P1DestinationName.DOMAIN_FIXTURE_PROBE:
-      return hasNoParameters(wire) ? { name: P1DestinationName.DOMAIN_FIXTURE_PROBE } : undefined;
-    case P1DestinationName.PIN_DRAFTS:
-      return hasNoParameters(wire) ? { name: P1DestinationName.PIN_DRAFTS } : undefined;
-    case P1DestinationName.QUESTION:
-      return decodeContent(wire, P1DestinationName.QUESTION);
-    case P1DestinationName.ANSWER:
-      return decodeContent(wire, P1DestinationName.ANSWER);
-    case P1DestinationName.ARTICLE:
-      return decodeContent(wire, P1DestinationName.ARTICLE);
-    case P1DestinationName.VIDEO:
-      return decodeContent(wire, P1DestinationName.VIDEO);
-    case P1DestinationName.PIN:
-      return decodeContent(wire, P1DestinationName.PIN);
-    case P1DestinationName.PEOPLE:
-      return decodeContent(wire, P1DestinationName.PEOPLE);
-    case P1DestinationName.COLLECTION:
-      return decodeContent(wire, P1DestinationName.COLLECTION);
-    case P1DestinationName.COLLECTIONS:
-      return decodeContent(wire, P1DestinationName.COLLECTIONS);
-    case P1DestinationName.WRITE_ANSWER:
+    case AppDestinationName.RECOMMENDATION_FILTER_SETTINGS:
+      return hasNoParameters(wire) ? { name: AppDestinationName.RECOMMENDATION_FILTER_SETTINGS } : undefined;
+    case AppDestinationName.LOGIN:
+      return hasNoParameters(wire) ? { name: AppDestinationName.LOGIN } : undefined;
+    case AppDestinationName.SETTINGS:
+      return hasNoParameters(wire) ? { name: AppDestinationName.SETTINGS } : undefined;
+    case AppDestinationName.BLOCKING_RULES:
+      return hasNoParameters(wire) ? { name: AppDestinationName.BLOCKING_RULES } : undefined;
+    case AppDestinationName.BLOCKED_FEED_HISTORY:
+      return hasNoParameters(wire) ? { name: AppDestinationName.BLOCKED_FEED_HISTORY } : undefined;
+    case AppDestinationName.READ_HISTORY:
+      return hasNoParameters(wire) ? { name: AppDestinationName.READ_HISTORY } : undefined;
+    case AppDestinationName.LOCAL_HISTORY:
+      return hasNoParameters(wire) ? { name: AppDestinationName.LOCAL_HISTORY } : undefined;
+    case AppDestinationName.TECHNICAL_LAB:
+      return hasNoParameters(wire) ? { name: AppDestinationName.TECHNICAL_LAB } : undefined;
+    case AppDestinationName.READER_PROBE:
+      return hasNoParameters(wire) ? { name: AppDestinationName.READER_PROBE } : undefined;
+    case AppDestinationName.IMAGE_PROBE:
+      return hasNoParameters(wire) ? { name: AppDestinationName.IMAGE_PROBE } : undefined;
+    case AppDestinationName.DATABASE_PROBE:
+      return hasNoParameters(wire) ? { name: AppDestinationName.DATABASE_PROBE } : undefined;
+    case AppDestinationName.DEEP_LINK_PROBE:
+      return hasNoParameters(wire) ? { name: AppDestinationName.DEEP_LINK_PROBE } : undefined;
+    case AppDestinationName.QR_SCAN_PROBE:
+      return hasNoParameters(wire) ? { name: AppDestinationName.QR_SCAN_PROBE } : undefined;
+    case AppDestinationName.QR_DESKTOP_LOGIN_SCAN:
+      return hasNoParameters(wire) ? { name: AppDestinationName.QR_DESKTOP_LOGIN_SCAN } : undefined;
+    case AppDestinationName.BACKGROUND_TASK_PROBE:
+      return hasNoParameters(wire) ? { name: AppDestinationName.BACKGROUND_TASK_PROBE } : undefined;
+    case AppDestinationName.DOMAIN_FIXTURE_PROBE:
+      return hasNoParameters(wire) ? { name: AppDestinationName.DOMAIN_FIXTURE_PROBE } : undefined;
+    case AppDestinationName.PIN_DRAFTS:
+      return hasNoParameters(wire) ? { name: AppDestinationName.PIN_DRAFTS } : undefined;
+    case AppDestinationName.QUESTION:
+      return decodeContent(wire, AppDestinationName.QUESTION);
+    case AppDestinationName.ANSWER:
+      return decodeContent(wire, AppDestinationName.ANSWER);
+    case AppDestinationName.ARTICLE:
+      return decodeContent(wire, AppDestinationName.ARTICLE);
+    case AppDestinationName.VIDEO:
+      return decodeContent(wire, AppDestinationName.VIDEO);
+    case AppDestinationName.PIN:
+      return decodeContent(wire, AppDestinationName.PIN);
+    case AppDestinationName.PEOPLE:
+      return decodeContent(wire, AppDestinationName.PEOPLE);
+    case AppDestinationName.COLLECTION:
+      return decodeContent(wire, AppDestinationName.COLLECTION);
+    case AppDestinationName.COLLECTIONS:
+      return decodeContent(wire, AppDestinationName.COLLECTIONS);
+    case AppDestinationName.WRITE_ANSWER:
       return decodeWriteAnswer(wire);
-    case P1DestinationName.WRITE_PIN:
+    case AppDestinationName.WRITE_PIN:
       return decodeWritePin(wire);
-    case P1DestinationName.COMMENT:
+    case AppDestinationName.COMMENT:
       const contentType = readString(wire, 'contentType');
       const contentId = readString(wire, 'contentId');
       const commentId = readString(wire, 'commentId');
@@ -343,7 +343,7 @@ export function decodeP1Destination(name: string, param: Object): P1Destination 
       }
       if (hasSegment) {
         return {
-          name: P1DestinationName.COMMENT,
+          name: AppDestinationName.COMMENT,
           contentType: contentType,
           contentId: contentId,
           segmentId: segmentId,
@@ -354,79 +354,79 @@ export function decodeP1Destination(name: string, param: Object): P1Destination 
         };
       }
       return commentId === undefined
-        ? { name: P1DestinationName.COMMENT, contentType: contentType, contentId: contentId }
+        ? { name: AppDestinationName.COMMENT, contentType: contentType, contentId: contentId }
         : {
-          name: P1DestinationName.COMMENT,
+          name: AppDestinationName.COMMENT,
           contentType: contentType,
           contentId: contentId,
           commentId: commentId
         };
-    case P1DestinationName.SEARCH:
+    case AppDestinationName.SEARCH:
       const query = readString(wire, 'query');
       if (query === undefined || !isSafeSearchDestinationQuery(query) || readString(wire, 'id') !== undefined ||
         readString(wire, 'contentId') !== undefined || readString(wire, 'commentId') !== undefined ||
         !hasOnlyFields(wire, ['name', 'query'])) {
         return undefined;
       }
-      return { name: P1DestinationName.SEARCH, query: query };
+      return { name: AppDestinationName.SEARCH, query: query };
     default:
       return undefined;
   }
 }
 
-export function isInfrastructureDestination(destination: P1Destination): boolean {
+export function isInfrastructureDestination(destination: AppDestination): boolean {
   switch (destination.name) {
-    case P1DestinationName.LOGIN:
-    case P1DestinationName.SETTINGS:
-    case P1DestinationName.APPEARANCE_SETTINGS:
-    case P1DestinationName.THEME_COLOR_SETTINGS:
-    case P1DestinationName.IDENTITY_MANAGEMENT:
-    case P1DestinationName.READING_SETTINGS:
-    case P1DestinationName.SYSTEM_UPDATE_SETTINGS:
-    case P1DestinationName.WHATS_NEW:
-    case P1DestinationName.RECOMMENDATION_FILTER_SETTINGS:
-    case P1DestinationName.BLOCKING_RULES:
-    case P1DestinationName.BLOCKED_FEED_HISTORY:
-    case P1DestinationName.READ_HISTORY:
-    case P1DestinationName.LOCAL_HISTORY:
-    case P1DestinationName.TECHNICAL_LAB:
-    case P1DestinationName.NOTIFICATION_SETTINGS:
-    case P1DestinationName.NOTIFICATION_ENTRY:
-    case P1DestinationName.PRIVATE_MESSAGE:
-    case P1DestinationName.READER_PROBE:
-    case P1DestinationName.IMAGE_PROBE:
-    case P1DestinationName.DATABASE_PROBE:
-    case P1DestinationName.DEEP_LINK_PROBE:
-    case P1DestinationName.QR_SCAN_PROBE:
-    case P1DestinationName.QR_DESKTOP_LOGIN_SCAN:
-    case P1DestinationName.BACKGROUND_TASK_PROBE:
-    case P1DestinationName.DOMAIN_FIXTURE_PROBE:
-    case P1DestinationName.PIN_DRAFTS:
+    case AppDestinationName.LOGIN:
+    case AppDestinationName.SETTINGS:
+    case AppDestinationName.APPEARANCE_SETTINGS:
+    case AppDestinationName.THEME_COLOR_SETTINGS:
+    case AppDestinationName.IDENTITY_MANAGEMENT:
+    case AppDestinationName.READING_SETTINGS:
+    case AppDestinationName.SYSTEM_UPDATE_SETTINGS:
+    case AppDestinationName.WHATS_NEW:
+    case AppDestinationName.RECOMMENDATION_FILTER_SETTINGS:
+    case AppDestinationName.BLOCKING_RULES:
+    case AppDestinationName.BLOCKED_FEED_HISTORY:
+    case AppDestinationName.READ_HISTORY:
+    case AppDestinationName.LOCAL_HISTORY:
+    case AppDestinationName.TECHNICAL_LAB:
+    case AppDestinationName.NOTIFICATION_SETTINGS:
+    case AppDestinationName.NOTIFICATION_ENTRY:
+    case AppDestinationName.PRIVATE_MESSAGE:
+    case AppDestinationName.READER_PROBE:
+    case AppDestinationName.IMAGE_PROBE:
+    case AppDestinationName.DATABASE_PROBE:
+    case AppDestinationName.DEEP_LINK_PROBE:
+    case AppDestinationName.QR_SCAN_PROBE:
+    case AppDestinationName.QR_DESKTOP_LOGIN_SCAN:
+    case AppDestinationName.BACKGROUND_TASK_PROBE:
+    case AppDestinationName.DOMAIN_FIXTURE_PROBE:
+    case AppDestinationName.PIN_DRAFTS:
       return true;
     default:
       return false;
   }
 }
 
-export function shouldReloadAfterAuthentication(destination: P1Destination): boolean {
+export function shouldReloadAfterAuthentication(destination: AppDestination): boolean {
   switch (destination.name) {
-    case P1DestinationName.QUESTION:
-    case P1DestinationName.ANSWER:
-    case P1DestinationName.ARTICLE:
-    case P1DestinationName.SEARCH:
-    case P1DestinationName.FOLLOWING:
-    case P1DestinationName.HOT:
-    case P1DestinationName.PIN:
-    case P1DestinationName.PEOPLE:
-    case P1DestinationName.READ_HISTORY:
-    case P1DestinationName.COLLECTION:
-    case P1DestinationName.COLLECTIONS:
-    case P1DestinationName.NOTIFICATION:
-    case P1DestinationName.NOTIFICATION_ENTRY:
-    case P1DestinationName.PRIVATE_MESSAGE:
-    case P1DestinationName.WRITE_ANSWER:
-    case P1DestinationName.WRITE_PIN:
-    case P1DestinationName.PIN_DRAFTS:
+    case AppDestinationName.QUESTION:
+    case AppDestinationName.ANSWER:
+    case AppDestinationName.ARTICLE:
+    case AppDestinationName.SEARCH:
+    case AppDestinationName.FOLLOWING:
+    case AppDestinationName.HOT:
+    case AppDestinationName.PIN:
+    case AppDestinationName.PEOPLE:
+    case AppDestinationName.READ_HISTORY:
+    case AppDestinationName.COLLECTION:
+    case AppDestinationName.COLLECTIONS:
+    case AppDestinationName.NOTIFICATION:
+    case AppDestinationName.NOTIFICATION_ENTRY:
+    case AppDestinationName.PRIVATE_MESSAGE:
+    case AppDestinationName.WRITE_ANSWER:
+    case AppDestinationName.WRITE_PIN:
+    case AppDestinationName.PIN_DRAFTS:
       return true;
     default:
       return false;
@@ -445,13 +445,13 @@ function decodeWhatsNew(wire: JsonObjectValue): WhatsNewDestination | undefined 
     !hasOnlyFields(wire, version === undefined ? ['name'] : ['name', 'version'])) {
     return undefined;
   }
-  return version === undefined ? { name: P1DestinationName.WHATS_NEW } : { name: P1DestinationName.WHATS_NEW, version: version };
+  return version === undefined ? { name: AppDestinationName.WHATS_NEW } : { name: AppDestinationName.WHATS_NEW, version: version };
 }
 
-function decodeContent(wire: JsonObjectValue, name: P1DestinationName.QUESTION | P1DestinationName.ANSWER |
-  P1DestinationName.ARTICLE | P1DestinationName.VIDEO | P1DestinationName.PIN |
-  P1DestinationName.PEOPLE | P1DestinationName.COLLECTION | P1DestinationName.COLLECTIONS |
-  P1DestinationName.DAILY_STORY): ContentDestination | undefined {
+function decodeContent(wire: JsonObjectValue, name: AppDestinationName.QUESTION | AppDestinationName.ANSWER |
+  AppDestinationName.ARTICLE | AppDestinationName.VIDEO | AppDestinationName.PIN |
+  AppDestinationName.PEOPLE | AppDestinationName.COLLECTION | AppDestinationName.COLLECTIONS |
+  AppDestinationName.DAILY_STORY): ContentDestination | undefined {
   const id = readString(wire, 'id');
   if (id === undefined || !hasText(id) ||
     readString(wire, 'contentId') !== undefined || readString(wire, 'commentId') !== undefined ||
@@ -460,12 +460,12 @@ function decodeContent(wire: JsonObjectValue, name: P1DestinationName.QUESTION |
     return undefined;
   }
   let validId = true;
-  if (name === P1DestinationName.PIN || name === P1DestinationName.DAILY_STORY) {
+  if (name === AppDestinationName.PIN || name === AppDestinationName.DAILY_STORY) {
     validId = isSafePinContentId(id);
-  } else if (name === P1DestinationName.PEOPLE || name === P1DestinationName.COLLECTIONS) {
+  } else if (name === AppDestinationName.PEOPLE || name === AppDestinationName.COLLECTIONS) {
     validId = isSafePeopleIdentifier(id);
-  } else if (name === P1DestinationName.QUESTION || name === P1DestinationName.ANSWER ||
-    name === P1DestinationName.ARTICLE || name === P1DestinationName.COLLECTION) {
+  } else if (name === AppDestinationName.QUESTION || name === AppDestinationName.ANSWER ||
+    name === AppDestinationName.ARTICLE || name === AppDestinationName.COLLECTION) {
     validId = isSafeDecimalContentId(id);
   }
   return validId ? { name: name, id: id } : undefined;
@@ -514,7 +514,7 @@ function decodeNotificationEntry(wire: JsonObjectValue): NotificationEntryDestin
     return undefined;
   }
   const destination: NotificationEntryDestination = {
-    name: P1DestinationName.NOTIFICATION_ENTRY,
+    name: AppDestinationName.NOTIFICATION_ENTRY,
     entryName: entryName as string,
     title: title as string
   };
@@ -532,7 +532,7 @@ function decodePrivateMessage(wire: JsonObjectValue): PrivateMessageDestination 
     return undefined;
   }
   const destination: PrivateMessageDestination = {
-    name: P1DestinationName.PRIVATE_MESSAGE,
+    name: AppDestinationName.PRIVATE_MESSAGE,
     peerId: peerId as string,
     peerName: peerName,
     avatarUrl: avatarUrl
@@ -549,8 +549,8 @@ function decodeWriteAnswer(wire: JsonObjectValue): WriteAnswerDestination | unde
     return undefined;
   }
   return answerId === undefined
-    ? { name: P1DestinationName.WRITE_ANSWER, questionId: questionId }
-    : { name: P1DestinationName.WRITE_ANSWER, questionId: questionId, answerId: answerId };
+    ? { name: AppDestinationName.WRITE_ANSWER, questionId: questionId }
+    : { name: AppDestinationName.WRITE_ANSWER, questionId: questionId, answerId: answerId };
 }
 
 function decodeWritePin(wire: JsonObjectValue): WritePinDestination | undefined {
@@ -558,7 +558,7 @@ function decodeWritePin(wire: JsonObjectValue): WritePinDestination | undefined 
   if (draftId === undefined || !isSafeLocalDraftId(draftId) || !hasOnlyFields(wire, ['name', 'draftId'])) {
     return undefined;
   }
-  return { name: P1DestinationName.WRITE_PIN, draftId: draftId };
+  return { name: AppDestinationName.WRITE_PIN, draftId: draftId };
 }
 
 function hasText(value: string | undefined): boolean {

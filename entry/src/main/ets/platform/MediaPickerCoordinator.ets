@@ -12,7 +12,7 @@ import {
   transitionImageTemporaryLifecycle,
   validatePickedImageBatch
 } from 'data';
-import { PickedImage } from './P4PlatformServices';
+import { PickedImage } from './PlatformServices';
 
 /**
  * P4-2 系统选图的窄平台边界。生产实现只能在用户明确点击选图后调用此接口；
@@ -48,7 +48,7 @@ export interface PickedImageInspector {
 }
 
 /**
- * 受控缓存写入器。实现必须生成 cacheDir/p4-images 下的随机文件名，不能接受 URI 作为路径。
+ * 受控缓存写入器。实现必须生成 cacheDir/picked-images 下的随机文件名，不能接受 URI 作为路径。
  * 此接口不负责网络上传，也不得保存原图到 RDB、Preferences 或日志。
  */
 export interface PickedImageTemporaryStore {

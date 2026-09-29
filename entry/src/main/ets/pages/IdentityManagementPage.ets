@@ -43,30 +43,30 @@ export struct IdentityManagementPage {
   build() {
     Stack() {
       Scroll() {
-        Column({ space: $r('app.float.p1_spacing_large') }) {
+        Column({ space: $r('app.float.spacing_large') }) {
           if (this.loading && this.accounts.length === 0) {
-            Column({ space: $r('app.float.p1_spacing_medium') }) {
+            Column({ space: $r('app.float.spacing_medium') }) {
               LoadingProgress().width(40).height(40).color(this.resolvedThemeColor)
               Text('正在加载身份列表…').fontColor($r('app.color.secondary_text'))
             }.width('100%').height(180).justifyContent(FlexAlign.Center)
           }
 
           if (this.errorMessage.length > 0) {
-            Column({ space: $r('app.float.p1_spacing_medium') }) {
-              Text('加载失败').fontSize($r('app.float.p1_heading_font_size'))
+            Column({ space: $r('app.float.spacing_medium') }) {
+              Text('加载失败').fontSize($r('app.float.heading_font_size'))
                 .fontColor($r('app.color.primary_text')).width('100%')
-              Text(this.errorMessage).fontSize($r('app.float.p1_secondary_font_size'))
+              Text(this.errorMessage).fontSize($r('app.float.secondary_font_size'))
                 .fontColor($r('app.color.secondary_text')).width('100%')
-              Button('重试').id('p5_identity_retry').enabled(!this.busy)
+              Button('重试').id('identity_retry').enabled(!this.busy)
                 .fontColor(onThemeColor(this.resolvedThemeColor))
                 .backgroundColor(this.resolvedThemeColor)
                 .onClick((): void => { void this.refresh(); })
-            }.width('100%').padding($r('app.float.p1_card_padding'))
-              .borderRadius($r('app.float.p1_card_radius')).backgroundColor($r('app.color.surface_background'))
+            }.width('100%').padding($r('app.float.card_padding'))
+              .borderRadius($r('app.float.card_radius')).backgroundColor($r('app.color.surface_background'))
           }
 
           if (this.accounts.length > 0) {
-            Text('当前手机号下的账号').fontSize($r('app.float.p1_secondary_font_size'))
+            Text('当前手机号下的账号').fontSize($r('app.float.secondary_font_size'))
               .fontColor($r('app.color.secondary_text')).width('100%')
             Column() {
               ForEach(this.accounts, (account: ZhihuIdentityAccount, index: number): void => {
@@ -75,14 +75,14 @@ export struct IdentityManagementPage {
                 }
                 this.accountRow(account, index)
               }, (account: ZhihuIdentityAccount): string => account.id)
-            }.width('100%').borderRadius($r('app.float.p1_card_radius'))
+            }.width('100%').borderRadius($r('app.float.card_radius'))
               .backgroundColor($r('app.color.surface_background'))
 
-            Text('新账号').fontSize($r('app.float.p1_secondary_font_size'))
+            Text('新账号').fontSize($r('app.float.secondary_font_size'))
               .fontColor($r('app.color.secondary_text')).width('100%')
-            Column({ space: $r('app.float.p1_spacing_small') }) {
+            Column({ space: $r('app.float.spacing_small') }) {
               Button('创建新账号')
-                .id('p5_identity_create')
+                .id('identity_create')
                 .width('100%')
                 .fontColor(onThemeColor(this.resolvedThemeColor))
                 .backgroundColor(this.resolvedThemeColor)
@@ -92,22 +92,22 @@ export struct IdentityManagementPage {
                   this.acceptedCreateRules = false;
                   this.confirmationShown = true;
                 })
-              Text(this.createHint()).fontSize($r('app.float.p1_secondary_font_size'))
+              Text(this.createHint()).fontSize($r('app.float.secondary_font_size'))
                 .fontColor($r('app.color.secondary_text')).width('100%')
-            }.width('100%').padding($r('app.float.p1_card_padding'))
-              .borderRadius($r('app.float.p1_card_radius')).backgroundColor($r('app.color.surface_background'))
+            }.width('100%').padding($r('app.float.card_padding'))
+              .borderRadius($r('app.float.card_radius')).backgroundColor($r('app.color.surface_background'))
           }
         }
         .width('100%')
-        .padding({ left: $r('app.float.p1_page_padding'), right: $r('app.float.p1_page_padding'),
+        .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
           top: 16, bottom: 40 })
       }
-      .id('p5_identity_scroll')
+      .id('identity_scroll')
       .width('100%').height('100%').scrollBar(BarState.Off)
       .backgroundColor($r('app.color.page_background'))
 
       if (this.busy) {
-        Column({ space: $r('app.float.p1_spacing_medium') }) {
+        Column({ space: $r('app.float.spacing_medium') }) {
           LoadingProgress().width(44).height(44).color(this.resolvedThemeColor)
           Text(this.confirmationKind === 'create' ? '正在创建并切换账号…' : '正在切换账号…')
             .fontColor($r('app.color.primary_text'))
@@ -134,7 +134,7 @@ export struct IdentityManagementPage {
   @Builder
   private accountRow(account: ZhihuIdentityAccount, index: number) {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
-      Row({ space: $r('app.float.p1_spacing_medium') }) {
+      Row({ space: $r('app.float.spacing_medium') }) {
         Stack({ alignContent: Alignment.Center }) {
           Text(account.name.length > 0 ? account.name.charAt(0) : '?')
             .width(42).height(42).borderRadius(21).textAlign(TextAlign.Center)
@@ -144,18 +144,18 @@ export struct IdentityManagementPage {
           }
         }
         Column({ space: 2 }) {
-          Text(account.name).fontSize($r('app.float.p1_body_font_size'))
+          Text(account.name).fontSize($r('app.float.body_font_size'))
             .fontColor($r('app.color.primary_text')).maxLines(1)
           Text(account.accountType === 1 ? '主账号' : (account.accountType === 2 ? '马甲号' : '知乎账号'))
-            .fontSize($r('app.float.p1_secondary_font_size')).fontColor($r('app.color.secondary_text'))
+            .fontSize($r('app.float.secondary_font_size')).fontColor($r('app.color.secondary_text'))
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
         Text(account.id === this.currentAccountId ? '当前登录' : '切换')
-          .fontSize($r('app.float.p1_secondary_font_size'))
+          .fontSize($r('app.float.secondary_font_size'))
           .fontColor(account.id === this.currentAccountId ? this.resolvedThemeColor : $r('app.color.secondary_text'))
       }.width('100%').alignItems(VerticalAlign.Center)
     }
-    .id(`p5_identity_account_${index}`)
-    .width('100%').padding($r('app.float.p1_card_padding')).backgroundColor(Color.Transparent)
+    .id(`identity_account_${index}`)
+    .width('100%').padding($r('app.float.card_padding')).backgroundColor(Color.Transparent)
     .enabled(!this.busy && account.id !== this.currentAccountId)
     .onClick((): void => {
       this.targetAccount = account;
@@ -166,32 +166,32 @@ export struct IdentityManagementPage {
 
   @Builder
   private confirmationSheet() {
-    Column({ space: $r('app.float.p1_spacing_medium') }) {
+    Column({ space: $r('app.float.spacing_medium') }) {
       Text(this.confirmationKind === 'create' ? '新账号使用规则' : '切换账号')
-        .fontSize($r('app.float.p1_heading_font_size')).fontWeight(FontWeight.Medium)
+        .fontSize($r('app.float.heading_font_size')).fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.primary_text')).width('100%')
       if (this.confirmationKind === 'create') {
         Text('新账号与当前账号共用同一手机号，但昵称、内容、数据和互动行为相互独立。创建机会有限，创建后将立即切换。')
-          .fontSize($r('app.float.p1_body_font_size')).fontColor($r('app.color.primary_text')).width('100%')
-        Row({ space: $r('app.float.p1_spacing_small') }) {
+          .fontSize($r('app.float.body_font_size')).fontColor($r('app.color.primary_text')).width('100%')
+        Row({ space: $r('app.float.spacing_small') }) {
           Checkbox({ name: 'identity-create-rules', group: 'identity-create' })
             .selectedColor(this.resolvedThemeColor)
             .select(this.acceptedCreateRules).onChange((checked: boolean): void => {
               this.acceptedCreateRules = checked;
             })
-          Text('我已知悉并同意上述规则').fontSize($r('app.float.p1_body_font_size'))
+          Text('我已知悉并同意上述规则').fontSize($r('app.float.body_font_size'))
         }.width('100%').alignItems(VerticalAlign.Center)
       } else {
         Text(`将切换到“${this.targetAccount?.name ?? ''}”。之后的推荐、内容和互动行为都属于该账号。`)
-          .fontSize($r('app.float.p1_body_font_size')).fontColor($r('app.color.primary_text')).width('100%')
+          .fontSize($r('app.float.body_font_size')).fontColor($r('app.color.primary_text')).width('100%')
       }
-      Row({ space: $r('app.float.p1_spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
         Button('取消').layoutWeight(1)
           .fontColor($r('app.color.primary_text'))
           .backgroundColor($r('app.color.control_background'))
           .onClick((): void => { this.confirmationShown = false; })
         Button(this.confirmationKind === 'create' ? '同意并创建' : '切换')
-          .id(this.confirmationKind === 'create' ? 'p5_identity_create_confirm' : 'p5_identity_switch_confirm')
+          .id(this.confirmationKind === 'create' ? 'identity_create_confirm' : 'identity_switch_confirm')
           .layoutWeight(1).enabled(this.confirmationKind !== 'create' || this.acceptedCreateRules)
           .fontColor(onThemeColor(this.resolvedThemeColor))
           .backgroundColor(this.resolvedThemeColor)
@@ -204,7 +204,7 @@ export struct IdentityManagementPage {
             }
           })
       }.width('100%')
-    }.width('100%').padding($r('app.float.p1_page_padding'))
+    }.width('100%').padding($r('app.float.page_padding'))
   }
 
   private async refresh(): Promise<void> {

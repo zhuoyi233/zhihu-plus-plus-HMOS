@@ -7,7 +7,7 @@ import { CURRENT_SCHEMA_VERSION, schemaMigrationTo, SchemaMigration } from './Rd
 const DATABASE_NAME = 'zhplus_rdb_probe.db';
 const TABLE_NAME = 'opened_content';
 const PROBE_KEY = 'answer:2035661632110585441';
-const PRODUCTION_PROBE_KEY = 'probe:p1-production-opened-content';
+const PRODUCTION_PROBE_KEY = 'probe:production-opened-content';
 
 export interface DatabaseProbeResult {
   rollbackVersion: number;
