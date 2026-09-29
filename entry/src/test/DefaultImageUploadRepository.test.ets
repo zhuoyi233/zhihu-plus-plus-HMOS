@@ -10,6 +10,7 @@ import {
   ImageUploadInput,
   ImageUploadPollDelay,
   ImageUploadSource,
+  isControlledImageUploadInput,
   OssImageUploadRequest,
   OssImageUploadResponse,
   OssImageUploadTransport,
@@ -208,6 +209,9 @@ function gifInput(byteLength: number): ImageUploadInput {
   return { sourceUri: CONTROLLED_GIF_URI, mimeType: 'image/gif', byteLength: byteLength };
 }
 
+const LEGACY_CONTROLLED_PNG_URI: string =
+  'file:///data/storage/el2/base/cache/p4-images/0123456789abcdef0123456789abcdef.png';
+
 function apiClient(
   responses: Array<ZhihuHttpResponse>,
   requests: Array<PreparedZhihuHttpRequest>,
@@ -218,6 +222,21 @@ function apiClient(
 
 export default function defaultImageUploadRepositoryTest(): void {
   describe('defaultImageUploadRepositoryTest', () => {
+    it('acceptsControlledFileUrisInBothTransitionDirectoriesOnly', 0, () => {
+      // 新目录与过渡期旧目录的受控随机名均可作为上传输入；其他目录一律拒绝。
+      expect(isControlledImageUploadInput(pngInput())).assertTrue();
+      const legacyInput: ImageUploadInput = {
+        sourceUri: LEGACY_CONTROLLED_PNG_URI, mimeType: 'image/png', byteLength: 4
+      };
+      expect(isControlledImageUploadInput(legacyInput)).assertTrue();
+      const outsideInput: ImageUploadInput = {
+        sourceUri: 'file:///data/storage/el2/base/cache/other/0123456789abcdef0123456789abcdef.png',
+        mimeType: 'image/png',
+        byteLength: 4
+      };
+      expect(isControlledImageUploadInput(outsideInput)).assertFalse();
+    });
+
     it('uploadsSingleImageInFixedApiOssNotifyAndPollOrderWithoutSessionLeak', 0, async () => {
       const apiRequests: Array<PreparedZhihuHttpRequest> = [];
       const events: Array<string> = [];

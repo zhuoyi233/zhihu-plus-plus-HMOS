@@ -18,8 +18,16 @@ export interface ContentDraftMetadataStore {
   remove(identity: ContentDraftIdentity): Promise<void>;
 }
 
+/**
+ * 缓存维护专用只读接口：覆盖本机所有账号草稿的图片引用 JSON。
+ * 只向缓存维护器返回引用文本，不提供跨账号草稿浏览能力；业务页面继续走按账号查询。
+ */
+export interface DraftImageReferenceScanSource {
+  listAllImageRefsJsonForMaintenance(): Promise<Array<string>>;
+}
+
 /** RDB 只保存可恢复元数据；加密 HTML 由 EncryptedDraftBodyStore 持有。 */
-export class ContentDraftStore implements ContentDraftMetadataStore {
+export class ContentDraftStore implements ContentDraftMetadataStore, DraftImageReferenceScanSource {
   private readonly database: AppDatabase;
   private mutationQueue: Promise<void> = Promise.resolve();
 
@@ -58,6 +66,27 @@ export class ContentDraftStore implements ContentDraftMetadataStore {
       if (resultSet.goToFirstRow()) {
         do {
           result.push(readDraftMetadata(resultSet));
+        } while (resultSet.goToNextRow());
+      }
+      return result;
+    } finally {
+      resultSet.close();
+    }
+  }
+
+  /** 维护扫描：不按账号过滤、不读取其他列；读取失败向上抛出，由调用方停止破坏性清理。 */
+  async listAllImageRefsJsonForMaintenance(): Promise<Array<string>> {
+    await this.mutationQueue;
+    const store = await this.database.open();
+    const resultSet = await store.query(new relationalStore.RdbPredicates(TABLE_NAME), ['image_refs']);
+    const result: Array<string> = [];
+    try {
+      if (resultSet.goToFirstRow()) {
+        do {
+          const index = resultSet.getColumnIndex('image_refs');
+          if (!resultSet.isColumnNull(index)) {
+            result.push(resultSet.getString(index));
+          }
         } while (resultSet.goToNextRow());
       }
       return result;

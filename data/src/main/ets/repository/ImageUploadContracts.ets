@@ -8,7 +8,9 @@ import { hmacSha1Base64 } from '../network/ZhihuHmacSha1';
 import { ZhihuHttpMethod } from '../network/ZhihuHttpClient';
 
 /** P4-2 图片选择与上传的纯函数合同；这里绝不读取 URI、文件或网络。 */
-export const IMAGE_UPLOAD_TEMPORARY_DIRECTORY: string = 'p4-images';
+export const IMAGE_UPLOAD_TEMPORARY_DIRECTORY: string = 'picked-images';
+/** 历史阶段目录：仅供升级过渡期读取与迁移，新写入一律使用当前目录。 */
+export const LEGACY_IMAGE_UPLOAD_TEMPORARY_DIRECTORY: string = 'p4-images';
 export const MAX_IMAGE_SELECTION_COUNT: number = 9;
 export const MAX_IMAGE_SINGLE_BYTES: number = 20 * 1024 * 1024;
 export const MAX_IMAGE_BATCH_BYTES: number = 50 * 1024 * 1024;
@@ -115,7 +117,7 @@ export interface ImageSelectionLimits {
 }
 
 export interface ImageTemporaryFile {
-  /** cacheDir/p4-images 下由应用生成的唯一文件名；不是用户可控 URI。 */
+  /** cacheDir/picked-images（或过渡期旧 cacheDir/p4-images）下由应用生成的唯一文件名；不是用户可控 URI。 */
   readonly path: string;
   readonly mimeType: string;
   readonly byteLength: number;
@@ -658,9 +660,14 @@ function validateSelectionLimits(limits: ImageSelectionLimits): void {
 
 function validateTemporaryFile(file: ImageTemporaryFile, cacheDir: string): void {
   const normalizedCache = normalizeCacheDir(cacheDir);
-  const prefix = normalizedCache + '/' + IMAGE_UPLOAD_TEMPORARY_DIRECTORY + '/';
+  // 过渡期同时接受新旧专用目录：旧目录文件只能来自升级前写入，新写入一律落当前目录。
+  const currentPrefix = normalizedCache + '/' + IMAGE_UPLOAD_TEMPORARY_DIRECTORY + '/';
+  const legacyPrefix = normalizedCache + '/' + LEGACY_IMAGE_UPLOAD_TEMPORARY_DIRECTORY + '/';
+  const matchesPrefix = (prefix: string): boolean =>
+    file.path.startsWith(prefix) &&
+    /^[a-f0-9]{32}\.(?:jpg|png|webp|gif)$/.test(file.path.substring(prefix.length));
   if (!isFiniteTimestamp(file.createdAtMillis) || !isSafeByteLength(file.byteLength) || !isAllowedImageMime(file.mimeType) ||
-    !file.path.startsWith(prefix) || !/^[a-f0-9]{32}\.(?:jpg|png|webp|gif)$/.test(file.path.substring(prefix.length))) {
+    (!matchesPrefix(currentPrefix) && !matchesPrefix(legacyPrefix))) {
     throw new ImageUploadFailure(ImageUploadFailureKind.INVALID_INPUT);
   }
 }

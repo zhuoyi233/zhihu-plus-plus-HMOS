@@ -4,7 +4,6 @@ import { http } from '@kit.NetworkKit';
 import {
   DefaultImageUploadRepository,
   ImageBinaryDescriptor,
-  ImageTemporaryFile,
   ImageUploadBinary,
   ImageUploadBinaryReader,
   ImageUploadFailure,
@@ -24,7 +23,7 @@ import {
   ZhihuHttpClient,
   ZhihuHttpMethod
 } from 'data';
-import { buildControlledImageTemporaryPath } from './SystemPickedImageFileStore';
+import { resolveControlledImageTemporaryFile } from './SystemPickedImageFileStore';
 
 const HEADER_BYTES: number = 65536;
 const DIGEST_READ_CHUNK_BYTES: number = 1024 * 1024;
@@ -44,17 +43,15 @@ export interface ImageAttachmentUploaderFactory {
 }
 
 /**
- * 生产上传唯一的本地文件入口。它从已验证的随机缓存名重建 file:// URI，外部调用者无法传入
- * Photo Picker 原始 URI、任意路径或图片字节。
+ * 生产上传唯一的本地文件入口。它经统一解析器从已验证的随机缓存名定位实际文件（新目录优先、
+ * 旧目录回退并尝试复制迁移），外部调用者无法传入 Photo Picker 原始 URI、任意路径或图片字节。
  */
-export function createControlledImageUploadInput(cacheDir: string,
-  reference: LocalDraftImageReference): ImageUploadInput {
-  const file: ImageTemporaryFile = {
-    path: buildControlledImageTemporaryPath(cacheDir, reference.fileName),
-    mimeType: reference.mimeType,
-    byteLength: reference.byteLength,
-    createdAtMillis: reference.createdAtMillis
-  };
+export async function createControlledImageUploadInput(cacheDir: string,
+  reference: LocalDraftImageReference): Promise<ImageUploadInput> {
+  const file = await resolveControlledImageTemporaryFile(cacheDir, reference);
+  if (file === undefined) {
+    throw new ImageUploadFailure(ImageUploadFailureKind.INVALID_INPUT);
+  }
   let sourceUri: string;
   try {
     sourceUri = fileUri.getUriFromPath(file.path);
@@ -293,7 +290,7 @@ export class ProductionImageAttachmentUploader implements ImageAttachmentUploade
   async upload(references: Array<LocalDraftImageReference>): Promise<Array<UploadedZhihuImage>> {
     const result: Array<UploadedZhihuImage> = [];
     for (let index = 0; index < references.length; index += 1) {
-      const input = createControlledImageUploadInput(this.cacheDir, references[index]);
+      const input = await createControlledImageUploadInput(this.cacheDir, references[index]);
       result.push(await this.repository.upload(input));
     }
     return result;

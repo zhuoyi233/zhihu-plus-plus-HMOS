@@ -8,7 +8,7 @@ import {
 } from '../platform/MediaPickerCoordinator';
 import {
   createProductionMediaPickerCoordinator,
-  purgeExpiredControlledImageCache,
+  RestoredControlledImages,
   restoreControlledPickedImages
 } from '../platform/SystemPickedImageFileStore';
 
@@ -26,9 +26,13 @@ export struct ImagePickerPanel {
   /** 编辑器持有本地图片引用时保留受控副本，供草稿重新打开；状态需随父页面更新。 */
   @Prop retainPreparedImages: boolean = false;
   /** 已保存草稿的受控缓存引用；只用于恢复本地预览和移除操作，不包含系统相册 URI。 */
-  restoredLocalImageReferences: Array<LocalDraftImageReference> = [];
+  @Prop @Watch('onRestoredReferencesChanged') restoredLocalImageReferences: Array<LocalDraftImageReference> = [];
   @State private viewState: MediaPickerViewState = initialPickerViewState();
+  @State private unavailableImageCount: number = 0;
   private coordinator: MediaPickerCoordinator | undefined = undefined;
+  private cacheDir: string = '';
+  private restoreGeneration: number = 0;
+  private lastRestoredReferencesKey: string = '';
 
   aboutToAppear(): void {
     if (this.coordinator !== undefined) {
@@ -41,13 +45,59 @@ export struct ImagePickerPanel {
     }
     try {
       this.coordinator = createProductionMediaPickerCoordinator(context.cacheDir);
-      this.viewState = this.coordinator.restorePreparedImages(
-        restoreControlledPickedImages(context.cacheDir, this.restoredLocalImageReferences));
-      // 仅回收 24 小时前的应用缓存；失败不影响用户本次显式选择。
-      void purgeExpiredControlledImageCache(context.cacheDir);
     } catch (_error) {
       this.viewState = failedPickerViewState(ImageUploadFailureKind.INVALID_INPUT);
+      return;
     }
+    this.cacheDir = context.cacheDir;
+    // 恢复改为异步解析：先验证新旧目录候选并尝试复制迁移，完成后再挂载预览；
+    // 24 小时缓存回收已移交启动维护（带草稿引用保护），面板内不再做无保护清理。
+    void this.restorePersistedImages();
+  }
+
+  /**
+   * 草稿恢复是异步流程：页面先进入 READY 挂载面板，引用在草稿元数据加载完成后才到达。
+   * 引用变化（含初次到达）都必须重新触发解析，否则恢复永远拿到空引用、草稿图片无法找回。
+   */
+  onRestoredReferencesChanged(): void {
+    if (this.coordinator === undefined) {
+      return;
+    }
+    if (this.lastRestoredReferencesKey === this.restoredReferencesKey()) {
+      return;
+    }
+    void this.restorePersistedImages();
+  }
+
+  private restoredReferencesKey(): string {
+    let key = '';
+    for (let index = 0; index < this.restoredLocalImageReferences.length; index += 1) {
+      key += (index > 0 ? ',' : '') + this.restoredLocalImageReferences[index].fileName;
+    }
+    return key;
+  }
+
+  private restorePersistedImages(): void {
+    const coordinator = this.coordinator;
+    if (coordinator === undefined) {
+      return;
+    }
+    this.restoreGeneration += 1;
+    const generation = this.restoreGeneration;
+    restoreControlledPickedImages(this.cacheDir, this.restoredLocalImageReferences)
+      .then((restored: RestoredControlledImages): void => {
+        if (this.coordinator !== coordinator || generation !== this.restoreGeneration) {
+          return;
+        }
+        this.lastRestoredReferencesKey = this.restoredReferencesKey();
+        this.unavailableImageCount = restored.unavailableCount;
+        this.viewState = coordinator.restorePreparedImages(restored.images);
+      })
+      .catch((_error: Error): void => {
+        if (this.coordinator === coordinator && generation === this.restoreGeneration) {
+          this.viewState = failedPickerViewState(ImageUploadFailureKind.INVALID_INPUT);
+        }
+      });
   }
 
   aboutToDisappear(): void {
@@ -88,6 +138,14 @@ export struct ImagePickerPanel {
         .fontColor(this.viewState.phase === MediaPickerPhase.FAILED ? $r('app.color.error_text') :
           $r('app.color.secondary_text'))
         .width('100%')
+
+      if (this.unavailableImageCount > 0) {
+        Text(`有 ${this.unavailableImageCount} 张本地图片已不可用，草稿正文已保留。`)
+          .id('image_picker_unavailable_hint')
+          .fontSize($r('app.float.caption_font_size'))
+          .fontColor($r('app.color.error_text'))
+          .width('100%')
+      }
 
       if (this.viewState.images.length > 0) {
         ForEach(this.viewState.images, (item: PreparedPickedImage, index: number) => {

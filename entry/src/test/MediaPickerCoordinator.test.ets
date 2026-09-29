@@ -1,9 +1,12 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
+  createImageTemporaryLifecycle,
   createLocalDraftImageReference,
   ImageTemporaryFile,
+  ImageTemporaryState,
   ImageUploadFailureKind,
   PickedImageInspection,
+  transitionImageTemporaryLifecycle,
   ValidatedPickedImage
 } from 'data';
 import { PickedImage } from '../main/ets/platform/PlatformServices';
@@ -16,9 +19,9 @@ import {
   PhotoPickerSelection,
   PickedImageInspector,
   PickedImageTemporaryStore,
+  PreparedPickedImage,
   SystemPhotoPickerGateway
 } from '../main/ets/platform/MediaPickerCoordinator';
-import { restoreControlledPickedImages } from '../main/ets/platform/SystemPickedImageFileStore';
 
 const CACHE_DIR: string = '/data/storage/el2/base/cache';
 const NOW: number = 1770000000000;
@@ -84,7 +87,7 @@ class MemoryTemporaryStore implements PickedImageTemporaryStore {
       return Promise.reject(new Error('cache unavailable'));
     }
     const file: ImageTemporaryFile = {
-      path: `${CACHE_DIR}/p4-images/0123456789abcdef0123456789abcdef.${image.descriptor.extension}`,
+      path: `${CACHE_DIR}/picked-images/0123456789abcdef0123456789abcdef.${image.descriptor.extension}`,
       mimeType: image.descriptor.mimeType,
       byteLength: image.byteLength,
       createdAtMillis: nowMillis
@@ -142,7 +145,7 @@ export default function mediaPickerCoordinatorTest(): void {
       expect(inspector.calls).assertEqual(1);
       expect(result.phase).assertEqual(MediaPickerPhase.READY);
       expect(result.images.length).assertEqual(1);
-      expect(result.images[0].lifecycle.file.path.includes('/p4-images/')).assertTrue();
+      expect(result.images[0].lifecycle.file.path.includes('/picked-images/')).assertTrue();
       expect(result.images[0].image.descriptor.mimeType).assertEqual('image/png');
       expect(store.written.length).assertEqual(1);
     });
@@ -204,7 +207,7 @@ export default function mediaPickerCoordinatorTest(): void {
       expect(released.phase).assertEqual(MediaPickerPhase.RELEASED);
       expect(released.images.length).assertEqual(0);
       expect(store.removed.length).assertEqual(1);
-      expect(store.removed[0].includes('/p4-images/')).assertTrue();
+      expect(store.removed[0].includes('/picked-images/')).assertTrue();
     });
 
     it('restoresPickerStateFromSavedControlledFileReferences', 0, async () => {
@@ -215,7 +218,20 @@ export default function mediaPickerCoordinatorTest(): void {
       const ready = await coordinator(picker, inspector, store).pickExplicitly();
       const reference = createLocalDraftImageReference(ready.images[0].lifecycle.file,
         ready.images[0].image.descriptor);
-      const reconstructed = restoreControlledPickedImages(CACHE_DIR, [reference]);
+      // 平台层文件解析成功后按引用重建 READY 生命周期；此处直接模拟其输出，
+      // 真实文件系统的解析与迁移由模拟器升级验证覆盖。
+      const file: ImageTemporaryFile = {
+        path: `${CACHE_DIR}/picked-images/${reference.fileName}`,
+        mimeType: reference.mimeType,
+        byteLength: reference.byteLength,
+        createdAtMillis: reference.createdAtMillis
+      };
+      const selected = createImageTemporaryLifecycle(file, CACHE_DIR);
+      const processing = transitionImageTemporaryLifecycle(selected, ImageTemporaryState.PROCESSING);
+      const reconstructed: Array<PreparedPickedImage> = [{
+        image: ready.images[0].image,
+        lifecycle: transitionImageTemporaryLifecycle(processing, ImageTemporaryState.READY)
+      }];
       const restored = coordinator(picker, inspector, store).restorePreparedImages(reconstructed);
 
       expect(restored.phase).assertEqual(MediaPickerPhase.READY);

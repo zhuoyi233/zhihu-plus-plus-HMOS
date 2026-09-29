@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
   buildControlledImageTemporaryPath,
+  buildLegacyControlledImageTemporaryPath,
   isControlledImageTemporaryPath,
   isPickedMediaUri,
   shouldPurgeControlledImageTemporaryArtifact
@@ -19,12 +20,18 @@ export default function systemPickedImageFileStoreTest(): void {
       expect(isPickedMediaUri('file://media/Photo/1/file name.png')).assertFalse();
     });
 
-    it('buildsAndRecognizesOnlyAppGeneratedCacheImagePaths', 0, () => {
+    it('buildsNewPickedImagesPathsAndRecognizesBothControlledDirectories', 0, () => {
       const path = buildControlledImageTemporaryPath(CACHE_DIR, FILE_NAME);
-      expect(path).assertEqual(`${CACHE_DIR}/p4-images/${FILE_NAME}`);
+      expect(path).assertEqual(`${CACHE_DIR}/picked-images/${FILE_NAME}`);
       expect(isControlledImageTemporaryPath(CACHE_DIR, path)).assertTrue();
+      // 过渡期兼容：旧目录路径仍被识别为受控路径，供升级迁移与清理使用。
+      const legacyPath = buildLegacyControlledImageTemporaryPath(CACHE_DIR, FILE_NAME);
+      expect(legacyPath).assertEqual(`${CACHE_DIR}/p4-images/${FILE_NAME}`);
+      expect(isControlledImageTemporaryPath(CACHE_DIR, legacyPath)).assertTrue();
+      expect(isControlledImageTemporaryPath(CACHE_DIR, `${CACHE_DIR}/picked-images/user-name.png`)).assertFalse();
       expect(isControlledImageTemporaryPath(CACHE_DIR, `${CACHE_DIR}/p4-images/user-name.png`)).assertFalse();
-      expect(isControlledImageTemporaryPath(CACHE_DIR, '/data/storage/el2/base/files/p4-images/' + FILE_NAME)).assertFalse();
+      expect(isControlledImageTemporaryPath(CACHE_DIR, '/data/storage/el2/base/files/picked-images/' + FILE_NAME))
+        .assertFalse();
     });
 
     it('purgesOnlyExpiredAppGeneratedFinalOrInterruptedCacheArtifacts', 0, () => {

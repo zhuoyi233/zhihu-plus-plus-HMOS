@@ -1,9 +1,12 @@
 import { AbilityConstant, Configuration, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { display, window } from '@kit.ArkUI';
 import { resourceManager } from '@kit.LocalizationKit';
-import { AppSessionOwner, AppThemeMode, closeAppDatabase, DEFAULT_THEME_COLOR, formulaForegroundColorForColorMode,
-  getAppDatabase, getAppSessionOwner, normalizeThemeColor, resolveThemeColorForDark } from 'data';
+import { AppSessionOwner, AppThemeMode, closeAppDatabase, ContentDraftStore, DEFAULT_THEME_COLOR,
+  formulaForegroundColorForColorMode, getAppDatabase, getAppSessionOwner, normalizeThemeColor,
+  removeLegacyProductionProbeKey, resolveThemeColorForDark } from 'data';
 import { clearAbilityContext, setAbilityContext } from './AbilityContextHolder';
+import { maintainControlledImageCaches } from '../platform/ControlledImageCacheMaintenance';
+import { purgeExpiredShareTemporaryFiles } from '../platform/SystemShareTemporaryCleaner';
 import {
   AppLogEvent,
   AppLogger,
@@ -37,8 +40,10 @@ export default class EntryAbility extends UIAbility {
         phase: StartupPhase.CRITICAL,
         dependencies: [],
         run: (): Promise<void> => {
-          return getAppDatabase(this.context).open().then((): void => {
-          });
+          const database = getAppDatabase(this.context);
+          return database.open().then((): Promise<void> => removeLegacyProductionProbeKey(database))
+            .then((): void => {
+            });
         }
       },
       {
@@ -48,6 +53,19 @@ export default class EntryAbility extends UIAbility {
         run: (): Promise<void> => {
           this.routeIncomingLink(want);
           return Promise.resolve();
+        }
+      },
+      {
+        name: 'cache-maintenance',
+        phase: StartupPhase.DEFERRED,
+        dependencies: ['deep-link-routing'],
+        run: (): Promise<void> => {
+          // 先完成全账号草稿引用扫描，再回收无引用的过期受控缓存；失败不影响启动。
+          return Promise.all([
+            maintainControlledImageCaches(this.context.cacheDir, new ContentDraftStore(getAppDatabase(this.context))),
+            purgeExpiredShareTemporaryFiles(this.context.cacheDir)
+          ]).then((): void => {
+          });
         }
       },
       {

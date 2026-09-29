@@ -82,6 +82,7 @@ import appearancePreferencesTest from './AppearancePreferences.test';
 import recommendationFilterPolicyTest from './RecommendationFilterPolicy.test';
 import identitySpeechSettingsTest from './IdentitySpeechSettings.test';
 import themeColorsTest from './ThemeColors.test';
+import draftImageReferenceScanTest from './DraftImageReferenceScan.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -168,4 +169,5 @@ export default function testsuite(): void {
   recommendationFilterPolicyTest();
   identitySpeechSettingsTest();
   themeColorsTest();
+  draftImageReferenceScanTest();
 }

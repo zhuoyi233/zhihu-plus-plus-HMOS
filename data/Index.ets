@@ -89,6 +89,7 @@ export * from './src/main/ets/preferences/SpeechPreferences';
 export * from './src/main/ets/data/AppDatabase';
 export * from './src/main/ets/data/OpenedContentStore';
 export * from './src/main/ets/data/ContentDraftStore';
+export * from './src/main/ets/data/DraftImageReferenceCollector';
 export * from './src/main/ets/data/DraftModels';
 export * from './src/main/ets/data/DraftCipher';
 export * from './src/main/ets/data/DraftKeyStore';
