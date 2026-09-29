@@ -196,7 +196,7 @@ export default function shareServiceTest(): void {
     });
 
     it('noLongerAcceptsLegacyPhaseDirectorySharePayloads', 0, () => {
-      // 目录改名后，旧 p4-share 路径不得通过白名单；确有旧文件任务须走专用迁移适配器。
+      // 阶段目录兼容层已退役：旧 p4-share 路径不属于任何受控目录，一律拒绝。
       const legacy = temporaryFile(`${CACHE_DIR}/p4-share/image-123.png`);
 
       expect((): void => { prepareSharePayload(filePayload(legacy), policy()); }).assertThrowError('分享内容不受支持');

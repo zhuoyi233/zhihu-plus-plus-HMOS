@@ -50,7 +50,7 @@ export struct ImagePickerPanel {
       return;
     }
     this.cacheDir = context.cacheDir;
-    // 恢复改为异步解析：先验证新旧目录候选并尝试复制迁移，完成后再挂载预览；
+    // 恢复为异步解析：校验受控缓存文件的尺寸与 magic bytes，完成后再挂载预览；
     // 24 小时缓存回收已移交启动维护（带草稿引用保护），面板内不再做无保护清理。
     void this.restorePersistedImages();
   }

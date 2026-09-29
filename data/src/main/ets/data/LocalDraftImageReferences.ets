@@ -30,8 +30,7 @@ export interface LocalDraftImageReference {
 }
 
 const CONTROLLED_FILE_NAME: RegExp = /^[a-f0-9]{32}\.(?:jpg|png|webp|gif)$/;
-// 过渡期同时接受新旧专用目录：旧目录仅来自升级前草稿，新目录为当前写入位置。
-const CONTROLLED_FILE_PATH: RegExp = /(?:^|\/)(?:p4-images|picked-images)\/([a-f0-9]{32}\.(?:jpg|png|webp|gif))$/;
+const CONTROLLED_FILE_PATH: RegExp = /(?:^|\/)picked-images\/([a-f0-9]{32}\.(?:jpg|png|webp|gif))$/;
 
 export function createLocalDraftImageReference(file: ImageTemporaryFile,
   descriptor: ImageBinaryDescriptor): LocalDraftImageReference {

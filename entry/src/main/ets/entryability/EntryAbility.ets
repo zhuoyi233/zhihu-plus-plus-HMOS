@@ -3,7 +3,7 @@ import { display, window } from '@kit.ArkUI';
 import { resourceManager } from '@kit.LocalizationKit';
 import { AppSessionOwner, AppThemeMode, closeAppDatabase, ContentDraftStore, DEFAULT_THEME_COLOR,
   formulaForegroundColorForColorMode, getAppDatabase, getAppSessionOwner, normalizeThemeColor,
-  removeLegacyProductionProbeKey, resolveThemeColorForDark } from 'data';
+  resolveThemeColorForDark } from 'data';
 import { clearAbilityContext, setAbilityContext } from './AbilityContextHolder';
 import { maintainControlledImageCaches } from '../platform/ControlledImageCacheMaintenance';
 import { purgeExpiredShareTemporaryFiles } from '../platform/SystemShareTemporaryCleaner';
@@ -40,10 +40,8 @@ export default class EntryAbility extends UIAbility {
         phase: StartupPhase.CRITICAL,
         dependencies: [],
         run: (): Promise<void> => {
-          const database = getAppDatabase(this.context);
-          return database.open().then((): Promise<void> => removeLegacyProductionProbeKey(database))
-            .then((): void => {
-            });
+          return getAppDatabase(this.context).open().then((): void => {
+          });
         }
       },
       {

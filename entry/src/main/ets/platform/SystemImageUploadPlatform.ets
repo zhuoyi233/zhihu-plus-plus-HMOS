@@ -43,8 +43,8 @@ export interface ImageAttachmentUploaderFactory {
 }
 
 /**
- * 生产上传唯一的本地文件入口。它经统一解析器从已验证的随机缓存名定位实际文件（新目录优先、
- * 旧目录回退并尝试复制迁移），外部调用者无法传入 Photo Picker 原始 URI、任意路径或图片字节。
+ * 生产上传唯一的本地文件入口。它经统一解析器校验受控缓存名对应的实际文件
+ * （存在性、尺寸与 magic bytes），外部调用者无法传入 Photo Picker 原始 URI、任意路径或图片字节。
  */
 export async function createControlledImageUploadInput(cacheDir: string,
   reference: LocalDraftImageReference): Promise<ImageUploadInput> {

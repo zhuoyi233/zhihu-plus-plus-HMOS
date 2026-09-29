@@ -162,16 +162,16 @@ export default function imageUploadContractsTest(): void {
       expect(restored[0].fileName).assertEqual('0123456789abcdef0123456789abcdef.png');
       expect(serializeLocalDraftImageReferences([reference]).includes('file://media')).assertFalse();
       expect(parseLocalDraftImageReferences('[{"fileName":"../../outside.png"}]').length).assertEqual(0);
-      // 过渡期兼容：旧 p4-images 受控路径仍可构建生命周期并提取引用；新写入一律落 picked-images。
+      // 阶段目录兼容层已退役：旧 p4-images 路径连同其他非受控目录一并拒绝，仅 picked-images 可用。
       const legacyFile: ImageTemporaryFile = {
         path: `${CACHE_DIR}/p4-images/0123456789abcdef0123456789abcdef.png`,
         mimeType: 'image/png',
         byteLength: 4096,
         createdAtMillis: 1770000000000
       };
-      expect(createImageTemporaryLifecycle(legacyFile, CACHE_DIR).file.path.includes('/p4-images/')).assertTrue();
-      expect(createLocalDraftImageReference(legacyFile, sniffImageBinary(PNG_HEADER)).fileName)
-        .assertEqual('0123456789abcdef0123456789abcdef.png');
+      expect((): void => {
+        createImageTemporaryLifecycle(legacyFile, CACHE_DIR);
+      }).assertThrowError('图片输入无效');
       const outsideFile: ImageTemporaryFile = {
         path: `${CACHE_DIR}/other/0123456789abcdef0123456789abcdef.png`,
         mimeType: 'image/png',

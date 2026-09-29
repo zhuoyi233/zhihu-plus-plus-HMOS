@@ -27,9 +27,9 @@ import {
 
 const HASH: string = '900150983cd24fb0d6963f7d28e17f72';
 const CONTROLLED_PNG_URI: string =
-  'file:///data/storage/el2/base/cache/p4-images/0123456789abcdef0123456789abcdef.png';
+  'file:///data/storage/el2/base/cache/picked-images/0123456789abcdef0123456789abcdef.png';
 const CONTROLLED_GIF_URI: string =
-  'file:///data/storage/el2/base/cache/p4-images/0123456789abcdef0123456789abcdef.gif';
+  'file:///data/storage/el2/base/cache/picked-images/0123456789abcdef0123456789abcdef.gif';
 const APPLY_RESPONSE: string =
   '{"upload_file":{"image_id":"123","state":2},"upload_token":' +
   '{"access_id":"TESTACCESSID123456","access_key":"test-access-key-0123456789abcdef",' +
@@ -222,13 +222,13 @@ function apiClient(
 
 export default function defaultImageUploadRepositoryTest(): void {
   describe('defaultImageUploadRepositoryTest', () => {
-    it('acceptsControlledFileUrisInBothTransitionDirectoriesOnly', 0, () => {
-      // 新目录与过渡期旧目录的受控随机名均可作为上传输入；其他目录一律拒绝。
+    it('acceptsOnlyCurrentDirectoryControlledFileUris', 0, () => {
+      // 阶段目录兼容层已退役：仅 picked-images 受控随机名可作为上传输入，旧目录与其他目录一律拒绝。
       expect(isControlledImageUploadInput(pngInput())).assertTrue();
       const legacyInput: ImageUploadInput = {
         sourceUri: LEGACY_CONTROLLED_PNG_URI, mimeType: 'image/png', byteLength: 4
       };
-      expect(isControlledImageUploadInput(legacyInput)).assertTrue();
+      expect(isControlledImageUploadInput(legacyInput)).assertFalse();
       const outsideInput: ImageUploadInput = {
         sourceUri: 'file:///data/storage/el2/base/cache/other/0123456789abcdef0123456789abcdef.png',
         mimeType: 'image/png',

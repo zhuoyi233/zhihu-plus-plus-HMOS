@@ -8,8 +8,6 @@ const DATABASE_NAME = 'zhplus_rdb_probe.db';
 const TABLE_NAME = 'opened_content';
 const PROBE_KEY = 'answer:2035661632110585441';
 const PRODUCTION_PROBE_KEY = 'probe:production-opened-content';
-/** 历史阶段前缀探针键：升级残留按完整键精确清理，禁止模糊匹配或清表。 */
-const LEGACY_PRODUCTION_PROBE_KEY = 'probe:p1-production-opened-content';
 
 export interface DatabaseProbeResult {
   rollbackVersion: number;
@@ -132,7 +130,6 @@ export class DatabaseProbe {
       if (initialStore.version !== CURRENT_SCHEMA_VERSION) {
         throw new Error(`生产数据库首次打开版本错误：v${initialStore.version}`);
       }
-      await openedContent.delete(LEGACY_PRODUCTION_PROBE_KEY);
       await openedContent.delete(PRODUCTION_PROBE_KEY);
       const first: OpenedContent = {
         contentKey: PRODUCTION_PROBE_KEY,
@@ -174,7 +171,6 @@ export class DatabaseProbe {
 
     try {
       await openedContent.delete(PRODUCTION_PROBE_KEY);
-      await openedContent.delete(LEGACY_PRODUCTION_PROBE_KEY);
     } catch (error) {
       const message = error instanceof Error ? error.message : '未知清理错误';
       failure = failure === undefined ? new Error(`生产探针清理失败：${message}`) :
@@ -252,16 +248,5 @@ export class DatabaseProbe {
     } finally {
       resultSet.close();
     }
-  }
-}
-
-/**
- * 启动维护：按完整旧键精确删除探针残留，不依赖用户再次打开数据库探针页面。
- * 旧键不存在视为成功；失败静默保留残留，下次启动重试。绝不使用 LIKE 或清表。
- */
-export async function removeLegacyProductionProbeKey(database: AppDatabase): Promise<void> {
-  try {
-    await new OpenedContentStore(database).delete(LEGACY_PRODUCTION_PROBE_KEY);
-  } catch (_error) {
   }
 }

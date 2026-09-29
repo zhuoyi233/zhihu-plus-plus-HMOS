@@ -9,8 +9,6 @@ export const MAX_SHARE_TITLE_LENGTH: number = 120;
 export const MAX_SHARE_SUMMARY_LENGTH: number = 1000;
 export const MAX_SHARE_URL_LENGTH: number = 2048;
 export const SHARE_TEMPORARY_DIRECTORY: string = 'share';
-/** 历史阶段目录：不再接受其路径作为分享载荷，仅供清理器回收升级残留文件。 */
-export const LEGACY_SHARE_TEMPORARY_DIRECTORY: string = 'p4-share';
 export const SHARE_PANEL_GRACE_MILLIS: number = 30 * 60 * 1000;
 export const SHARE_TEMPORARY_MAX_AGE_MILLIS: number = 24 * 60 * 60 * 1000;
 
