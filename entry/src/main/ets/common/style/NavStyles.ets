@@ -1,8 +1,15 @@
 import { LengthMetrics } from '@kit.ArkUI';
 import { hdsMaterial, ScrollEffectType, TitleBarStyleOptions } from '@kit.UIDesignKit';
+import { ImmersiveMaterialMode } from 'data';
 import { HarmonyOSCapabilities } from '../platform/HarmonyOSCapabilities';
+import {
+  ImmersiveMaterialSupportState,
+  resolveImmersiveMaterialLevel
+} from './ImmersiveMaterialStyles';
+import { hdsMaterialLevelFor } from './HdsMaterialLevels';
 
-export function getImmersiveTitleBarStyle(): TitleBarStyleOptions {
+export function getImmersiveTitleBarStyle(materialMode: ImmersiveMaterialMode,
+  materialSupport: ImmersiveMaterialSupportState): TitleBarStyleOptions {
   // 标题栏沉浸样式（材质层+渐变模糊滚动效果）仅 API 26+ 渲染正常；
   // 23 真机渲染白色遮挡条（见 HarmonyOSCapabilities.supportsImmersiveTitleBarStyle）。
   if (HarmonyOSCapabilities.supportsImmersiveTitleBarStyle()) {
@@ -43,9 +50,10 @@ export function getImmersiveTitleBarStyle(): TitleBarStyleOptions {
         }
       },
       systemMaterialEffect: {
-        // ADAPTIVE 跟随系统材质策略（自 6.1.0(23) 起可用），由系统按设备能力自选
+        // materialType 恒为 ADAPTIVE；materialLevel 由调用方传入响应式挡位经统一策略解析
+        //（勿在本函数内直接 AppStorage.get，否则无法建立更新依赖）。
         materialType: hdsMaterial.MaterialType.ADAPTIVE,
-        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        materialLevel: hdsMaterialLevelFor(resolveImmersiveMaterialLevel(materialMode, materialSupport))
       }
     };
   }
@@ -73,7 +81,8 @@ export function getImmersiveTitleBarStyle(): TitleBarStyleOptions {
  * 详情页与评论页使用的常驻沉浸标题栏：正文从首帧起就在材质层下方滚动，
  * 因此不等待滚动阈值，直接让 originalStyle 使用与滚动态相同的半透明主题背景。
  */
-export function getPersistentImmersiveTitleBarStyle(): TitleBarStyleOptions {
+export function getPersistentImmersiveTitleBarStyle(materialMode: ImmersiveMaterialMode,
+  materialSupport: ImmersiveMaterialSupportState): TitleBarStyleOptions {
   if (HarmonyOSCapabilities.supportsImmersiveTitleBarStyle()) {
     return {
       scrollEffectOpts: {
@@ -96,7 +105,7 @@ export function getPersistentImmersiveTitleBarStyle(): TitleBarStyleOptions {
       },
       systemMaterialEffect: {
         materialType: hdsMaterial.MaterialType.ADAPTIVE,
-        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        materialLevel: hdsMaterialLevelFor(resolveImmersiveMaterialLevel(materialMode, materialSupport))
       }
     };
   }

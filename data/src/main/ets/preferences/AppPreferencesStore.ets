@@ -29,6 +29,12 @@ import {
   normalizeSpeechPreferences,
   SpeechPreferences
 } from './SpeechPreferences';
+import {
+  decodeImmersiveMaterialMode,
+  decodeImmersiveMaterialModeText,
+  DEFAULT_IMMERSIVE_MATERIAL_MODE,
+  ImmersiveMaterialMode
+} from './ImmersiveMaterialPreferences';
 import { DEFAULT_THEME_COLOR, normalizeThemeColor } from './ThemeColors';
 
 const PREFERENCES_NAME = 'app_preferences';
@@ -69,6 +75,9 @@ const SPEECH_PITCH_KEY = 'readingSpeechPitch';
 const SPEECH_PERSON_KEY = 'readingSpeechPerson';
 const SPEECH_LANGUAGE_KEY = 'readingSpeechLanguage';
 const SPEECH_STYLE_KEY = 'readingSpeechStyle';
+// 沉浸光感挡位：独立键保存（不入 AppearancePreferences 整包），避免其他外观设置
+// 写回时用默认值意外覆盖本偏好。
+const IMMERSIVE_MATERIAL_LEVEL_KEY = 'immersiveMaterialLevel';
 
 export const DEFAULT_CONTENT_FONT_SIZE = 100;
 export const DEFAULT_CONTENT_LINE_HEIGHT = 160;
@@ -633,6 +642,43 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
     );
     this.saveQueue = operation.then((): void => {}, (): void => {});
     return operation;
+  }
+
+  async loadImmersiveMaterialLevel(): Promise<ImmersiveMaterialMode> {
+    await this.saveQueue;
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      return decodeImmersiveMaterialMode(await store.get(IMMERSIVE_MATERIAL_LEVEL_KEY,
+        DEFAULT_IMMERSIVE_MATERIAL_MODE));
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('Immersive material level load', error));
+      }
+      throw new Error(appPreferencesFailureMessage('Immersive material level load', undefined));
+    }
+  }
+
+  saveImmersiveMaterialLevel(mode: ImmersiveMaterialMode): Promise<void> {
+    const normalized = decodeImmersiveMaterialModeText(mode);
+    const operation = this.saveQueue.then(
+      (): Promise<void> => this.writeImmersiveMaterialLevel(normalized),
+      (): Promise<void> => this.writeImmersiveMaterialLevel(normalized)
+    );
+    this.saveQueue = operation.then((): void => {}, (): void => {});
+    return operation;
+  }
+
+  private async writeImmersiveMaterialLevel(mode: ImmersiveMaterialMode): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      await store.put(IMMERSIVE_MATERIAL_LEVEL_KEY, mode);
+      await store.flush();
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(appPreferencesFailureMessage('Immersive material level save', error));
+      }
+      throw new Error(appPreferencesFailureMessage('Immersive material level save', undefined));
+    }
   }
 
   async loadAnswerDoubleTapAction(): Promise<AnswerDoubleTapAction> {

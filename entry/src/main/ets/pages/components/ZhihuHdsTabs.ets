@@ -1,5 +1,18 @@
 import { DividerMode, hdsMaterial, HdsTabs, HdsTabsController } from '@kit.UIDesignKit';
-import { DEFAULT_THEME_COLOR } from 'data';
+import { DEFAULT_THEME_COLOR, decodeImmersiveMaterialModeText } from 'data';
+import {
+  decodeImmersiveMaterialSupport,
+  resolveImmersiveMaterialLevel
+} from '../../common/style/ImmersiveMaterialStyles';
+import { hdsMaterialLevelFor } from '../../common/style/HdsMaterialLevels';
+
+/** HdsTabs 浮动玻璃材质等级：@StorageProp 直读挡位与能力广播，经统一策略解析
+ * （跨页面状态不经 builder 传参/@Consume，同 resolvedThemeColor 模式）。 */
+export function zhihuHdsMaterialLevel(levelValue: string, supportValue: string): hdsMaterial.MaterialLevel {
+  return hdsMaterialLevelFor(resolveImmersiveMaterialLevel(
+    decodeImmersiveMaterialModeText(levelValue),
+    decodeImmersiveMaterialSupport(supportValue)));
+}
 
 @Component
 export struct ZhihuHdsTabs {
@@ -8,6 +21,8 @@ export struct ZhihuHdsTabs {
   @StorageProp('bottomRectHeight') bottomRectHeight: number = 0;
   @StorageProp('autoHideBottomBar') private autoHideBottomBar: boolean = false;
   @StorageProp('bottomBarHiddenByScroll') private bottomBarHiddenByScroll: boolean = false;
+  @StorageProp('immersiveMaterialLevel') private immersiveMaterialLevel: string = 'adaptive';
+  @StorageProp('immersiveMaterialSupport') private immersiveMaterialSupport: string = 'unknown';
   controller: HdsTabsController = new HdsTabsController();
   @BuilderParam content: () => void;
   /** 双击页签回调（350ms 内同页签连点两次），供宿主实现双击刷新。 */
@@ -61,10 +76,9 @@ export struct ZhihuHdsTabs {
       barSideMargin: 16,
       barBottomMargin: this.bottomRectHeight,
       systemMaterialEffect: {
-        // ADAPTIVE 跟随系统材质策略（自 6.1.0(23) 起可用）：系统按设备能力自选材质类型与档位，
-        // 支持材质的设备自动选用沉浸材质，未来新增材质类型无需应用侧跟进
+        // materialType 恒为 ADAPTIVE；materialLevel 按用户挡位 + 设备能力统一策略解析。
         materialType: hdsMaterial.MaterialType.ADAPTIVE,
-        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        materialLevel: zhihuHdsMaterialLevel(this.immersiveMaterialLevel, this.immersiveMaterialSupport)
       },
       gradientMask: {
         maskColor: $r('app.color.page_background'),
@@ -85,6 +99,8 @@ export struct ZhihuHdsTabs {
 @Component
 export struct ZhihuHdsActionBar {
   @StorageProp('bottomRectHeight') bottomRectHeight: number = 0;
+  @StorageProp('immersiveMaterialLevel') private immersiveMaterialLevel: string = 'adaptive';
+  @StorageProp('immersiveMaterialSupport') private immersiveMaterialSupport: string = 'unknown';
   @BuilderParam content: () => void = this.emptyContent;
   @Prop barHeight: number = 76;
   @State private measuredWidth: number = 0;
@@ -139,7 +155,7 @@ export struct ZhihuHdsActionBar {
           lightColor: Color.White,
           systemMaterialEffect: {
             materialType: hdsMaterial.MaterialType.ADAPTIVE,
-            materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+            materialLevel: zhihuHdsMaterialLevel(this.immersiveMaterialLevel, this.immersiveMaterialSupport)
           },
           thermoCtrl: true
         })
