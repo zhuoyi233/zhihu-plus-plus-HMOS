@@ -19,8 +19,9 @@
 
 - 插在“主题颜色”之后、“悬浮按钮透明度”之前。
 - 标题：**沉浸光感**。
-- 采用四项单选 `SegmentButton`，顺序为“自适应 / 精美 / 轻柔 / 流畅”。点击立即应用，无需另设确认按钮。
-- 控件下方显示当前选项的简短说明；外观与设置页现有卡片、字体、间距一致。
+- 采用四项单选下拉列表（`Select`），顺序为“自适应 / 精美 / 轻柔 / 流畅”。选择立即应用，无需另设确认按钮。
+  （2026-09-30 按用户要求由初版 SegmentButton 段控改为下拉列表，见 §8.5。）
+- 控件旁显示当前选项的简短说明；外观与设置页现有卡片、字体、间距一致。
 - 设置搜索增加“沉浸、光感、材质、自适应、精美、轻柔、流畅”等关键词，命中后显示现有“外观与阅读体验”入口。
 
 | 显示名称 | 存储值 | HDS 等级 | 说明文案 |
@@ -34,11 +35,14 @@
 
 ### 2.2 控件实现要求
 
-- `SegmentButton` 的 options 存在 `@State` 字段，设置明确宽度，避免内联对象导致真机点击回调丢失。
-- 选中背景读取 `@StorageProp('resolvedThemeColor')`；选中文字使用 `onThemeColor(resolvedThemeColor)`。主题变化时同步更新 options 中的颜色。
-- 单独编写 `immersiveMaterialSetting()` builder，在 builder 中直接读取状态。现有通用 `selectSetting()` 存在按值参数固化记录，不沿用该传参方式。
-- 覆盖窄屏、深浅色、系统大字体和无障碍选中状态。四项若在大字体下无法完整显示，使用同一四项单选列表呈现，保持名称、顺序与语义一致。
-- 为设置项和可操作选项提供稳定的 UI 定位方式；拟用设置项 ID `appearance_immersive_material_level`，具体子项 ID 按组件支持情况落地。
+- 选项行沿用设置页既有行式布局：左侧标题与说明文案、右侧 `Select` 下拉（同“应用启动默认页面”行）。
+- 单独编写 `immersiveMaterialSetting()` builder，`Select` 的 options/selected/value 在 builder 体内直读状态，
+  挡位与提示更新后随之刷新；现有通用 `selectSetting()` 存在按值参数固化记录，不沿用该传参方式。
+- 说明文案按“保存类提示 > 能力降级/查询失败提示 > 选项默认说明”优先级展示，提示存在时用主题生效色强调。
+- 恢复完成前控件不可操作：`.enabled` 门禁 + 回调内就绪校验双保险。
+- 覆盖窄屏、深浅色、系统大字体和无障碍选中状态。
+- 为设置项和可操作选项提供稳定的 UI 定位方式；设置项 ID `appearance_immersive_material_level`，
+  下拉控件 ID `appearance_immersive_material_select`。
 
 ### 2.3 不支持设备与异常反馈
 
@@ -188,8 +192,9 @@ pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall
 - 材质接入：`ZhihuHdsTabs`/`ZhihuHdsActionBar`、`MaterialCanvas`（builder 内组件自订阅，宽高 @Prop 保留实测宽度更新）、
   `NavStyles` 两样式函数显式接收挡位参数，AppShell 46 处调用点传入响应式值；API 23 标题栏门禁、`thermoCtrl`、
   组件模糊兜底均未改动。
-- 设置 UI：主题卡片内“主题颜色”之后插入四挡 `SegmentButton`（`@State` options + 主题色 `@Watch` 重建），
-  说明区按“保存提示 > 能力降级提示 > 选项说明”优先级展示；设置搜索新增“沉浸/光感/材质/自适应/精美/轻柔/流畅”关键词。
+- 设置 UI：主题卡片内“主题颜色”之后插入四挡下拉列表（独立 `immersiveMaterialSetting()` builder 直读状态，
+  恢复就绪前不可操作），说明区按“保存提示 > 能力降级提示 > 选项说明”优先级展示；设置搜索新增
+  “沉浸/光感/材质/自适应/精美/轻柔/流畅”关键词。
 - 自动化：新增 `ImmersiveMaterialPreferences.test.ets`、`ImmersiveMaterialStyles.test.ets` 并注册，
   Hypium 710/710 通过（`verify-harmony.ps1 -SkipDependencyInstall -SkipBuild` 与完整 Debug 构建均通过）。
 
@@ -202,10 +207,39 @@ pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall
 **实测发现**：本模拟器 `getSystemMaterialTypes()` 返回 `[101]`（含 `IMMERSIVE=101`），即模拟器自身支持沉浸材质，
 精美/轻柔按原挡生效、不显示降级提示属预期行为。
 
-### 8.3 未验证项（设备条件不具备或属真机范畴，未宣称）
+### 8.3 真机回归（PLA-AL10，HarmonyOS 7.0.0.109 / API 26，10.225.185.237 无线 hdc）
 
-- “不支持 IMMERSIVE”与“能力查询失败”的设备端降级提示路径：模拟器无法复现，降级映射由 Hypium 单测覆盖。
-- API 26 标题栏随挡位实时更新：标题栏材质门禁为 API 26+，API 23 模拟器不渲染材质分支，需 API 26 真机。
-- 系统大字体/窄屏下的四挡段控表现、真机四挡视觉对比与长列表帧率/发热：需真机，无测量数据不下结论。
-- 保存失败重试路径：本地无法模拟存储层失败，代码层就绪态门禁 + 重试语义已实现。
-- 同页签内已挂载标题栏对挡位变化的实时刷新：样式函数已改为响应式传参，实际重渲染效果需 API 26 真机确认。
+已验证（2026-09-30，本地调试签名安装，Cookie 登录后）：
+
+- 真机 `getSystemMaterialTypes()` 返回 `[101]`（含 IMMERSIVE），精美/轻柔按原挡生效；
+  API 26 **常驻沉浸标题栏与返回/操作玻璃胶囊在流畅、精美挡下渲染正常**（问题页截图留档），
+  无 API 23 真机白色遮挡问题族的表现。
+- 首次安装默认自适应；四挡互切即时更新说明；”流畅”经 force-stop 重启正确恢复；
+  深色模式下四挡选中态与文字可读；全程无崩溃。
+- **安装签名注意**：本仓库 Debug 构建默认走 AGC「应用市场分发」证书（`Key/知乎++鸿蒙版Release.p7b`，
+  `app-distribution-type: app_gallery`），该签名包**真机侧载必拒**（9568322 not trusted app source，
+  模拟器不受影响）；侧载需本地调试签名——`devecocli signature generate --force` 重生成并写入
+  build-profile 后重建，验证完从备份恢复原配置。
+
+### 8.4 未验证项（条件不具备，未宣称）
+
+- “不支持 IMMERSIVE”与”能力查询失败”的设备端降级提示路径：手头模拟器与真机均支持沉浸材质，
+  无法复现；降级映射由 Hypium 单测覆盖。
+- 标题栏材质在挡位切换瞬间的**原地实时刷新**：切挡经设置页完成，返回后页面以新挡位渲染正常；
+  HDS 是否对已创建 titleBar 原地重应用材质，静态截图无法目辨各挡差异，需动态场景进一步确认。
+- 系统大字体/窄屏下的四挡段控表现：真机未测大字体。
+- 真机四挡动态视觉对比与长列表滚动帧率/发热：静态截图难以区分挡位差异，需真人动态对比与测量；
+  无测量数据不下功耗结论。
+- 保存失败重试路径：无法模拟存储层失败，代码层就绪态门禁 + 重试语义已实现。
+
+### 8.5 变更记录
+
+- 2026-09-30（晚于首次实施）：按用户要求将挡位选择器由 `SegmentButton` 段控改为 `Select` 下拉列表。
+  仅改设置页控件层（数据层、策略层、AppShell 状态流与三处材质接入点不变）；段控专用的
+  options 状态、@Watch 重建与配色函数移除。改动后重新编译、跑 Hypium（710/710）并在
+  **API 26 真机**回归（模拟器已关闭）：下拉渲染与持久化恢复（“精美”经覆盖安装+重启后保留）、
+  下拉选“流畅”即时更新说明、重启后正确恢复流畅，全程无崩溃；下拉版设置页截图留存于本机
+  （真机截图未随仓库分发）。深色下下拉沿用系统 `Select` 自适应配色（与页内其他下拉一致），
+  未单独截图。保存失败后的重试：Select 下重复选择当前项是否触发 `onSelect` 未逐项核实，
+  重试可先切其他挡再切回。注意：已入库的 `immersive-material-settings-api23-emulator-*.jpg`
+  为段控初版 UI，选择器形态以本节下拉列表为准。
