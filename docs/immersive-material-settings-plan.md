@@ -234,6 +234,12 @@ pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall
 
 ### 8.5 变更记录
 
+- 2026-09-30（bugfix）：修复 API 26 真机"手动挡 + 页面顶部"标题栏返回键渲染为黑色圆的问题。
+  根因（真机对照实验锁定）：HDS 在滚动模糊未激活的原始态，会把标题栏按钮区域的材质高光渲染成
+  黑色圆（滚动激活后与 ADAPTIVE 挡均正常；`SystemMaterialParams` 无颜色参数可控）。规避方式：
+  生效挡位非 ADAPTIVE 时，`getImmersiveTitleBarStyle` 不设置 `systemMaterialEffect`（标题栏按钮区
+  无材质），滚动渐变模糊保留；挡位材质效果仍作用于底栏与胶囊。自适应挡按钮区材质原样保留。
+  Hypium 710/710；真机三挡顶部/滚动状态复核通过（流畅、精美、自适应返回键均正常）。
 - 2026-09-30（晚于首次实施）：按用户要求将挡位选择器由 `SegmentButton` 段控改为 `Select` 下拉列表。
   仅改设置页控件层（数据层、策略层、AppShell 状态流与三处材质接入点不变）；段控专用的
   options 状态、@Watch 重建与配色函数移除。改动后重新编译、跑 Hypium（710/710）并在

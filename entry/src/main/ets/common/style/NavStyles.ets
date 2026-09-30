@@ -13,7 +13,12 @@ export function getImmersiveTitleBarStyle(materialMode: ImmersiveMaterialMode,
   // 标题栏沉浸样式（材质层+渐变模糊滚动效果）仅 API 26+ 渲染正常；
   // 23 真机渲染白色遮挡条（见 HarmonyOSCapabilities.supportsImmersiveTitleBarStyle）。
   if (HarmonyOSCapabilities.supportsImmersiveTitleBarStyle()) {
-    return {
+    // 手动挡（生效挡位非 ADAPTIVE）时，HDS 会在滚动模糊未激活的原始态把标题栏按钮区域
+    // （返回键圆底）的材质高光渲染成黑色，滚动后恢复正常（API 26 真机实测；ADAPTIVE 挡
+    // 无此问题，SystemMaterialParams 亦无颜色参数可控）——手动挡移除按钮区材质规避，
+    // 挡位材质保留在底栏与胶囊；自适应挡保持按钮区材质原样。
+    const effectiveLevel = resolveImmersiveMaterialLevel(materialMode, materialSupport);
+    const style: TitleBarStyleOptions = {
       scrollEffectOpts: {
         enableScrollEffect: true,
         scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR,
@@ -48,14 +53,15 @@ export function getImmersiveTitleBarStyle(materialMode: ImmersiveMaterialMode,
           subIconStyle: { iconColor: $r('app.color.primary_text') },
           menuStyle: { iconColor: $r('app.color.primary_text') }
         }
-      },
-      systemMaterialEffect: {
-        // materialType 恒为 ADAPTIVE；materialLevel 由调用方传入响应式挡位经统一策略解析
-        //（勿在本函数内直接 AppStorage.get，否则无法建立更新依赖）。
-        materialType: hdsMaterial.MaterialType.ADAPTIVE,
-        materialLevel: hdsMaterialLevelFor(resolveImmersiveMaterialLevel(materialMode, materialSupport))
       }
     };
+    if (effectiveLevel === ImmersiveMaterialMode.ADAPTIVE) {
+      style.systemMaterialEffect = {
+        materialType: hdsMaterial.MaterialType.ADAPTIVE,
+        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+      };
+    }
+    return style;
   }
   return {
     scrollEffectOpts: {
