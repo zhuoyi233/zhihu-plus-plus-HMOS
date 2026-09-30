@@ -1,12 +1,24 @@
 import { LengthMetrics } from '@kit.ArkUI';
 import { hdsMaterial, ScrollEffectType, TitleBarStyleOptions } from '@kit.UIDesignKit';
+import { ImmersiveMaterialMode } from 'data';
 import { HarmonyOSCapabilities } from '../platform/HarmonyOSCapabilities';
+import {
+  ImmersiveMaterialSupportState,
+  resolveImmersiveMaterialLevel
+} from './ImmersiveMaterialStyles';
+import { hdsMaterialLevelFor } from './HdsMaterialLevels';
 
-export function getImmersiveTitleBarStyle(): TitleBarStyleOptions {
+export function getImmersiveTitleBarStyle(materialMode: ImmersiveMaterialMode,
+  materialSupport: ImmersiveMaterialSupportState): TitleBarStyleOptions {
   // 标题栏沉浸样式（材质层+渐变模糊滚动效果）仅 API 26+ 渲染正常；
   // 23 真机渲染白色遮挡条（见 HarmonyOSCapabilities.supportsImmersiveTitleBarStyle）。
   if (HarmonyOSCapabilities.supportsImmersiveTitleBarStyle()) {
-    return {
+    // 手动挡（生效挡位非 ADAPTIVE）时，HDS 会在滚动模糊未激活的原始态把标题栏按钮区域
+    // （返回键圆底）的材质高光渲染成黑色，滚动后恢复正常（API 26 真机实测；ADAPTIVE 挡
+    // 无此问题，SystemMaterialParams 亦无颜色参数可控）——手动挡移除按钮区材质规避，
+    // 挡位材质保留在底栏与胶囊；自适应挡保持按钮区材质原样。
+    const effectiveLevel = resolveImmersiveMaterialLevel(materialMode, materialSupport);
+    const style: TitleBarStyleOptions = {
       scrollEffectOpts: {
         enableScrollEffect: true,
         scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR,
@@ -41,13 +53,15 @@ export function getImmersiveTitleBarStyle(): TitleBarStyleOptions {
           subIconStyle: { iconColor: $r('app.color.primary_text') },
           menuStyle: { iconColor: $r('app.color.primary_text') }
         }
-      },
-      systemMaterialEffect: {
-        // ADAPTIVE 跟随系统材质策略（自 6.1.0(23) 起可用），由系统按设备能力自选
-        materialType: hdsMaterial.MaterialType.ADAPTIVE,
-        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
       }
     };
+    if (effectiveLevel === ImmersiveMaterialMode.ADAPTIVE) {
+      style.systemMaterialEffect = {
+        materialType: hdsMaterial.MaterialType.ADAPTIVE,
+        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+      };
+    }
+    return style;
   }
   return {
     scrollEffectOpts: {
@@ -73,7 +87,8 @@ export function getImmersiveTitleBarStyle(): TitleBarStyleOptions {
  * 详情页与评论页使用的常驻沉浸标题栏：正文从首帧起就在材质层下方滚动，
  * 因此不等待滚动阈值，直接让 originalStyle 使用与滚动态相同的半透明主题背景。
  */
-export function getPersistentImmersiveTitleBarStyle(): TitleBarStyleOptions {
+export function getPersistentImmersiveTitleBarStyle(materialMode: ImmersiveMaterialMode,
+  materialSupport: ImmersiveMaterialSupportState): TitleBarStyleOptions {
   if (HarmonyOSCapabilities.supportsImmersiveTitleBarStyle()) {
     return {
       scrollEffectOpts: {
@@ -96,7 +111,7 @@ export function getPersistentImmersiveTitleBarStyle(): TitleBarStyleOptions {
       },
       systemMaterialEffect: {
         materialType: hdsMaterial.MaterialType.ADAPTIVE,
-        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
+        materialLevel: hdsMaterialLevelFor(resolveImmersiveMaterialLevel(materialMode, materialSupport))
       }
     };
   }

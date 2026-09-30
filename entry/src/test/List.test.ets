@@ -82,6 +82,8 @@ import appearancePreferencesTest from './AppearancePreferences.test';
 import recommendationFilterPolicyTest from './RecommendationFilterPolicy.test';
 import identitySpeechSettingsTest from './IdentitySpeechSettings.test';
 import themeColorsTest from './ThemeColors.test';
+import immersiveMaterialPreferencesTest from './ImmersiveMaterialPreferences.test';
+import immersiveMaterialStylesTest from './ImmersiveMaterialStyles.test';
 import draftImageReferenceScanTest from './DraftImageReferenceScan.test';
 
 export default function testsuite(): void {
@@ -169,5 +171,7 @@ export default function testsuite(): void {
   recommendationFilterPolicyTest();
   identitySpeechSettingsTest();
   themeColorsTest();
+  immersiveMaterialPreferencesTest();
+  immersiveMaterialStylesTest();
   draftImageReferenceScanTest();
 }

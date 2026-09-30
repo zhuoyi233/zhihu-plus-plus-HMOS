@@ -1,46 +1,71 @@
 import { DividerMode, hdsMaterial, HdsTabs } from '@kit.UIDesignKit';
+import { decodeImmersiveMaterialModeText } from 'data';
+import {
+  decodeImmersiveMaterialSupport,
+  resolveImmersiveMaterialLevel
+} from '../../common/style/ImmersiveMaterialStyles';
+import { hdsMaterialLevelFor } from '../../common/style/HdsMaterialLevels';
 
 /**
- * 沉浸光感玻璃画布：空的 HdsTabs 仅作为浮动材质承载层（对齐 PR 的 ZhihuHdsActionBar 思路），
+ * 沉浸光感玻璃画布组件：空的 HdsTabs 仅作为浮动材质承载层（对齐 PR 的 ZhihuHdsActionBar 思路），
  * 透过 HDS 组件自身的材质渲染路径呈现真机玻璃效果，规避 uiMaterial.systemMaterial 的
- * 白底遮挡问题。画布不响应点击。
+ * 白底遮挡问题。画布不响应点击。挡位经 @StorageProp 自行订阅 AppStorage 广播，
+ * 材质等级走统一策略解析（ImmersiveMaterialStyles）。
  *
  * 关键：必须给 barFloatingStyle.barWidth 显式传三档断点宽度并设置组件级 barWidth/barHeight，
  * 否则无页签内容的 bar 会塌缩成最小宽度的竖条（真机上表现为“玻璃细棍”）。
  *
  * 用法：GlassCapsule() { 内容组件 }，或单独以 materialCanvas(w, h) 铺底。
  */
-@Builder
-export function materialCanvas(widthVp: Length, heightVp: Length) {
-  HdsTabs({ barPosition: BarPosition.End }) {
+@Component
+export struct MaterialCanvas {
+  @Prop widthVp: number = 0;
+  @Prop heightVp: number = 0;
+  @StorageProp('immersiveMaterialLevel') private immersiveMaterialLevel: string = 'adaptive';
+  @StorageProp('immersiveMaterialSupport') private immersiveMaterialSupport: string = 'unknown';
+
+  build() {
+    HdsTabs({ barPosition: BarPosition.End }) {
+    }
+      .width(this.widthVp)
+      .height(this.heightVp)
+      .barPosition(BarPosition.End)
+      .barWidth(this.widthVp)
+      .barHeight(this.heightVp)
+      .barOverlap(true)
+      .clip(false)
+      .backgroundColor(Color.Transparent)
+      .vertical(false)
+      .divider({ mode: DividerMode.NONE })
+      .hitTestBehavior(HitTestMode.None)
+      .barFloatingStyle({
+        barWidth: {
+          smallWidth: this.widthVp,
+          mediumWidth: this.widthVp,
+          largeWidth: this.widthVp
+        },
+        barBottomMargin: 0,
+        barSideMargin: 0,
+        lightColor: Color.White,
+        systemMaterialEffect: {
+          // materialType 恒为 ADAPTIVE；materialLevel 按用户挡位 + 设备能力统一策略解析。
+          materialType: hdsMaterial.MaterialType.ADAPTIVE,
+          materialLevel: hdsMaterialLevelFor(resolveImmersiveMaterialLevel(
+            decodeImmersiveMaterialModeText(this.immersiveMaterialLevel),
+            decodeImmersiveMaterialSupport(this.immersiveMaterialSupport)))
+        },
+        thermoCtrl: true
+      })
   }
-    .width(widthVp)
-    .height(heightVp)
-    .barPosition(BarPosition.End)
-    .barWidth(widthVp)
-    .barHeight(heightVp)
-    .barOverlap(true)
-    .clip(false)
-    .backgroundColor(Color.Transparent)
-    .vertical(false)
-    .divider({ mode: DividerMode.NONE })
-    .hitTestBehavior(HitTestMode.None)
-    .barFloatingStyle({
-      barWidth: {
-        smallWidth: widthVp,
-        mediumWidth: widthVp,
-        largeWidth: widthVp
-      },
-      barBottomMargin: 0,
-      barSideMargin: 0,
-      lightColor: Color.White,
-      systemMaterialEffect: {
-        // ADAPTIVE 跟随系统材质策略（自 6.1.0(23) 起可用），由系统按设备能力自选
-        materialType: hdsMaterial.MaterialType.ADAPTIVE,
-        materialLevel: hdsMaterial.MaterialLevel.ADAPTIVE
-      },
-      thermoCtrl: true
-    })
+}
+
+/**
+ * 全局 builder 包装：保留既有外部调用形态（GlassCapsule / 各标题栏 / 评论输入胶囊 /
+ * AppShell 返回胶囊），内部组件自行订阅挡位；宽高经 @Prop 随调用方实测宽度更新。
+ */
+@Builder
+export function materialCanvas(widthVp: number, heightVp: number) {
+  MaterialCanvas({ widthVp: widthVp, heightVp: heightVp })
 }
 
 /**

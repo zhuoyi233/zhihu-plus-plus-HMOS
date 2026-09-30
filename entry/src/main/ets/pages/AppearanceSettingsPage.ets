@@ -10,9 +10,11 @@ import {
   decodeContentBlockSpacing,
   decodeContentFontSize,
   decodeContentLineHeight,
+  decodeImmersiveMaterialModeText,
   DEFAULT_THEME_COLOR,
   FeedCardStyle,
   ExperiencePreferences,
+  ImmersiveMaterialMode,
   normalizeBottomBarItems,
   normalizeExperiencePreferences,
   normalizeAppearancePreferences,
@@ -22,6 +24,14 @@ import {
   ReaderTypography,
   ShareActionMode
 } from 'data';
+import {
+  allImmersiveMaterialModes,
+  decodeImmersiveMaterialSupport,
+  immersiveMaterialEffectiveNotice,
+  immersiveMaterialModeDescription,
+  immersiveMaterialModeIndex,
+  immersiveMaterialModeLabel
+} from '../common/style/ImmersiveMaterialStyles';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 
 /**
@@ -46,9 +56,16 @@ export struct AppearanceSettingsPage {
   @Prop themeMode: AppThemeMode = AppThemeMode.SYSTEM;
   onThemeModeChange: (mode: AppThemeMode) => void = (_mode: AppThemeMode): void => {};
   onOpenThemeColorSettings: () => void = (): void => {};
+  /** 沉浸光感四挡选择回调：AppShell 负责广播与持久化（唯一写入入口）。 */
+  onImmersiveMaterialChange: (mode: ImmersiveMaterialMode) => void = (_mode: ImmersiveMaterialMode): void => {};
   /** 主题色 seed 与当前生效色（AppShell 启动时广播），驱动主题块入口行与强调色。 */
   @StorageProp('themeColor') private themeColorSeed: string = DEFAULT_THEME_COLOR;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  /** 沉浸光感：挡位/就绪/提示均经 AppStorage 广播（AppShell 唯一保存入口），页面直读。 */
+  @StorageProp('immersiveMaterialLevel') private immersiveMaterialLevel: string = 'adaptive';
+  @StorageProp('immersiveMaterialSupport') private immersiveMaterialSupport: string = 'unknown';
+  @StorageProp('immersiveMaterialPreferencesReady') private immersiveMaterialPreferencesReady: boolean = false;
+  @StorageProp('immersiveMaterialNotice') private immersiveMaterialNotice: string = '';
   @StorageProp('contentFontSize') private contentFontSize: number = 100;
   @StorageProp('contentLineHeight') private contentLineHeight: number = 160;
   @StorageProp('contentBlockSpacing') private contentBlockSpacing: number = 100;
@@ -111,6 +128,8 @@ export struct AppearanceSettingsPage {
           this.themeModeSetting()
           Divider().color($r('app.color.divider_color'))
           this.themeColorSetting()
+          Divider().color($r('app.color.divider_color'))
+          this.immersiveMaterialSetting()
           Divider().color($r('app.color.divider_color'))
           this.sliderSetting({
             title: '悬浮按钮透明度',
@@ -411,6 +430,80 @@ export struct AppearanceSettingsPage {
     .padding($r('app.float.card_padding'))
     .alignItems(VerticalAlign.Center)
     .onClick((): void => this.onOpenThemeColorSettings())
+  }
+
+  /** 沉浸光感四挡下拉选择：独立 @Builder 直读状态（通用 selectSetting 按值传参会固化记录，
+   * 挡位与提示更新后不会刷新）；选择即经 AppShell 广播生效并保存。 */
+  @Builder
+  private immersiveMaterialSetting() {
+    Row({ space: $r('app.float.spacing_medium') }) {
+      Column({ space: $r('app.float.spacing_xsmall') }) {
+        Text('沉浸光感')
+          .fontSize($r('app.float.body_font_size'))
+          .fontColor($r('app.color.primary_text'))
+          .width('100%')
+        Text(this.immersiveMaterialHintText())
+          .id('appearance_immersive_material_hint')
+          .fontSize($r('app.float.secondary_font_size'))
+          .fontColor(this.immersiveMaterialNotice.length > 0
+            ? this.resolvedThemeColor : $r('app.color.secondary_text'))
+          .width('100%')
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+      Select(this.immersiveMaterialSelectOptions())
+        .id('appearance_immersive_material_select')
+        .selected(this.immersiveMaterialSelectedIndex())
+        .value(this.immersiveMaterialSelectedLabel())
+        .fontColor($r('app.color.primary_text'))
+        .constraintSize({ maxWidth: 160 })
+        .enabled(this.immersiveMaterialPreferencesReady)
+        .onSelect((index: number): void => this.selectImmersiveMaterialMode(index))
+    }
+    .id('appearance_immersive_material_level')
+    .width('100%')
+    .padding($r('app.float.card_padding'))
+    .alignItems(VerticalAlign.Center)
+  }
+
+  private immersiveMaterialSelectOptions(): SelectOption[] {
+    return allImmersiveMaterialModes().map((mode: ImmersiveMaterialMode): SelectOption => {
+      return { value: immersiveMaterialModeLabel(mode) } as SelectOption;
+    });
+  }
+
+  private immersiveMaterialSelectedIndex(): number {
+    return immersiveMaterialModeIndex(decodeImmersiveMaterialModeText(this.immersiveMaterialLevel));
+  }
+
+  private immersiveMaterialSelectedLabel(): string {
+    return immersiveMaterialModeLabel(decodeImmersiveMaterialModeText(this.immersiveMaterialLevel));
+  }
+
+  /** 说明文案：保存类提示优先，其次设备能力降级/查询失败提示，最后当前选项默认说明。 */
+  private immersiveMaterialHintText(): string {
+    if (this.immersiveMaterialNotice.length > 0) {
+      return this.immersiveMaterialNotice;
+    }
+    const mode = decodeImmersiveMaterialModeText(this.immersiveMaterialLevel);
+    const support = decodeImmersiveMaterialSupport(this.immersiveMaterialSupport);
+    const effectiveNotice = immersiveMaterialEffectiveNotice(mode, support);
+    if (effectiveNotice.length > 0) {
+      return effectiveNotice;
+    }
+    return immersiveMaterialModeDescription(mode);
+  }
+
+  private selectImmersiveMaterialMode(index: number): void {
+    const modes = allImmersiveMaterialModes();
+    if (index < 0 || index >= modes.length) {
+      return;
+    }
+    // 未就绪（恢复中）不触发选择；保存失败后先切其他挡再切回即可重试保存。
+    if (!this.immersiveMaterialPreferencesReady) {
+      return;
+    }
+    this.onImmersiveMaterialChange(modes[index]);
   }
 
   @Builder

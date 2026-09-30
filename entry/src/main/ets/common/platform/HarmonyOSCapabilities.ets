@@ -1,5 +1,6 @@
 import { deviceInfo } from '@kit.BasicServicesKit';
 import { hdsMaterial } from '@kit.UIDesignKit';
+import { ImmersiveMaterialSupportState } from '../style/ImmersiveMaterialStyles';
 
 export class HarmonyOSCapabilities {
   /**
@@ -14,6 +15,20 @@ export class HarmonyOSCapabilities {
       return hdsMaterial.getSystemMaterialTypes().includes(hdsMaterial.MaterialType.IMMERSIVE);
     } catch (_error) {
       return false;
+    }
+  }
+
+  /**
+   * 沉浸材质能力三态查询：区分"不支持"与"查询失败"（供设置页提示文案使用）。
+   * 启动时由 AppShell 查询一次并经 AppStorage 广播，组件不得在 build 中反复调用。
+   */
+  static immersiveMaterialSupportState(): ImmersiveMaterialSupportState {
+    try {
+      return hdsMaterial.getSystemMaterialTypes().includes(hdsMaterial.MaterialType.IMMERSIVE)
+        ? ImmersiveMaterialSupportState.SUPPORTED
+        : ImmersiveMaterialSupportState.UNSUPPORTED;
+    } catch (_error) {
+      return ImmersiveMaterialSupportState.UNKNOWN;
     }
   }
 

@@ -14,10 +14,13 @@ import {
   BlockedFeedHistoryStore,
   ContentFilterRuntimeStore,
   AppThemeMode,
+  decodeImmersiveMaterialModeText,
+  DEFAULT_IMMERSIVE_MATERIAL_MODE,
   DEFAULT_THEME_COLOR,
   FORMULA_FOREGROUND_DARK,
   FORMULA_FOREGROUND_LIGHT,
   ExperiencePreferences,
+  ImmersiveMaterialMode,
   normalizeBottomBarItems,
   normalizeThemeColor,
   resolveThemeColorForDark,
@@ -64,6 +67,11 @@ import {
 } from './TopLevelTabs';
 import { DividerShowType, hdsMaterial, HdsNavDestination, HdsNavigation, HdsNavigationAttribute, HdsNavigationTitleMode, HdsTabsController } from '@kit.UIDesignKit';
 import { getImmersiveTitleBarStyle, getPersistentImmersiveTitleBarStyle } from '../common/style/NavStyles';
+import {
+  decodeImmersiveMaterialSupport,
+  ImmersiveMaterialSupportState
+} from '../common/style/ImmersiveMaterialStyles';
+import { HarmonyOSCapabilities } from '../common/platform/HarmonyOSCapabilities';
 import { ZhihuHdsTabs } from './components/ZhihuHdsTabs';
 import { AppearanceSettingsPage } from './AppearanceSettingsPage';
 import { ThemeColorSettingsPage } from './ThemeColorSettingsPage';
@@ -202,6 +210,12 @@ export struct AppShell {
   /** 主题色 seed：设置页选择/拖动时写入，@Watch 重新解析生效色并广播（否则换色不生效）。 */
   @StorageProp('themeColor') @Watch('onThemeColorSeedChanged') private themeColorSeed: string =
     DEFAULT_THEME_COLOR;
+  /** 沉浸光感挡位（用户选择，字符串为 ImmersiveMaterialMode 存储值）与设备能力三态：
+   * 标题栏样式函数经本组件传入响应式值（函数内 AppStorage.get 不建立更新依赖）。 */
+  @StorageProp('immersiveMaterialLevel') private immersiveMaterialLevel: string =
+    DEFAULT_IMMERSIVE_MATERIAL_MODE;
+  @StorageProp('immersiveMaterialSupport') private immersiveMaterialSupport: string =
+    ImmersiveMaterialSupportState.UNKNOWN;
   private startDestinationApplied: boolean = false;
   private readonly tabsController: HdsTabsController = new HdsTabsController();
   @Provide('appPathStack') pathStack: NavPathStack = new NavPathStack();
@@ -209,7 +223,9 @@ export struct AppShell {
   private readonly themeOperationGuard: LatestOperationGuard = new LatestOperationGuard();
   private themeMounted: boolean = false;
   private themeSaveQueue: Promise<void> = Promise.resolve();
-  /** 排版偏好专用 store 实例：滑块拖动会高频写盘，需单实例 saveQueue 串行化。 */
+  /** 沉浸光感偏好唯一写入入口（aboutToAppear 创建）：复用 store 串行 saveQueue，
+   * 快速切换最终保存最后一次选择；设置页退出后由本组件继续完成保存。 */
+  private immersiveMaterialStore: AppPreferencesStore | undefined = undefined;
 
   aboutToAppear(): void {
     this.themeMounted = true;
@@ -220,6 +236,15 @@ export struct AppShell {
     // 主题色恢复前先广播默认 seed 与按当前模式解析的生效色，保证组件挂载即有值。
     AppStorage.setOrCreate('themeColor', DEFAULT_THEME_COLOR);
     AppStorage.setOrCreate('resolvedThemeColor', this.resolveThemeColorForMode(AppThemeMode.SYSTEM, DEFAULT_THEME_COLOR));
+    // 沉浸光感：先广播默认挡位与能力三态（组件挂载即有值），就绪前设置控件不可操作；
+    // 异步读取持久化值后再次发布（初始化广播与用户变更经就绪状态区分，恢复不触发保存）。
+    const immersiveContext = getAbilityContext();
+    this.immersiveMaterialStore = immersiveContext === undefined
+      ? undefined : new AppPreferencesStore(immersiveContext);
+    AppStorage.setOrCreate('immersiveMaterialLevel', DEFAULT_IMMERSIVE_MATERIAL_MODE);
+    AppStorage.setOrCreate('immersiveMaterialSupport', HarmonyOSCapabilities.immersiveMaterialSupportState());
+    AppStorage.setOrCreate('immersiveMaterialNotice', '');
+    AppStorage.setOrCreate('immersiveMaterialPreferencesReady', false);
     this.sessionSnapshot = this.session?.getState();
     this.restoreThemeMode();
     void this.restoreThemeColor();
@@ -227,6 +252,7 @@ export struct AppShell {
     void this.restoreReaderTypography();
     void this.restoreAppearancePreferences();
     void this.restoreExperiencePreferences();
+    void this.restoreImmersiveMaterialLevel();
     void this.restoreDeveloperMode();
     this.refreshInstalledVersionLabel();
     this.unsubscribeStartupDestination?.();
@@ -366,14 +392,14 @@ export struct AppShell {
       HdsNavDestination() {
         this.invalidDestinationPage();
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '无法打开页面' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '无法打开页面' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.SETTINGS) {
       HdsNavDestination() {
         this.settingsPage();
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '我的' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '我的' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.APPEARANCE_SETTINGS) {
@@ -383,24 +409,27 @@ export struct AppShell {
           onThemeModeChange: (mode: AppThemeMode): void => {
             void this.selectThemeMode(mode);
           },
-          onOpenThemeColorSettings: (): void => this.navigate({ name: AppDestinationName.THEME_COLOR_SETTINGS })
+          onOpenThemeColorSettings: (): void => this.navigate({ name: AppDestinationName.THEME_COLOR_SETTINGS }),
+          onImmersiveMaterialChange: (mode: ImmersiveMaterialMode): void => {
+            this.selectImmersiveMaterialLevel(mode);
+          }
         });
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '外观与阅读体验' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '外观与阅读体验' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.THEME_COLOR_SETTINGS) {
       HdsNavDestination() {
         ThemeColorSettingsPage();
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '主题颜色' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '主题颜色' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.IDENTITY_MANAGEMENT) {
       HdsNavDestination() {
         IdentityManagementPage();
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: { title: { mainTitle: '身份管理' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
@@ -408,7 +437,7 @@ export struct AppShell {
       HdsNavDestination() {
         ReadingSettingsPage();
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: { title: { mainTitle: '朗读与播放' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
@@ -429,7 +458,7 @@ export struct AppShell {
           onOpenUpdateWhatsNew: (): void => this.openUpdateWhatsNew()
         });
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: { title: { mainTitle: '系统与更新' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
@@ -442,7 +471,7 @@ export struct AppShell {
           onOpenDownload: (): void => this.navigate({ name: AppDestinationName.SYSTEM_UPDATE_SETTINGS })
         });
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: {
           title: { mainTitle: destination.version !== undefined ? '新版本描述' : '本版本更新内容' },
           divider: { showType: DividerShowType.OFF }
@@ -458,7 +487,7 @@ export struct AppShell {
           onOpenBlockedHistory: (): void => this.navigate({ name: AppDestinationName.BLOCKED_FEED_HISTORY })
         });
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: { title: { mainTitle: '推荐系统与内容过滤' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
@@ -468,7 +497,7 @@ export struct AppShell {
           this.pathStack.pop();
         });
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '内容屏蔽' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '内容屏蔽' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.BLOCKED_FEED_HISTORY) {
@@ -477,7 +506,7 @@ export struct AppShell {
           this.pathStack.pop();
         });
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '屏蔽记录' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '屏蔽记录' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.READ_HISTORY) {
@@ -487,7 +516,7 @@ export struct AppShell {
         });
       }
       .titleBar({
-        style: getImmersiveTitleBarStyle(),
+        style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()),
         avoidLayoutSafeArea: true,
         // 返回键用 HDS 标题栏自带 backIcon，右上角选项菜单由 stackBuilder 注入（同搜索页模式）。
         content: {
@@ -505,7 +534,7 @@ export struct AppShell {
             this.pathStack.pop();
           });
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '本地历史记录' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '本地历史记录' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.TECHNICAL_LAB) {
@@ -514,7 +543,7 @@ export struct AppShell {
           this.disableDeveloperMode();
         });
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '开发者选项' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '开发者选项' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.LOGIN) {
@@ -527,7 +556,7 @@ export struct AppShell {
           this.navigate({ name: AppDestinationName.QR_DESKTOP_LOGIN_SCAN });
         });
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '登录' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '登录' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.SEARCH) {
@@ -541,7 +570,7 @@ export struct AppShell {
         );
       }
       .titleBar({
-        style: getImmersiveTitleBarStyle(),
+        style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()),
         avoidLayoutSafeArea: true,
         // 返回键用 HDS 标题栏自带 backIcon（自定义 action 接管），避免与 stackBuilder 内自绘返回键重叠。
         content: {
@@ -561,7 +590,7 @@ export struct AppShell {
         );
       }
       .titleBar({
-        style: getPersistentImmersiveTitleBarStyle(),
+        style: getPersistentImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()),
         avoidLayoutSafeArea: true,
         content: {
           stackBuilder: (): void => this.commentTitleBar(destination.contentType, destination.contentId),
@@ -582,14 +611,14 @@ export struct AppShell {
           (destination: AppDestination): void => this.navigate(destination),
           this.followingTitleSelectedIndex);
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '关注' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '关注' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.HOT) {
       HdsNavDestination() {
         this.hotContent(this.hotReloadToken, (destination: AppDestination): void => this.navigate(destination));
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '热榜' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '热榜' }, divider: { showType: DividerShowType.OFF } } })
       .hideTitleBar(false)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
@@ -598,7 +627,7 @@ export struct AppShell {
         this.dailyContent(this.dailyReloadToken, this.dailyDateCursor,
           (destination: AppDestination): void => this.navigate(destination));
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '知乎日报' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '知乎日报' }, divider: { showType: DividerShowType.OFF } } })
       .hideTitleBar(false)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
@@ -609,7 +638,7 @@ export struct AppShell {
           (destination: AppDestination): void => this.navigate(destination)
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '日报正文' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '日报正文' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.QUESTION) {
@@ -622,7 +651,7 @@ export struct AppShell {
           }
         );
       }
-      .titleBar({ style: getPersistentImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.questionTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getPersistentImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.questionTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
       // 问题页正文图片同样可打开全屏查看器：隐藏顶栏，返回键优先关查看器。
       .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll || this.imagePreviewUrl.length > 0)
@@ -645,7 +674,7 @@ export struct AppShell {
           }
         );
       }
-      .titleBar({ style: getPersistentImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.answerTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getPersistentImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.answerTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
       // 沉浸式/图片查看器中隐藏顶栏（对齐上游 topBar={}）；返回键优先关查看器、再退沉浸式。
       .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll || this.imagePreviewUrl.length > 0)
@@ -673,7 +702,7 @@ export struct AppShell {
           }
         );
       }
-      .titleBar({ style: getPersistentImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.articleTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getPersistentImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.articleTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
       // 与回答页一致：沉浸式/图片查看器中隐藏顶栏，返回键优先关查看器。
       .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll || this.imagePreviewUrl.length > 0)
@@ -701,7 +730,7 @@ export struct AppShell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '视频' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '视频' }, divider: { showType: DividerShowType.OFF } } })
       .hideTitleBar(true)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
@@ -716,7 +745,7 @@ export struct AppShell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '写回答' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '写回答' }, divider: { showType: DividerShowType.OFF } } })
       // 页面自带返回键/标题/发布按钮的完整头部，注入标题栏会与之重叠（同视频页先例）。
       .hideTitleBar(true)
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
@@ -731,7 +760,7 @@ export struct AppShell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '发布想法' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '发布想法' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.PIN_DRAFTS) {
@@ -743,7 +772,7 @@ export struct AppShell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '想法草稿' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '想法草稿' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.PEOPLE) {
@@ -756,7 +785,7 @@ export struct AppShell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: { title: { mainTitle: peopleTitleText(this.peopleTitleStates, destination.id) },
           divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
@@ -771,7 +800,7 @@ export struct AppShell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '想法' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '想法' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.COLLECTIONS) {
@@ -784,7 +813,7 @@ export struct AppShell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '收藏夹' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '收藏夹' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.COLLECTION) {
@@ -797,7 +826,7 @@ export struct AppShell {
           }
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '收藏夹内容' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '收藏夹内容' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.NOTIFICATION) {
@@ -810,7 +839,7 @@ export struct AppShell {
         );
       }
       // 消息中心标题栏对齐上游：标题「消息」+ 右上角已读/设置动作（同搜索页 stackBuilder 模式）。
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: {
           stackBuilder: (): void => this.notificationTitleBar(),
           backIcon: { action: (): void => { this.pathStack.pop(); } },
@@ -827,7 +856,7 @@ export struct AppShell {
           (destination: AppDestination): void => this.navigate(destination)
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: { title: { mainTitle: (destination as NotificationEntryDestination).title },
           divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
@@ -841,7 +870,7 @@ export struct AppShell {
           (destination: AppDestination): void => this.navigate(destination)
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: { title: { mainTitle:
           ((destination as PrivateMessageDestination).peerName ?? '').length > 0
             ? ((destination as PrivateMessageDestination).peerName as string) : '私信' },
@@ -852,7 +881,7 @@ export struct AppShell {
       HdsNavDestination() {
         this.notificationSettingsContent((destination: AppDestination): void => this.navigate(destination));
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '通知设置' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '通知设置' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.READER_PROBE) {
@@ -861,7 +890,7 @@ export struct AppShell {
           this.pathStack.pop();
         });
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: { title: { mainTitle: '阅读器诊断' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
@@ -871,7 +900,7 @@ export struct AppShell {
           this.pathStack.pop();
         });
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: { title: { mainTitle: '图片诊断' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
@@ -881,7 +910,7 @@ export struct AppShell {
           this.pathStack.pop();
         });
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: { title: { mainTitle: '数据库诊断' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
@@ -891,7 +920,7 @@ export struct AppShell {
           this.pathStack.pop();
         });
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: { title: { mainTitle: '深链诊断' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
@@ -901,7 +930,7 @@ export struct AppShell {
           this.pathStack.pop();
         });
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: { title: { mainTitle: '二维码诊断' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
@@ -911,7 +940,7 @@ export struct AppShell {
           this.pathStack.pop();
         });
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true, content: { title: { mainTitle: '扫描电脑端登录码' }, divider: { showType: DividerShowType.OFF } } })
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '扫描电脑端登录码' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.BACKGROUND_TASK_PROBE) {
@@ -920,7 +949,7 @@ export struct AppShell {
           this.pathStack.pop();
         });
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: { title: { mainTitle: '后台任务诊断' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
@@ -930,7 +959,7 @@ export struct AppShell {
           this.pathStack.pop();
         });
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: { title: { mainTitle: '领域数据诊断' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
@@ -938,7 +967,7 @@ export struct AppShell {
       HdsNavDestination() {
         this.businessPlaceholder(destination);
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(), avoidLayoutSafeArea: true,
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: { title: { mainTitle: destination.name }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
@@ -982,7 +1011,7 @@ export struct AppShell {
       }
     }
     .titleBar({
-      style: getImmersiveTitleBarStyle(),
+      style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()),
       avoidLayoutSafeArea: true,
       content: {
         stackBuilder: (): void => this.rootTitleBarContent(),
@@ -1794,7 +1823,7 @@ export struct AppShell {
           showLeadingIcon: true, leadingIcon: $r('sys.symbol.bell_badge_gearshape'),
           onRowClick: (): void => this.navigate({ name: AppDestinationName.NOTIFICATION_SETTINGS }) });
       }
-      if (this.settingsSearchMatches('外观与阅读体验', '主题 阅读排版 信息流 字号 行高 段间距')) {
+      if (this.settingsSearchMatches('外观与阅读体验', '主题 沉浸 光感 材质 自适应 精美 轻柔 流畅 阅读排版 信息流 字号 行高 段间距')) {
         AppNavigationRow({ title: '外观与阅读体验', description: '主题、阅读排版与信息流显示',
           testId: 'settings_search_search_open_appearance_settings',
           showLeadingIcon: true, leadingIcon: $r('sys.symbol.eye'),
@@ -2289,7 +2318,7 @@ export struct AppShell {
       this.settingsSearchMatches('通知设置', '设置提醒和推送偏好') ||
       (this.sessionSnapshot?.status === SessionStatus.AUTHENTICATED &&
         this.settingsSearchMatches('身份管理', '创建马甲号 切换当前身份')) ||
-      this.settingsSearchMatches('外观与阅读体验', '主题 阅读排版 信息流 字号 行高 段间距') ||
+      this.settingsSearchMatches('外观与阅读体验', '主题 沉浸 光感 材质 自适应 精美 轻柔 流畅 阅读排版 信息流 字号 行高 段间距') ||
       this.settingsSearchMatches('朗读与播放', '语音 语速 音调 播放') ||
       this.settingsSearchMatches('推荐系统与内容过滤', '推荐算法 质量过滤 智能过滤 关键词 用户 主题 广告 盐选') ||
       this.settingsSearchMatches('系统与更新', '版本信息 检查更新 问题反馈') ||
@@ -2607,6 +2636,44 @@ export struct AppShell {
     }
   }
 
+  /** 启动恢复沉浸光感挡位：成功则发布持久化值，失败保留默认自适应并给出简短提示；
+   * 读取成功或失败都结束加载状态（就绪后设置控件方可操作）。恢复只读不写，
+   * 不触发保存，避免旧读取结果覆盖用户刚选择的新值。 */
+  private async restoreImmersiveMaterialLevel(): Promise<void> {
+    if (this.immersiveMaterialStore === undefined) {
+      AppStorage.setOrCreate('immersiveMaterialPreferencesReady', true);
+      return;
+    }
+    try {
+      const mode = await this.immersiveMaterialStore.loadImmersiveMaterialLevel();
+      AppStorage.setOrCreate('immersiveMaterialLevel', mode);
+    } catch (_error) {
+      AppStorage.setOrCreate('immersiveMaterialNotice', '沉浸光感设置读取失败，已使用默认效果');
+    } finally {
+      AppStorage.setOrCreate('immersiveMaterialPreferencesReady', true);
+    }
+  }
+
+  /** 设置页四挡选择唯一入口：先广播即时生效，再经唯一 store 串行保存。
+   * 保存失败保留本次已生效的选择并提示；同一选项可重试，只有最新一次保存结果更新提示。 */
+  selectImmersiveMaterialLevel(mode: ImmersiveMaterialMode): void {
+    if (AppStorage.get<boolean>('immersiveMaterialPreferencesReady') !== true) {
+      // 恢复完成前控件不可操作；防御性忽略，避免旧读取结果覆盖新选择。
+      return;
+    }
+    if (this.immersiveMaterialStore === undefined) {
+      AppStorage.setOrCreate('immersiveMaterialNotice', '沉浸光感设置暂不可用，本次调整未保存');
+      return;
+    }
+    AppStorage.setOrCreate('immersiveMaterialLevel', mode);
+    const store = this.immersiveMaterialStore;
+    void store.saveImmersiveMaterialLevel(mode).then((): void => {
+      AppStorage.setOrCreate('immersiveMaterialNotice', '');
+    }).catch((_error: Object): void => {
+      AppStorage.setOrCreate('immersiveMaterialNotice', '沉浸光感设置保存失败，本次调整仍已生效');
+    });
+  }
+
   private createPreferencesStore(): AppPreferencesStore | undefined {
     const context = getAbilityContext();
     return context === undefined ? undefined : new AppPreferencesStore(context);
@@ -2832,6 +2899,16 @@ export struct AppShell {
 
   private currentThemeColorSeed(): string {
     return normalizeThemeColor(AppStorage.get<string>('themeColor') ?? DEFAULT_THEME_COLOR);
+  }
+
+  /** 标题栏样式函数的响应式挡位入参：从 @StorageProp 字段解码，
+   * 挡位/能力变化时所有 titleBar 样式随本组件重新求值。 */
+  private immersiveMaterialMode(): ImmersiveMaterialMode {
+    return decodeImmersiveMaterialModeText(this.immersiveMaterialLevel);
+  }
+
+  private immersiveMaterialSupportState(): ImmersiveMaterialSupportState {
+    return decodeImmersiveMaterialSupport(this.immersiveMaterialSupport);
   }
 
   /** 解析主题色 seed 在指定模式下的生效色：深色提亮（对齐原深色品牌色观感），其余原样。 */
