@@ -392,7 +392,8 @@ function inlineRuns(content: string, blockId: string): Array<ReaderInlineRun> {
         i += tag.length;
         const parsed = inlineTagName(tag);
         if (!parsed.closing && parsed.name === 'img') {
-          if (attributeValue(tag, 'eeimg') === '1') {
+          // 知乎允许 display 公式与文字出现在同一个段落中（issue #47）。
+          if (attributeValue(tag, 'eeimg') === '1' || attributeValue(tag, 'eeimg') === '2') {
             pushFormula(tag);
           } else {
             emitImageReplacement(tag);

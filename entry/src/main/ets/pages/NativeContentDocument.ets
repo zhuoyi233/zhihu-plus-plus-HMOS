@@ -25,9 +25,9 @@ import {
   toCookieHeader
 } from 'data';
 import {
-  blockFormulaDisplayAspectRatio,
+  formulaDisplaySize,
+  FormulaDisplaySize,
   clearFormulaByteCache,
-  inlineFormulaDisplayWidth,
   loadFormulaPixelMap,
   parseZhihuHtml,
   ReaderBlock,
@@ -424,7 +424,8 @@ struct ContentInlineFormula {
   onBodySelectionActive?: (active: boolean) => void;
   @State private loadedRunIds: Array<string> = [];
   private pixelMaps: Map<string, image.PixelMap> = new Map();
-  private formulaWidths: Map<string, number> = new Map();
+  private formulaSizes: Map<string, FormulaDisplaySize> = new Map();
+  @State private formulaAvailableWidth: number = 320;
   private active: boolean = false;
   private loadGeneration: number = 0;
 
@@ -446,7 +447,7 @@ struct ContentInlineFormula {
       pixelMap.release();
     });
     this.pixelMaps.clear();
-    this.formulaWidths.clear();
+    this.formulaSizes.clear();
   }
 
   build() {
@@ -483,8 +484,8 @@ struct ContentInlineFormula {
         } else {
           ImageSpan(this.pixelMaps.get(run.id) ?? run.text)
             .id(`content_inline_formula_${run.id}`)
-            .width(this.formulaWidths.get(run.id) ?? 20)
-            .height(24)
+            .width(this.displaySize(run.id).width)
+            .height(this.displaySize(run.id).height)
             .objectFit(ImageFit.Contain)
             .verticalAlign(ImageSpanAlignment.CENTER)
             .onError((): void => {
@@ -502,6 +503,15 @@ struct ContentInlineFormula {
       this.onBodySelectionActive?.(start !== end);
     })
     .width('100%')
+    .onAreaChange((_oldArea: Area, area: Area): void => {
+      this.formulaAvailableWidth = Number(area.width);
+    })
+  }
+
+  private displaySize(id: string): FormulaDisplaySize {
+    const intrinsic = this.formulaSizes.get(id);
+    return formulaDisplaySize(intrinsic?.width ?? 0, intrinsic?.height ?? 0,
+      readerBodyFontSize(this.fontSizePercent), this.formulaAvailableWidth);
   }
 
   private async loadFormula(run: ReaderInlineRun, generation: number): Promise<void> {
@@ -520,7 +530,7 @@ struct ContentInlineFormula {
         await previous.release();
       }
       this.pixelMaps.set(run.id, pixelMap);
-      this.formulaWidths.set(run.id, inlineFormulaDisplayWidth(info.size.width, info.size.height));
+      this.formulaSizes.set(run.id, { width: info.size.width, height: info.size.height });
       pixelMap = undefined;
       this.loadedRunIds = this.loadedRunIds.concat(run.id);
     } catch (_error) {
@@ -547,7 +557,7 @@ struct ContentInlineFormula {
   private failFormula(id: string): void {
     const pixelMap = this.pixelMaps.get(id);
     this.pixelMaps.delete(id);
-    this.formulaWidths.delete(id);
+    this.formulaSizes.delete(id);
     pixelMap?.release();
     this.loadedRunIds = this.loadedRunIds.filter((loadedId: string): boolean => loadedId !== id);
   }
@@ -564,7 +574,10 @@ struct ContentBlockFormula {
   };
   @State private failed: boolean = false;
   @State private pixelMap: image.PixelMap | undefined = undefined;
-  @State private formulaAspectRatio: number = 4;
+  @State private formulaWidth: number = 0;
+  @State private formulaHeight: number = 0;
+  @State private formulaAvailableWidth: number = 320;
+  @StorageProp('contentFontSize') private fontSizePercent: number = 100;
   @StorageProp('formulaForegroundColor') private formulaColor: string = '#111111';
   /** 加载失败兜底 Text 的选区状态回调（转发宿主，语义同 NativeContentDocument.onBodySelectionActive）。 */
   onBodySelectionActive?: (active: boolean) => void;
@@ -587,8 +600,10 @@ struct ContentBlockFormula {
       if (this.pixelMap !== undefined && !this.failed) {
         Image(this.pixelMap)
           .id(`content_formula_${this.item.id}`)
-          .width('100%')
-          .aspectRatio(this.formulaAspectRatio)
+          .width(formulaDisplaySize(this.formulaWidth, this.formulaHeight,
+            readerBodyFontSize(this.fontSizePercent), this.formulaAvailableWidth).width)
+          .height(formulaDisplaySize(this.formulaWidth, this.formulaHeight,
+            readerBodyFontSize(this.fontSizePercent), this.formulaAvailableWidth).height)
           .objectFit(ImageFit.Contain)
           .onError((): void => {
             this.failed = true;
@@ -611,6 +626,11 @@ struct ContentBlockFormula {
     .padding($r('app.float.spacing_small'))
     .backgroundColor($r('app.color.surface_background'))
     .borderRadius($r('app.float.card_radius'))
+    .onAreaChange((_oldArea: Area, area: Area): void => {
+      const padding = this.getUIContext().getHostContext()?.resourceManager
+        .getNumber($r('app.float.spacing_small').id) ?? 10;
+      this.formulaAvailableWidth = Math.max(1, Number(area.width) - padding * 2);
+    })
   }
 
   private async loadFormula(generation: number): Promise<void> {
@@ -627,7 +647,8 @@ struct ContentBlockFormula {
       if (this.pixelMap !== undefined) {
         await this.pixelMap.release();
       }
-      this.formulaAspectRatio = blockFormulaDisplayAspectRatio(info.size.width, info.size.height);
+      this.formulaWidth = info.size.width;
+      this.formulaHeight = info.size.height;
       this.pixelMap = pixelMap;
       pixelMap = undefined;
       this.failed = false;
