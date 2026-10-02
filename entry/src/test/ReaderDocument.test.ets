@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
   blockFormulaDisplayAspectRatio,
+  formulaDisplaySize,
   inlineFormulaDisplayWidth,
   isTrustedFormulaUrl,
   normalizeFormulaSvgText,
@@ -115,6 +116,40 @@ export default function readerDocumentTest(): void {
       expect(blocks[0].inlineRuns[1].text).assertEqual('e^{i&pi;}+1=0');
       expect(blocks[0].inlineRuns[1].sourceUrl)
         .assertEqual('https://www.zhihu.com/equation?tex=e%5Ei');
+    });
+
+    it('rendersDisplayEquationsMixedWithTextAndInlineEquations', 0, () => {
+      // issue #47：牛顿—莱布尼茨公式与“其中 F'(x)=f(x)”处于同一段。
+      const blocks = parseZhihuHtml('<p><img eeimg="2" ' +
+        'src="https://www.zhihu.com/equation?tex=int" alt="积分"/>其中 ' +
+        '<img eeimg="1" src="https://www.zhihu.com/equation?tex=F" alt="F&#39;(x)=f(x)"/>。</p>');
+      expect(blocks[0].inlineRuns.length).assertEqual(4);
+      expect(blocks[0].inlineRuns[0].kind).assertEqual(ReaderInlineKind.FORMULA);
+      expect(blocks[0].inlineRuns[1].text).assertEqual('其中');
+      expect(blocks[0].inlineRuns[2].kind).assertEqual(ReaderInlineKind.FORMULA);
+      expect(blocks[0].inlineRuns[2].text).assertEqual("F'(x)=f(x)");
+      const trailing = parseZhihuHtml('<p>积分 <b><img eeimg="2" ' +
+        'src="https://www.zhihu.com/equation?tex=x" alt="x"/></b></p>');
+      expect(trailing[0].inlineRuns[1].kind).assertEqual(ReaderInlineKind.FORMULA);
+      const untrusted = parseZhihuHtml('<p>积分<img eeimg="2" ' +
+        'src="https://example.com/x.svg" alt="x"/></p>');
+      expect(untrusted[0].inlineRuns.length).assertEqual(0);
+    });
+
+    it('sizesFormulasByFontAndIntrinsicSizeWithoutStretchingToLineWidth', 0, () => {
+      const small = formulaDisplaySize(90, 30, 18, 1200);
+      expect(small.width).assertEqual(54);
+      expect(small.height).assertEqual(18);
+      const largeFont = formulaDisplaySize(90, 30, 24, 1200);
+      expect(largeFont.width).assertEqual(72);
+      expect(largeFont.height).assertEqual(24);
+      const tall = formulaDisplaySize(90, 120, 18, 320);
+      expect(tall.height).assertEqual(72);
+      const wide = formulaDisplaySize(1200, 120, 18, 300);
+      expect(wide.width).assertEqual(300);
+      expect(wide.height).assertEqual(30);
+      expect(formulaDisplaySize(0, 30).width).assertEqual(20);
+      expect(formulaDisplaySize(90, 30, Number.NaN, 0).width).assertEqual(54);
     });
 
     it('detectsBlockEquation', 0, () => {

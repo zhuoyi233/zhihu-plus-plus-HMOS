@@ -140,6 +140,18 @@ $hdc = "hdc"
 
 - **截图/附件**：UI 改动附截图，统一放 `docs/ui-screenshots/` 后在正文中以表格引用
   （文件名 `ui-adaptation-NN.jpg` 类推），不外链临时地址。
+  - 截图须随代码提交，并在获准推送分支后，用 Markdown 图片语法引用仓库内图片：
+    `![图片说明](https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/blob/<完整提交SHA>/docs/ui-screenshots/<文件名>?raw=true)`。
+    开头的 `!` 用于直接展示图片，`?raw=true` 用于读取图片内容；普通 `[说明](URL)` 只显示链接。
+  - 使用实际包含截图的完整提交 SHA（可通过 `git rev-parse HEAD` 获取），固定图片版本，
+    避免分支后续更新影响 PR 截图；不要把占位符直接写入 PR。
+  - 修复前后截图放入两列表格并排展示，例如（替换 SHA 和文件名后使用）：
+
+    ```markdown
+    | 修复前 | 修复后 |
+    | --- | --- |
+    | ![修复前](https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/blob/<完整提交SHA>/docs/ui-screenshots/issue-47-before.png?raw=true) | ![修复后](https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/blob/<完整提交SHA>/docs/ui-screenshots/issue-47-after.png?raw=true) |
+    ```
 
 - **分支方向**：功能分支（`feature/<name>`）或累计分支（`dev`）→ `main`；创建/推送 PR 属外发
   操作，仅当用户**当次明确要求**时执行（对齐"严格禁止 push"节）。
