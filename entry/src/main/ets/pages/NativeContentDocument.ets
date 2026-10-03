@@ -1581,7 +1581,8 @@ export struct NativeContentDocument {
         .fontWeight(seg.bold || baseBold ? FontWeight.Bold : FontWeight.Normal)
         .fontStyle(seg.italic ? FontStyle.Italic : FontStyle.Normal)
         .fontFamily('monospace')
-        .fontColor(seg.linkUrl.length > 0 ? this.resolvedThemeColor : $r('app.color.primary_text'))
+        .fontColor(seg.linkUrl.length > 0 || seg.referenceNumero !== undefined
+          ? this.resolvedThemeColor : $r('app.color.primary_text'))
         .textBackgroundStyle({ color: '#14808080', radius: 3 })
         .decoration({
           type: seg.segmentRef !== undefined ? TextDecorationType.Underline :
@@ -1599,7 +1600,8 @@ export struct NativeContentDocument {
         .fontSize(seg.superscript || seg.subscript ? fontSizeVp * 0.75 : fontSizeVp)
         .fontWeight(seg.bold || baseBold ? FontWeight.Bold : FontWeight.Normal)
         .fontStyle(seg.italic ? FontStyle.Italic : FontStyle.Normal)
-        .fontColor(seg.linkUrl.length > 0 ? this.resolvedThemeColor : $r('app.color.primary_text'))
+        .fontColor(seg.linkUrl.length > 0 || seg.referenceNumero !== undefined
+          ? this.resolvedThemeColor : $r('app.color.primary_text'))
         .textBackgroundStyle(seg.mark ? { color: '#66FDD835', radius: 3 } : { color: Color.Transparent, radius: 0 })
         .decoration({
           type: seg.segmentRef !== undefined ? TextDecorationType.Underline :
