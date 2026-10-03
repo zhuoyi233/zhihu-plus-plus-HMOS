@@ -242,6 +242,7 @@ struct ContentDetailPage {
   private answersController?: QuestionAnswersController;
   /** P3-9-C：底部菜单弹窗可见性。 */
   @State private actionMenuShown: boolean = false;
+  @State private actionMenuWidth: number = 400;
   /** 他人划线（segment_infos）：由服务端返回，按段落 pid 对齐渲染蓝色高亮。 */
   @State private segmentInfos: SegmentInfoParagraph[] = [];
   /** 划线点赞/评论面板可见性。 */
@@ -251,8 +252,6 @@ struct ContentDetailPage {
   @State private segmentSheetMarkIndex: number = -1;
   /** 划线点赞请求进行中（防重复点击）。 */
   @State private segmentLikeBusy: boolean = false;
-  /** P3-9-C：菜单操作反馈（复制链接结果等）。 */
-  @State private menuStatus: string = '';
   /** 沉浸式阅读仅收起页面 Chrome，不改变正文、互动或滚动状态。
    * 变化经 AppStorage 广播给 AppShell 隐藏/恢复 NavDestination 顶栏（对齐上游 topBar={}）。 */
   @State @Watch('onImmersiveReadingChanged') private immersiveReading: boolean = false;
@@ -2747,7 +2746,7 @@ struct ContentDetailPage {
 
   @Builder
   private actionMenuSheet() {
-    // 分享、复制链接与屏蔽操作放入 API 26 系统半模态；尚未接线的能力不显示占位项。
+    // 阅读设置、分享、复制链接与屏蔽操作集中在详情页半模态菜单。
     Column({ space: $r('app.float.spacing_small') }) {
       Row({ space: $r('app.float.spacing_small') }) {
         Text('更多操作')
@@ -2772,29 +2771,15 @@ struct ContentDetailPage {
       }
       .width('100%')
 
-      if (this.kind === ContentDetailKind.ANSWER || this.kind === ContentDetailKind.ARTICLE) {
-        Button(this.isCurrentContentSpeaking() ? '停止朗读' : '朗读',
-          { type: ButtonType.Normal, stateEffect: true })
-          .id('detail_menu_speech')
-          .width('100%')
-          .fontSize($r('app.float.body_font_size'))
-          .fontColor($r('app.color.primary_text'))
-          .backgroundColor($r('app.color.control_background'))
-          .borderRadius($r('app.float.card_radius'))
-          .onClick((): void => {
-            this.actionMenuShown = false;
-            void this.toggleSpeechPlayback();
-          })
-      }
-
-      Button('分享', { type: ButtonType.Normal, stateEffect: true })
-        .id('detail_menu_share')
-        .width('100%')
-        .fontSize($r('app.float.body_font_size'))
-        .fontColor($r('app.color.primary_text'))
-        .backgroundColor($r('app.color.control_background'))
-        .borderRadius($r('app.float.card_radius'))
-        .onClick((): void => {
+      Flex({ wrap: FlexWrap.Wrap }) {
+        if (this.kind === ContentDetailKind.ANSWER || this.kind === ContentDetailKind.ARTICLE) {
+          this.menuQuickAction(this.isCurrentContentSpeaking() ? '停止朗读' : '朗读',
+            $r('sys.symbol.headphones'), 'detail_menu_speech', this.isCurrentContentSpeaking(), (): void => {
+              this.actionMenuShown = false;
+              void this.toggleSpeechPlayback();
+            })
+        }
+        this.menuQuickAction('分享', $r('sys.symbol.share'), 'detail_menu_share', false, (): void => {
           this.actionMenuShown = false;
           if (this.shareActionMode === 'copy') {
             this.copyContentLink();
@@ -2802,81 +2787,124 @@ struct ContentDetailPage {
             this.shareContentLink();
           }
         })
-
-      Button('复制链接', { type: ButtonType.Normal, stateEffect: true })
-        .id('detail_menu_copy_link')
-        .width('100%')
-        .fontSize($r('app.float.body_font_size'))
-        .fontColor($r('app.color.primary_text'))
-        .backgroundColor($r('app.color.control_background'))
-        .borderRadius($r('app.float.card_radius'))
-        .onClick((): void => {
+        this.menuQuickAction('复制链接', $r('sys.symbol.link'), 'detail_menu_copy_link', false, (): void => {
           this.actionMenuShown = false;
           this.copyContentLink();
         })
-
-      if (this.menuStatus.length > 0) {
-        Text(this.menuStatus)
-          .id('detail_menu_status')
-          .fontSize($r('app.float.secondary_font_size'))
-          .fontColor($r('app.color.secondary_text'))
-          .width('100%')
-      }
-
-      if (this.kind === ContentDetailKind.ANSWER || this.kind === ContentDetailKind.ARTICLE) {
-        Button('沉浸式阅读', { type: ButtonType.Normal, stateEffect: true })
-          .id(`content_${this.kind}_detail_immersive`)
-          .width('100%')
-          .fontSize($r('app.float.body_font_size'))
-          .fontColor($r('app.color.primary_text'))
-          .backgroundColor($r('app.color.control_background'))
-          .borderRadius($r('app.float.card_radius'))
-          .onClick((): void => {
-            this.actionMenuShown = false;
-            this.immersiveReading = true;
-            // 对齐上游菜单提示：沉浸式下返回键优先退出沉浸式而非退出回答。
-            this.getUIContext().getPromptAction()
-              .showToast({ message: '已进入沉浸式，按返回键即可退出' });
-          })
-      }
-
-      if (this.content !== undefined && contentAuthorName(this.content).length > 0) {
-        Button('屏蔽作者', { type: ButtonType.Normal, stateEffect: true })
-          .id(`${this.kind}_block_author`)
-          .width('100%')
-          .fontSize($r('app.float.body_font_size'))
-          .fontColor($r('app.color.primary_text'))
-          .backgroundColor($r('app.color.control_background'))
-          .borderRadius($r('app.float.card_radius'))
-          .enabled(!this.blockingBusy && this.blockingAction !== undefined)
-          .onClick((): void => {
-            const content = this.content;
-            const author = content?.value.author;
-            if (author !== undefined) {
+        if (this.kind === ContentDetailKind.ANSWER || this.kind === ContentDetailKind.ARTICLE) {
+          this.menuQuickAction('沉浸阅读', $r('sys.symbol.arrow_up_left_and_arrow_down_right'),
+            `content_${this.kind}_detail_immersive`, this.immersiveReading, (): void => {
               this.actionMenuShown = false;
-              this.pendingUserBlock = { userId: author.id, userName: author.name };
-            }
-          })
+              this.immersiveReading = !this.immersiveReading;
+              this.showMenuToast(this.immersiveReading ? '已进入沉浸式，按返回键即可退出' : '已退出沉浸式');
+            })
+        }
       }
+      .width('100%')
+      .padding({ top: 8, bottom: 8 })
 
-      Button('屏蔽关键词', { type: ButtonType.Normal, stateEffect: true })
-        .id(`${this.kind}_block_keyword`)
-        .width('100%')
-        .fontSize($r('app.float.body_font_size'))
-        .fontColor($r('app.color.primary_text'))
-        .backgroundColor($r('app.color.control_background'))
-        .borderRadius($r('app.float.card_radius'))
-        .enabled(!this.blockingBusy && this.blockingAction !== undefined)
-        .onClick((): void => {
+      this.menuSettingRow('外观与阅读体验', $r('sys.symbol.eye'), 'detail_menu_appearance_settings',
+        true, true, (): void => {
           this.actionMenuShown = false;
-          this.keywordBlockInput = '';
-          this.keywordBlockVisible = true;
+          this.navigate({ name: AppDestinationName.APPEARANCE_SETTINGS });
         })
 
+      Column() {
+        if (this.content !== undefined && contentAuthorName(this.content).length > 0) {
+          this.menuSettingRow('屏蔽作者', $r('sys.symbol.person'), `${this.kind}_block_author`,
+            false, !this.blockingBusy && this.blockingAction !== undefined, (): void => {
+              const author = this.content?.value.author;
+              if (author !== undefined) {
+                this.actionMenuShown = false;
+                this.pendingUserBlock = { userId: author.id, userName: author.name };
+              }
+            })
+        }
+        this.menuSettingRow('屏蔽关键词', $r('sys.symbol.eye_slash'), `${this.kind}_block_keyword`,
+          false, !this.blockingBusy && this.blockingAction !== undefined, (): void => {
+            this.actionMenuShown = false;
+            this.keywordBlockInput = '';
+            this.keywordBlockVisible = true;
+          })
+      }
+      .width('100%')
+      .margin({ top: 8 })
+      .backgroundColor($r('app.color.control_background'))
+      .borderRadius($r('app.float.card_radius'))
     }
     .id('detail_menu_sheet')
     .width('100%')
     .padding($r('app.float.spacing_medium'))
+    .onAreaChange((_oldArea: Area, newArea: Area): void => {
+      this.actionMenuWidth = Number(newArea.width);
+    })
+  }
+
+  private menuQuickActionWidth(): string {
+    const fontScale = getAbilityContext()?.config.fontSizeScale ?? 1;
+    // 正文大字号或系统大字体下使用两列，窄窗口同样避免四个标签挤在一行。
+    return this.previewFontSizePercent >= 130 || fontScale > 1.2 || this.actionMenuWidth < 360 ? '50%' : '25%';
+  }
+
+  @Builder
+  private menuQuickAction(label: string, icon: Resource, testId: string, active: boolean, action: () => void) {
+    Button({ type: ButtonType.Normal, stateEffect: true }) {
+      Column({ space: 8 }) {
+        Stack() {
+          SymbolGlyph(icon)
+            .fontSize(24)
+            .fontColor([active ? onThemeColor(this.resolvedThemeColor) : this.resolvedThemeColor])
+        }
+        .width(48)
+        .height(48)
+        .borderRadius(24)
+        .backgroundColor(active ? this.resolvedThemeColor : $r('app.color.control_background'))
+        Text(label)
+          .fontSize($r('app.float.secondary_font_size'))
+          .fontColor($r('app.color.primary_text'))
+          .textAlign(TextAlign.Center)
+          .width('100%')
+      }
+      .width('100%')
+    }
+    .id(testId)
+    .width(this.menuQuickActionWidth())
+    .padding({ top: 8, bottom: 8, left: 4, right: 4 })
+    .backgroundColor(Color.Transparent)
+    .borderRadius($r('app.float.card_radius'))
+    .accessibilityText(label)
+    .onClick(action)
+  }
+
+  @Builder
+  private menuSettingRow(label: string, icon: Resource, testId: string, accent: boolean,
+    enabled: boolean, action: () => void) {
+    Button({ type: ButtonType.Normal, stateEffect: true }) {
+      Row({ space: 12 }) {
+        SymbolGlyph(icon)
+          .fontSize(22)
+          .fontColor([accent ? this.resolvedThemeColor : $r('app.color.secondary_text')])
+        Text(label)
+          .fontSize($r('app.float.body_font_size'))
+          .fontColor($r('app.color.primary_text'))
+          .layoutWeight(1)
+        if (accent) {
+          SymbolGlyph($r('sys.symbol.chevron_right'))
+            .fontSize(14)
+            .fontColor([$r('app.color.secondary_text')])
+        }
+      }
+      .width('100%')
+    }
+    .id(testId)
+    .width('100%')
+    .constraintSize({ minHeight: 52 })
+    .padding({ top: 14, bottom: 14, left: 16, right: 16 })
+    .backgroundColor($r('app.color.control_background'))
+    .borderRadius($r('app.float.card_radius'))
+    .enabled(enabled)
+    .accessibilityText(label)
+    .onClick(action)
   }
 
   /** 双击动作询问面板（对齐上游 showDoubleTapActionDialog）：每项保存偏好并立即执行该动作。 */
@@ -2947,6 +2975,12 @@ struct ContentDetailPage {
     .padding($r('app.float.spacing_medium'))
   }
 
+  private showMenuToast(message: string): void {
+    if (message.length > 0) {
+      this.getUIContext().getPromptAction().showToast({ message: message });
+    }
+  }
+
   private copyContentLink(): void {
     const content = this.content;
     if (content === undefined) {
@@ -2959,12 +2993,12 @@ struct ContentDetailPage {
     try {
       const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, url);
       pasteboard.getSystemPasteboard().setData(pasteData).then((): void => {
-        this.menuStatus = '已复制链接';
+        this.showMenuToast('已复制链接');
       }).catch((_error: Error): void => {
-        this.menuStatus = '复制失败，请重试';
+        this.showMenuToast('复制失败，请重试');
       });
     } catch (_error) {
-      this.menuStatus = '复制失败，请重试';
+      this.showMenuToast('复制失败，请重试');
     }
   }
 
@@ -2983,7 +3017,7 @@ struct ContentDetailPage {
     const service = getSpeechPlaybackService();
     if (this.isCurrentContentSpeaking()) {
       service.stop();
-      this.menuStatus = '已停止朗读';
+      this.showMenuToast('已停止朗读');
       return;
     }
     const context = getAbilityContext();
@@ -2994,9 +3028,9 @@ struct ContentDetailPage {
         contentDetailPageTitle(content.kind);
       await service.speak(this.activeContentId, title, contentSpeechText(content), preferences);
       const snapshot = service.getSnapshot();
-      this.menuStatus = snapshot.status === SpeechPlaybackStatus.ERROR ? snapshot.message : '已开始朗读';
+      this.showMenuToast(snapshot.status === SpeechPlaybackStatus.ERROR ? snapshot.message : '已开始朗读');
     } catch (_error) {
-      this.menuStatus = '朗读启动失败，请稍后重试';
+      this.showMenuToast('朗读启动失败，请稍后重试');
     }
   }
 
@@ -3005,7 +3039,7 @@ struct ContentDetailPage {
     const content = this.content;
     const context = getAbilityContext();
     if (content === undefined || context === undefined || content.value.url.trim().length === 0) {
-      this.menuStatus = '暂时无法打开分享面板';
+      this.showMenuToast('暂时无法打开分享面板');
       return;
     }
     const contextTitle = contentContextTitle(content);
@@ -3017,9 +3051,9 @@ struct ContentDetailPage {
       thumbnailUrl: contentShareThumbnailUrl(content)
     };
     createSystemShareService(context).share(payload).then((outcome: ShareOutcome): void => {
-      this.menuStatus = outcome === ShareOutcome.CANCELLED ? '' : '已打开系统分享面板';
+      this.showMenuToast(outcome === ShareOutcome.CANCELLED ? '' : '已打开系统分享面板');
     }).catch((): void => {
-      this.menuStatus = '暂时无法打开分享面板';
+      this.showMenuToast('暂时无法打开分享面板');
     });
   }
 
