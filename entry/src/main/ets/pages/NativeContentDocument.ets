@@ -437,6 +437,8 @@ struct ContentInlineFormula {
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   /** 正文内联链接点击回调（行内公式所在段落同样生效）。 */
   onLinkClick?: (url: string) => void;
+  /** 参考标记点击回调：跳转文末参考条目（NativeContentDocument.scrollToReference）。 */
+  onReferenceClick?: (numero: number) => void;
   /** 行内公式段落 Text 的选区状态回调（转发宿主，语义同 NativeContentDocument.onBodySelectionActive）。 */
   onBodySelectionActive?: (active: boolean) => void;
   @State private loadedRunIds: Array<string> = [];
@@ -478,7 +480,12 @@ struct ContentInlineFormula {
           this.pixelMaps.get(run.id) === undefined) {
           if (run.kind === ReaderInlineKind.TEXT) {
             Span(run.text)
-              .fontColor((run.linkUrl ?? '').length > 0 ? this.resolvedThemeColor : $r('app.color.primary_text'))
+              .fontSize(readerBodyFontSize(this.fontSizePercent) *
+                (run.referenceNumero !== undefined ? 0.75 : 1))
+              .baselineOffset(run.referenceNumero !== undefined ?
+                LengthMetrics.vp(readerBodyFontSize(this.fontSizePercent) * 0.35) : LengthMetrics.vp(0))
+              .fontColor((run.linkUrl ?? '').length > 0 || run.referenceNumero !== undefined
+                ? this.resolvedThemeColor : $r('app.color.primary_text'))
               .fontWeight(run.bold === true ? FontWeight.Bold : FontWeight.Normal)
               .fontStyle(run.italic === true ? FontStyle.Italic : FontStyle.Normal)
               .decoration({
@@ -491,8 +498,14 @@ struct ContentInlineFormula {
                 : { color: Color.Transparent, radius: 0 })
               .onClick((): void => {
                 const link = run.linkUrl ?? '';
-                if (link.length > 0 && this.onLinkClick !== undefined) {
-                  this.onLinkClick(link);
+                if (link.length > 0) {
+                  if (this.onLinkClick !== undefined) {
+                    this.onLinkClick(link);
+                  }
+                  return;
+                }
+                if (run.referenceNumero !== undefined && this.onReferenceClick !== undefined) {
+                  this.onReferenceClick(run.referenceNumero);
                 }
               })
           } else {
@@ -1323,6 +1336,8 @@ export struct NativeContentDocument {
       }
     } else if (item.kind === ReaderBlockKind.DIVIDER) {
       Divider().margin({ top: 8, bottom: 8 })
+    } else if (item.kind === ReaderBlockKind.REFERENCE) {
+      this.referenceEntryBlock(item)
     } else if (item.kind === ReaderBlockKind.FORMULA) {
       // 按主题/字号 tick 奇偶翻转分支强制销毁重建（见 formulaRecreateTick/formulaDecodeTick 注释）。
       if ((this.formulaRecreateTick + this.formulaDecodeTick) % 2 === 0) {
@@ -1379,18 +1394,20 @@ export struct NativeContentDocument {
     } else if (item.inlineRuns.length > 0) {
       // 含行内公式的段落走公式宿主；其余 styled runs 走统一样式渲染（划线叠加保留）。
       if (this.inlineHasFormula(item)) {
-        // 按主题/字号 tick 奇偶翻转分支强制销毁重建（见 formulaRecreateTick/formulaDecodeTick 注释）。
-        if ((this.formulaRecreateTick + this.formulaDecodeTick) % 2 === 0) {
-          ContentInlineFormula({ item: item, onLinkClick: this.onLinkClick,
-            onBodySelectionActive: (active: boolean): void => {
-              this.setBodySelectionActive(active);
-            } })
-        } else {
-          ContentInlineFormula({ item: item, onLinkClick: this.onLinkClick,
-            onBodySelectionActive: (active: boolean): void => {
-              this.setBodySelectionActive(active);
-            } })
-        }
+      // 按主题/字号 tick 奇偶翻转分支强制销毁重建（见 formulaRecreateTick/formulaDecodeTick 注释）。
+      if ((this.formulaRecreateTick + this.formulaDecodeTick) % 2 === 0) {
+        ContentInlineFormula({ item: item, onLinkClick: this.onLinkClick,
+          onReferenceClick: (numero: number): void => this.scrollToReference(numero),
+          onBodySelectionActive: (active: boolean): void => {
+            this.setBodySelectionActive(active);
+          } })
+      } else {
+        ContentInlineFormula({ item: item, onLinkClick: this.onLinkClick,
+          onReferenceClick: (numero: number): void => this.scrollToReference(numero),
+          onBodySelectionActive: (active: boolean): void => {
+            this.setBodySelectionActive(active);
+          } })
+      }
       } else {
         Text() {
           this.styledSpanChildren(item, false, this.bodyFontSize())
@@ -1438,6 +1455,55 @@ export struct NativeContentDocument {
       })
       .width('100%')
     }
+  }
+
+  /** 文末参考条目行（对齐上游脚注定义渲染：[N] + 说明文本 + 可点击链接，脚注字号）。 */
+  @Builder
+  private referenceEntryBlock(item: ReaderBlock) {
+    Row({ space: 8 }) {
+      Text(this.referenceEntryLabel(item))
+        .fontSize(this.referenceFontSize())
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.primary_text'))
+      Column({ space: 4 }) {
+        if (item.text.length > 0) {
+          Text(item.text)
+            .fontSize(this.referenceFontSize())
+            .fontColor($r('app.color.primary_text'))
+            .width('100%')
+        }
+        if (this.referenceEntryUrl(item).length > 0) {
+          Text(this.referenceEntryUrl(item))
+            .fontSize(this.referenceFontSize())
+            .fontColor(this.resolvedThemeColor)
+            .wordBreak(WordBreak.BREAK_ALL)
+            .width('100%')
+            .onClick((): void => {
+              const url = this.referenceEntryUrl(item);
+              if (url.length > 0 && this.onLinkClick !== undefined) {
+                this.onLinkClick(url);
+              }
+            })
+        }
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+    }
+    .alignItems(VerticalAlign.Top)
+    .width('100%')
+  }
+
+  /** 参考条目字号（fp）：脚注样式取正文的 85%。 */
+  private referenceFontSize(): number {
+    return this.bodyFontSize() * 0.85;
+  }
+
+  private referenceEntryLabel(item: ReaderBlock): string {
+    return `[${item.reference?.numero ?? ''}]`;
+  }
+
+  private referenceEntryUrl(item: ReaderBlock): string {
+    return item.reference?.url ?? '';
   }
 
   /** 内联 runs 是否含公式 run（决定段落走公式宿主还是统一样式渲染）。 */
@@ -1549,7 +1615,7 @@ export struct NativeContentDocument {
     }
   }
 
-  /** 样式片段点击：链接优先于他人划线面板。 */
+  /** 样式片段点击：链接优先于参考跳转，参考标记优先于他人划线面板。 */
   private handleStyledSpanClick(seg: StyledTextSegment): void {
     if (seg.linkUrl.length > 0) {
       this.bodyTapDetector.markForeignClick();
@@ -1558,10 +1624,32 @@ export struct NativeContentDocument {
       }
       return;
     }
+    if (seg.referenceNumero !== undefined && seg.referenceNumero > 0) {
+      this.bodyTapDetector.markForeignClick();
+      this.scrollToReference(seg.referenceNumero);
+      return;
+    }
     if (seg.segmentRef !== undefined && this.onSegmentClick !== undefined) {
       this.bodyTapDetector.markForeignClick();
       this.onSegmentClick(seg.segmentRef.paragraph, seg.segmentRef.markIndex);
     }
+  }
+
+  /**
+   * 点击正文参考标记：滚动到文末对应参考条目（对齐上游脚注引用跳转）。
+   * List 索引 = 块下标 + 1 个页头槽位；折叠视口内块不占独立槽位，退化为滚到视口本体。
+   */
+  private scrollToReference(numero: number): void {
+    const blockIndex = this.blocks.findIndex((block: ReaderBlock): boolean =>
+      block.kind === ReaderBlockKind.REFERENCE && block.reference?.numero === numero);
+    if (blockIndex < 0) {
+      return;
+    }
+    if (this.collapsibleActive) {
+      this.scroller.scrollToIndex(1, true, ScrollAlign.START);
+      return;
+    }
+    this.scroller.scrollToIndex(blockIndex + 1, true, ScrollAlign.START);
   }
 
   /** 本块对应的他人划线引用（按 data-pid 对齐 segment_infos）。@Builder 体内禁止非 UI 语句，故提为方法。 */
