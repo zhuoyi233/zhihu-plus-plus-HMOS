@@ -1457,7 +1457,7 @@ export struct NativeContentDocument {
     }
   }
 
-  /** 文末参考条目行（对齐上游脚注定义渲染：[N] + 说明文本 + 可点击链接，脚注字号）。 */
+  /** 文末参考条目行（对齐上游脚注定义渲染：[N] + ↩ 返回 + 说明文本 + 可点击链接，脚注字号）。 */
   @Builder
   private referenceEntryBlock(item: ReaderBlock) {
     Row({ space: 8 }) {
@@ -1465,6 +1465,16 @@ export struct NativeContentDocument {
         .fontSize(this.referenceFontSize())
         .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.primary_text'))
+      SymbolGlyph($r('sys.symbol.arrowshape_turn_up_left'))
+        .fontSize(this.referenceFontSize())
+        .fontColor([this.resolvedThemeColor])
+        .onClick((): void => {
+          if (item.reference !== undefined) {
+            this.bodyTapDetector.markForeignClick();
+            this.scrollBackToReference(item.reference.numero);
+          }
+        })
+        .accessibilityText('返回正文引用位置')
       Column({ space: 4 }) {
         if (item.text.length > 0) {
           Text(item.text)
@@ -1639,19 +1649,40 @@ export struct NativeContentDocument {
 
   /**
    * 点击正文参考标记：滚动到文末对应参考条目（对齐上游脚注引用跳转）。
+   * 跳转前记忆当前偏移供条目 ↩ 返回（对齐上游 rememberReturnPosition）。
    * List 索引 = 块下标 + 1 个页头槽位；折叠视口内块不占独立槽位，退化为滚到视口本体。
    */
+  private readonly referenceReturnOffsets: Map<number, number> = new Map();
+
   private scrollToReference(numero: number): void {
     const blockIndex = this.blocks.findIndex((block: ReaderBlock): boolean =>
       block.kind === ReaderBlockKind.REFERENCE && block.reference?.numero === numero);
     if (blockIndex < 0) {
       return;
     }
+    this.referenceReturnOffsets.set(numero, this.scroller.currentOffset().yOffset);
     if (this.collapsibleActive) {
       this.scroller.scrollToIndex(1, true, ScrollAlign.START);
       return;
     }
     this.scroller.scrollToIndex(blockIndex + 1, true, ScrollAlign.START);
+  }
+
+  /**
+   * 条目 ↩ 返回（对齐上游 onFootnoteBackClick）：优先滚回点标记前的阅读位置；
+   * 无记忆（未点过标记）则回退滚到标记所在段落。折叠视口内段落不可按槽位滚动，忽略。
+   */
+  private scrollBackToReference(numero: number): void {
+    const remembered = this.referenceReturnOffsets.get(numero);
+    if (remembered !== undefined && remembered >= 0) {
+      this.scroller.scrollTo({ xOffset: 0, yOffset: remembered, animation: true });
+      return;
+    }
+    const blockIndex = this.blocks.findIndex((block: ReaderBlock): boolean =>
+      block.inlineRuns.some((run: ReaderInlineRun): boolean => run.referenceNumero === numero));
+    if (blockIndex >= 0 && !this.collapsibleActive) {
+      this.scroller.scrollToIndex(blockIndex + 1, true, ScrollAlign.START);
+    }
   }
 
   /** 本块对应的他人划线引用（按 data-pid 对齐 segment_infos）。@Builder 体内禁止非 UI 语句，故提为方法。 */

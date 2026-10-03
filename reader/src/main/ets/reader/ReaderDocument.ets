@@ -637,9 +637,17 @@ export function parseZhihuHtml(html: string): Array<ReaderBlock> {
     });
   });
   // 文末参考条目区（对齐上游：reference sup 注册 FootnoteDefinition 追加到文档末尾）：
-  // 分隔线 + 按序号升序逐条成块；正文标记经 referenceNumero 关联到条目块。
+  // 分隔线 + 标题 + 按序号升序逐条成块；正文标记经 referenceNumero 关联到条目块。
+  // 分区标题为知乎网页版行为（上游渲染库不渲染标题，这里按网页形态补齐）。
   if (references.size > 0) {
     blocks.push({ id: `block-${blocks.length}`, kind: ReaderBlockKind.DIVIDER, text: '', sourceUrl: '', inlineRuns: [] });
+    blocks.push({
+      id: `block-${blocks.length}`,
+      kind: ReaderBlockKind.HEADING,
+      text: '参考',
+      sourceUrl: '',
+      inlineRuns: []
+    });
     const numeros = Array.from(references.keys()).sort((a: number, b: number): number => a - b);
     numeros.forEach((numero: number): void => {
       const item: ReaderReferenceItem | undefined = references.get(numero);

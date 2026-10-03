@@ -324,7 +324,7 @@ export default function readerDocumentTest(): void {
         '<sup data-text="A Quick Trip Through Knot Theory, 1962" data-url="" ' +
         'data-draft-type="reference" data-numero="2">[2]</sup>。</p>');
 
-      expect(blocks.length).assertEqual(4);
+      expect(blocks.length).assertEqual(5);
       expect(blocks[0].kind).assertEqual(ReaderBlockKind.PARAGRAPH);
       expect(blocks[0].text).assertEqual('绳结理论[1] 与[2]。');
       const runs = blocks[0].inlineRuns;
@@ -334,16 +334,18 @@ export default function readerDocumentTest(): void {
       expect(runs[1].referenceNumero).assertEqual(1);
       expect(runs[3].text).assertEqual('[2]');
       expect(runs[3].referenceNumero).assertEqual(2);
-      // 文末合成：分隔线 + 按序号升序的参考条目块
+      // 文末合成：分隔线 + "参考"标题 + 按序号升序的参考条目块
       expect(blocks[1].kind).assertEqual(ReaderBlockKind.DIVIDER);
-      expect(blocks[2].kind).assertEqual(ReaderBlockKind.REFERENCE);
-      expect(blocks[2].reference?.numero).assertEqual(1);
-      expect(blocks[2].text).assertEqual('Reidemeister Moves');
-      expect(blocks[2].reference?.url).assertEqual('http://www.amazon.com/exec/obidos/ASIN/9810238789');
+      expect(blocks[2].kind).assertEqual(ReaderBlockKind.HEADING);
+      expect(blocks[2].text).assertEqual('参考');
       expect(blocks[3].kind).assertEqual(ReaderBlockKind.REFERENCE);
-      expect(blocks[3].reference?.numero).assertEqual(2);
-      expect(blocks[3].text).assertEqual('A Quick Trip Through Knot Theory, 1962');
-      expect(blocks[3].reference?.url).assertEqual('');
+      expect(blocks[3].reference?.numero).assertEqual(1);
+      expect(blocks[3].text).assertEqual('Reidemeister Moves');
+      expect(blocks[3].reference?.url).assertEqual('http://www.amazon.com/exec/obidos/ASIN/9810238789');
+      expect(blocks[4].kind).assertEqual(ReaderBlockKind.REFERENCE);
+      expect(blocks[4].reference?.numero).assertEqual(2);
+      expect(blocks[4].text).assertEqual('A Quick Trip Through Knot Theory, 1962');
+      expect(blocks[4].reference?.url).assertEqual('');
     });
 
     it('keepsPlainSuperscriptWithoutReferenceBlocks', 0, () => {
@@ -362,13 +364,14 @@ export default function readerDocumentTest(): void {
         '<sup data-text="危险链接" data-url="javascript:alert(1)" data-draft-type="reference" ' +
         'data-numero="4">[4]</sup></p>');
 
-      expect(blocks.length).assertEqual(4);
+      expect(blocks.length).assertEqual(5);
       expect(blocks[1].kind).assertEqual(ReaderBlockKind.DIVIDER);
-      expect(blocks[2].kind).assertEqual(ReaderBlockKind.REFERENCE);
-      expect(blocks[2].reference?.numero).assertEqual(3);
-      expect(blocks[2].text).assertEqual('第一条');
-      expect(blocks[3].reference?.numero).assertEqual(4);
-      expect(blocks[3].reference?.url).assertEqual('');
+      expect(blocks[2].kind).assertEqual(ReaderBlockKind.HEADING);
+      expect(blocks[3].kind).assertEqual(ReaderBlockKind.REFERENCE);
+      expect(blocks[3].reference?.numero).assertEqual(3);
+      expect(blocks[3].text).assertEqual('第一条');
+      expect(blocks[4].reference?.numero).assertEqual(4);
+      expect(blocks[4].reference?.url).assertEqual('');
     });
 
     it('skipsEmptyEntriesAndNormalizesReferenceUrls', 0, () => {
@@ -377,9 +380,10 @@ export default function readerDocumentTest(): void {
         '<sup data-text="" data-url="" data-draft-type="reference" data-numero="2">[2]</sup></p>');
 
       // 空条目（无说明无链接）不生成参考块，站内根路径归一化为绝对地址
-      expect(blocks.length).assertEqual(3);
-      expect(blocks[2].reference?.numero).assertEqual(1);
-      expect(blocks[2].reference?.url).assertEqual('https://www.zhihu.com/special/000');
+      expect(blocks.length).assertEqual(4);
+      expect(blocks[2].kind).assertEqual(ReaderBlockKind.HEADING);
+      expect(blocks[3].reference?.numero).assertEqual(1);
+      expect(blocks[3].reference?.url).assertEqual('https://www.zhihu.com/special/000');
       // 空条目的标记仍按上标渲染，但无跳转目标
       expect(blocks[0].inlineRuns[2].referenceNumero).assertEqual(2);
     });
