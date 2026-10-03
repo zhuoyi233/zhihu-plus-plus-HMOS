@@ -1,15 +1,15 @@
 {
-  "tag_name": "HMOSv0.5.6",
-  "name": "HMOSv0.5.6-hotfix",
-  "html_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.5.6",
-  "published_at": "2026-09-28T14:17:10Z",
-  "body": "# ZhihuPlusPlus-HMOS v0.5.6\r\n\r\n本次更新以**更新链路容错**为主题：检查更新与发布说明获取引入多源容错与离线兜底，升级后首次启动即可正常查看本版本更新内容，共 2 个提交。\r\n\r\n## 🔄 应用内更新\r\n\r\n- 静态更新清单在 GitHub Raw 与 jsDelivr/Fastly 镜像之外新增下载代理波次容错：4 秒内无有效响应自动叠加 17 个下载代理竞速，首个有效响应获胜，弱网环境下检查更新与查看发布说明更可靠\r\n- 发版时将本版本发布说明预置进安装包内置清单：离线状态下也能查看「本版本更新内容」，检查更新可正确判定\"已是最新\"\r\n- 不支持清单路径的代理返回的错误页由结构校验自动淘汰，无需维护白名单\r\n\r\n## 🐛 问题修复\r\n\r\n- 修复升级后首次启动的「本版本更新内容」页在弱网/离线下误报「静态更新清单中暂无发布说明」的结构性缺陷\r\n\r\n## 📥 下载与安装\r\n\r\n1. 下载下方附件 `ZhihuPlusPlus-HMOS-v0.5.6-unsigned.hap`\r\n2. 使用 [小白调试助手](https://github.com/likuai2010/auto-installer) 或 [HoKit](https://github.com/yabi-zzh/HoKit/releases) 自行签名\r\n3. 覆盖安装即可升级，原有登录状态、设置与历史数据会保留\r\n\r\n> [!IMPORTANT]\r\n> - 要求设备系统为 **HarmonyOS 6.1.0（API 23）及以上**\r\n> - 本项目非知乎官方产品，内容来自知乎网站，服务端接口变化可能导致部分功能失效。\r\n",
+  "tag_name": "HMOSv0.5.7",
+  "name": "HMOSv0.5.7",
+  "html_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.5.7",
+  "published_at": "2026-10-03T12:16:44Z",
+  "body": "# ZhihuPlusPlus-HMOS v0.5.7\r\n\r\n本次更新以**安装包大幅瘦身**为重点，同时完善公式与参考资料阅读，新增详情阅读设置和启动时剪贴板链接跳转。自 v0.5.6 起，发版准备前共 8 个提交。\r\n\r\n## 📦 安装包大幅瘦身\r\n\r\n- 发行包改用 Release 构建，并将源码映射移至包外归档，显著减少下载与传输所需的数据量。\r\n- 相比 v0.5.6 的公开未签名安装包，v0.5.7 从约 **7.48 MiB 缩小至 3.00 MiB**，体积减少约 **59.9%**，下载体积降至原来的约四成。\r\n- 包体积指未签名 HAP 文件大小，不代表安装后的磁盘占用或运行内存。\r\n\r\n## 📖 阅读体验\r\n\r\n- 详情页新增阅读设置入口，可在阅读过程中调整显示设置，并优化更多菜单布局，避免正文字号影响菜单列数。\r\n- 修复文字与公式混排识别、公式尺寸异常及模糊问题，改善超宽公式与错误 SVG 的显示。\r\n- 正文参考标记支持跳转到文末参考资料，参考条目支持打开链接并返回原阅读位置。\r\n\r\n## 🎨 外观与导航\r\n\r\n- 沉浸光感新增自适应、精美、轻柔、流畅四挡设置，统一调整底栏与标题栏的材质表现，并按设备能力回退。\r\n- 修复手动沉浸光感挡位下，页面顶部返回按钮出现黑色圆形背景的问题。\r\n- 启动时支持识别剪贴板中的知乎链接并跳转到对应内容。\r\n\r\n## 📥 下载与安装\r\n\r\n1. 下载下方附件 `ZhihuPlusPlus-HMOS-v0.5.7-unsigned.hap`\r\n2. 使用 [小白调试助手](https://github.com/likuai2010/auto-installer) 或 [HoKit](https://github.com/yabi-zzh/HoKit/releases) 自行签名\r\n3. 覆盖安装即可升级，原有登录状态、设置与历史数据会保留\r\n\r\n> [!IMPORTANT]\r\n> 要求设备系统为 **HarmonyOS 6.1.0（API 23）及以上**。\r\n> 沉浸光感效果取决于设备与系统支持情况，不支持的挡位会回退为流畅效果。\r\n> 本项目非知乎官方产品，内容来自知乎网站，服务端接口变化可能导致部分功能失效。\r\n",
   "assets": [
     {
-      "name": "ZhihuPlusPlus-HMOS-v0.5.6-unsigned.hap",
-      "browser_download_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/download/HMOSv0.5.6/ZhihuPlusPlus-HMOS-v0.5.6-unsigned.hap",
-      "size": 7844629,
-      "sha256": "decf45cfb97923ece68700e1475184b6edf690fba8f498accf5de666f023f535"
+      "name": "ZhihuPlusPlus-HMOS-v0.5.7-unsigned.hap",
+      "browser_download_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/download/HMOSv0.5.7/ZhihuPlusPlus-HMOS-v0.5.7-unsigned.hap",
+      "size": 3144937,
+      "sha256": "40b760b6251fbc4c1fe94dd52e9d909b1d0ed48c629d9d5fe962e731d2c3decf"
     }
   ]
 }
