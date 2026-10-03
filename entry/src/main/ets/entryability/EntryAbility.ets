@@ -9,6 +9,7 @@ import { AppSessionOwner, AppThemeMode, closeAppDatabase, ContentDraftStore, DEF
 import { clearAbilityContext, setAbilityContext } from './AbilityContextHolder';
 import { maintainControlledImageCaches } from '../platform/ControlledImageCacheMaintenance';
 import { purgeExpiredShareTemporaryFiles } from '../platform/SystemShareTemporaryCleaner';
+import { updateStatusBarAppearance } from '../platform/SystemBars';
 import {
   appDestinationIdentity,
   AppLogEvent,
@@ -115,6 +116,7 @@ export default class EntryAbility extends UIAbility {
     const isDark = newConfig.colorMode !== undefined
       ? newConfig.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK
       : this.readSystemIsDark();
+    updateStatusBarAppearance(isDark);
     if (isDark === undefined || isDark === this.lastObservedIsDark) {
       return;
     }
@@ -150,6 +152,7 @@ export default class EntryAbility extends UIAbility {
       // 对齐上游 MainActivity.onWindowFocusChanged：窗口获得焦点（含冷启动与回前台）时
       // 识别剪切板；剪切板读取要求焦点就绪，onForeground 时系统会拒绝访问，不能挂在那里。
       if (event === window.WindowEventType.WINDOW_ACTIVE) {
+        updateStatusBarAppearance();
         this.readClipboardForNavigation();
       }
     });
@@ -270,10 +273,10 @@ export default class EntryAbility extends UIAbility {
     mainWindow.setImmersiveModeEnabledState(true);
     void mainWindow.setWindowSystemBarProperties({
       navigationBarColor: '#00000000',
-      statusBarColor: '#00000000',
-      statusBarContentColor: '#000000',
-      isStatusBarLightIcon: true
+      statusBarColor: '#00000000'
+    }).catch((_error: Object): void => {
     });
+    updateStatusBarAppearance();
     this.publishAvoidAreas(mainWindow);
   }
 

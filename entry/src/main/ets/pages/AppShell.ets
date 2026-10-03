@@ -1,3 +1,4 @@
+import { updateStatusBarAppearance } from '../platform/SystemBars';
 import { QuestionTitleBar } from './QuestionTitleBar';
 import { SearchTitleBar } from './SearchTitleBar';
 import { HistoryTitleBar } from './HistoryTitleBar';
@@ -221,6 +222,7 @@ export struct AppShell {
   @Provide('appPathStack') pathStack: NavPathStack = new NavPathStack();
   private unsubscribeStartupDestination: (() => void) | undefined = undefined;
   private readonly themeOperationGuard: LatestOperationGuard = new LatestOperationGuard();
+  private readonly themeColorOperationGuard: LatestOperationGuard = new LatestOperationGuard();
   private themeMounted: boolean = false;
   private themeSaveQueue: Promise<void> = Promise.resolve();
   /** 沉浸光感偏好唯一写入入口（aboutToAppear 创建）：复用 store 串行 saveQueue，
@@ -273,6 +275,7 @@ export struct AppShell {
   aboutToDisappear(): void {
     this.themeMounted = false;
     this.themeOperationGuard.invalidate();
+    this.themeColorOperationGuard.invalidate();
     this.unsubscribeStartupDestination?.();
     this.unsubscribeStartupDestination = undefined;
   }
@@ -2878,6 +2881,7 @@ export struct AppShell {
       this.themeMode = mode;
       // 广播当前主题模式：EntryAbility.onConfigurationUpdate 仅在跟随系统时联动公式换色。
       AppStorage.setOrCreate('appThemeMode', mode);
+      updateStatusBarAppearance();
       AppStorage.setOrCreate('formulaForegroundColor', this.resolveFormulaForegroundColor(mode));
       AppStorage.setOrCreate('resolvedThemeColor', this.resolveThemeColorForMode(mode, this.currentThemeColorSeed()));
       AppStorage.setOrCreate('appearanceThemeTick',
@@ -2933,14 +2937,15 @@ export struct AppShell {
   }
 
   private async restoreThemeColor(): Promise<void> {
-    const generation = this.themeOperationGuard.next();
+    // 主题色与主题模式独立恢复，不能互相使对方的操作代次失效。
+    const generation = this.themeColorOperationGuard.next();
     try {
       const context = this.getUIContext().getHostContext();
       if (context === undefined) {
         return;
       }
       const seed = await new AppPreferencesStore(context).loadThemeColor();
-      if (!this.themeMounted || !this.themeOperationGuard.isCurrent(generation)) {
+      if (!this.themeMounted || !this.themeColorOperationGuard.isCurrent(generation)) {
         return;
       }
       AppStorage.setOrCreate('themeColor', seed);
