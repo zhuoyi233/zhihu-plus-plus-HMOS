@@ -24,6 +24,8 @@ export interface StyledTextSegment {
   superscript: boolean;
   subscript: boolean;
   linkUrl: string;
+  /** 参考标记序号（sup[data-draft-type=reference]），点击跳转文末参考条目；非标记不设置。 */
+  referenceNumero?: number;
   segmentRef?: SegmentHighlightRef;
 }
 
@@ -167,6 +169,7 @@ export function flattenStyledTextSegments(
         superscript: run.superscript === true,
         subscript: run.subscript === true,
         linkUrl: run.linkUrl ?? '',
+        referenceNumero: run.referenceNumero,
         segmentRef: segRef
       });
     }

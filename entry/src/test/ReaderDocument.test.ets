@@ -315,5 +315,77 @@ export default function readerDocumentTest(): void {
       expect(protocolRelative[0].sourceUrl).assertEqual('https://picx.zhimg.com/reading.jpg');
       expect(unsafe.length).assertEqual(0);
     });
+
+    it('parsesReferenceSupAndSynthesizesFootnoteBlocks', 0, () => {
+      // 真实知乎参考资料形态（issue：正文参考链接无法渲染）：sup 携带 data-text/data-url 属性
+      const blocks = parseZhihuHtml('<p>绳结理论<sup data-text="Reidemeister Moves" ' +
+        'data-url="http://www.amazon.com/exec/obidos/ASIN/9810238789" data-draft-node="inline" ' +
+        'data-draft-type="reference" data-numero="1">[1]</sup> 与' +
+        '<sup data-text="A Quick Trip Through Knot Theory, 1962" data-url="" ' +
+        'data-draft-type="reference" data-numero="2">[2]</sup>。</p>');
+
+      expect(blocks.length).assertEqual(5);
+      expect(blocks[0].kind).assertEqual(ReaderBlockKind.PARAGRAPH);
+      expect(blocks[0].text).assertEqual('绳结理论[1] 与[2]。');
+      const runs = blocks[0].inlineRuns;
+      expect(runs.length).assertEqual(5);
+      expect(runs[1].superscript === true).assertTrue();
+      expect(runs[1].text).assertEqual('[1]');
+      expect(runs[1].referenceNumero).assertEqual(1);
+      expect(runs[3].text).assertEqual('[2]');
+      expect(runs[3].referenceNumero).assertEqual(2);
+      // 文末合成：分隔线 + "参考"标题 + 按序号升序的参考条目块
+      expect(blocks[1].kind).assertEqual(ReaderBlockKind.DIVIDER);
+      expect(blocks[2].kind).assertEqual(ReaderBlockKind.HEADING);
+      expect(blocks[2].text).assertEqual('参考');
+      expect(blocks[3].kind).assertEqual(ReaderBlockKind.REFERENCE);
+      expect(blocks[3].reference?.numero).assertEqual(1);
+      expect(blocks[3].text).assertEqual('Reidemeister Moves');
+      expect(blocks[3].reference?.url).assertEqual('http://www.amazon.com/exec/obidos/ASIN/9810238789');
+      expect(blocks[4].kind).assertEqual(ReaderBlockKind.REFERENCE);
+      expect(blocks[4].reference?.numero).assertEqual(2);
+      expect(blocks[4].text).assertEqual('A Quick Trip Through Knot Theory, 1962');
+      expect(blocks[4].reference?.url).assertEqual('');
+    });
+
+    it('keepsPlainSuperscriptWithoutReferenceBlocks', 0, () => {
+      const blocks = parseZhihuHtml('<p>x<sup>2</sup>=4</p>');
+
+      expect(blocks.length).assertEqual(1);
+      expect(blocks[0].inlineRuns[1].superscript === true).assertTrue();
+      expect(blocks[0].inlineRuns[1].referenceNumero).assertUndefined();
+    });
+
+    it('dedupsReferenceNumerosAndRejectsUnsafeUrls', 0, () => {
+      const blocks = parseZhihuHtml('<p>重复<sup data-text="第一条" data-url="https://a.com" ' +
+        'data-draft-type="reference" data-numero="3">[3]</sup>' +
+        '<sup data-text="后到忽略" data-url="https://b.com" data-draft-type="reference" ' +
+        'data-numero="3">[3]</sup>' +
+        '<sup data-text="危险链接" data-url="javascript:alert(1)" data-draft-type="reference" ' +
+        'data-numero="4">[4]</sup></p>');
+
+      expect(blocks.length).assertEqual(5);
+      expect(blocks[1].kind).assertEqual(ReaderBlockKind.DIVIDER);
+      expect(blocks[2].kind).assertEqual(ReaderBlockKind.HEADING);
+      expect(blocks[3].kind).assertEqual(ReaderBlockKind.REFERENCE);
+      expect(blocks[3].reference?.numero).assertEqual(3);
+      expect(blocks[3].text).assertEqual('第一条');
+      expect(blocks[4].reference?.numero).assertEqual(4);
+      expect(blocks[4].reference?.url).assertEqual('');
+    });
+
+    it('skipsEmptyEntriesAndNormalizesReferenceUrls', 0, () => {
+      const blocks = parseZhihuHtml('<p>站点内<sup data-text="目录" data-url="/special/000" ' +
+        'data-draft-type="reference" data-numero="1">[1]</sup>' +
+        '<sup data-text="" data-url="" data-draft-type="reference" data-numero="2">[2]</sup></p>');
+
+      // 空条目（无说明无链接）不生成参考块，站内根路径归一化为绝对地址
+      expect(blocks.length).assertEqual(4);
+      expect(blocks[2].kind).assertEqual(ReaderBlockKind.HEADING);
+      expect(blocks[3].reference?.numero).assertEqual(1);
+      expect(blocks[3].reference?.url).assertEqual('https://www.zhihu.com/special/000');
+      // 空条目的标记仍按上标渲染，但无跳转目标
+      expect(blocks[0].inlineRuns[2].referenceNumero).assertEqual(2);
+    });
   });
 }

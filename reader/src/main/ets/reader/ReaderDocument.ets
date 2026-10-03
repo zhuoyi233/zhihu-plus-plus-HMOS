@@ -7,7 +7,8 @@ export enum ReaderBlockKind {
   FORMULA,
   IMAGE,
   VIDEO,
-  LIST_ITEM
+  LIST_ITEM,
+  REFERENCE
 }
 
 export enum ReaderInlineKind {
@@ -34,6 +35,21 @@ export interface ReaderInlineRun {
   subscript?: boolean;
   /** 链接目标（a[href]，已归一化为绝对 https URL）；无链接为空串。 */
   linkUrl?: string;
+  /** 参考标记序号（sup[data-draft-type=reference] 的 data-numero）；非标记不设置。 */
+  referenceNumero?: number;
+}
+
+/**
+ * 参考条目：知乎参考资料标记（sup[data-draft-type=reference]）携带的文外信息，
+ * 对齐上游 MdAst 的 FootnoteDefinition（data-text 说明 + 可选 data-url 链接）。
+ */
+export interface ReaderReferenceItem {
+  /** 脚注序号（data-numero）。 */
+  numero: number;
+  /** 参考条目说明（data-text），可能为空串。 */
+  text: string;
+  /** 参考链接（data-url，已归一化），空串表示无链接。 */
+  url: string;
 }
 
 export interface ReaderBlock {
@@ -45,6 +61,8 @@ export interface ReaderBlock {
   targetId?: string;
   /** 正文段落的知乎段落 id（p/li 的 data-pid），用于对齐服务端 segment_infos 的他人划线。 */
   pid?: string;
+  /** REFERENCE 块的参考条目；其他块不设置。 */
+  reference?: ReaderReferenceItem;
   inlineRuns: Array<ReaderInlineRun>;
 }
 
@@ -146,12 +164,14 @@ interface InlineFormatState {
   superscript: boolean;
   subscript: boolean;
   linkUrl: string;
+  /** 参考标记序号；0 表示非参考标记。 */
+  referenceNumero: number;
 }
 
 function baseFormatState(): InlineFormatState {
   return {
     bold: false, italic: false, strikethrough: false, code: false,
-    mark: false, superscript: false, subscript: false, linkUrl: ''
+    mark: false, superscript: false, subscript: false, linkUrl: '', referenceNumero: 0
   };
 }
 
@@ -159,13 +179,14 @@ function copyFormatState(state: InlineFormatState): InlineFormatState {
   return {
     bold: state.bold, italic: state.italic, strikethrough: state.strikethrough,
     code: state.code, mark: state.mark, superscript: state.superscript,
-    subscript: state.subscript, linkUrl: state.linkUrl
+    subscript: state.subscript, linkUrl: state.linkUrl, referenceNumero: state.referenceNumero
   };
 }
 
 function hasInlineStyle(state: InlineFormatState): boolean {
   return state.bold || state.italic || state.strikethrough || state.code ||
-    state.mark || state.superscript || state.subscript || state.linkUrl.length > 0;
+    state.mark || state.superscript || state.subscript || state.linkUrl.length > 0 ||
+    state.referenceNumero > 0;
 }
 
 /** 对齐上游 MdAst.extractInlineNode 的样式标签集合。 */
@@ -173,6 +194,31 @@ function isStyleTag(name: string): boolean {
   return name === 'b' || name === 'strong' || name === 'i' || name === 'em' ||
     name === 'del' || name === 's' || name === 'strike' || name === 'code' ||
     name === 'kbd' || name === 'mark' || name === 'sub' || name === 'sup' || name === 'a';
+}
+
+/**
+ * 读取 reference sup 的脚注序号（data-numero）；非参考标记或序号非法返回 0。
+ */
+function referenceNumeroOf(tag: string): number {
+  if (attributeValue(tag, 'data-draft-type') !== 'reference') {
+    return 0;
+  }
+  const numero = Number.parseInt(decodeHtml(attributeValue(tag, 'data-numero')).trim(), 10);
+  return Number.isFinite(numero) && numero > 0 ? numero : 0;
+}
+
+/** 登记 reference sup 携带的参考条目（numero → 条目，重复 numero 首见优先）；空条目跳过。 */
+function collectReference(references: Map<number, ReaderReferenceItem>, tag: string): void {
+  const numero = referenceNumeroOf(tag);
+  if (numero <= 0 || references.has(numero)) {
+    return;
+  }
+  const text = decodeHtml(attributeValue(tag, 'data-text')).trim();
+  const url = normalizeLinkHref(attributeValue(tag, 'data-url'));
+  if (text.length === 0 && url.length === 0) {
+    return;
+  }
+  references.set(numero, { numero: numero, text: text, url: url });
 }
 
 function applyStyleTag(state: InlineFormatState, name: string, tag: string): InlineFormatState {
@@ -191,6 +237,7 @@ function applyStyleTag(state: InlineFormatState, name: string, tag: string): Inl
     next.subscript = true;
   } else if (name === 'sup') {
     next.superscript = true;
+    next.referenceNumero = referenceNumeroOf(tag);
   } else if (name === 'a') {
     next.linkUrl = normalizeLinkHref(attributeValue(tag, 'href'));
   }
@@ -298,7 +345,8 @@ function inlineTagName(tag: string): InlineTagName {
   return parsed;
 }
 
-function inlineRuns(content: string, blockId: string): Array<ReaderInlineRun> {
+function inlineRuns(content: string, blockId: string,
+  references?: Map<number, ReaderReferenceItem>): Array<ReaderInlineRun> {
   const runs: Array<ReaderInlineRun> = [];
   const stack: Array<InlineFormatFrame> = [];
   const stream = new InlineTextStream();
@@ -312,7 +360,7 @@ function inlineRuns(content: string, blockId: string): Array<ReaderInlineRun> {
       return;
     }
     const state = currentState();
-    runs.push({
+    const run: ReaderInlineRun = {
       id: `${blockId}-inline-${runs.length}`,
       kind: ReaderInlineKind.TEXT,
       text: text,
@@ -325,7 +373,11 @@ function inlineRuns(content: string, blockId: string): Array<ReaderInlineRun> {
       superscript: state.superscript,
       subscript: state.subscript,
       linkUrl: state.linkUrl
-    });
+    };
+    if (state.referenceNumero > 0) {
+      run.referenceNumero = state.referenceNumero;
+    }
+    runs.push(run);
   };
 
   const pushFormula = (tag: string): void => {
@@ -408,6 +460,9 @@ function inlineRuns(content: string, blockId: string): Array<ReaderInlineRun> {
           if (parsed.closing) {
             closeTag(parsed.name);
           } else {
+            if (parsed.name === 'sup' && references !== undefined) {
+              collectReference(references, tag);
+            }
             flush();
             stack.push({ tag: parsed.name, state: applyStyleTag(currentState(), parsed.name, tag) });
           }
@@ -459,7 +514,8 @@ function inlineRuns(content: string, blockId: string): Array<ReaderInlineRun> {
       mark: run.mark === true,
       superscript: run.superscript === true,
       subscript: run.subscript === true,
-      linkUrl: run.linkUrl ?? ''
+      linkUrl: run.linkUrl ?? '',
+      referenceNumero: run.referenceNumero ?? 0
     }));
   if (!hasFormula && !hasStyle) {
     return [];
@@ -510,6 +566,7 @@ export function parseZhihuHtml(html: string): Array<ReaderBlock> {
     return [];
   }
 
+  const references = new Map<number, ReaderReferenceItem>();
   const blocks: Array<ReaderBlock> = [];
   matches.forEach((blockHtml: string) => {
     const normalized = blockHtml.trim();
@@ -576,9 +633,37 @@ export function parseZhihuHtml(html: string): Array<ReaderBlock> {
       text: text,
       sourceUrl: '',
       pid: attributeValue(normalized, 'data-pid'),
-      inlineRuns: inlineRuns(content, blockId)
+      inlineRuns: inlineRuns(content, blockId, references)
     });
   });
+  // 文末参考条目区（对齐上游：reference sup 注册 FootnoteDefinition 追加到文档末尾）：
+  // 分隔线 + 标题 + 按序号升序逐条成块；正文标记经 referenceNumero 关联到条目块。
+  // 分区标题为知乎网页版行为（上游渲染库不渲染标题，这里按网页形态补齐）。
+  if (references.size > 0) {
+    blocks.push({ id: `block-${blocks.length}`, kind: ReaderBlockKind.DIVIDER, text: '', sourceUrl: '', inlineRuns: [] });
+    blocks.push({
+      id: `block-${blocks.length}`,
+      kind: ReaderBlockKind.HEADING,
+      text: '参考',
+      sourceUrl: '',
+      inlineRuns: []
+    });
+    const numeros = Array.from(references.keys()).sort((a: number, b: number): number => a - b);
+    numeros.forEach((numero: number): void => {
+      const item: ReaderReferenceItem | undefined = references.get(numero);
+      if (item === undefined) {
+        return;
+      }
+      blocks.push({
+        id: `block-${blocks.length}`,
+        kind: ReaderBlockKind.REFERENCE,
+        text: item.text,
+        sourceUrl: '',
+        reference: item,
+        inlineRuns: []
+      });
+    });
+  }
   return blocks;
 }
 
