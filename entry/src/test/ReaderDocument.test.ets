@@ -1,8 +1,13 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
+  FORMULA_MAX_DECODE_PIXELS_PER_EX,
+  FORMULA_MAX_RASTER_DIMENSION_PX,
+  FORMULA_MIN_DECODE_PIXELS_PER_EX,
   blockFormulaDisplayAspectRatio,
+  formulaDecodePixelsPerEx,
   formulaDisplaySize,
-  inlineFormulaDisplayWidth,
+  formulaSvgExSize,
+  isMathJaxErrorSvg,
   isTrustedFormulaUrl,
   normalizeFormulaSvgText,
   parseZhihuHtml,
@@ -137,19 +142,58 @@ export default function readerDocumentTest(): void {
     });
 
     it('sizesFormulasByFontAndIntrinsicSizeWithoutStretchingToLineWidth', 0, () => {
-      const small = formulaDisplaySize(90, 30, 18, 1200);
+      // 入参为公式 SVG 的 ex 固有尺寸（如 6ex × 2ex 的公式，18fp 正文按 0.5em/ex 换算）。
+      const small = formulaDisplaySize(6, 2, 18, 1200);
       expect(small.width).assertEqual(54);
       expect(small.height).assertEqual(18);
-      const largeFont = formulaDisplaySize(90, 30, 24, 1200);
+      const largeFont = formulaDisplaySize(6, 2, 24, 1200);
       expect(largeFont.width).assertEqual(72);
       expect(largeFont.height).assertEqual(24);
-      const tall = formulaDisplaySize(90, 120, 18, 320);
+      const tall = formulaDisplaySize(6, 8, 18, 320);
       expect(tall.height).assertEqual(72);
-      const wide = formulaDisplaySize(1200, 120, 18, 300);
+      const wide = formulaDisplaySize(80, 8, 18, 300);
       expect(wide.width).assertEqual(300);
       expect(wide.height).assertEqual(30);
-      expect(formulaDisplaySize(0, 30).width).assertEqual(20);
-      expect(formulaDisplaySize(90, 30, Number.NaN, 0).width).assertEqual(54);
+      expect(formulaDisplaySize(0, 2).width).assertEqual(20);
+      expect(formulaDisplaySize(6, 2, Number.NaN, 0).width).assertEqual(54);
+    });
+
+    it('parsesFormulaSvgExSizeFromRootAttributes', 0, () => {
+      const svg = '<svg width="13.491ex" height="5.676ex" style="font-size: 15px;"></svg>';
+      const exSize = formulaSvgExSize(svg);
+      expect(exSize?.width).assertEqual(13.491);
+      expect(exSize?.height).assertEqual(5.676);
+      expect(formulaSvgExSize('<svg width="10px" height="5ex"></svg>')).assertUndefined();
+      expect(formulaSvgExSize('<svg width="0ex" height="5ex"></svg>')).assertUndefined();
+    });
+
+    it('detectsMathJaxErrorSvgAsFormulaFailure', 0, () => {
+      // 知乎端点对无法解析的 LaTeX 返回红底红字（rgb(247, 86, 89)）的错误提示框。
+      const errorSvg = '<svg width="17.048ex" height="3.843ex">' +
+        '<rect fill="rgba(247, 86, 89, 0.08)" stroke="none"></rect>' +
+        '<g fill="rgb(247, 86, 89)"><text>Misplaced &amp;</text></g></svg>';
+      expect(isMathJaxErrorSvg(errorSvg)).assertTrue();
+      expect(isMathJaxErrorSvg(
+        '<svg width="0.84ex" height="2.009ex"><path stroke="currentColor" d="M26 385"></path></svg>')).assertFalse();
+    });
+
+    it('clampsFormulaDecodePixelsPerExForSharpnessAndLimits', 0, () => {
+      // 常规公式：目标密度（字号×0.5em/ex×屏幕密度）原样生效。
+      expect(formulaDecodePixelsPerEx(6, 2, 29)).assertEqual(29);
+      // 目标过高时钳到上限，目标过低时钳到下限。
+      expect(formulaDecodePixelsPerEx(6, 2, 500)).assertEqual(FORMULA_MAX_DECODE_PIXELS_PER_EX);
+      expect(formulaDecodePixelsPerEx(6, 2, 1)).assertEqual(FORMULA_MIN_DECODE_PIXELS_PER_EX);
+      // issue #51 超长公式（423.75ex 宽）：按 4096 上限压低采样密度而非放弃解码，
+      // ceil 换算后的栅格宽度不越尺寸上限。
+      const longFormula = formulaDecodePixelsPerEx(423.75, 3.843, 29);
+      expect(longFormula > 0).assertTrue();
+      expect(Math.ceil(423.75 * longFormula) <= FORMULA_MAX_RASTER_DIMENSION_PX).assertTrue();
+      // 极端超宽：尺寸上限压过密度下限，宁可低精度也不整条失败。
+      const extreme = formulaDecodePixelsPerEx(2000, 8, 29);
+      expect(Math.ceil(2000 * extreme) <= FORMULA_MAX_RASTER_DIMENSION_PX).assertTrue();
+      expect(extreme < FORMULA_MIN_DECODE_PIXELS_PER_EX).assertTrue();
+      // 非法输入回退到兜底采样密度。
+      expect(formulaDecodePixelsPerEx(0, 2, 29)).assertEqual(15);
     });
 
     it('detectsBlockEquation', 0, () => {
@@ -205,8 +249,6 @@ export default function readerDocumentTest(): void {
       expect(normalized.includes('width="38px"')).assertTrue();
       expect(normalized.includes('height="18px"')).assertTrue();
       expect(normalized.includes('fill="#F5F5F5"')).assertTrue();
-      expect(inlineFormulaDisplayWidth(90, 30)).assertEqual(72);
-      expect(inlineFormulaDisplayWidth(30, 30)).assertEqual(24);
       expect(blockFormulaDisplayAspectRatio(600, 100)).assertEqual(6);
       expect(blockFormulaDisplayAspectRatio(0, 100)).assertEqual(4);
     });
