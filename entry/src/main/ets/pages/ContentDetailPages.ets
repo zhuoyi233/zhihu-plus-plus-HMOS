@@ -2842,8 +2842,8 @@ struct ContentDetailPage {
 
   private menuQuickActionWidth(): string {
     const fontScale = getAbilityContext()?.config.fontSizeScale ?? 1;
-    // 正文大字号或系统大字体下使用两列，窄窗口同样避免四个标签挤在一行。
-    return this.previewFontSizePercent >= 130 || fontScale > 1.2 || this.actionMenuWidth < 360 ? '50%' : '25%';
+    // 菜单字号只跟随系统字体；正文字号不影响菜单布局。
+    return fontScale > 1.2 || this.actionMenuWidth < 360 ? '50%' : '25%';
   }
 
   @Builder
