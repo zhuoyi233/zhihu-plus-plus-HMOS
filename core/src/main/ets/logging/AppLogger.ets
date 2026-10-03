@@ -13,6 +13,8 @@ export enum AppLogEvent {
   CONTENT_LOAD_FAILED = 'content-load-failed',
   DEEP_LINK_RESOLVED = 'deep-link-resolved',
   DEEP_LINK_UNSUPPORTED = 'deep-link-unsupported',
+  CLIPBOARD_LINK_RESOLVED = 'clipboard-link-resolved',
+  CLIPBOARD_READ_FAILED = 'clipboard-read-failed',
   STARTUP_NOT_READY = 'startup-not-ready'
 }
 

@@ -11,6 +11,10 @@
     {
       "name": "EntryAbility_label",
       "value": "知乎++鸿蒙版"
+    },
+    {
+      "name": "pasteboard_read_reason",
+      "value": "识别剪贴板中的知乎链接，打开应用时快速跳转到对应内容"
     }
   ]
 }
