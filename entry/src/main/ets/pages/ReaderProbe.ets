@@ -5,7 +5,6 @@ import { getAppSessionOwner, getGuestDeviceCookieManager, toCookieHeader } from 
 import {
   blockFormulaDisplayAspectRatio,
   clearFormulaByteCache,
-  inlineFormulaDisplayWidth,
   loadFormulaPixelMap,
   parseZhihuHtml,
   ReaderBlock,
@@ -16,6 +15,7 @@ import {
   ReaderInlineRun,
   readerDocumentStats
 } from 'reader';
+import { formulaDecodeDensity } from './NativeContentDocument';
 
 @Component
 struct ReaderInlineFormulaBlock {
@@ -98,9 +98,9 @@ struct ReaderInlineFormulaBlock {
   private async loadFormula(run: ReaderInlineRun, generation: number): Promise<void> {
     let pixelMap: image.PixelMap | undefined = undefined;
     try {
-      pixelMap = await loadFormulaPixelMap(run.sourceUrl, await this.formulaCookieHeader(),
-        this.formulaColor);
-      const info = await pixelMap.getImageInfo();
+      const result = await loadFormulaPixelMap(run.sourceUrl, await this.formulaCookieHeader(),
+        this.formulaColor, formulaDecodeDensity(18));
+      pixelMap = result.pixelMap;
       if (!this.active || this.loadGeneration !== generation) {
         await pixelMap.release();
         pixelMap = undefined;
@@ -111,7 +111,9 @@ struct ReaderInlineFormulaBlock {
         await previous.release();
       }
       this.pixelMaps.set(run.id, pixelMap);
-      this.formulaWidths.set(run.id, inlineFormulaDisplayWidth(info.size.width, info.size.height));
+      // 探针页沿用"高 24vp、按固有宽高比定宽"的行内公式展示口径。
+      this.formulaWidths.set(run.id, Math.min(220,
+        Math.max(4, 24 * result.exSize.width / result.exSize.height)));
       pixelMap = undefined;
       this.loadedRunIds = this.loadedRunIds.concat(run.id);
       this.onFormulaDecoded(run.id);
@@ -232,9 +234,9 @@ struct ReaderBlockFormulaBlock {
   private async loadFormula(generation: number): Promise<void> {
     let pixelMap: image.PixelMap | undefined = undefined;
     try {
-      pixelMap = await loadFormulaPixelMap(this.item.sourceUrl, await this.formulaCookieHeader(),
-        this.formulaColor);
-      const info = await pixelMap.getImageInfo();
+      const result = await loadFormulaPixelMap(this.item.sourceUrl, await this.formulaCookieHeader(),
+        this.formulaColor, formulaDecodeDensity(18));
+      pixelMap = result.pixelMap;
       if (!this.active || this.loadGeneration !== generation) {
         await pixelMap.release();
         pixelMap = undefined;
@@ -243,7 +245,7 @@ struct ReaderBlockFormulaBlock {
       if (this.pixelMap !== undefined) {
         await this.pixelMap.release();
       }
-      this.formulaAspectRatio = blockFormulaDisplayAspectRatio(info.size.width, info.size.height);
+      this.formulaAspectRatio = blockFormulaDisplayAspectRatio(result.exSize.width, result.exSize.height);
       this.pixelMap = pixelMap;
       pixelMap = undefined;
       this.onFormulaDecoded(this.item.id);

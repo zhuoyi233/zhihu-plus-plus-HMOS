@@ -3,6 +3,7 @@ import { image } from '@kit.ImageKit';
 import { http } from '@kit.NetworkKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { Want } from '@kit.AbilityKit';
+import { display } from '@kit.ArkUI';
 import { LengthMetrics } from '@ohos.arkui.node';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { DoubleTapDetector } from './DoubleTapDetector';
@@ -25,6 +26,7 @@ import {
   toCookieHeader
 } from 'data';
 import {
+  FORMULA_EM_PER_EX,
   formulaDisplaySize,
   FormulaDisplaySize,
   clearFormulaByteCache,
@@ -96,6 +98,21 @@ function clampValue(value: number, limit: number): number {
 
 function isTrustedPreviewImageUrl(value: string): boolean {
   return /^https:\/\/(?:picx?|pic[0-9]+)\.zhimg\.com\//i.test(value);
+}
+
+/**
+ * 公式解码采样密度（px/ex）：字号 × 0.5em/ex × 屏幕密度——让栅格与显示物理像素
+ * 1:1，规避"固定 15px/ex 采样在显示端被放大"造成的模糊（issue #51）。
+ */
+export function formulaDecodeDensity(fontSizeFp: number): number {
+  let density = 1;
+  try {
+    density = display.getDefaultDisplaySync().densityPixels;
+  } catch (_error) {
+    density = 1;
+  }
+  const safeDensity = Number.isFinite(density) && density > 0 ? density : 1;
+  return fontSizeFp * FORMULA_EM_PER_EX * safeDensity;
 }
 
 function previewImageExtension(value: string): string {
@@ -424,7 +441,8 @@ struct ContentInlineFormula {
   onBodySelectionActive?: (active: boolean) => void;
   @State private loadedRunIds: Array<string> = [];
   private pixelMaps: Map<string, image.PixelMap> = new Map();
-  private formulaSizes: Map<string, FormulaDisplaySize> = new Map();
+  /** 公式 SVG 固有尺寸（ex 单位，run.id → exSize）：显示尺寸按 ex × 字号换算。 */
+  private formulaExSizes: Map<string, FormulaDisplaySize> = new Map();
   @State private formulaAvailableWidth: number = 320;
   private active: boolean = false;
   private loadGeneration: number = 0;
@@ -447,7 +465,7 @@ struct ContentInlineFormula {
       pixelMap.release();
     });
     this.pixelMaps.clear();
-    this.formulaSizes.clear();
+    this.formulaExSizes.clear();
   }
 
   build() {
@@ -509,17 +527,17 @@ struct ContentInlineFormula {
   }
 
   private displaySize(id: string): FormulaDisplaySize {
-    const intrinsic = this.formulaSizes.get(id);
-    return formulaDisplaySize(intrinsic?.width ?? 0, intrinsic?.height ?? 0,
+    const exSize = this.formulaExSizes.get(id);
+    return formulaDisplaySize(exSize?.width ?? 0, exSize?.height ?? 0,
       readerBodyFontSize(this.fontSizePercent), this.formulaAvailableWidth);
   }
 
   private async loadFormula(run: ReaderInlineRun, generation: number): Promise<void> {
     let pixelMap: image.PixelMap | undefined = undefined;
     try {
-      pixelMap = await loadFormulaPixelMap(run.sourceUrl, await this.formulaCookieHeader(),
-        this.formulaColor);
-      const info = await pixelMap.getImageInfo();
+      const result = await loadFormulaPixelMap(run.sourceUrl, await this.formulaCookieHeader(),
+        this.formulaColor, formulaDecodeDensity(readerBodyFontSize(this.fontSizePercent)));
+      pixelMap = result.pixelMap;
       if (!this.active || this.loadGeneration !== generation) {
         await pixelMap.release();
         pixelMap = undefined;
@@ -530,7 +548,7 @@ struct ContentInlineFormula {
         await previous.release();
       }
       this.pixelMaps.set(run.id, pixelMap);
-      this.formulaSizes.set(run.id, { width: info.size.width, height: info.size.height });
+      this.formulaExSizes.set(run.id, result.exSize);
       pixelMap = undefined;
       this.loadedRunIds = this.loadedRunIds.concat(run.id);
     } catch (_error) {
@@ -557,7 +575,7 @@ struct ContentInlineFormula {
   private failFormula(id: string): void {
     const pixelMap = this.pixelMaps.get(id);
     this.pixelMaps.delete(id);
-    this.formulaSizes.delete(id);
+    this.formulaExSizes.delete(id);
     pixelMap?.release();
     this.loadedRunIds = this.loadedRunIds.filter((loadedId: string): boolean => loadedId !== id);
   }
@@ -574,8 +592,8 @@ struct ContentBlockFormula {
   };
   @State private failed: boolean = false;
   @State private pixelMap: image.PixelMap | undefined = undefined;
-  @State private formulaWidth: number = 0;
-  @State private formulaHeight: number = 0;
+  /** 公式 SVG 固有尺寸（ex 单位）：显示尺寸按 ex × 字号换算。 */
+  @State private formulaExSize: FormulaDisplaySize = { width: 0, height: 0 };
   @State private formulaAvailableWidth: number = 320;
   @StorageProp('contentFontSize') private fontSizePercent: number = 100;
   @StorageProp('formulaForegroundColor') private formulaColor: string = '#111111';
@@ -600,11 +618,11 @@ struct ContentBlockFormula {
       if (this.pixelMap !== undefined && !this.failed) {
         Image(this.pixelMap)
           .id(`content_formula_${this.item.id}`)
-          .width(formulaDisplaySize(this.formulaWidth, this.formulaHeight,
-            readerBodyFontSize(this.fontSizePercent), this.formulaAvailableWidth).width)
-          .height(formulaDisplaySize(this.formulaWidth, this.formulaHeight,
-            readerBodyFontSize(this.fontSizePercent), this.formulaAvailableWidth).height)
+          .width(this.blockDisplaySize().width)
+          .height(this.blockDisplaySize().height)
           .objectFit(ImageFit.Contain)
+          // 栅格按载入时字号解码，字号调小后 Image 缩小显示：开高质量插值避免锯齿。
+          .interpolation(ImageInterpolation.High)
           .onError((): void => {
             this.failed = true;
             this.releasePixelMap();
@@ -633,12 +651,17 @@ struct ContentBlockFormula {
     })
   }
 
+  private blockDisplaySize(): FormulaDisplaySize {
+    return formulaDisplaySize(this.formulaExSize.width, this.formulaExSize.height,
+      readerBodyFontSize(this.fontSizePercent), this.formulaAvailableWidth);
+  }
+
   private async loadFormula(generation: number): Promise<void> {
     let pixelMap: image.PixelMap | undefined = undefined;
     try {
-      pixelMap = await loadFormulaPixelMap(this.item.sourceUrl, await this.formulaCookieHeader(),
-        this.formulaColor);
-      const info = await pixelMap.getImageInfo();
+      const result = await loadFormulaPixelMap(this.item.sourceUrl, await this.formulaCookieHeader(),
+        this.formulaColor, formulaDecodeDensity(readerBodyFontSize(this.fontSizePercent)));
+      pixelMap = result.pixelMap;
       if (!this.active || this.loadGeneration !== generation) {
         await pixelMap.release();
         pixelMap = undefined;
@@ -647,8 +670,7 @@ struct ContentBlockFormula {
       if (this.pixelMap !== undefined) {
         await this.pixelMap.release();
       }
-      this.formulaWidth = info.size.width;
-      this.formulaHeight = info.size.height;
+      this.formulaExSize = result.exSize;
       this.pixelMap = pixelMap;
       pixelMap = undefined;
       this.failed = false;
@@ -775,6 +797,14 @@ export struct NativeContentDocument {
    * formulaForegroundColor，天然免疫"颜色与 tick 两个 @StorageProp 广播时序竞态"。
    */
   @StorageProp('appearanceThemeTick') private formulaRecreateTick: number = 0;
+  /**
+   * 字号变化 tick：onTypographyChanged 检测到字号档位变化时递增。公式栅格按载入时
+   * 字号密度解码（见 formulaDecodeDensity），字号调整后需整体销毁重建公式组件才能
+   * 按新密度重新解码；与主题 tick 同用 if/else 翻转分支的强制重建机制（实测可靠）。
+   * 行高/段间距不影响公式栅格，不触发。
+   */
+  @State private formulaDecodeTick: number = 0;
+  private lastDecodedFontSizePercent: number = 100;
   @State private pageTurnGuideVisible: boolean = false;
   /** 正文视口高度（vp）：List 的 onAreaChange 回填，供阅读进度条换算拇指高度。 */
   @State private viewportHeightVp: number = 0;
@@ -893,6 +923,7 @@ export struct NativeContentDocument {
   }
 
   aboutToAppear(): void {
+    this.lastDecodedFontSizePercent = this.fontSizePercent;
     const blocks = parseZhihuHtml(this.html);
     this.empty = blocks.length === 0;
     this.blocks = blocks;
@@ -1137,6 +1168,10 @@ export struct NativeContentDocument {
    * 依赖刷新（行内公式子组件同源，无需外部传参）。
    */
   private onTypographyChanged(): void {
+    if (this.fontSizePercent !== this.lastDecodedFontSizePercent) {
+      this.lastDecodedFontSizePercent = this.fontSizePercent;
+      this.formulaDecodeTick += 1;
+    }
     this.blockHeights.clear();
     this.measuredBlockHeightSumVp = 0;
     this.measuredBlockCount = 0;
@@ -1289,8 +1324,8 @@ export struct NativeContentDocument {
     } else if (item.kind === ReaderBlockKind.DIVIDER) {
       Divider().margin({ top: 8, bottom: 8 })
     } else if (item.kind === ReaderBlockKind.FORMULA) {
-      // 按主题 tick 奇偶翻转分支强制销毁重建（见 formulaRecreateTick 注释）。
-      if (this.formulaRecreateTick % 2 === 0) {
+      // 按主题/字号 tick 奇偶翻转分支强制销毁重建（见 formulaRecreateTick/formulaDecodeTick 注释）。
+      if ((this.formulaRecreateTick + this.formulaDecodeTick) % 2 === 0) {
         ContentBlockFormula({ item: item, onBodySelectionActive: (active: boolean): void => {
           this.setBodySelectionActive(active);
         } })
@@ -1344,8 +1379,8 @@ export struct NativeContentDocument {
     } else if (item.inlineRuns.length > 0) {
       // 含行内公式的段落走公式宿主；其余 styled runs 走统一样式渲染（划线叠加保留）。
       if (this.inlineHasFormula(item)) {
-        // 按主题 tick 奇偶翻转分支强制销毁重建（见 formulaRecreateTick 注释）。
-        if (this.formulaRecreateTick % 2 === 0) {
+        // 按主题/字号 tick 奇偶翻转分支强制销毁重建（见 formulaRecreateTick/formulaDecodeTick 注释）。
+        if ((this.formulaRecreateTick + this.formulaDecodeTick) % 2 === 0) {
           ContentInlineFormula({ item: item, onLinkClick: this.onLinkClick,
             onBodySelectionActive: (active: boolean): void => {
               this.setBodySelectionActive(active);

@@ -1,7 +1,14 @@
 import { image } from '@kit.ImageKit';
 import { http } from '@kit.NetworkKit';
 import { util } from '@kit.ArkTS';
-import { normalizeFormulaSvgText } from './FormulaRendering';
+import {
+  FORMULA_FALLBACK_PIXELS_PER_EX,
+  FormulaDisplaySize,
+  formulaDecodePixelsPerEx,
+  formulaSvgExSize,
+  isMathJaxErrorSvg,
+  normalizeFormulaSvgText
+} from './FormulaRendering';
 import { isTrustedFormulaUrl } from './FormulaSourcePolicy';
 
 const MAX_SVG_BYTES = 1024 * 1024;
@@ -14,6 +21,16 @@ const READ_TIMEOUT_MS = 15000;
 // Cookie（含 z_c0），才能稳定取回公式 SVG。
 const FORMULA_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
+
+/** 公式解码结果：除 PixelMap 外带回 ex 固有尺寸与实际采样密度，供显示尺寸换算。 */
+export interface FormulaPixelMapResult {
+  pixelMap: image.PixelMap;
+  /** 公式 SVG 固有尺寸（ex 单位，来自根节点 width/height 声明）。 */
+  exSize: FormulaDisplaySize;
+  /** 实际解码采样密度（px/ex）：与 formulaDecodePixelsPerEx 的钳制结果一致。 */
+  pixelsPerEx: number;
+}
+
 const svgBytesCache: Map<string, ArrayBuffer> = new Map();
 const inFlightDownloads: Map<string, Promise<ArrayBuffer>> = new Map();
 let cachedByteCount: number = 0;
@@ -26,12 +43,6 @@ function isSvgResponse(contentType: string, bytes: ArrayBuffer): boolean {
   const prefixLength = Math.min(256, bytes.byteLength);
   const prefix = util.TextDecoder.create('utf-8').decodeToString(new Uint8Array(bytes.slice(0, prefixLength)));
   return /^\uFEFF?\s*(?:<\?xml[^>]*>\s*)?<svg(?:\s|>)/i.test(prefix);
-}
-
-function normalizeZhihuSvg(bytes: ArrayBuffer, foregroundColor: string): ArrayBuffer {
-  const svg = util.TextDecoder.create('utf-8').decodeToString(new Uint8Array(bytes));
-  const normalized = normalizeFormulaSvgText(svg, foregroundColor);
-  return util.TextEncoder.create('utf-8').encodeInto(normalized).buffer;
 }
 
 function cacheSvg(url: string, bytes: ArrayBuffer): void {
@@ -140,10 +151,31 @@ export function clearFormulaByteCache(): void {
   cachedByteCount = 0;
 }
 
+/**
+ * 下载并解码公式 SVG 为 PixelMap。
+ *
+ * @param targetPixelsPerEx 目标解码采样密度（px/ex）：调用方按
+ * 「正文字号 × 0.5em/ex × 屏幕密度」计算，使栅格与显示物理像素 1:1（issue #51
+ * 的模糊问题：固定 15px/ex 采样在显示端被放大 2 倍左右）。函数内部会按公式
+ * 固有尺寸钳制，保证栅格单边不超 ImageKit 限制——超长公式降采样密度而不是
+ * 整条识别失败。缺省时用 15px/ex 兜底。
+ */
 export async function loadFormulaPixelMap(url: string, cookieHeader?: string,
-  foregroundColor: string = '#111111'): Promise<image.PixelMap> {
+  foregroundColor: string = '#111111', targetPixelsPerEx: number = FORMULA_FALLBACK_PIXELS_PER_EX):
+  Promise<FormulaPixelMapResult> {
   const bytes = await cachedSvg(url, cookieHeader);
-  const normalizedBytes = normalizeZhihuSvg(bytes, foregroundColor);
+  const svg = util.TextDecoder.create('utf-8').decodeToString(new Uint8Array(bytes));
+  if (isMathJaxErrorSvg(svg)) {
+    // 知乎端点对无法解析的 LaTeX 仍返回 200，内容是红底红字的 MathJax 错误提示框；
+    // 视为公式渲染失败，由组件退回 TeX 替代文本。
+    throw new Error('公式无法被知乎公式服务解析');
+  }
+  const exSize = formulaSvgExSize(svg);
+  const pixelsPerEx = exSize === undefined
+    ? FORMULA_FALLBACK_PIXELS_PER_EX
+    : formulaDecodePixelsPerEx(exSize.width, exSize.height, targetPixelsPerEx);
+  const normalizedBytes = util.TextEncoder.create('utf-8')
+    .encodeInto(normalizeFormulaSvgText(svg, foregroundColor, pixelsPerEx)).buffer;
   let source: image.ImageSource | undefined = undefined;
   try {
     source = image.createImageSource(normalizedBytes.slice(0));
@@ -151,9 +183,15 @@ export async function loadFormulaPixelMap(url: string, cookieHeader?: string,
     if (info.size.width <= 0 || info.size.height <= 0 || info.size.width > 4096 || info.size.height > 4096) {
       throw new Error('公式 SVG 尺寸不合法');
     }
-    return await source.createPixelMap({
+    const pixelMap = await source.createPixelMap({
       editable: false
     });
+    const result: FormulaPixelMapResult = {
+      pixelMap: pixelMap,
+      exSize: exSize ?? { width: info.size.width / pixelsPerEx, height: info.size.height / pixelsPerEx },
+      pixelsPerEx: pixelsPerEx
+    };
+    return result;
   } catch (error) {
     if (error instanceof Error) {
       throw error;
