@@ -52,6 +52,26 @@ export function describeDeepLink(destination: DeepLinkDestination): string {
   }
 }
 
+/**
+ * 从任意文本中提取第一个可路由的知乎链接，行为对齐安卓上游 MainActivity.onWindowFocusChanged
+ * 的剪切板识别：先按 URL 正则逐个匹配，再取第一个能被 `resolveZhihuLink` 解析的链接。
+ */
+export function extractZhihuLinkFromText(text: string): DeepLinkDestination | undefined {
+  if (text.length === 0) {
+    return undefined;
+  }
+  const urlPattern = /https?:\/\/[-a-zA-Z0-9@:%_+.~#?&/=]*/g;
+  let match: RegExpExecArray | null = urlPattern.exec(text);
+  while (match !== null) {
+    const destination = resolveZhihuLink(match[0]);
+    if (destination !== undefined) {
+      return destination;
+    }
+    match = urlPattern.exec(text);
+  }
+  return undefined;
+}
+
 function resolveZhihuLinkAtDepth(input: string, depth: number): DeepLinkDestination | undefined {
   if (input.length === 0 || input.length > MAX_DEEP_LINK_INPUT_LENGTH || depth > MAX_REDIRECT_DEPTH) {
     return undefined;

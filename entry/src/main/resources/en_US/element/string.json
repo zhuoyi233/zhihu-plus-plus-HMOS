@@ -11,6 +11,10 @@
     {
       "name": "EntryAbility_label",
       "value": "Zhihu++HMOS"
+    },
+    {
+      "name": "pasteboard_read_reason",
+      "value": "Detect Zhihu links in the clipboard for quick navigation on launch"
     }
   ]
 }

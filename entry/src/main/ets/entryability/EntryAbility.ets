@@ -1,5 +1,7 @@
-import { AbilityConstant, Configuration, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
+import { AbilityConstant, abilityAccessCtrl, Configuration, ConfigurationConstant, Permissions,
+  PermissionRequestResult, UIAbility, Want } from '@kit.AbilityKit';
 import { display, window } from '@kit.ArkUI';
+import { BusinessError, pasteboard } from '@kit.BasicServicesKit';
 import { resourceManager } from '@kit.LocalizationKit';
 import { AppSessionOwner, AppThemeMode, closeAppDatabase, ContentDraftStore, DEFAULT_THEME_COLOR,
   formulaForegroundColorForColorMode, getAppDatabase, getAppSessionOwner, normalizeThemeColor,
@@ -8,9 +10,11 @@ import { clearAbilityContext, setAbilityContext } from './AbilityContextHolder';
 import { maintainControlledImageCaches } from '../platform/ControlledImageCacheMaintenance';
 import { purgeExpiredShareTemporaryFiles } from '../platform/SystemShareTemporaryCleaner';
 import {
+  appDestinationIdentity,
   AppLogEvent,
   AppLogger,
   AppStartup,
+  extractZhihuLinkFromText,
   LatestOperationGuard,
   resolveZhihuLink,
   startupDestinationChannel,
@@ -27,6 +31,11 @@ export default class EntryAbility extends UIAbility {
   private readonly lifecycleGuard: LatestOperationGuard = new LatestOperationGuard();
   private lifecycleGeneration: number = 0;
   private lastObservedIsDark: boolean | undefined = undefined;
+  // 上游语义（MainActivity.onWindowFocusChanged）：intent 携带链接时不做剪切板识别，
+  // 且剪切板目的地与上次相同（含经深链跳转标记的）不重复导航。
+  private wantHasUriLink: boolean = false;
+  private lastClipboardDestinationIdentity: string | undefined = undefined;
+  private clipboardPermissionDenied: boolean = false;
 
   onCreate(want: Want, _launchParam: AbilityConstant.LaunchParam): void {
     this.lifecycleGeneration = this.lifecycleGuard.next();
@@ -49,7 +58,7 @@ export default class EntryAbility extends UIAbility {
         phase: StartupPhase.CRITICAL,
         dependencies: ['database-migration'],
         run: (): Promise<void> => {
-          this.routeIncomingLink(want);
+          this.wantHasUriLink = this.routeIncomingLink(want);
           return Promise.resolve();
         }
       },
@@ -92,7 +101,7 @@ export default class EntryAbility extends UIAbility {
   }
 
   onNewWant(want: Want, _launchParam: AbilityConstant.LaunchParam): void {
-    this.routeIncomingLink(want);
+    this.wantHasUriLink = this.routeIncomingLink(want);
   }
 
   /**
@@ -137,6 +146,13 @@ export default class EntryAbility extends UIAbility {
     const mainWindow = windowStage.getMainWindowSync();
     this.configureImmersiveWindow(mainWindow);
     mainWindow.on('windowSizeChange', (): void => this.configureImmersiveWindow(mainWindow));
+    mainWindow.on('windowEvent', (event: window.WindowEventType): void => {
+      // 对齐上游 MainActivity.onWindowFocusChanged：窗口获得焦点（含冷启动与回前台）时
+      // 识别剪切板；剪切板读取要求焦点就绪，onForeground 时系统会拒绝访问，不能挂在那里。
+      if (event === window.WindowEventType.WINDOW_ACTIVE) {
+        this.readClipboardForNavigation();
+      }
+    });
     mainWindow.on('avoidAreaChange', (data: window.AvoidAreaOptions): void => {
       if (data.type === window.AvoidAreaType.TYPE_SYSTEM ||
         data.type === window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR) {
@@ -198,17 +214,56 @@ export default class EntryAbility extends UIAbility {
     });
   }
 
-  private routeIncomingLink(want: Want): void {
+  private routeIncomingLink(want: Want): boolean {
     if (want.uri === undefined || want.uri.length === 0) {
-      return;
+      return false;
     }
     const destination = resolveZhihuLink(want.uri);
     if (destination === undefined) {
       AppLogger.info(AppLogEvent.DEEP_LINK_UNSUPPORTED);
-      return;
+      return true;
     }
+    // 上游 handleIntentData 同样会把 intent 命中的目的地记入剪切板去重标记。
+    this.lastClipboardDestinationIdentity = appDestinationIdentity(toAppDestination(destination));
     startupDestinationChannel.publish(toAppDestination(destination));
     AppLogger.info(AppLogEvent.DEEP_LINK_RESOLVED);
+    return true;
+  }
+
+  private readClipboardForNavigation(): void {
+    if (this.wantHasUriLink || this.clipboardPermissionDenied) {
+      return;
+    }
+    // READ_PASTEBOARD 是 user_grant 权限，仅声明不会自动弹窗，需显式申请；
+    // 授权结果进程内记忆，避免每次窗口聚焦都触发授权请求。
+    const permissions: Array<Permissions> = ['ohos.permission.READ_PASTEBOARD'];
+    abilityAccessCtrl.createAtManager().requestPermissionsFromUser(this.context, permissions)
+      .then((result: PermissionRequestResult): Promise<void> => {
+        if (result.authResults[0] !== 0) {
+          this.clipboardPermissionDenied = true;
+          return Promise.resolve();
+        }
+        return pasteboard.getSystemPasteboard().getData().then((pasteData: pasteboard.PasteData): void => {
+          const text: string = pasteData.getPrimaryText();
+          if (text.length === 0) {
+            return;
+          }
+          const destination = extractZhihuLinkFromText(text);
+          if (destination === undefined) {
+            return;
+          }
+          const identity = appDestinationIdentity(toAppDestination(destination));
+          if (identity === this.lastClipboardDestinationIdentity) {
+            return;
+          }
+          this.lastClipboardDestinationIdentity = identity;
+          startupDestinationChannel.publish(toAppDestination(destination));
+          AppLogger.info(AppLogEvent.CLIPBOARD_LINK_RESOLVED);
+        });
+      })
+      .catch((error: BusinessError): void => {
+        AppLogger.failure(AppLogEvent.CLIPBOARD_READ_FAILED, error.code);
+      });
   }
 
   private configureImmersiveWindow(mainWindow: window.Window): void {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
   DeepLinkType,
+  extractZhihuLinkFromText,
   MAX_DEEP_LINK_INPUT_LENGTH,
   MAX_SEARCH_QUERY_LENGTH,
   resolveZhihuLink
@@ -88,6 +89,31 @@ export default function deepLinkResolverTest(): void {
       expect(resolveZhihuLink(
         `https://www.zhihu.com/search?q=${'x'.repeat(MAX_DEEP_LINK_INPUT_LENGTH)}`
       )).assertUndefined();
+    });
+
+    it('extractsZhihuLinkFromClipboardText', 0, () => {
+      const answer = extractZhihuLinkFromText(
+        '看看这个问题 https://www.zhihu.com/question/14841937090/answer/1943042322918007481 很有意思');
+      expect(answer?.type).assertEqual(DeepLinkType.ANSWER);
+      expect(answer?.id).assertEqual('1943042322918007481');
+
+      const plain = extractZhihuLinkFromText('https://www.zhihu.com/question/631983014');
+      expect(plain?.type).assertEqual(DeepLinkType.QUESTION);
+      expect(plain?.id).assertEqual('631983014');
+
+      const article = extractZhihuLinkFromText('【分享】https://zhuanlan.zhihu.com/p/1981671287999981270 （转）');
+      expect(article?.type).assertEqual(DeepLinkType.ARTICLE);
+      expect(article?.id).assertEqual('1981671287999981270');
+    });
+
+    it('extractsFirstResolvableUrlAndIgnoresNonZhihuText', 0, () => {
+      const mixed = extractZhihuLinkFromText('https://example.com/page https://www.zhihu.com/question/631983014');
+      expect(mixed?.type).assertEqual(DeepLinkType.QUESTION);
+
+      expect(extractZhihuLinkFromText('https://example.com/nothing-here')).assertUndefined();
+      expect(extractZhihuLinkFromText('没有链接的纯文本')).assertUndefined();
+      expect(extractZhihuLinkFromText('')).assertUndefined();
+      expect(extractZhihuLinkFromText('链接被截断 https://www.zhihu.com/question/')).assertUndefined();
     });
   });
 }
