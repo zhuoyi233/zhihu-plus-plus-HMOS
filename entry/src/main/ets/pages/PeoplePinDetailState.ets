@@ -1,3 +1,4 @@
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
   DomainDecodeError,
   HttpFailure,
@@ -143,6 +144,7 @@ export class PeopleDetailController {
       return;
     }
     uploader.addProfile(personId).catch((_error: Error): void => {
+      hilog.warn(0xD001, 'ReadHistoryUpload', 'profile report failed');
     });
   }
 

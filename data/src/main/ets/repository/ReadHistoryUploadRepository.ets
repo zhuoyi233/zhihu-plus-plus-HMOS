@@ -10,9 +10,10 @@ export interface ReadHistoryAddPair {
   contentType: string;
 }
 
-/** 个人主页上报单元：对齐上游 addReadHistory(person.id, "profile")。 */
+/** 个人主页上报单元：对齐上游 addReadHistory(person.id, "profile")。
+ * people id 允许 [A-Za-z0-9_-]（与 people 解码器 identifier 规则一致），不限于纯数字。 */
 export function readHistoryProfilePairOf(personId: string): ReadHistoryAddPair {
-  if (!/^[1-9][0-9]{0,29}$/.test(personId)) {
+  if (!/^[A-Za-z0-9_-]{1,100}$/.test(personId)) {
     throw new Error('Read history person id is invalid');
   }
   return { contentToken: personId, contentType: 'profile' };

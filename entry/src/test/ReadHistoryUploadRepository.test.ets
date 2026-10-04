@@ -134,7 +134,8 @@ export default function readHistoryUploadRepositoryTest(): void {
     it('parsesProfileIdsAndPostsProfileType', 0, async () => {
       expect(readHistoryProfilePairOf('600001').contentType).assertEqual('profile');
       expect(readHistoryProfilePairOf('600001').contentToken).assertEqual('600001');
-      const invalid: Array<string> = ['', 'abc', '0', '007', '-1', '1:2'];
+      expect(readHistoryProfilePairOf('user_name-2').contentToken).assertEqual('user_name-2');
+      const invalid: Array<string> = ['', '1:2', '空白', 'a'.repeat(101)];
       invalid.forEach((id: string): void => {
         let failed = false;
         try {
