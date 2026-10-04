@@ -339,6 +339,28 @@ export default function readerDocumentTest(): void {
       expect(blocks[3].kind).assertEqual(ReaderBlockKind.LINK_CARD);
     });
 
+    it('parsesConsecutiveRecommendationCardsIntoBlocks', 0, () => {
+      // 还原线上真实结构：h2 后连续多个 link-card <a>（无块级标签分隔、标题在 data-text），
+      // 此前整组被塞进同一片段且仅处理单 anchor，卡片整体消失（模拟器回归发现）。
+      const blocks = parseZhihuHtml('<h2>推荐阅读</h2>' +
+        '<a target="_blank" href="https://zhuanlan.zhihu.com/p/2439992031" data-draft-node="block" ' +
+        'data-draft-type="link-card" data-text="政治是思维杀手" class="LinkCard new">' +
+        '<span class="LinkCard-image LinkCard-image--default"></span>' +
+        '<span class="LinkCard-contents"><span class="LinkCard-title loading" data-text="true"></span>' +
+        '<span class="LinkCard-desc loading"></span></span></a>' +
+        '<a target="_blank" href="https://zhuanlan.zhihu.com/p/2618776559" data-draft-node="block" ' +
+        'data-draft-type="link-card" data-text="政策辩论不应一边倒" class="LinkCard new">' +
+        '<span class="LinkCard-contents"></span></a>');
+      expect(blocks.length).assertEqual(3);
+      expect(blocks[0].text).assertEqual('推荐阅读');
+      expect(blocks[1].kind).assertEqual(ReaderBlockKind.LINK_CARD);
+      expect(blocks[1].text).assertEqual('政治是思维杀手');
+      expect(blocks[1].sourceUrl).assertEqual('https://zhuanlan.zhihu.com/p/2439992031');
+      expect(blocks[1].inlineRuns.length).assertEqual(0);
+      expect(blocks[2].kind).assertEqual(ReaderBlockKind.LINK_CARD);
+      expect(blocks[2].text).assertEqual('政策辩论不应一边倒');
+    });
+
     it('rejectsUnsafeCardTargetsAndKeepsFigureCaption', 0, () => {
       const blocks = parseZhihuHtml('<a class="link-card" href="javascript:alert(1)">说明</a>' +
         '<blockquote><figure><img src="https://picx.zhimg.com/test.jpg"><figcaption><p>图注</p>' +

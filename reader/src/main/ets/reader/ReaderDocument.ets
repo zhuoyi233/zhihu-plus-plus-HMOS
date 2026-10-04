@@ -353,6 +353,13 @@ function linkCardDisplayUrl(url: string): string {
   return displayUrl;
 }
 
+/** link-card 卡片锚点判定：class 含 link-card 或 data-draft-type=link-card。 */
+function isLinkCardAnchor(anchorHtml: string): boolean {
+  const openingTag = anchorHtml.match(/^\s*(<a\b[^>]*>)/i)?.[0] ?? '';
+  return attributeValue(openingTag, 'class').split(/\s+/).includes('link-card') ||
+    attributeValue(openingTag, 'data-draft-type') === 'link-card';
+}
+
 /**
  * 复刻 plainText 的空白归一化语义：连续空格/制表符折叠为一个空格，
  * 换行（含 <br>）连同两侧空白折叠为换行；供样式 run 的文本与 plainText 逐字对齐。
@@ -678,6 +685,29 @@ export function parseZhihuHtml(html: string): Array<ReaderBlock> {
         return;
       }
       const anchors = content.match(ANCHOR_PATTERN);
+      // 知乎回答/文章的「推荐阅读」区块是 h2 后连续多个 link-card <a>（无块级标签分隔），
+      // 会被 blockFragments 归入同一片段；仅当片段由 anchor 与空白组成时按卡片组解析，
+      // 每张卡片独立成块，混入非卡片 anchor 或正文时回退普通段落解析。
+      const anchorGroup = anchors !== null && content.replace(ANCHOR_PATTERN, '').trim().length === 0 ?
+        anchors : null;
+      if (anchorGroup !== null && anchorGroup.every(isLinkCardAnchor)) {
+        anchorGroup.forEach((anchorHtml: string, index: number): void => {
+          const openingTag = anchorHtml.match(/^\s*(<a\b[^>]*>)/i)?.[0] ?? '';
+          const url = normalizeLinkHref(attributeValue(openingTag, 'href'));
+          const label = linkCardDisplayUrl(plainText(anchorHtml).trim() ||
+            decodeHtml(attributeValue(openingTag, 'data-draft-title') || attributeValue(openingTag, 'data-title') ||
+              attributeValue(openingTag, 'data-text')).trim() || url);
+          if (label.length === 0) {
+            return;
+          }
+          const cover = decodeHtml(attributeValue(openingTag, 'data-draft-cover')).trim();
+          const coverUrl = cover.startsWith('//') ? `https:${cover}` : cover;
+          blocks.push({ id: `${blockId}-card${index}`, kind: ReaderBlockKind.LINK_CARD, text: label,
+            sourceUrl: url, displayUrl: linkCardDisplayUrl(url),
+            coverUrl: coverUrl.startsWith('https://') ? coverUrl : '', inlineRuns: [] });
+        });
+        return;
+      }
       const anchor = anchors?.length === 1 && anchors[0] === content.trim() ?
         content.match(/^\s*(<a\b[^>]*>)/i) : null;
       if (anchor !== null && (attributeValue(anchor[1], 'class').split(/\s+/).includes('link-card') ||
@@ -685,7 +715,8 @@ export function parseZhihuHtml(html: string): Array<ReaderBlock> {
         const url = normalizeLinkHref(attributeValue(anchor[1], 'href'));
         const displayUrl = linkCardDisplayUrl(url);
         const label = linkCardDisplayUrl(plainText(contentOf(content.trim())) ||
-          decodeHtml(attributeValue(anchor[1], 'data-draft-title') || attributeValue(anchor[1], 'data-title')).trim() || url);
+          decodeHtml(attributeValue(anchor[1], 'data-draft-title') || attributeValue(anchor[1], 'data-title') ||
+            attributeValue(anchor[1], 'data-text')).trim() || url);
         if (label.length > 0) {
           const cover = decodeHtml(attributeValue(anchor[1], 'data-draft-cover')).trim();
           const coverUrl = cover.startsWith('//') ? `https:${cover}` : cover;
