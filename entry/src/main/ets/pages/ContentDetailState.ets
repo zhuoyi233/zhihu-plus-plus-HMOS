@@ -11,6 +11,7 @@ import {
   OpenedContentStore,
   Question,
   QuestionTopicSummary,
+  ReadHistoryUploadRepository,
   SegmentInfoMark,
   SegmentInfoMeta,
   SegmentInfoParagraph,
@@ -63,6 +64,7 @@ export type ContentDetailStateObserver = (state: ContentDetailViewState) => void
 export class ContentDetailController {
   private readonly repository: ContentRepository;
   private readonly openedContentStore?: OpenedContentStore;
+  private readonly historyUploader?: ReadHistoryUploadRepository;
   private readonly observer: ContentDetailStateObserver;
   private active: boolean = false;
   private generation: number = 0;
@@ -75,9 +77,10 @@ export class ContentDetailController {
 
   constructor(repository: ContentRepository, openedContentStore?: OpenedContentStore,
     observer: ContentDetailStateObserver = (_state: ContentDetailViewState): void => {
-    }) {
+    }, historyUploader?: ReadHistoryUploadRepository) {
     this.repository = repository;
     this.openedContentStore = openedContentStore;
+    this.historyUploader = historyUploader;
     this.observer = observer;
   }
 
@@ -192,12 +195,23 @@ export class ContentDetailController {
         this.openedRecordPhase = OpenedRecordPhase.RECORDED;
         this.emit();
       }
+      this.reportCloudHistory(contentDetailIdentity(content.kind, content.value.id));
     } catch (_error) {
       if (this.isCurrent(generation)) {
         this.openedRecordPhase = OpenedRecordPhase.FAILED;
         this.emit();
       }
     }
+  }
+
+  /** 对齐上游 addReadHistory：本地记录成功后向知乎云端上报一条阅读历史，失败静默不阻塞页面。 */
+  private reportCloudHistory(contentKey: string): void {
+    const uploader = this.historyUploader;
+    if (uploader === undefined) {
+      return;
+    }
+    uploader.add(contentKey).catch((_error: Error): void => {
+    });
   }
 
   private isCurrent(generation: number): boolean {

@@ -85,6 +85,7 @@ import themeColorsTest from './ThemeColors.test';
 import immersiveMaterialPreferencesTest from './ImmersiveMaterialPreferences.test';
 import immersiveMaterialStylesTest from './ImmersiveMaterialStyles.test';
 import draftImageReferenceScanTest from './DraftImageReferenceScan.test';
+import readHistoryUploadRepositoryTest from './ReadHistoryUploadRepository.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -174,4 +175,5 @@ export default function testsuite(): void {
   immersiveMaterialPreferencesTest();
   immersiveMaterialStylesTest();
   draftImageReferenceScanTest();
+  readHistoryUploadRepositoryTest();
 }

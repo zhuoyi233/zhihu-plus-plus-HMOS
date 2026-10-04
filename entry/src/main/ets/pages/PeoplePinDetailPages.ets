@@ -9,6 +9,7 @@ import {
   LoginSessionGateway,
   onThemeColor,
   OpenedContentStore,
+  ReadHistoryUploadRepository,
   PeopleContentItem,
   PeopleContentKind,
   PeopleContentRepository,
@@ -917,6 +918,8 @@ export struct PinDetailPage {
   repository: PinRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
+  /** 阅读历史上云仓库（对齐上游 addReadHistory；未配置或游客态时不上报）。 */
+  historyUploader: ReadHistoryUploadRepository | undefined = undefined;
   commentRepository: CommentRepository | undefined = undefined;
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
@@ -955,7 +958,8 @@ export struct PinDetailPage {
       this.repository,
       this.session,
       this.openedContentStore,
-      (state: PinDetailViewState): void => this.applyState(state)
+      (state: PinDetailViewState): void => this.applyState(state),
+      this.historyUploader
     );
     this.controller.activate();
     this.controller.load(this.contentId);

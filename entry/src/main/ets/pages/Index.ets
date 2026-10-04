@@ -28,6 +28,7 @@ import {
   DefaultRecentFollowingUsersRepository,
   DefaultSearchRepository,
   DefaultOnlineHistoryRepository,
+  DefaultReadHistoryUploadRepository,
   DefaultMobileNotificationRepository,
   DefaultVoteRepository,
   DefaultSegmentReactionRepository,
@@ -40,6 +41,7 @@ import {
   NotificationSettingsGateway,
   OpenedContentStore,
   OnlineHistoryRepository,
+  ReadHistoryUploadRepository,
   PeopleContentRepository,
   PeopleDetailRepository,
   RecentFollowingUsersRepository,
@@ -135,6 +137,8 @@ struct Index {
   @State private peopleContentRepository?: PeopleContentRepository = undefined;
   @State private pinRepository?: PinRepository = undefined;
   @State private onlineHistoryRepository?: OnlineHistoryRepository = undefined;
+  /** 阅读历史上云仓库：打开问题/回答/文章/想法时对齐上游 addReadHistory 上报。 */
+  @State private readHistoryUploader?: ReadHistoryUploadRepository = undefined;
   @State private voteRepository?: VoteRepository = undefined;
   @State private segmentReactionRepository?: SegmentReactionRepository = undefined;
   private segmentCommentRepositoryHttpClient: ZhihuHttpClient = new ZhihuHttpClient();
@@ -198,6 +202,7 @@ struct Index {
       this.peopleContentRepository = new DefaultPeopleContentRepository(new ZhihuHttpClient(session));
       this.pinRepository = new DefaultPinRepository(new ZhihuHttpClient(session));
       this.onlineHistoryRepository = new DefaultOnlineHistoryRepository(new ZhihuHttpClient(session));
+      this.readHistoryUploader = new DefaultReadHistoryUploadRepository(new ZhihuHttpClient(session), session);
       this.voteRepository = new DefaultVoteRepository(new ZhihuHttpClient(session));
       this.segmentReactionRepository = new DefaultSegmentReactionRepository(new ZhihuHttpClient(session));
       this.segmentCommentRepositoryHttpClient = new ZhihuHttpClient(session);
@@ -405,6 +410,7 @@ struct Index {
       contentId: id,
       repository: this.questionRepository,
       openedContentStore: this.openedContentStore,
+      historyUploader: this.readHistoryUploader,
       navigate: navigate,
       rules: this.blockingRuleStore,
       history: this.blockedFeedHistoryStore,
@@ -425,6 +431,7 @@ struct Index {
       contentId: id,
       repository: this.answerRepository,
       openedContentStore: this.openedContentStore,
+      historyUploader: this.readHistoryUploader,
       navigate: navigate,
       rules: this.blockingRuleStore,
       history: this.blockedFeedHistoryStore,
@@ -445,6 +452,7 @@ struct Index {
       contentId: id,
       repository: this.articleRepository,
       openedContentStore: this.openedContentStore,
+      historyUploader: this.readHistoryUploader,
       navigate: navigate,
       rules: this.blockingRuleStore,
       history: this.blockedFeedHistoryStore,
@@ -532,6 +540,7 @@ struct Index {
       repository: this.pinRepository,
       session: this.session,
       openedContentStore: this.openedContentStore,
+      historyUploader: this.readHistoryUploader,
       commentRepository: this.commentRepository,
       navigate: navigate,
       rules: this.blockingRuleStore,
