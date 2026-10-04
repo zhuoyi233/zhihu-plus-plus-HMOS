@@ -389,6 +389,30 @@ export default function readerDocumentTest(): void {
       expect(blocks[2].coverUrl).assertEqual('https://picx.zhimg.com/a.jpg');
     });
 
+    it('hidesZhihuRedirectWrapperOnlyInCardDisplay', 0, () => {
+      const redirect = 'https://link.zhihu.com/?target=https%3A%2F%2Fexample.com%2Fpaper%3Fa%3D1%26b%3D2';
+      const blocks = parseZhihuHtml('<a data-draft-type="link-card" href="' + redirect + '">论文</a>' +
+        '<a data-draft-type="link-card" href="' + redirect + '">' + redirect + '</a>');
+      expect(blocks[0].displayUrl).assertEqual('https://example.com/paper?a=1&b=2');
+      expect(blocks[0].sourceUrl).assertEqual(redirect);
+      expect(blocks[0].text).assertEqual('论文');
+      expect(blocks[1].text).assertEqual('https://example.com/paper?a=1&b=2');
+    });
+
+    it('keepsMalformedOrNonZhihuRedirectAddressesUnchanged', 0, () => {
+      const urls = [
+        'https://link.zhihu.com/?target=%ZZ',
+        'https://link.zhihu.com/?target=javascript%3Aalert(1)',
+        'https://example.com/?target=https%3A%2F%2Fother.com',
+        'https://link.zhihu.com.evil.test/?target=https%3A%2F%2Fother.com'
+      ];
+      urls.forEach((url: string): void => {
+        const blocks = parseZhihuHtml('<a data-draft-type="link-card" href="' + url + '">资料</a>');
+        expect(blocks[0].displayUrl).assertEqual(url);
+        expect(blocks[0].sourceUrl).assertEqual(url);
+      });
+    });
+
     it('normalizesProtocolRelativeImageAndRejectsUnsafeSource', 0, () => {
       const protocolRelative = parseZhihuHtml('<figure><img srcset="https://picx.zhimg.com/wrong.jpg 2x" ' +
         'src="//picx.zhimg.com/reading.jpg"></figure>');

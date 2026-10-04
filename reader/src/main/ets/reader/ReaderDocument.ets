@@ -1,3 +1,4 @@
+import { parseAbsoluteUrl } from 'core';
 import { isTrustedFormulaUrl } from './FormulaSourcePolicy';
 
 export enum ReaderBlockKind {
@@ -62,6 +63,8 @@ export interface ReaderBlock {
   quoteDepth?: number;
   /** 推荐阅读卡片的封面；不与点击目标 sourceUrl 混用。 */
   coverUrl?: string;
+  /** 卡片展示地址：去掉知乎跳转包装，sourceUrl 仍用于点击。 */
+  displayUrl?: string;
   /** 视频块的 data-lens-id；其他块不设置。 */
   targetId?: string;
   /** 正文段落的知乎段落 id（p/li 的 data-pid），用于对齐服务端 segment_infos 的他人划线。 */
@@ -329,6 +332,25 @@ function normalizeLinkHref(href: string): string {
     return `https://www.zhihu.com${trimmed}`;
   }
   return '';
+}
+
+function linkCardDisplayUrl(url: string): string {
+  let displayUrl = url;
+  for (let depth = 0; depth < 3; depth++) {
+    const parsed = parseAbsoluteUrl(displayUrl);
+    if (parsed === undefined || parsed.hostname !== 'link.zhihu.com' ||
+      parsed.hasUserInfo || parsed.port.length > 0) {
+      break;
+    }
+    const target = parsed.params.get('target');
+    if (target === undefined) { break; }
+    const destination = parseAbsoluteUrl(target);
+    if (destination === undefined || (destination.protocol !== 'https:' && destination.protocol !== 'http:')) {
+      break;
+    }
+    displayUrl = target;
+  }
+  return displayUrl;
 }
 
 /**
@@ -661,13 +683,15 @@ export function parseZhihuHtml(html: string): Array<ReaderBlock> {
       if (anchor !== null && (attributeValue(anchor[1], 'class').split(/\s+/).includes('link-card') ||
         attributeValue(anchor[1], 'data-draft-type') === 'link-card')) {
         const url = normalizeLinkHref(attributeValue(anchor[1], 'href'));
-        const label = plainText(contentOf(content.trim())) ||
-          decodeHtml(attributeValue(anchor[1], 'data-draft-title') || attributeValue(anchor[1], 'data-title')).trim() || url;
+        const displayUrl = linkCardDisplayUrl(url);
+        const label = linkCardDisplayUrl(plainText(contentOf(content.trim())) ||
+          decodeHtml(attributeValue(anchor[1], 'data-draft-title') || attributeValue(anchor[1], 'data-title')).trim() || url);
         if (label.length > 0) {
           const cover = decodeHtml(attributeValue(anchor[1], 'data-draft-cover')).trim();
           const coverUrl = cover.startsWith('//') ? `https:${cover}` : cover;
           blocks.push({ id: blockId, kind: ReaderBlockKind.LINK_CARD, text: label,
-            sourceUrl: url, coverUrl: coverUrl.startsWith('https://') ? coverUrl : '', inlineRuns: [] });
+            sourceUrl: url, displayUrl: displayUrl,
+            coverUrl: coverUrl.startsWith('https://') ? coverUrl : '', inlineRuns: [] });
         }
         return;
       }

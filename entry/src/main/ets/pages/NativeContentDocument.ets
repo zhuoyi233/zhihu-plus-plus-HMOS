@@ -1296,7 +1296,12 @@ export struct NativeContentDocument {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
-    .padding({ left: (item.quoteDepth ?? 0) > 0 ? 12 : 0 })
+    .padding({
+      left: (item.quoteDepth ?? 0) > 0 ? 12 : 0,
+      // 知乎网页 h2 的实际段前间距为 42px；扣除列表已有间距，避免重复叠加。
+      top: item.kind === ReaderBlockKind.HEADING && item.text.trim() === '推荐阅读' ?
+        Math.max(0, 42 - this.blockSpacing()) : 0
+    })
     .margin({ left: Math.min(Math.max((item.quoteDepth ?? 0) - 1, 0), 4) * 8 })
     .borderWidth({ left: (item.quoteDepth ?? 0) > 0 ? 3 : 0 })
     .borderColor($r('app.color.secondary_text'))
@@ -1375,8 +1380,8 @@ export struct NativeContentDocument {
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.primary_text'))
             .width('100%')
-          if (item.sourceUrl.length > 0 && item.sourceUrl !== item.text) {
-            Text(item.sourceUrl)
+          if ((item.displayUrl ?? item.sourceUrl).length > 0 && (item.displayUrl ?? item.sourceUrl) !== item.text) {
+            Text(item.displayUrl ?? item.sourceUrl)
               .fontSize(this.referenceFontSize())
               .fontColor(this.resolvedThemeColor)
               .maxLines(1)
