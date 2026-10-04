@@ -10,7 +10,15 @@ export interface ReadHistoryAddPair {
   contentType: string;
 }
 
-/** contentKey 形如 "answer:123456"；与在线历史 `${kind}:${id}` 约定一致。 */
+/** 个人主页上报单元：对齐上游 addReadHistory(person.id, "profile")。 */
+export function readHistoryProfilePairOf(personId: string): ReadHistoryAddPair {
+  if (!/^[1-9][0-9]{0,29}$/.test(personId)) {
+    throw new Error('Read history person id is invalid');
+  }
+  return { contentToken: personId, contentType: 'profile' };
+}
+
+/** contentKey 形如 "answer:123456"；与在线历史 `${kind}:${id}` 约定一致。profile 走 addProfile。 */
 export function readHistoryAddPairOf(contentKey: string): ReadHistoryAddPair {
   const separator = contentKey.indexOf(':');
   if (separator <= 0 || separator !== contentKey.lastIndexOf(':')) {
@@ -39,12 +47,19 @@ export class DefaultReadHistoryUploadRepository implements ReadHistoryUploadRepo
   }
 
   async add(contentKey: string): Promise<void> {
+    await this.execute(readHistoryAddPairOf(contentKey));
+  }
+
+  async addProfile(personId: string): Promise<void> {
+    await this.execute(readHistoryProfilePairOf(personId));
+  }
+
+  private async execute(pair: ReadHistoryAddPair): Promise<void> {
     if (this.cookieProvider !== undefined &&
       sessionCookieValue(this.cookieProvider.getCookies(), 'd_c0') === undefined) {
       hilog.info(0xD001, 'ReadHistoryUpload', 'skip guest');
       return;
     }
-    const pair = readHistoryAddPairOf(contentKey);
     await this.httpClient.execute({
       url: READ_HISTORY_ADD_URL,
       method: ZhihuHttpMethod.POST,

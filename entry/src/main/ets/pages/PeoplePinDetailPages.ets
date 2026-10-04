@@ -99,6 +99,8 @@ struct ReadOnlyDetailStatusPanel {
 export struct PeopleDetailPage {
   identifier: string = '';
   repository: PeopleDetailRepository | undefined = undefined;
+  /** 阅读历史上云仓库（对齐上游 addReadHistory；未配置或游客态时不上报）。 */
+  historyUploader: ReadHistoryUploadRepository | undefined = undefined;
   contentRepository: PeopleContentRepository | undefined = undefined;
   followRepository: FollowRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
@@ -155,7 +157,8 @@ export struct PeopleDetailPage {
     this.controller = new PeopleDetailController(
       this.repository,
       this.session,
-      (state: PeopleDetailViewState): void => this.applyState(state)
+      (state: PeopleDetailViewState): void => this.applyState(state),
+      this.historyUploader
     );
     this.controller.activate();
     this.controller.load(this.identifier);

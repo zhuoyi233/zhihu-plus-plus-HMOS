@@ -46,6 +46,7 @@ export type PinDetailObserver = (state: PinDetailViewState) => void;
 export class PeopleDetailController {
   private readonly repository: PeopleDetailRepository;
   private readonly session: LoginSessionGateway;
+  private readonly historyUploader?: ReadHistoryUploadRepository;
   private readonly observer: PeopleDetailObserver;
   private active: boolean = false;
   private generation: number = 0;
@@ -56,9 +57,10 @@ export class PeopleDetailController {
 
   constructor(repository: PeopleDetailRepository, session: LoginSessionGateway,
     observer: PeopleDetailObserver = (_state: PeopleDetailViewState): void => {
-    }) {
+    }, historyUploader?: ReadHistoryUploadRepository) {
     this.repository = repository;
     this.session = session;
+    this.historyUploader = historyUploader;
     this.observer = observer;
   }
 
@@ -122,6 +124,7 @@ export class PeopleDetailController {
       }
       this.profile = profile;
       this.phase = ReadOnlyDetailPhase.READY;
+      this.reportCloudHistory(profile.id);
     } catch (error) {
       if (!this.isCurrent(generation)) {
         return;
@@ -131,6 +134,16 @@ export class PeopleDetailController {
       this.requiresLogin = readOnlyDetailRequiresLogin(error);
     }
     this.emit();
+  }
+
+  /** 对齐上游 addReadHistory(person.id, "profile")：主页加载成功后上报云端阅读历史，失败静默。 */
+  private reportCloudHistory(personId: string): void {
+    const uploader = this.historyUploader;
+    if (uploader === undefined) {
+      return;
+    }
+    uploader.addProfile(personId).catch((_error: Error): void => {
+    });
   }
 
   private isCurrent(generation: number): boolean {

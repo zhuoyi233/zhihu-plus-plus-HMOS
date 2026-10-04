@@ -5,6 +5,7 @@ import {
   PreparedZhihuHttpRequest,
   READ_HISTORY_ADD_URL,
   readHistoryAddPairOf,
+  readHistoryProfilePairOf,
   SessionCookie,
   SessionCookieProvider,
   ZhihuHttpClient,
@@ -128,6 +129,34 @@ export default function readHistoryUploadRepositoryTest(): void {
       }
       expect(failed).assertTrue();
       expect(factory.transport.requests.length).assertEqual(1);
+    });
+
+    it('parsesProfileIdsAndPostsProfileType', 0, async () => {
+      expect(readHistoryProfilePairOf('600001').contentType).assertEqual('profile');
+      expect(readHistoryProfilePairOf('600001').contentToken).assertEqual('600001');
+      const invalid: Array<string> = ['', 'abc', '0', '007', '-1', '1:2'];
+      invalid.forEach((id: string): void => {
+        let failed = false;
+        try {
+          readHistoryProfilePairOf(id);
+        } catch (_error) {
+          failed = true;
+        }
+        expect(failed).assertTrue();
+      });
+
+      const provider = new UploadCookieProvider([
+        { name: 'z_c0', value: 'login' },
+        { name: 'd_c0', value: 'device' }
+      ]);
+      const factory = new UploadTransportFactory(OK_RESPONSE);
+      const repository = new DefaultReadHistoryUploadRepository(
+        new ZhihuHttpClient(provider, factory), provider);
+      await repository.addProfile('600001');
+      expect(factory.transport.requests.length).assertEqual(1);
+      const request = factory.transport.requests[0];
+      expect(request.url).assertEqual(READ_HISTORY_ADD_URL);
+      expect(request.body).assertEqual('{"content_token":"600001","content_type":"profile"}');
     });
   });
 }

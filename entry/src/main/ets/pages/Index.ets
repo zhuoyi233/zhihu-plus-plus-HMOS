@@ -29,6 +29,7 @@ import {
   DefaultSearchRepository,
   DefaultOnlineHistoryRepository,
   DefaultReadHistoryUploadRepository,
+  DefaultLastReadTouchRepository,
   DefaultMobileNotificationRepository,
   DefaultVoteRepository,
   DefaultSegmentReactionRepository,
@@ -41,6 +42,7 @@ import {
   NotificationSettingsGateway,
   OpenedContentStore,
   OnlineHistoryRepository,
+  LastReadTouchRepository,
   ReadHistoryUploadRepository,
   PeopleContentRepository,
   PeopleDetailRepository,
@@ -139,6 +141,8 @@ struct Index {
   @State private onlineHistoryRepository?: OnlineHistoryRepository = undefined;
   /** 阅读历史上云仓库：打开问题/回答/文章/想法时对齐上游 addReadHistory 上报。 */
   @State private readHistoryUploader?: ReadHistoryUploadRepository = undefined;
+  /** 上次阅读上报仓库：首页点击 read、feed 曝光 touch（对齐上游 lastread/touch）。 */
+  @State private lastReadTouchRepository?: LastReadTouchRepository = undefined;
   @State private voteRepository?: VoteRepository = undefined;
   @State private segmentReactionRepository?: SegmentReactionRepository = undefined;
   private segmentCommentRepositoryHttpClient: ZhihuHttpClient = new ZhihuHttpClient();
@@ -203,6 +207,7 @@ struct Index {
       this.pinRepository = new DefaultPinRepository(new ZhihuHttpClient(session));
       this.onlineHistoryRepository = new DefaultOnlineHistoryRepository(new ZhihuHttpClient(session));
       this.readHistoryUploader = new DefaultReadHistoryUploadRepository(new ZhihuHttpClient(session), session);
+      this.lastReadTouchRepository = new DefaultLastReadTouchRepository(new ZhihuHttpClient(session), session);
       this.voteRepository = new DefaultVoteRepository(new ZhihuHttpClient(session));
       this.segmentReactionRepository = new DefaultSegmentReactionRepository(new ZhihuHttpClient(session));
       this.segmentCommentRepositoryHttpClient = new ZhihuHttpClient(session);
@@ -311,6 +316,7 @@ struct Index {
   homeContent(reloadToken: number, navigate: (destination: AppDestination) => void) {
     HomeFeedPage({
       repository: this.homeRepository,
+      lastReadTouch: this.lastReadTouchRepository,
       reloadToken: reloadToken,
       navigate: navigate,
       rules: this.blockingRuleStore,
@@ -523,6 +529,7 @@ struct Index {
     PeopleDetailPage({
       identifier: id,
       repository: this.peopleRepository,
+      historyUploader: this.readHistoryUploader,
       contentRepository: this.peopleContentRepository,
       followRepository: this.followRepository,
       session: this.session,

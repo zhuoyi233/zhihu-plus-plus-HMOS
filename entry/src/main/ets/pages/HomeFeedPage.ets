@@ -10,7 +10,9 @@ import {
   FeedRepository,
   FeedTargetKind,
   isUpdateAnnouncementVisible,
-  OpenedContentStore
+  OpenedContentStore,
+  LastReadTouchEntry,
+  LastReadTouchRepository
 } from 'data';
 import {
   BlockingActionContext,
@@ -34,6 +36,8 @@ export struct HomeFeedPage {
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
+  /** 上次阅读上报仓库（对齐上游 lastread/touch；未配置或游客态时不上报）。 */
+  lastReadTouch: LastReadTouchRepository | undefined = undefined;
   @Prop @Watch('reloadAfterAuthentication') reloadToken: number = 0;
   // 登录成功重载信号：reloadToken 走 Builder 参数、@Provide/@Consume 在 HdsTabs 的
   // TabContent 构建树下均实测不可靠，AppStorage 广播是可靠通道（同 bottomRectHeight）
@@ -73,6 +77,8 @@ export struct HomeFeedPage {
   private controller: HomeFeedController | undefined = undefined;
   private blockingAction?: BlockingActionController;
   private pendingBlockItem?: FeedItem = undefined;
+  /** 本会话已批量上报过曝光（touch）的条目，对齐上游 reportedTouchedItems 去重。 */
+  private readonly reportedTouchIdentities: Set<string> = new Set<string>();
   private readonly listScroller: ListScroller = new ListScroller();
   private firstVisibleIndex: number = 0;
 
@@ -479,7 +485,45 @@ export struct HomeFeedPage {
       contentType: item.target.kind,
       title: item.target.title
     }).catch((_error: Error): void => {});
+    this.reportLastReadTouch(item, 'read');
     this.navigate(homeFeedDestination(item));
+  }
+
+  /** 对齐上游 lastread/touch：点击上报 read、feed 曝光批量上报 touch，游客态由仓库静默跳过。 */
+  private reportLastReadTouch(item: FeedItem, action: string): void {
+    const entry = lastReadTouchEntryOf(item, action);
+    const repository = this.lastReadTouch;
+    if (entry === undefined || repository === undefined) {
+      return;
+    }
+    repository.report([entry]).catch((_error: Error): void => {});
+  }
+
+  private reportLastReadTouches(items: Array<FeedItem>): void {
+    const repository = this.lastReadTouch;
+    if (repository === undefined) {
+      return;
+    }
+    const entries: Array<LastReadTouchEntry> = [];
+    items.forEach((item: FeedItem): void => {
+      const identity = feedItemIdentity(item);
+      if (this.reportedTouchIdentities.has(identity)) {
+        return;
+      }
+      const entry = lastReadTouchEntryOf(item, 'touch');
+      if (entry !== undefined) {
+        entries.push(entry);
+        this.reportedTouchIdentities.add(identity);
+      }
+    });
+    if (entries.length === 0) {
+      return;
+    }
+    repository.report(entries).catch((_error: Error): void => {
+      entries.forEach((entry: LastReadTouchEntry): void => {
+        this.reportedTouchIdentities.delete(`${entry.kind}:${entry.id}`);
+      });
+    });
   }
 
   private feedBlockMenu(item: FeedItem): Array<MenuElement> {
@@ -624,6 +668,9 @@ export struct HomeFeedPage {
   private applyState(state: HomeFeedViewState): void {
     this.phase = state.phase;
     this.items = state.items;
+    if (state.items.length > 0) {
+      this.reportLastReadTouches(state.items);
+    }
     this.refreshing = state.refreshing;
     this.indicator?.setRefreshing(state.refreshing);
     this.loadingMore = state.loadingMore;
@@ -631,6 +678,15 @@ export struct HomeFeedPage {
     this.errorMessage = state.errorMessage ?? '';
     this.requiresLogin = state.requiresLogin;
   }
+}
+
+/** lastread/touch 仅支持回答/文章/想法（对齐上游 Feed target 白名单，问题/视频不报）。 */
+function lastReadTouchEntryOf(item: FeedItem, action: string): LastReadTouchEntry | undefined {
+  const kind = item.target.kind;
+  if (kind !== FeedTargetKind.ANSWER && kind !== FeedTargetKind.ARTICLE) {
+    return undefined;
+  }
+  return { kind: kind, id: item.target.id, action: action };
 }
 
 export function homeFeedDestination(item: FeedItem): AppDestination {
