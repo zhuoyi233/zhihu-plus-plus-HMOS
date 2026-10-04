@@ -1290,6 +1290,19 @@ export struct NativeContentDocument {
 
   @Builder
   private readerBlock(item: ReaderBlock) {
+    Column() {
+      this.readerBlockContent(item)
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+    .padding({ left: (item.quoteDepth ?? 0) > 0 ? 12 : 0 })
+    .margin({ left: Math.min(Math.max((item.quoteDepth ?? 0) - 1, 0), 4) * 8 })
+    .borderWidth({ left: (item.quoteDepth ?? 0) > 0 ? 3 : 0 })
+    .borderColor($r('app.color.secondary_text'))
+  }
+
+  @Builder
+  private readerBlockContent(item: ReaderBlock) {
     if (item.kind === ReaderBlockKind.HEADING) {
       if (item.inlineRuns.length > 0) {
         Text() {
@@ -1338,6 +1351,35 @@ export struct NativeContentDocument {
       Divider().margin({ top: 8, bottom: 8 })
     } else if (item.kind === ReaderBlockKind.REFERENCE) {
       this.referenceEntryBlock(item)
+    } else if (item.kind === ReaderBlockKind.LINK_CARD) {
+      Column({ space: 6 }) {
+        Text(item.text)
+          .fontSize(this.bodyFontSize())
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.primary_text'))
+          .width('100%')
+        if (item.sourceUrl.length > 0 && item.sourceUrl !== item.text) {
+          Text(item.sourceUrl)
+            .fontSize(this.referenceFontSize())
+            .fontColor(this.resolvedThemeColor)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width('100%')
+        }
+      }
+      .id(`content_link_card_${item.id}`)
+      .width('100%')
+      .padding(12)
+      .borderRadius(8)
+      .backgroundColor($r('app.color.surface_background'))
+      .borderWidth(1)
+      .borderColor($r('app.color.secondary_text'))
+      .onClick((): void => {
+        if (item.sourceUrl.length > 0) {
+          this.bodyTapDetector.markForeignClick();
+          this.onLinkClick?.(item.sourceUrl);
+        }
+      })
     } else if (item.kind === ReaderBlockKind.FORMULA) {
       // 按主题/字号 tick 奇偶翻转分支强制销毁重建（见 formulaRecreateTick/formulaDecodeTick 注释）。
       if ((this.formulaRecreateTick + this.formulaDecodeTick) % 2 === 0) {

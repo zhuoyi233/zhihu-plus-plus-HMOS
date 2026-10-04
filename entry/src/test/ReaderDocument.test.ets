@@ -292,7 +292,7 @@ export default function readerDocumentTest(): void {
       expect(blocks[0].targetId).assertUndefined();
     });
 
-    it('parsesBlockquoteAndPreAsParagraphs', 0, () => {
+    it('preservesQuoteDepthAndPreText', 0, () => {
       const blocks = parseZhihuHtml('<p>开场</p><blockquote>记者问：如何看待信教人数增长？</blockquote>' +
         '<blockquote><p>答：依法管理宗教事务。</p></blockquote><pre>code sample</pre>');
 
@@ -301,10 +301,73 @@ export default function readerDocumentTest(): void {
       expect(blocks[0].text).assertEqual('开场');
       expect(blocks[1].kind).assertEqual(ReaderBlockKind.PARAGRAPH);
       expect(blocks[1].text).assertEqual('记者问：如何看待信教人数增长？');
+      expect(blocks[1].quoteDepth).assertEqual(1);
       expect(blocks[2].kind).assertEqual(ReaderBlockKind.PARAGRAPH);
       expect(blocks[2].text).assertEqual('答：依法管理宗教事务。');
+      expect(blocks[2].quoteDepth).assertEqual(1);
       expect(blocks[3].kind).assertEqual(ReaderBlockKind.PARAGRAPH);
       expect(blocks[3].text).assertEqual('code sample');
+      expect(blocks[3].quoteDepth).assertEqual(0);
+    });
+
+    it('preservesNestedQuoteParagraphsAndReferences', 0, () => {
+      const blocks = parseZhihuHtml('<blockquote><p data-pid="first">第一段<b>加粗</b></p>' +
+        '<blockquote><p>内层</p></blockquote><p data-pid="last">末段' +
+        '<sup data-draft-type="reference" data-numero="1" data-text="资料">[1]</sup></p>' +
+        '引用尾文</blockquote><p>正文</p>');
+      expect(blocks.length).assertEqual(8);
+      expect(blocks[0].text).assertEqual('第一段加粗');
+      expect(blocks[0].pid).assertEqual('first');
+      expect(blocks[0].inlineRuns[1].bold).assertTrue();
+      expect(blocks[1].quoteDepth).assertEqual(2);
+      expect(blocks[2].quoteDepth).assertEqual(1);
+      expect(blocks[2].pid).assertEqual('last');
+      expect(blocks[3].text).assertEqual('引用尾文');
+      expect(blocks[4].quoteDepth).assertEqual(0);
+      expect(blocks[7].reference?.text).assertEqual('资料');
+    });
+
+    it('preservesTopLevelLinksAndRecommendationCards', 0, () => {
+      const blocks = parseZhihuHtml('<p>推荐阅读</p><a href="https://example.com">网页</a>' +
+        '<a class="extra link-card" href="/question/123/answer/456">站内回答</a>' +
+        '<p><a data-draft-type="link-card" href="https://zhuanlan.zhihu.com/p/123">文章</a></p>');
+      expect(blocks.length).assertEqual(4);
+      expect(blocks[1].inlineRuns[0].linkUrl).assertEqual('https://example.com');
+      expect(blocks[2].kind).assertEqual(ReaderBlockKind.LINK_CARD);
+      expect(blocks[2].sourceUrl).assertEqual('https://www.zhihu.com/question/123/answer/456');
+      expect(blocks[3].text).assertEqual('文章');
+      expect(blocks[3].kind).assertEqual(ReaderBlockKind.LINK_CARD);
+    });
+
+    it('rejectsUnsafeCardTargetsAndKeepsFigureCaption', 0, () => {
+      const blocks = parseZhihuHtml('<a class="link-card" href="javascript:alert(1)">说明</a>' +
+        '<blockquote><figure><img src="https://picx.zhimg.com/test.jpg"><figcaption><p>图注</p>' +
+        '</figcaption></figure><p>图后</p></blockquote><p>外部</p>');
+      expect(blocks.length).assertEqual(4);
+      expect(blocks[0].sourceUrl).assertEqual('');
+      expect(blocks[1].text).assertEqual('图注');
+      expect(blocks[1].quoteDepth).assertEqual(1);
+      expect(blocks[2].text).assertEqual('图后');
+      expect(blocks[3].text).assertEqual('外部');
+    });
+
+    it('supportsZhihuDraftCardTitlesAndQuoteParagraphIds', 0, () => {
+      const blocks = parseZhihuHtml('<a class="internal" data-draft-node="block" ' +
+        'data-draft-type="link-card" data-draft-title="推荐文章" href="https://zhuanlan.zhihu.com/p/123"></a>' +
+        '<blockquote data-pid="quote">首行<br/>末行</blockquote><p>后文</p>');
+      expect(blocks[0].text).assertEqual('推荐文章');
+      expect(blocks[0].kind).assertEqual(ReaderBlockKind.LINK_CARD);
+      expect(blocks[1].pid).assertEqual('quote');
+      expect(blocks[1].text).assertEqual('首行\n末行');
+      expect(blocks[2].quoteDepth).assertEqual(0);
+    });
+
+    it('doesNotCollapseMultipleInlineLinksIntoOneCard', 0, () => {
+      const blocks = parseZhihuHtml('<p><a data-draft-type="link-card" href="https://example.com/a">甲</a>' +
+        '与<a href="https://example.com/b">乙</a></p>');
+      expect(blocks[0].kind).assertEqual(ReaderBlockKind.PARAGRAPH);
+      expect(blocks[0].text).assertEqual('甲与乙');
+      expect(blocks[0].inlineRuns[2].linkUrl).assertEqual('https://example.com/b');
     });
 
     it('normalizesProtocolRelativeImageAndRejectsUnsafeSource', 0, () => {
