@@ -780,6 +780,7 @@ export struct NativeContentDocument {
   @State private naturalHeightVp: number = 0;
   private blocks: ReaderBlock[] = [];
   @State private empty: boolean = true;
+  @State private failedCardCoverIds: Array<string> = [];
   /** 正文是否贴在列表底边：onReachEnd 置位；出现任何实际滚动（回滚/内容增高后续滚）即复位。 */
   private atBottomEdge: boolean = false;
   /** 正文是否贴在列表顶边：初始即顶；滚动进正文（yOffset 越过容差）即复位，滚回顶部再置位。 */
@@ -1352,20 +1353,38 @@ export struct NativeContentDocument {
     } else if (item.kind === ReaderBlockKind.REFERENCE) {
       this.referenceEntryBlock(item)
     } else if (item.kind === ReaderBlockKind.LINK_CARD) {
-      Column({ space: 6 }) {
-        Text(item.text)
-          .fontSize(this.bodyFontSize())
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.primary_text'))
-          .width('100%')
-        if (item.sourceUrl.length > 0 && item.sourceUrl !== item.text) {
-          Text(item.sourceUrl)
-            .fontSize(this.referenceFontSize())
-            .fontColor(this.resolvedThemeColor)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
+      Row({ space: 12 }) {
+        if ((item.coverUrl ?? '').length > 0 && !this.failedCardCoverIds.includes(item.id)) {
+          Image(item.coverUrl ?? '')
+            .id(`content_link_cover_${item.id}`)
+            .width(64)
+            .height(64)
+            .objectFit(ImageFit.Cover)
+            .borderRadius(6)
+            .clip(true)
+            .accessibilityLevel('no')
+            .onError((): void => {
+              if (!this.failedCardCoverIds.includes(item.id)) {
+                this.failedCardCoverIds = this.failedCardCoverIds.concat(item.id);
+              }
+            })
         }
+        Column({ space: 6 }) {
+          Text(item.text)
+            .fontSize(this.bodyFontSize())
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.primary_text'))
+            .width('100%')
+          if (item.sourceUrl.length > 0 && item.sourceUrl !== item.text) {
+            Text(item.sourceUrl)
+              .fontSize(this.referenceFontSize())
+              .fontColor(this.resolvedThemeColor)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .width('100%')
+          }
+        }
+        .layoutWeight(1)
       }
       .id(`content_link_card_${item.id}`)
       .width('100%')

@@ -370,6 +370,25 @@ export default function readerDocumentTest(): void {
       expect(blocks[0].inlineRuns[2].linkUrl).assertEqual('https://example.com/b');
     });
 
+    it('preservesDraftCardCoverSeparatelyFromLinkTarget', 0, () => {
+      const blocks = parseZhihuHtml('<a data-draft-type="link-card" href="https://zhuanlan.zhihu.com/p/123" ' +
+        'data-draft-cover="//picx.zhimg.com/cover.jpg?source=test&amp;needBackground=1">推荐文章</a>');
+      expect(blocks[0].coverUrl).assertEqual('https://picx.zhimg.com/cover.jpg?source=test&needBackground=1');
+      expect(blocks[0].sourceUrl).assertEqual('https://zhuanlan.zhihu.com/p/123');
+      expect(blocks[0].text).assertEqual('推荐文章');
+    });
+
+    it('keepsTextCardsWhenCoverIsMissingOrUnsafe', 0, () => {
+      const blocks = parseZhihuHtml('<a data-draft-type="link-card" href="https://example.com">无图</a>' +
+        '<a data-draft-type="link-card" href="https://example.com" data-draft-cover="javascript:alert(1)">坏图</a>' +
+        '<a data-draft-type="link-card" href="https://example.com" data-draft-cover="https://picx.zhimg.com/a.jpg">有图</a>');
+      expect(blocks.length).assertEqual(3);
+      expect(blocks[0].coverUrl).assertEqual('');
+      expect(blocks[1].coverUrl).assertEqual('');
+      expect(blocks[1].text).assertEqual('坏图');
+      expect(blocks[2].coverUrl).assertEqual('https://picx.zhimg.com/a.jpg');
+    });
+
     it('normalizesProtocolRelativeImageAndRejectsUnsafeSource', 0, () => {
       const protocolRelative = parseZhihuHtml('<figure><img srcset="https://picx.zhimg.com/wrong.jpg 2x" ' +
         'src="//picx.zhimg.com/reading.jpg"></figure>');

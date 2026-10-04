@@ -60,6 +60,8 @@ export interface ReaderBlock {
   sourceUrl: string;
   /** 引用嵌套层数；保持子段落、公式和参考标记各自的语义。 */
   quoteDepth?: number;
+  /** 推荐阅读卡片的封面；不与点击目标 sourceUrl 混用。 */
+  coverUrl?: string;
   /** 视频块的 data-lens-id；其他块不设置。 */
   targetId?: string;
   /** 正文段落的知乎段落 id（p/li 的 data-pid），用于对齐服务端 segment_infos 的他人划线。 */
@@ -662,8 +664,10 @@ export function parseZhihuHtml(html: string): Array<ReaderBlock> {
         const label = plainText(contentOf(content.trim())) ||
           decodeHtml(attributeValue(anchor[1], 'data-draft-title') || attributeValue(anchor[1], 'data-title')).trim() || url;
         if (label.length > 0) {
+          const cover = decodeHtml(attributeValue(anchor[1], 'data-draft-cover')).trim();
+          const coverUrl = cover.startsWith('//') ? `https:${cover}` : cover;
           blocks.push({ id: blockId, kind: ReaderBlockKind.LINK_CARD, text: label,
-            sourceUrl: url, inlineRuns: [] });
+            sourceUrl: url, coverUrl: coverUrl.startsWith('https://') ? coverUrl : '', inlineRuns: [] });
         }
         return;
       }
