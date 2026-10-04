@@ -154,7 +154,7 @@ struct Index {
   @State private followRepository?: FollowRepository = undefined;
   @State private collectionRepository?: CollectionRepository = undefined;
   @State private commentRepository?: CommentRepository = undefined;
-  @State private notificationRepository?: MobileNotificationRepository = undefined;
+  private notificationRepositoryFactory?: () => MobileNotificationRepository = undefined;
   @State private notificationSettings?: NotificationSettingsGateway = undefined;
   private answerPublishFactory: AnswerPublishPageControllerFactory | undefined = undefined;
   private answerImageUploaderFactory: AnswerPublishImageUploaderFactory | undefined = undefined;
@@ -219,7 +219,7 @@ struct Index {
       this.followRepository = new DefaultFollowRepository(new ZhihuHttpClient(session));
       this.collectionRepository = new DefaultCollectionRepository(new ZhihuHttpClient(session));
       this.commentRepository = new DefaultCommentRepository(new ZhihuHttpClient(session));
-      this.notificationRepository = new DefaultMobileNotificationRepository(
+      this.notificationRepositoryFactory = (): MobileNotificationRepository => new DefaultMobileNotificationRepository(
         new ZhihuMobileHttpClient(session));
       this.notificationSettings = new AppPreferencesStore(context);
       this.answerPublishFactory = new LocalDraftAnswerPublishControllerFactory(session, draftRepository,
@@ -590,7 +590,7 @@ struct Index {
   @Builder
   notificationContent(navigate: (destination: AppDestination) => void, onBack: () => void) {
     NotificationPage({
-      repository: this.notificationRepository,
+      repositoryFactory: this.notificationRepositoryFactory,
       settings: this.notificationSettings,
       session: this.session,
       navigate: navigate,
@@ -608,7 +608,7 @@ struct Index {
   notificationEntryContent(entryName: string, title: string, navigate: (destination: AppDestination) => void) {
     NotificationTimelinePage({
       entryName: entryName,
-      repository: this.notificationRepository,
+      repositoryFactory: this.notificationRepositoryFactory,
       settings: this.notificationSettings,
       session: this.session,
       navigate: navigate
@@ -621,7 +621,7 @@ struct Index {
       peerId: peerId,
       peerName: peerName,
       avatarUrl: avatarUrl,
-      repository: this.notificationRepository,
+      repositoryFactory: this.notificationRepositoryFactory,
       session: this.session,
       navigate: navigate
     });

@@ -1,3 +1,4 @@
+import { ApplicationStateChangeCallback, common } from '@kit.AbilityKit';
 import { AppDestination, AppDestinationName } from 'core';
 import {
   onThemeColor,
@@ -12,6 +13,16 @@ import { PrivateMessageController, PrivateMessagePhase, PrivateMessageViewState 
 import { parsePrivateMessageSegments, PrivateMessageSegment, privateMessageDisplaySource } from './PrivateMessageContent';
 import { contentLinkDestination } from './NotificationLinkResolver';
 import { FLOATING_TITLE_BAR_OFFSET } from './AppPageChrome';
+
+class PrivateMessageApplicationCallback extends ApplicationStateChangeCallback {
+  private readonly change: (foreground: boolean) => void;
+  constructor(change: (foreground: boolean) => void) {
+    super();
+    this.change = change;
+  }
+  onApplicationForeground(): void { this.change(true); }
+  onApplicationBackground(): void { this.change(false); }
+}
 
 function relativeTime(createdTime: number): string {
   if (createdTime <= 0) {
@@ -47,6 +58,7 @@ export struct PrivateMessagePage {
   peerName: string = '';
   avatarUrl: string = '';
   repository: MobileNotificationRepository | undefined = undefined;
+  repositoryFactory?: () => MobileNotificationRepository;
   session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {};
   @State private phase: PrivateMessagePhase = PrivateMessagePhase.IDLE;
@@ -65,10 +77,17 @@ export struct PrivateMessagePage {
   private lastStableId: string = '';
   /** 初始定位到最新消息前不响应顶部触发的翻页，避免前插改变目标下标。 */
   private initialScrollSettled: boolean = false;
+  private atBottom: boolean = true;
+  private pageVisible: boolean = false;
+  private foreground: boolean = true;
+  private pollTimer: number = -1;
+  private pollEpoch: number = 0;
+  private applicationContext?: common.ApplicationContext;
+  private applicationCallback?: PrivateMessageApplicationCallback;
 
   aboutToAppear(): void {
     this.peerDisplayName = this.peerName;
-    const repository = this.repository;
+    const repository = this.repositoryFactory?.() ?? this.repository;
     const session = this.session;
     if (repository === undefined || session === undefined) {
       this.phase = PrivateMessagePhase.ERROR;
@@ -79,11 +98,52 @@ export struct PrivateMessagePage {
       (state: PrivateMessageViewState): void => this.applyState(state));
     this.controller.activate();
     this.controller.loadInitial();
+    const context = this.getUIContext().getHostContext()?.getApplicationContext();
+    if (context !== undefined) {
+      const callback = new PrivateMessageApplicationCallback((foreground: boolean): void => {
+        this.foreground = foreground;
+        this.updatePolling();
+      });
+      context.on('applicationStateChange', callback);
+      this.applicationContext = context;
+      this.applicationCallback = callback;
+    }
   }
 
   aboutToDisappear(): void {
+    this.pageVisible = false;
+    this.updatePolling();
+    if (this.applicationContext !== undefined && this.applicationCallback !== undefined) {
+      this.applicationContext.off('applicationStateChange', this.applicationCallback);
+    }
+    this.applicationContext = undefined;
+    this.applicationCallback = undefined;
     this.controller?.deactivate();
     this.controller = undefined;
+  }
+
+  private updatePolling(): void {
+    this.pollEpoch += 1;
+    if (this.pollTimer !== -1) {
+      clearTimeout(this.pollTimer);
+      this.pollTimer = -1;
+    }
+    if (this.pageVisible && this.foreground && this.controller !== undefined) {
+      this.schedulePoll(this.pollEpoch);
+    }
+  }
+
+  private schedulePoll(epoch: number): void {
+    this.pollTimer = setTimeout(async (): Promise<void> => {
+      this.pollTimer = -1;
+      if (epoch !== this.pollEpoch || !this.pageVisible || !this.foreground) {
+        return;
+      }
+      await this.controller?.refreshLatest();
+      if (epoch === this.pollEpoch && this.pageVisible && this.foreground) {
+        this.schedulePoll(epoch);
+      }
+    }, 5000);
   }
 
   build() {
@@ -100,7 +160,7 @@ export struct PrivateMessagePage {
             ListItem() {
               this.messageBubble(message)
             }
-          }, (message: ZhihuPrivateMessage): string => `private_message_${privateMessageStableId(message)}`)
+          }, (message: ZhihuPrivateMessage): string => `private_message_${JSON.stringify(message)}`)
 
           if (this.loadingMore) {
             ListItem() {
@@ -132,6 +192,9 @@ export struct PrivateMessagePage {
             }
           }
         }
+        .onScrollIndex((_start: number, end: number): void => {
+          this.atBottom = end >= this.items.length - 1;
+        })
         .id('private_message_list')
         .width('100%')
         // 顶栏让位：内缩滚动内容起点，未滚动时首屏内容仍从标题栏下沿开始
@@ -187,6 +250,10 @@ export struct PrivateMessagePage {
         .alignItems(VerticalAlign.Center)
       }
     }
+    .onVisibleAreaChange([0, 1], (visible: boolean, ratio: number): void => {
+      this.pageVisible = visible && ratio > 0;
+      this.updatePolling();
+    })
     .id('private_message_page')
     .width('100%')
     .height('100%')
@@ -326,6 +393,7 @@ export struct PrivateMessagePage {
 
   private applyState(state: PrivateMessageViewState): void {
     const previous = this.items;
+    const followLatest = previous.length === 0 || this.atBottom || this.sending;
     this.phase = state.phase;
     this.items = state.items;
     this.sending = state.sending;
@@ -361,7 +429,7 @@ export struct PrivateMessagePage {
       if (lastId !== this.lastStableId) {
         this.lastStableId = lastId;
         const count = this.items.length;
-        if (previous.length === 0 || count !== previous.length) {
+        if (followLatest && (previous.length === 0 || count !== previous.length)) {
           setTimeout((): void => {
             this.scroller.scrollToIndex(count - 1, false);
             this.initialScrollSettled = true;

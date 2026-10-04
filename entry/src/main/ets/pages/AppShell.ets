@@ -6,7 +6,8 @@ import { AnswerTitleBar } from './AnswerTitleBar';
 import { ArticleTitleBar } from './ArticleTitleBar';
 import { peopleTitleText, PeopleTitleState } from './PeopleTitleBar';
 import { CommentTitleBar, commentTitleStateId } from './CommentTitleBar';
-import { NotificationTitleBar } from './NotificationTitleBar';
+import { NotificationTitleBar, NOTIFICATION_HUB_REFRESH_TICK_KEY,
+  NOTIFICATION_TIMELINE_REFRESH_TICK_KEY, NOTIFICATION_TIMELINE_ENTRY_KEY } from './NotificationTitleBar';
 import {
   onThemeColor,
   AppearancePreferences,
@@ -841,6 +842,10 @@ export struct AppShell {
           }
         );
       }
+      .onShown((): void => {
+        const tick = AppStorage.get<number>(NOTIFICATION_HUB_REFRESH_TICK_KEY) ?? 0;
+        AppStorage.setOrCreate(NOTIFICATION_HUB_REFRESH_TICK_KEY, tick + 1);
+      })
       // 消息中心标题栏对齐上游：标题「消息」+ 右上角已读/设置动作（同搜索页 stackBuilder 模式）。
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: {
@@ -859,6 +864,12 @@ export struct AppShell {
           (destination: AppDestination): void => this.navigate(destination)
         );
       }
+      .onShown((): void => {
+        AppStorage.setOrCreate(NOTIFICATION_TIMELINE_ENTRY_KEY,
+          (destination as NotificationEntryDestination).entryName);
+        const tick = AppStorage.get<number>(NOTIFICATION_TIMELINE_REFRESH_TICK_KEY) ?? 0;
+        AppStorage.setOrCreate(NOTIFICATION_TIMELINE_REFRESH_TICK_KEY, tick + 1);
+      })
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: { title: { mainTitle: (destination as NotificationEntryDestination).title },
           divider: { showType: DividerShowType.OFF } } })

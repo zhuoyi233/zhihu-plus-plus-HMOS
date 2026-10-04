@@ -1,3 +1,4 @@
+import { notificationItemRenderKey } from '../main/ets/pages/NotificationItemRenderKey';
 import { describe, expect, it } from '@ohos/hypium';
 import {
   HttpFailure,
@@ -147,6 +148,16 @@ function preferencesWith(likeAnswerDisplay: boolean): NotificationPreferences {
 
 export default function notificationStateTest(): void {
   describe('notificationStateTest', () => {
+    it('sameNotificationIdRerendersWhenSummaryOrReadStateChanges', 0, () => {
+      const before = makeItem('same-thread', 'message', '旧摘要', false);
+      const unchanged = makeItem('same-thread', 'message', '旧摘要', false);
+      const updated = makeItem('same-thread', 'message', '新摘要', false);
+      const read = makeItem('same-thread', 'message', '旧摘要', true);
+      expect(notificationItemRenderKey(before)).assertEqual(notificationItemRenderKey(unchanged));
+      expect(notificationItemRenderKey(before) === notificationItemRenderKey(updated)).assertFalse();
+      expect(notificationItemRenderKey(before) === notificationItemRenderKey(read)).assertFalse();
+    });
+
     it('hubRequiresLoginWithoutAuthenticatedSession', 0, async () => {
       const repository = new FakeMobileNotificationRepository();
       const controller = new NotificationController(repository,
@@ -199,6 +210,26 @@ export default function notificationStateTest(): void {
       expect(controller.snapshot().categoryUnread.like).assertEqual(0);
     });
 
+    it('hubReloadReplacesUnreadBadgesAfterReturning', 0, async () => {
+      const repository = new FakeMobileNotificationRepository();
+      repository.messagePages.push(makeMessagePage());
+      const controller = new NotificationController(repository,
+        new FixedSessionGateway(SessionStatus.AUTHENTICATED));
+      controller.activate();
+      await controller.loadInitial();
+      expect(controller.snapshot().unreadTotal).assertEqual(4);
+      expect(controller.snapshot().items[0].unreadCount).assertEqual(1);
+      repository.messagePages.push({
+        overview: { head: [], columnHead: [] },
+        items: [makeItem('c1', 'message', '', true)],
+        cursor: { isEnd: true, isStart: false, next: undefined, previous: undefined, page: 0, total: 0 }
+      });
+      await controller.loadInitial();
+      expect(controller.snapshot().unreadTotal).assertEqual(0);
+      expect(controller.snapshot().items.length).assertEqual(1);
+      expect(controller.snapshot().items[0].unreadCount).assertEqual(0);
+    });
+
     it('timelineFiltersByPreferencesAndAutoMarksRead', 0, async () => {
       const repository = new FakeMobileNotificationRepository();
       repository.timelinePages.push(makeTimelinePage());
@@ -229,6 +260,97 @@ export default function notificationStateTest(): void {
       repository.timelinePages.push(makeTimelinePage());
       await autoController.loadInitial();
       expect(repository.readAllEntries).assertContain('like');
+    });
+
+    it('timelineReloadReplacesReadStateForExistingIds', 0, async () => {
+      const repository = new FakeMobileNotificationRepository();
+      repository.timelinePages.push(makeTimelinePage());
+      const controller = new NotificationTimelineController('like', repository,
+        new FixedSessionGateway(SessionStatus.AUTHENTICATED));
+      controller.activate();
+      await controller.loadInitial();
+      expect(controller.snapshot().items[0].isRead).assertFalse();
+      repository.timelinePages.push({
+        items: [makeItem('t1', 'notification', '喜欢了你的回答', true)],
+        cursor: { isEnd: true, isStart: false, next: undefined, previous: undefined, page: 0, total: 0 }
+      });
+      await controller.loadInitial();
+      expect(controller.snapshot().items.length).assertEqual(1);
+      expect(controller.snapshot().items[0].isRead).assertTrue();
+    });
+
+    it('timelineMarksReadWhenPreferencesArriveAfterMessages', 0, async () => {
+      const repository = new FakeMobileNotificationRepository();
+      repository.timelinePages.push(makeTimelinePage());
+      const controller = new NotificationTimelineController('like', repository,
+        new FixedSessionGateway(SessionStatus.AUTHENTICATED));
+      controller.activate();
+      await controller.loadInitial();
+      expect(repository.readAllEntries.length).assertEqual(0);
+      const defaults = defaultNotificationPreferences();
+      const preferences: NotificationPreferences = {
+        likeAnswerDisplay: defaults.likeAnswerDisplay,
+        likeCommentDisplay: defaults.likeCommentDisplay,
+        replyCommentDisplay: defaults.replyCommentDisplay,
+        inviteAnswerDisplay: defaults.inviteAnswerDisplay,
+        autoMarkAsRead: true,
+        unreadBadge: defaults.unreadBadge
+      };
+      controller.setPreferences(preferences);
+      controller.setPreferences(preferences);
+      await Promise.resolve();
+      expect(repository.readAllEntries.length).assertEqual(1);
+      expect(repository.readAllEntries[0]).assertEqual('like');
+      controller.deactivate();
+      controller.setPreferences(preferences);
+      expect(repository.readAllEntries.length).assertEqual(1);
+    });
+
+    it('privateMessagePollMergesNewMessagesWithoutLosingHistory', 0, async () => {
+      const repository = new FakeMobileNotificationRepository();
+      repository.privateMessagePages.push(makePrivateMessagePage());
+      const controller = new PrivateMessageController('peer-id', repository,
+        new FixedSessionGateway(SessionStatus.AUTHENTICATED));
+      controller.activate();
+      await controller.loadInitial();
+      repository.privateMessagePages.push({
+        items: [makeMessage('m3', '实时新消息', 1760002000), makeMessage('m2', '第二条', 1760001000)],
+        cursor: { isEnd: false, isStart: false, next: 'older', previous: undefined, page: 0, total: 0 }
+      });
+      await controller.refreshLatest();
+      expect(controller.snapshot().items.length).assertEqual(3);
+      expect(controller.snapshot().items[0].id).assertEqual('m1');
+      expect(controller.snapshot().items[2].content).assertEqual('实时新消息');
+      // 请求失败保留可读会话，不切换到整页错误。
+      await controller.refreshLatest();
+      expect(controller.snapshot().phase).assertEqual(PrivateMessagePhase.READY);
+      expect(controller.snapshot().items.length).assertEqual(3);
+      controller.deactivate();
+      repository.privateMessagePages.push(makePrivateMessagePage());
+      await controller.refreshLatest();
+      expect(repository.privateMessagePages.length).assertEqual(1);
+    });
+
+    it('privateMessagePollCatchesUpAcrossMultiplePages', 0, async () => {
+      const repository = new FakeMobileNotificationRepository();
+      repository.privateMessagePages.push(makePrivateMessagePage());
+      const controller = new PrivateMessageController('peer-id', repository,
+        new FixedSessionGateway(SessionStatus.AUTHENTICATED));
+      controller.activate();
+      await controller.loadInitial();
+      repository.privateMessagePages.push({
+        items: [makeMessage('m4', '第四条', 1760003000)],
+        cursor: { isEnd: false, isStart: false, next: 'gap', previous: undefined, page: 0, total: 0 }
+      });
+      repository.privateMessagePages.push({
+        items: [makeMessage('m3', '第三条', 1760002000), makeMessage('m2', '第二条', 1760001000)],
+        cursor: { isEnd: false, isStart: false, next: 'older', previous: undefined, page: 0, total: 0 }
+      });
+      await controller.refreshLatest();
+      expect(controller.snapshot().items.length).assertEqual(4);
+      expect(controller.snapshot().items[2].id).assertEqual('m3');
+      expect(controller.snapshot().items[3].id).assertEqual('m4');
+      expect(controller.snapshot().canLoadMore).assertFalse();
     });
 
     it('privateMessagePrependsOlderPagesOnLoadMore', 0, async () => {
