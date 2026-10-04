@@ -7,6 +7,7 @@ import {
   FollowMutationResult,
   FollowRepository,
   LoginSessionGateway,
+  LinkCardMetaRepository,
   onThemeColor,
   OpenedContentStore,
   ReadHistoryUploadRepository,
@@ -919,6 +920,8 @@ function peopleContentDestination(item: PeopleContentItem): AppDestination {
 export struct PinDetailPage {
   contentId: string = '';
   repository: PinRepository | undefined = undefined;
+  /** 推荐阅读卡片站内元数据仓库：赞同/评论计数与资源类型（正文 link-card 展示）。 */
+  linkCardMetaRepository: LinkCardMetaRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
   /** 阅读历史上云仓库（对齐上游 addReadHistory；未配置或游客态时不上报）。 */
@@ -1174,6 +1177,7 @@ export struct PinDetailPage {
         NativeContentDocument({
           html: pin.contentHtml,
           emptyMessage: '这条想法暂时没有正文',
+          linkCardMetaRepository: this.linkCardMetaRepository,
           onLinkClick: (url: string): void => this.openContentLink(url)
         })
           .layoutWeight(1)

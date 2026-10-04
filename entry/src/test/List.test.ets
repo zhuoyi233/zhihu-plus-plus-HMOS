@@ -87,6 +87,7 @@ import immersiveMaterialStylesTest from './ImmersiveMaterialStyles.test';
 import draftImageReferenceScanTest from './DraftImageReferenceScan.test';
 import readHistoryUploadRepositoryTest from './ReadHistoryUploadRepository.test';
 import lastReadTouchRepositoryTest from './LastReadTouchRepository.test';
+import linkCardMetaTest from './LinkCardMeta.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -98,6 +99,7 @@ export default function testsuite(): void {
   qrDesktopLoginScanFlowTest();
   qrDesktopLoginConfirmationPolicyTest();
   readerDocumentTest();
+  linkCardMetaTest();
   segmentHighlightTest();
   rdbSchemaTest();
   zhihuLoginClientTest();

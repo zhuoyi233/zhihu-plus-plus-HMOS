@@ -37,6 +37,7 @@ import {
   FollowMutationResult,
   FollowRepository,
   LoginSessionGateway,
+  LinkCardMetaRepository,
   OpenedContentStore,
   QuestionAnswerFeedRepository,
   QuestionAnswerSortOrder,
@@ -162,6 +163,8 @@ struct ContentDetailPage {
   private contentTitleHeightVp: number = 0;
   private pageActive: boolean = false;
   repository: ContentRepository | undefined = undefined;
+  /** 推荐阅读卡片站内元数据仓库：赞同/评论计数与资源类型（正文 link-card 展示）。 */
+  linkCardMetaRepository: LinkCardMetaRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
   /** 阅读历史上云仓库（对齐上游 addReadHistory；未配置或游客态时不上报）。 */
   historyUploader: ReadHistoryUploadRepository | undefined = undefined;
@@ -978,6 +981,7 @@ struct ContentDetailPage {
         NativeContentDocument({
           html: contentHtml(content),
           emptyMessage: contentEmptyMessage(content),
+          linkCardMetaRepository: this.linkCardMetaRepository,
           disableEdgeSpring: this.kind === ContentDetailKind.ANSWER,
           topInsetVp: this.immersiveReading ? 0 : FLOATING_TITLE_BAR_OFFSET,
           onVideoOpen: (videoId: string): void => this.openVideo(videoId),
@@ -1937,6 +1941,7 @@ struct ContentDetailPage {
     Refresh({ refreshing: $$this.refreshingAnswers, refreshingContent: this.indicator?.view() }) {
       NativeContentDocument({
         html: contentHtml(content), emptyMessage: contentEmptyMessage(content), collapsible: true,
+        linkCardMetaRepository: this.linkCardMetaRepository,
         topInsetVp: this.immersiveReading ? 0 : FLOATING_TITLE_BAR_OFFSET,
         onVideoOpen: (videoId: string): void => this.openVideo(videoId),
         onLinkClick: (url: string): void => this.openContentLink(url),
@@ -3334,6 +3339,8 @@ export struct QuestionDetailPage {
   questionAnswerFeedFactory: () => QuestionAnswerFeedRepository | undefined = () => undefined;
   contentId: string = '';
   repository: ContentRepository | undefined = undefined;
+  /** 推荐阅读卡片站内元数据仓库：赞同/评论计数与资源类型（正文 link-card 展示）。 */
+  linkCardMetaRepository: LinkCardMetaRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
   /** 阅读历史上云仓库（对齐上游 addReadHistory；未配置或游客态时不上报）。 */
   historyUploader: ReadHistoryUploadRepository | undefined = undefined;
@@ -3357,6 +3364,7 @@ export struct QuestionDetailPage {
       questionAnswerFeedFactory: this.questionAnswerFeedFactory,
       contentId: this.contentId,
       repository: this.repository,
+      linkCardMetaRepository: this.linkCardMetaRepository,
       openedContentStore: this.openedContentStore,
       historyUploader: this.historyUploader,
       rules: this.rules,
@@ -3378,6 +3386,8 @@ export struct AnswerDetailPage {
   questionAnswerFeedFactory: () => QuestionAnswerFeedRepository | undefined = () => undefined;
   contentId: string = '';
   repository: ContentRepository | undefined = undefined;
+  /** 推荐阅读卡片站内元数据仓库：赞同/评论计数与资源类型（正文 link-card 展示）。 */
+  linkCardMetaRepository: LinkCardMetaRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
   /** 阅读历史上云仓库（对齐上游 addReadHistory；未配置或游客态时不上报）。 */
   historyUploader: ReadHistoryUploadRepository | undefined = undefined;
@@ -3401,6 +3411,7 @@ export struct AnswerDetailPage {
       questionAnswerFeedFactory: this.questionAnswerFeedFactory,
       contentId: this.contentId,
       repository: this.repository,
+      linkCardMetaRepository: this.linkCardMetaRepository,
       openedContentStore: this.openedContentStore,
       historyUploader: this.historyUploader,
       rules: this.rules,
@@ -3421,6 +3432,8 @@ export struct AnswerDetailPage {
 export struct ArticleDetailPage {
   contentId: string = '';
   repository: ContentRepository | undefined = undefined;
+  /** 推荐阅读卡片站内元数据仓库：赞同/评论计数与资源类型（正文 link-card 展示）。 */
+  linkCardMetaRepository: LinkCardMetaRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
   /** 阅读历史上云仓库（对齐上游 addReadHistory；未配置或游客态时不上报）。 */
   historyUploader: ReadHistoryUploadRepository | undefined = undefined;
@@ -3443,6 +3456,7 @@ export struct ArticleDetailPage {
       kind: ContentDetailKind.ARTICLE,
       contentId: this.contentId,
       repository: this.repository,
+      linkCardMetaRepository: this.linkCardMetaRepository,
       openedContentStore: this.openedContentStore,
       historyUploader: this.historyUploader,
       rules: this.rules,

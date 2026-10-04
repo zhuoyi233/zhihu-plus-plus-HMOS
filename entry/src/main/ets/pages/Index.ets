@@ -32,6 +32,8 @@ import {
   DefaultLastReadTouchRepository,
   DefaultMobileNotificationRepository,
   DefaultVoteRepository,
+  DefaultLinkCardMetaRepository,
+  LinkCardMetaRepository,
   DefaultSegmentReactionRepository,
   DefaultSegmentCommentRepository,
   FeedRepository,
@@ -144,6 +146,8 @@ struct Index {
   /** 上次阅读上报仓库：首页点击 read、feed 曝光 touch（对齐上游 lastread/touch）。 */
   @State private lastReadTouchRepository?: LastReadTouchRepository = undefined;
   @State private voteRepository?: VoteRepository = undefined;
+  /** 推荐阅读卡片站内元数据（赞同/评论计数与资源类型）。 */
+  @State private linkCardMetaRepository?: LinkCardMetaRepository = undefined;
   @State private segmentReactionRepository?: SegmentReactionRepository = undefined;
   private segmentCommentRepositoryHttpClient: ZhihuHttpClient = new ZhihuHttpClient();
   private videoRepository?: VideoRepository = undefined;
@@ -209,6 +213,7 @@ struct Index {
       this.readHistoryUploader = new DefaultReadHistoryUploadRepository(new ZhihuHttpClient(session), session);
       this.lastReadTouchRepository = new DefaultLastReadTouchRepository(new ZhihuHttpClient(session), session);
       this.voteRepository = new DefaultVoteRepository(new ZhihuHttpClient(session));
+      this.linkCardMetaRepository = new DefaultLinkCardMetaRepository(new ZhihuHttpClient(session));
       this.segmentReactionRepository = new DefaultSegmentReactionRepository(new ZhihuHttpClient(session));
       this.segmentCommentRepositoryHttpClient = new ZhihuHttpClient(session);
       this.followRepository = new DefaultFollowRepository(new ZhihuHttpClient(session));
@@ -415,6 +420,7 @@ struct Index {
     QuestionDetailPage({
       contentId: id,
       repository: this.questionRepository,
+      linkCardMetaRepository: this.linkCardMetaRepository,
       openedContentStore: this.openedContentStore,
       historyUploader: this.readHistoryUploader,
       navigate: navigate,
@@ -436,6 +442,7 @@ struct Index {
     AnswerDetailPage({
       contentId: id,
       repository: this.answerRepository,
+      linkCardMetaRepository: this.linkCardMetaRepository,
       openedContentStore: this.openedContentStore,
       historyUploader: this.readHistoryUploader,
       navigate: navigate,
@@ -457,6 +464,7 @@ struct Index {
     ArticleDetailPage({
       contentId: id,
       repository: this.articleRepository,
+      linkCardMetaRepository: this.linkCardMetaRepository,
       openedContentStore: this.openedContentStore,
       historyUploader: this.readHistoryUploader,
       navigate: navigate,
@@ -545,6 +553,7 @@ struct Index {
     PinDetailPage({
       contentId: id,
       repository: this.pinRepository,
+      linkCardMetaRepository: this.linkCardMetaRepository,
       session: this.session,
       openedContentStore: this.openedContentStore,
       historyUploader: this.readHistoryUploader,
