@@ -21,6 +21,8 @@ import {
   effectiveSegmentMeta,
   getAppSessionOwner,
   getGuestDeviceCookieManager,
+  LinkCardMeta,
+  LinkCardMetaRepository,
   SegmentInfoMark,
   SegmentInfoParagraph,
   toCookieHeader
@@ -57,6 +59,7 @@ import {
   readerBodyLineHeight,
   readerHeadingFontSize
 } from './ReaderTypography';
+import { linkCardMetaLine } from './LinkCardMetaText';
 
 /**
  * 块高缺失时的估算兜底（vp）：未渲染块按实测平均块高估，无实测值时用该值。
@@ -728,6 +731,8 @@ export struct NativeContentDocument {
   onVideoOpen?: (videoId: string) => void;
   /** 正文内联链接（a[href]）点击回调：站内内容导航、外链交系统浏览器，由宿主详情页决定。 */
   onLinkClick?: (url: string) => void;
+  /** 推荐阅读卡片元数据仓库：解析站内链接并拉取赞同/评论计数；未配置时卡片回退为展示链接地址。 */
+  linkCardMetaRepository?: LinkCardMetaRepository = undefined;
   /** 正文区域双击回调（回答页双击赞同动作）。 */
   onBodyDoubleTap?: () => void;
   /** 正文 Text 的双击识别器：开启选词的 Text 会吞掉手势系统事件，只能靠 onTouch 自行识别。 */
@@ -781,6 +786,10 @@ export struct NativeContentDocument {
   private blocks: ReaderBlock[] = [];
   @State private empty: boolean = true;
   @State private failedCardCoverIds: Array<string> = [];
+  /** 推荐阅读卡片站内元数据（卡片 url → meta）：aboutToAppear 异步回填，重赋值触发重渲染。 */
+  @State private linkCardMetas: Map<string, LinkCardMeta> = new Map();
+  /** 卡片元数据请求代际：组件销毁（切换回答/离开页面）后丢弃迟到响应，不再回填状态。 */
+  private linkCardMetaGeneration: number = 0;
   /** 正文是否贴在列表底边：onReachEnd 置位；出现任何实际滚动（回滚/内容增高后续滚）即复位。 */
   private atBottomEdge: boolean = false;
   /** 正文是否贴在列表顶边：初始即顶；滚动进正文（yOffset 越过容差）即复位，滚回顶部再置位。 */
@@ -942,11 +951,60 @@ export struct NativeContentDocument {
     this.empty = blocks.length === 0;
     this.blocks = blocks;
     this.dataSource.replace(blocks);
+    this.loadLinkCardMetas(blocks);
     const plainLength = this.html.replace(/<[^>]*>/g, '').trim().length;
     this.collapsibleActive = this.collapsible && (plainLength >= 100 || this.html.includes('<img'));
   }
 
+  /**
+   * 推荐阅读卡片元数据拉取：逐个卡片链接（去重）解析站内资源并取赞同/评论计数。
+   * 必须串行：ZhihuHttpClient 是单飞设计（同一实例并发第二请求直接抛 BUSY），
+   * 并行拉取会让除第一张外的所有卡片拿到失败。失败或非站内资源静默跳过，
+   * 卡片保持展示链接地址的回退形态。
+   */
+  private loadLinkCardMetas(blocks: ReaderBlock[]): void {
+    const repository = this.linkCardMetaRepository;
+    if (repository === undefined) {
+      return;
+    }
+    const urls: Array<string> = [];
+    blocks.forEach((block: ReaderBlock): void => {
+      if (block.kind === ReaderBlockKind.LINK_CARD && block.sourceUrl.length > 0 &&
+        !urls.includes(block.sourceUrl)) {
+        urls.push(block.sourceUrl);
+      }
+    });
+    if (urls.length === 0) {
+      return;
+    }
+    void this.loadLinkCardMetasSequentially(urls, repository, this.linkCardMetaGeneration);
+  }
+
+  private async loadLinkCardMetasSequentially(urls: Array<string>, repository: LinkCardMetaRepository,
+    generation: number): Promise<void> {
+    for (const url of urls) {
+      if (generation !== this.linkCardMetaGeneration) {
+        return;
+      }
+      try {
+        const meta = await repository.getMeta(url);
+        if (meta === undefined || generation !== this.linkCardMetaGeneration) {
+          continue;
+        }
+        const updated: Map<string, LinkCardMeta> = new Map();
+        this.linkCardMetas.forEach((existing: LinkCardMeta, key: string): void => {
+          updated.set(key, existing);
+        });
+        updated.set(url, meta);
+        this.linkCardMetas = updated;
+      } catch (_error) {
+        // 单卡失败不阻塞后续卡片，保持链接地址回退形态。
+      }
+    }
+  }
+
   aboutToDisappear(): void {
+    this.linkCardMetaGeneration += 1;
     clearFormulaByteCache();
     if (this.bodySelectionRestoreTimerId >= 0) {
       clearTimeout(this.bodySelectionRestoreTimerId);
@@ -1380,7 +1438,17 @@ export struct NativeContentDocument {
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.primary_text'))
             .width('100%')
-          if ((item.displayUrl ?? item.sourceUrl).length > 0 && (item.displayUrl ?? item.sourceUrl) !== item.text) {
+          // 站内资源回填元数据后展示 `赞同 X · 评论 Y · 类型`（对齐网页卡片 meta 行）；
+          // 外链/拉取失败回退为展示链接地址。
+          if (this.linkCardMetas.has(item.sourceUrl)) {
+            Text(linkCardMetaLine(this.linkCardMetas.get(item.sourceUrl) as LinkCardMeta))
+              .fontSize(this.referenceFontSize())
+              .fontColor($r('app.color.secondary_text'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .width('100%')
+          } else if ((item.displayUrl ?? item.sourceUrl).length > 0 &&
+            (item.displayUrl ?? item.sourceUrl) !== item.text) {
             Text(item.displayUrl ?? item.sourceUrl)
               .fontSize(this.referenceFontSize())
               .fontColor(this.resolvedThemeColor)

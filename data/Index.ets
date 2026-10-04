@@ -54,6 +54,7 @@ export * from './src/main/ets/repository/DefaultMobileNotificationRepository';
 export * from './src/main/ets/repository/DefaultDailyStoryRepository';
 export * from './src/main/ets/repository/DefaultFeedRepository';
 export * from './src/main/ets/repository/DefaultFollowRepository';
+export * from './src/main/ets/repository/LinkCardMetaRepository';
 export * from './src/main/ets/repository/DefaultPeopleRepository';
 export * from './src/main/ets/repository/DefaultPeopleContentRepository';
 export * from './src/main/ets/repository/DefaultPinRepository';
