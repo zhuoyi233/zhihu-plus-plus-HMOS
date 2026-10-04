@@ -780,6 +780,7 @@ export struct NativeContentDocument {
   @State private naturalHeightVp: number = 0;
   private blocks: ReaderBlock[] = [];
   @State private empty: boolean = true;
+  @State private failedCardCoverIds: Array<string> = [];
   /** 正文是否贴在列表底边：onReachEnd 置位；出现任何实际滚动（回滚/内容增高后续滚）即复位。 */
   private atBottomEdge: boolean = false;
   /** 正文是否贴在列表顶边：初始即顶；滚动进正文（yOffset 越过容差）即复位，滚回顶部再置位。 */
@@ -1290,6 +1291,24 @@ export struct NativeContentDocument {
 
   @Builder
   private readerBlock(item: ReaderBlock) {
+    Column() {
+      this.readerBlockContent(item)
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Start)
+    .padding({
+      left: (item.quoteDepth ?? 0) > 0 ? 12 : 0,
+      // 知乎网页 h2 的实际段前间距为 42px；扣除列表已有间距，避免重复叠加。
+      top: item.kind === ReaderBlockKind.HEADING && item.text.trim() === '推荐阅读' ?
+        Math.max(0, 42 - this.blockSpacing()) : 0
+    })
+    .margin({ left: Math.min(Math.max((item.quoteDepth ?? 0) - 1, 0), 4) * 8 })
+    .borderWidth({ left: (item.quoteDepth ?? 0) > 0 ? 3 : 0 })
+    .borderColor($r('app.color.secondary_text'))
+  }
+
+  @Builder
+  private readerBlockContent(item: ReaderBlock) {
     if (item.kind === ReaderBlockKind.HEADING) {
       if (item.inlineRuns.length > 0) {
         Text() {
@@ -1338,6 +1357,53 @@ export struct NativeContentDocument {
       Divider().margin({ top: 8, bottom: 8 })
     } else if (item.kind === ReaderBlockKind.REFERENCE) {
       this.referenceEntryBlock(item)
+    } else if (item.kind === ReaderBlockKind.LINK_CARD) {
+      Row({ space: 12 }) {
+        if ((item.coverUrl ?? '').length > 0 && !this.failedCardCoverIds.includes(item.id)) {
+          Image(item.coverUrl ?? '')
+            .id(`content_link_cover_${item.id}`)
+            .width(64)
+            .height(64)
+            .objectFit(ImageFit.Cover)
+            .borderRadius(6)
+            .clip(true)
+            .accessibilityLevel('no')
+            .onError((): void => {
+              if (!this.failedCardCoverIds.includes(item.id)) {
+                this.failedCardCoverIds = this.failedCardCoverIds.concat(item.id);
+              }
+            })
+        }
+        Column({ space: 6 }) {
+          Text(item.text)
+            .fontSize(this.bodyFontSize())
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.primary_text'))
+            .width('100%')
+          if ((item.displayUrl ?? item.sourceUrl).length > 0 && (item.displayUrl ?? item.sourceUrl) !== item.text) {
+            Text(item.displayUrl ?? item.sourceUrl)
+              .fontSize(this.referenceFontSize())
+              .fontColor(this.resolvedThemeColor)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .width('100%')
+          }
+        }
+        .layoutWeight(1)
+      }
+      .id(`content_link_card_${item.id}`)
+      .width('100%')
+      .padding(12)
+      .borderRadius(8)
+      .backgroundColor($r('app.color.surface_background'))
+      .borderWidth(1)
+      .borderColor($r('app.color.secondary_text'))
+      .onClick((): void => {
+        if (item.sourceUrl.length > 0) {
+          this.bodyTapDetector.markForeignClick();
+          this.onLinkClick?.(item.sourceUrl);
+        }
+      })
     } else if (item.kind === ReaderBlockKind.FORMULA) {
       // 按主题/字号 tick 奇偶翻转分支强制销毁重建（见 formulaRecreateTick/formulaDecodeTick 注释）。
       if ((this.formulaRecreateTick + this.formulaDecodeTick) % 2 === 0) {

@@ -1,3 +1,4 @@
+import { parseAbsoluteUrl } from 'core';
 import { isTrustedFormulaUrl } from './FormulaSourcePolicy';
 
 export enum ReaderBlockKind {
@@ -8,7 +9,8 @@ export enum ReaderBlockKind {
   IMAGE,
   VIDEO,
   LIST_ITEM,
-  REFERENCE
+  REFERENCE,
+  LINK_CARD
 }
 
 export enum ReaderInlineKind {
@@ -57,6 +59,12 @@ export interface ReaderBlock {
   kind: ReaderBlockKind;
   text: string;
   sourceUrl: string;
+  /** 引用嵌套层数；保持子段落、公式和参考标记各自的语义。 */
+  quoteDepth?: number;
+  /** 推荐阅读卡片的封面；不与点击目标 sourceUrl 混用。 */
+  coverUrl?: string;
+  /** 卡片展示地址：去掉知乎跳转包装，sourceUrl 仍用于点击。 */
+  displayUrl?: string;
   /** 视频块的 data-lens-id；其他块不设置。 */
   targetId?: string;
   /** 正文段落的知乎段落 id（p/li 的 data-pid），用于对齐服务端 segment_infos 的他人划线。 */
@@ -76,7 +84,64 @@ export interface ReaderDocumentStats {
   imageCount: number;
 }
 
-const BLOCK_PATTERN = /<(?:h[1-6]|p|li|figure|blockquote|pre)\b[^>]*>[\s\S]*?<\/(?:h[1-6]|p|li|figure|blockquote|pre)>|<a\b[^>]*>[\s\S]*?<\/a>|<hr\b[^>]*\/?>/gi;
+interface HtmlBlockFragment {
+  html: string;
+  quoteDepth: number;
+  pid: string;
+}
+
+/** 按同名标签闭合，避免 blockquote/figure 被内部 p 的结束标签截断。 */
+function blockFragments(html: string): Array<HtmlBlockFragment> {
+  const fragments: Array<HtmlBlockFragment> = [];
+  const tags = /<!--[\s\S]*?-->|<\/?[a-z][a-z0-9]*\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
+  let quoteDepth = 0;
+  const quotePids: Array<string> = [];
+  let pending = '';
+  let offset = 0;
+  let active = '';
+  let depth = 0;
+  const flush = (): void => {
+    if (pending.trim().length > 0) {
+      fragments.push({ html: active.length > 0 ? pending : `<p>${pending}</p>`, quoteDepth: quoteDepth,
+        pid: active.length === 0 ? (quotePids[quotePids.length - 1] ?? '') : '' });
+    }
+    pending = '';
+  };
+  let match: RegExpExecArray | null;
+  while ((match = tags.exec(html)) !== null) {
+    pending += html.slice(offset, match.index);
+    const tag = match[0];
+    offset = match.index + tag.length;
+    if (tag.startsWith('<!--')) { continue; }
+    const parsed = inlineTagName(tag);
+    if (active.length > 0) {
+      pending += tag;
+      if (parsed.name === active) {
+        depth += parsed.closing ? -1 : 1;
+        if (depth === 0) { flush(); active = ''; }
+      }
+    } else if (parsed.name === 'blockquote') {
+      flush();
+      quoteDepth = Math.max(0, quoteDepth + (parsed.closing ? -1 : 1));
+      if (parsed.closing) { quotePids.pop(); } else { quotePids.push(attributeValue(tag, 'data-pid')); }
+    } else if (/^(h[1-6]|p|li|figure|pre|a)$/.test(parsed.name) && !parsed.closing) {
+      flush();
+      active = parsed.name;
+      depth = 1;
+      pending = tag;
+    } else if (parsed.name === 'hr') {
+      flush();
+      fragments.push({ html: tag, quoteDepth: quoteDepth, pid: '' });
+    } else if (/^(div|section|ul|ol)$/.test(parsed.name)) {
+      flush();
+    } else {
+      pending += tag;
+    }
+  }
+  pending += html.slice(offset);
+  flush();
+  return fragments;
+}
 const IMAGE_PATTERN = /<img\b[^>]*>/gi;
 const NOSCRIPT_PATTERN = /<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi;
 const ANCHOR_PATTERN = /<a\b[^>]*>[\s\S]*?<\/a>/gi;
@@ -267,6 +332,25 @@ function normalizeLinkHref(href: string): string {
     return `https://www.zhihu.com${trimmed}`;
   }
   return '';
+}
+
+function linkCardDisplayUrl(url: string): string {
+  let displayUrl = url;
+  for (let depth = 0; depth < 3; depth++) {
+    const parsed = parseAbsoluteUrl(displayUrl);
+    if (parsed === undefined || parsed.hostname !== 'link.zhihu.com' ||
+      parsed.hasUserInfo || parsed.port.length > 0) {
+      break;
+    }
+    const target = parsed.params.get('target');
+    if (target === undefined) { break; }
+    const destination = parseAbsoluteUrl(target);
+    if (destination === undefined || (destination.protocol !== 'https:' && destination.protocol !== 'http:')) {
+      break;
+    }
+    displayUrl = target;
+  }
+  return displayUrl;
 }
 
 /**
@@ -561,80 +645,103 @@ function trimRunsEdges(runs: Array<ReaderInlineRun>): void {
 }
 
 export function parseZhihuHtml(html: string): Array<ReaderBlock> {
-  const matches = html.match(BLOCK_PATTERN);
-  if (matches === null) {
-    return [];
-  }
-
+  const matches = blockFragments(html.replace(NOSCRIPT_PATTERN, '')
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, ''));
   const references = new Map<number, ReaderReferenceItem>();
   const blocks: Array<ReaderBlock> = [];
-  matches.forEach((blockHtml: string) => {
-    const normalized = blockHtml.trim();
-    const blockId = `block-${blocks.length}`;
-    if (/^<hr\b/i.test(normalized)) {
-      blocks.push({ id: blockId, kind: ReaderBlockKind.DIVIDER, text: '', sourceUrl: '', inlineRuns: [] });
-      return;
-    }
+  matches.forEach((fragment: HtmlBlockFragment) => {
+    const firstBlock = blocks.length;
+    const parseFragment = (): void => {
+      const normalized = fragment.html.trim();
+      const blockId = `block-${blocks.length}`;
+      if (/^<hr\b/i.test(normalized)) {
+        blocks.push({ id: blockId, kind: ReaderBlockKind.DIVIDER, text: '', sourceUrl: '', inlineRuns: [] });
+        return;
+      }
 
-    const content = contentOf(normalized);
-    const visibleContent = content.replace(NOSCRIPT_PATTERN, '');
-    const video = videoAnchor(normalized);
-    if (video !== undefined) {
-      const openingTag = video.slice(0, video.indexOf('>') + 1);
-      const imageTag = video.match(/<img\b[^>]*>/i)?.[0] ?? '';
-      const label = decodeHtml(attributeValue(openingTag, 'data-title')).trim() || plainText(video) || '视频';
-      blocks.push({
-        id: blockId,
-        kind: ReaderBlockKind.VIDEO,
-        text: label,
-        sourceUrl: imageTag.length > 0 ? preferredImageSource(imageTag) : '',
-        targetId: attributeValue(openingTag, 'data-lens-id'),
-        inlineRuns: []
-      });
-      return;
-    }
-    const imageTags = visibleContent.match(IMAGE_PATTERN);
-    const singleImage = imageTags !== null && imageTags.length === 1 &&
-      visibleContent.replace(IMAGE_PATTERN, '').trim().length === 0;
-    if (singleImage && attributeValue(imageTags[0], 'eeimg') === '2') {
-      blocks.push({
-        id: blockId,
-        kind: ReaderBlockKind.FORMULA,
-        text: decodeHtml(attributeValue(imageTags[0], 'alt')),
-        sourceUrl: formulaSource(imageTags[0]),
-        inlineRuns: []
-      });
-      return;
-    }
-    if (imageTags !== null && /^<figure\b/i.test(normalized)) {
-      const sourceUrl = preferredImageSource(imageTags[0]);
-      if (sourceUrl.length > 0) {
-        const alt = decodeHtml(attributeValue(imageTags[0], 'alt')).trim();
+      // 顶层 a 自身携带 href，不能剥去外层后再解析行内样式。
+      const content = /^<a\b/i.test(normalized) ? normalized : contentOf(normalized);
+      const visibleContent = content.replace(NOSCRIPT_PATTERN, '');
+      const video = videoAnchor(normalized);
+      if (video !== undefined) {
+        const openingTag = video.slice(0, video.indexOf('>') + 1);
+        const imageTag = video.match(/<img\b[^>]*>/i)?.[0] ?? '';
+        const label = decodeHtml(attributeValue(openingTag, 'data-title')).trim() || plainText(video) || '视频';
         blocks.push({
           id: blockId,
-          kind: ReaderBlockKind.IMAGE,
-          text: alt.length > 0 ? alt : plainText(visibleContent.replace(IMAGE_PATTERN, '')),
-          sourceUrl: sourceUrl,
+          kind: ReaderBlockKind.VIDEO,
+          text: label,
+          sourceUrl: imageTag.length > 0 ? preferredImageSource(imageTag) : '',
+          targetId: attributeValue(openingTag, 'data-lens-id'),
           inlineRuns: []
         });
+        return;
       }
-      return;
-    }
+      const anchors = content.match(ANCHOR_PATTERN);
+      const anchor = anchors?.length === 1 && anchors[0] === content.trim() ?
+        content.match(/^\s*(<a\b[^>]*>)/i) : null;
+      if (anchor !== null && (attributeValue(anchor[1], 'class').split(/\s+/).includes('link-card') ||
+        attributeValue(anchor[1], 'data-draft-type') === 'link-card')) {
+        const url = normalizeLinkHref(attributeValue(anchor[1], 'href'));
+        const displayUrl = linkCardDisplayUrl(url);
+        const label = linkCardDisplayUrl(plainText(contentOf(content.trim())) ||
+          decodeHtml(attributeValue(anchor[1], 'data-draft-title') || attributeValue(anchor[1], 'data-title')).trim() || url);
+        if (label.length > 0) {
+          const cover = decodeHtml(attributeValue(anchor[1], 'data-draft-cover')).trim();
+          const coverUrl = cover.startsWith('//') ? `https:${cover}` : cover;
+          blocks.push({ id: blockId, kind: ReaderBlockKind.LINK_CARD, text: label,
+            sourceUrl: url, displayUrl: displayUrl,
+            coverUrl: coverUrl.startsWith('https://') ? coverUrl : '', inlineRuns: [] });
+        }
+        return;
+      }
+      const imageTags = visibleContent.match(IMAGE_PATTERN);
+      const singleImage = imageTags !== null && imageTags.length === 1 &&
+        visibleContent.replace(IMAGE_PATTERN, '').trim().length === 0;
+      if (singleImage && attributeValue(imageTags[0], 'eeimg') === '2') {
+        blocks.push({
+          id: blockId,
+          kind: ReaderBlockKind.FORMULA,
+          text: decodeHtml(attributeValue(imageTags[0], 'alt')),
+          sourceUrl: formulaSource(imageTags[0]),
+          inlineRuns: []
+        });
+        return;
+      }
+      if (imageTags !== null && /^<figure\b/i.test(normalized)) {
+        const sourceUrl = preferredImageSource(imageTags[0]);
+        if (sourceUrl.length > 0) {
+          const alt = decodeHtml(attributeValue(imageTags[0], 'alt')).trim();
+          blocks.push({
+            id: blockId,
+            kind: ReaderBlockKind.IMAGE,
+            text: alt.length > 0 ? alt : plainText(visibleContent.replace(IMAGE_PATTERN, '')),
+            sourceUrl: sourceUrl,
+            inlineRuns: []
+          });
+        }
+        return;
+      }
 
-    const text = plainText(content);
-    if (text.length === 0) {
-      return;
+      const text = plainText(content);
+      if (text.length === 0) {
+        return;
+      }
+      const kind = /^<h[1-6]\b/i.test(normalized) ? ReaderBlockKind.HEADING :
+        (/^<li\b/i.test(normalized) ? ReaderBlockKind.LIST_ITEM : ReaderBlockKind.PARAGRAPH);
+      blocks.push({
+        id: blockId,
+        kind: kind,
+        text: text,
+        sourceUrl: '',
+        pid: attributeValue(normalized.slice(0, normalized.indexOf('>') + 1), 'data-pid') || fragment.pid,
+        inlineRuns: inlineRuns(content, blockId, references)
+      });
+    };
+    parseFragment();
+    for (let index = firstBlock; index < blocks.length; index++) {
+      blocks[index].quoteDepth = fragment.quoteDepth;
     }
-    const kind = /^<h[1-6]\b/i.test(normalized) ? ReaderBlockKind.HEADING :
-      (/^<li\b/i.test(normalized) ? ReaderBlockKind.LIST_ITEM : ReaderBlockKind.PARAGRAPH);
-    blocks.push({
-      id: blockId,
-      kind: kind,
-      text: text,
-      sourceUrl: '',
-      pid: attributeValue(normalized, 'data-pid'),
-      inlineRuns: inlineRuns(content, blockId, references)
-    });
   });
   // 文末参考条目区（对齐上游：reference sup 注册 FootnoteDefinition 追加到文档末尾）：
   // 分隔线 + 标题 + 按序号升序逐条成块；正文标记经 referenceNumero 关联到条目块。
