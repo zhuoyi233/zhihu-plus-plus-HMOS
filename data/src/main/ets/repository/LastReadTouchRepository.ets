@@ -75,7 +75,8 @@ export class DefaultLastReadTouchRepository implements LastReadTouchRepository {
       accept: 'application/json',
       contentType: lastReadTouchContentTypeOf(boundary),
       useSession: true,
-      signWithZse: true
+      signWithZse: true,
+      allowConcurrent: true
     });
     hilog.info(0xD001, 'LastReadTouch', 'reported action=%{public}s count=%{public}d',
       entries[0].action, entries.length);

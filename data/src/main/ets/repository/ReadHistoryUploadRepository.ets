@@ -67,7 +67,8 @@ export class DefaultReadHistoryUploadRepository implements ReadHistoryUploadRepo
       body: buildReadHistoryAddBody(pair),
       accept: 'application/json',
       useSession: true,
-      signWithZse: true
+      signWithZse: true,
+      allowConcurrent: true
     });
     hilog.info(0xD001, 'ReadHistoryUpload', 'accepted type=%{public}s', pair.contentType);
   }

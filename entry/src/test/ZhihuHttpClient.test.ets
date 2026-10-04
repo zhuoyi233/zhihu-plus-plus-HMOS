@@ -333,5 +333,38 @@ export default function zhihuHttpClientTest(): void {
       expect(factory.transport.destroyCount).assertEqual(1);
       expect(factory.replacement.destroyCount).assertEqual(1);
     });
+
+    it('allowsConcurrentRequestsToBypassSingleFlight', 0, async () => {
+      const factory = new CancellingTransportFactory();
+      const client = new ZhihuHttpClient(undefined, factory);
+      const pending = client.execute({ url: 'https://www.zhihu.com/api/v4/test' });
+      // 并发豁免：单飞占位中，allowConcurrent 请求照常发出（对齐上游 Ktor 并发语义）。
+      const concurrent = await client.execute({
+        url: 'https://www.zhihu.com/api/v4/test',
+        allowConcurrent: true
+      });
+      expect(concurrent.statusCode).assertEqual(200);
+      // 未豁免的请求仍被单飞拒绝。
+      let busyFailure: HttpFailure | undefined = undefined;
+      try {
+        await client.execute({ url: 'https://www.zhihu.com/api/v4/test' });
+      } catch (error) {
+        if (error instanceof HttpFailure) {
+          busyFailure = error;
+        }
+      }
+      expect(busyFailure?.kind).assertEqual(HttpFailureKind.BUSY);
+      client.cancel();
+      let failure: HttpFailure | undefined = undefined;
+      try {
+        await pending;
+      } catch (error) {
+        if (error instanceof HttpFailure) {
+          failure = error;
+        }
+      }
+      expect(failure?.kind).assertEqual(HttpFailureKind.CANCELLED);
+      expect(factory.replacement.destroyCount).assertEqual(1);
+    });
   });
 }
