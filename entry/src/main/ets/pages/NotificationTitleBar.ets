@@ -7,6 +7,9 @@ import { AppDestination, AppDestinationName } from 'core';
  * （同 HistoryTitleBar 模式）：已读可见性/忙碌态由页面发布，动作只发 tick。
  */
 export const NOTIFICATION_HUB_UNREAD_TOTAL_KEY = 'notificationHubUnreadTotal';
+export const NOTIFICATION_TIMELINE_REFRESH_TICK_KEY = 'notificationTimelineRefreshTick';
+export const NOTIFICATION_TIMELINE_ENTRY_KEY = 'notificationTimelineVisibleEntry';
+export const NOTIFICATION_HUB_REFRESH_TICK_KEY = 'notificationHubRefreshTick';
 export const NOTIFICATION_HUB_BUSY_KEY = 'notificationHubBusy';
 export const NOTIFICATION_HUB_MARK_READ_TICK_KEY = 'notificationHubMarkReadTick';
 

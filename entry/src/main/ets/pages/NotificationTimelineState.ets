@@ -49,6 +49,7 @@ export class NotificationTimelineController {
   private paginationBlocked: boolean = false;
   private requiresLogin: boolean = false;
   private markedAsRead: boolean = false;
+  private markingAsRead: boolean = false;
   private preferences?: NotificationPreferences;
   private errorMessage?: string;
 
@@ -95,6 +96,7 @@ export class NotificationTimelineController {
     this.preferences = preferences;
     this.applyFilter();
     this.emit();
+    this.markReadIfReady(this.generation);
   }
 
   loadInitial(): Promise<void> {
@@ -156,6 +158,9 @@ export class NotificationTimelineController {
       if (!this.isCurrent(generation)) {
         return;
       }
+      if (cursor === undefined) {
+        this.allItems = [];
+      }
       const existing: Set<string> = new Set<string>();
       this.allItems.forEach((item: MobileNotificationTimelineItem): void => {
         existing.add(item.uniqueId.length > 0 ? item.uniqueId : item.id);
@@ -174,14 +179,7 @@ export class NotificationTimelineController {
       this.phase = this.items.length === 0 && this.allItems.length === 0
         ? NotificationTimelinePhase.EMPTY
         : NotificationTimelinePhase.READY;
-      if (!this.markedAsRead && this.preferences !== undefined && this.preferences.autoMarkAsRead) {
-        this.markedAsRead = true;
-        try {
-          await this.repository.markEntryAsRead(this.entryName);
-        } catch (_error) {
-          // 自动已读失败不阻断列表展示
-        }
-      }
+      await this.markReadIfReady(generation);
     } catch (error) {
       if (!this.isCurrent(generation)) {
         return;
@@ -192,6 +190,25 @@ export class NotificationTimelineController {
       if (this.isCurrent(generation)) {
         this.emit();
       }
+    }
+  }
+
+  private async markReadIfReady(generation: number): Promise<void> {
+    if (!this.isCurrent(generation) || this.markedAsRead || this.markingAsRead ||
+      (this.phase !== NotificationTimelinePhase.READY && this.phase !== NotificationTimelinePhase.EMPTY) ||
+      this.preferences === undefined || !this.preferences.autoMarkAsRead) {
+      return;
+    }
+    this.markingAsRead = true;
+    try {
+      await this.repository.markEntryAsRead(this.entryName);
+      if (this.isCurrent(generation)) {
+        this.markedAsRead = true;
+      }
+    } catch (_error) {
+      // 失败不阻断展示，后续加载仍可重试。
+    } finally {
+      this.markingAsRead = false;
     }
   }
 

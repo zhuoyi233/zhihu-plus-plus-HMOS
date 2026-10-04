@@ -18,7 +18,7 @@ import {
   themeColorContainerColor
 } from 'data';
 import { NotificationController, NotificationPhase, NotificationViewState } from './NotificationState';
-import { NOTIFICATION_HUB_BUSY_KEY, NOTIFICATION_HUB_MARK_READ_TICK_KEY,
+import { NOTIFICATION_HUB_REFRESH_TICK_KEY, NOTIFICATION_HUB_BUSY_KEY, NOTIFICATION_HUB_MARK_READ_TICK_KEY,
   NOTIFICATION_HUB_UNREAD_TOTAL_KEY } from './NotificationTitleBar';
 import { timelineItemDestination } from './NotificationLinkResolver';
 import { FLOATING_TITLE_BAR_OFFSET } from './AppPageChrome';
@@ -76,6 +76,7 @@ export struct NotificationPage {
   @State private errorMessage: string = '';
   @State private preferences?: NotificationPreferences = undefined;
   @StorageProp(NOTIFICATION_HUB_MARK_READ_TICK_KEY) @Watch('onMarkReadTick') markReadTick: number = 0;
+  @StorageProp(NOTIFICATION_HUB_REFRESH_TICK_KEY) @Watch('onRefreshTick') refreshTick: number = 0;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: NotificationController;
 
@@ -96,12 +97,17 @@ export struct NotificationPage {
       (state: NotificationViewState): void => this.applyState(state));
     this.controller.activate();
     this.loadPreferences();
-    this.controller.loadInitial();
+    // 首次展示和从子页返回统一由 NavDestination.onShown 触发一次加载。
   }
 
   aboutToDisappear(): void {
     this.controller?.deactivate();
     this.controller = undefined;
+  }
+
+  onRefreshTick(): void {
+    this.loadPreferences();
+    this.controller?.loadInitial();
   }
 
   /** 标题栏「已读」按钮经 AppStorage 广播触发（跨组件通道）。 */

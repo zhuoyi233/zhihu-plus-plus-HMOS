@@ -14,6 +14,7 @@ import {
   NotificationSettingsGateway,
   themeColorContainerColor
 } from 'data';
+import { NOTIFICATION_TIMELINE_REFRESH_TICK_KEY, NOTIFICATION_TIMELINE_ENTRY_KEY } from './NotificationTitleBar';
 import { EmojiText } from './EmojiText';
 import { contentLinkDestination, timelineItemDestination } from './NotificationLinkResolver';
 import { notificationPlainText } from './PrivateMessageContent';
@@ -72,6 +73,7 @@ export struct NotificationTimelinePage {
   @State private requiresLogin: boolean = false;
   @State private errorMessage: string = '';
   @State private preferences?: NotificationPreferences = undefined;
+  @StorageProp(NOTIFICATION_TIMELINE_REFRESH_TICK_KEY) @Watch('onRefreshTick') refreshTick: number = 0;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: NotificationTimelineController;
 
@@ -91,7 +93,13 @@ export struct NotificationTimelinePage {
       (state: NotificationTimelineViewState): void => this.applyState(state));
     this.controller.activate();
     this.loadPreferences();
-    this.controller.loadInitial();
+    // 首次展示与从内容详情返回统一走 onShown 广播。
+  }
+
+  onRefreshTick(): void {
+    if (AppStorage.get<string>(NOTIFICATION_TIMELINE_ENTRY_KEY) === this.entryName) {
+      this.controller?.loadInitial();
+    }
   }
 
   aboutToDisappear(): void {

@@ -199,6 +199,26 @@ export default function notificationStateTest(): void {
       expect(controller.snapshot().categoryUnread.like).assertEqual(0);
     });
 
+    it('hubReloadReplacesUnreadBadgesAfterReturning', 0, async () => {
+      const repository = new FakeMobileNotificationRepository();
+      repository.messagePages.push(makeMessagePage());
+      const controller = new NotificationController(repository,
+        new FixedSessionGateway(SessionStatus.AUTHENTICATED));
+      controller.activate();
+      await controller.loadInitial();
+      expect(controller.snapshot().unreadTotal).assertEqual(4);
+      expect(controller.snapshot().items[0].unreadCount).assertEqual(1);
+      repository.messagePages.push({
+        overview: { head: [], columnHead: [] },
+        items: [makeItem('c1', 'message', '', true)],
+        cursor: { isEnd: true, isStart: false, next: undefined, previous: undefined, page: 0, total: 0 }
+      });
+      await controller.loadInitial();
+      expect(controller.snapshot().unreadTotal).assertEqual(0);
+      expect(controller.snapshot().items.length).assertEqual(1);
+      expect(controller.snapshot().items[0].unreadCount).assertEqual(0);
+    });
+
     it('timelineFiltersByPreferencesAndAutoMarksRead', 0, async () => {
       const repository = new FakeMobileNotificationRepository();
       repository.timelinePages.push(makeTimelinePage());
@@ -229,6 +249,50 @@ export default function notificationStateTest(): void {
       repository.timelinePages.push(makeTimelinePage());
       await autoController.loadInitial();
       expect(repository.readAllEntries).assertContain('like');
+    });
+
+    it('timelineReloadReplacesReadStateForExistingIds', 0, async () => {
+      const repository = new FakeMobileNotificationRepository();
+      repository.timelinePages.push(makeTimelinePage());
+      const controller = new NotificationTimelineController('like', repository,
+        new FixedSessionGateway(SessionStatus.AUTHENTICATED));
+      controller.activate();
+      await controller.loadInitial();
+      expect(controller.snapshot().items[0].isRead).assertFalse();
+      repository.timelinePages.push({
+        items: [makeItem('t1', 'notification', '喜欢了你的回答', true)],
+        cursor: { isEnd: true, isStart: false, next: undefined, previous: undefined, page: 0, total: 0 }
+      });
+      await controller.loadInitial();
+      expect(controller.snapshot().items.length).assertEqual(1);
+      expect(controller.snapshot().items[0].isRead).assertTrue();
+    });
+
+    it('timelineMarksReadWhenPreferencesArriveAfterMessages', 0, async () => {
+      const repository = new FakeMobileNotificationRepository();
+      repository.timelinePages.push(makeTimelinePage());
+      const controller = new NotificationTimelineController('like', repository,
+        new FixedSessionGateway(SessionStatus.AUTHENTICATED));
+      controller.activate();
+      await controller.loadInitial();
+      expect(repository.readAllEntries.length).assertEqual(0);
+      const defaults = defaultNotificationPreferences();
+      const preferences: NotificationPreferences = {
+        likeAnswerDisplay: defaults.likeAnswerDisplay,
+        likeCommentDisplay: defaults.likeCommentDisplay,
+        replyCommentDisplay: defaults.replyCommentDisplay,
+        inviteAnswerDisplay: defaults.inviteAnswerDisplay,
+        autoMarkAsRead: true,
+        unreadBadge: defaults.unreadBadge
+      };
+      controller.setPreferences(preferences);
+      controller.setPreferences(preferences);
+      await Promise.resolve();
+      expect(repository.readAllEntries.length).assertEqual(1);
+      expect(repository.readAllEntries[0]).assertEqual('like');
+      controller.deactivate();
+      controller.setPreferences(preferences);
+      expect(repository.readAllEntries.length).assertEqual(1);
     });
 
     it('privateMessagePrependsOlderPagesOnLoadMore', 0, async () => {
