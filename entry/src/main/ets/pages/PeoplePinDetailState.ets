@@ -1,3 +1,4 @@
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import {
   DomainDecodeError,
   HttpFailure,
@@ -13,6 +14,7 @@ import {
   PinRepository,
   PinRepositoryFailure,
   PinRepositoryFailureKind,
+  ReadHistoryUploadRepository,
   SessionStatus,
   UserProfile
 } from 'data';
@@ -45,6 +47,7 @@ export type PinDetailObserver = (state: PinDetailViewState) => void;
 export class PeopleDetailController {
   private readonly repository: PeopleDetailRepository;
   private readonly session: LoginSessionGateway;
+  private readonly historyUploader?: ReadHistoryUploadRepository;
   private readonly observer: PeopleDetailObserver;
   private active: boolean = false;
   private generation: number = 0;
@@ -55,9 +58,10 @@ export class PeopleDetailController {
 
   constructor(repository: PeopleDetailRepository, session: LoginSessionGateway,
     observer: PeopleDetailObserver = (_state: PeopleDetailViewState): void => {
-    }) {
+    }, historyUploader?: ReadHistoryUploadRepository) {
     this.repository = repository;
     this.session = session;
+    this.historyUploader = historyUploader;
     this.observer = observer;
   }
 
@@ -121,6 +125,7 @@ export class PeopleDetailController {
       }
       this.profile = profile;
       this.phase = ReadOnlyDetailPhase.READY;
+      this.reportCloudHistory(profile.id);
     } catch (error) {
       if (!this.isCurrent(generation)) {
         return;
@@ -130,6 +135,17 @@ export class PeopleDetailController {
       this.requiresLogin = readOnlyDetailRequiresLogin(error);
     }
     this.emit();
+  }
+
+  /** 对齐上游 addReadHistory(person.id, "profile")：主页加载成功后上报云端阅读历史，失败静默。 */
+  private reportCloudHistory(personId: string): void {
+    const uploader = this.historyUploader;
+    if (uploader === undefined) {
+      return;
+    }
+    uploader.addProfile(personId).catch((_error: Error): void => {
+      hilog.warn(0xD001, 'ReadHistoryUpload', 'profile report failed');
+    });
   }
 
   private isCurrent(generation: number): boolean {
@@ -147,6 +163,7 @@ export class PinDetailController {
   private readonly repository: PinRepository;
   private readonly session: LoginSessionGateway;
   private readonly openedContentStore?: OpenedContentStore;
+  private readonly historyUploader?: ReadHistoryUploadRepository;
   private readonly observer: PinDetailObserver;
   private active: boolean = false;
   private generation: number = 0;
@@ -158,10 +175,11 @@ export class PinDetailController {
 
   constructor(repository: PinRepository, session: LoginSessionGateway, openedContentStore?: OpenedContentStore,
     observer: PinDetailObserver = (_state: PinDetailViewState): void => {
-    }) {
+    }, historyUploader?: ReadHistoryUploadRepository) {
     this.repository = repository;
     this.session = session;
     this.openedContentStore = openedContentStore;
+    this.historyUploader = historyUploader;
     this.observer = observer;
   }
 
@@ -252,12 +270,23 @@ export class PinDetailController {
         contentType: 'pin',
         title: pinHistoryExcerpt(pin.contentHtml)
       });
+      this.reportCloudHistory(`pin:${pin.id}`);
     } catch (_error) {
       if (this.isCurrent(generation)) {
         this.openedRecordFailed = true;
         this.emit();
       }
     }
+  }
+
+  /** 对齐上游 addReadHistory：本地记录成功后向知乎云端上报一条阅读历史，失败静默不阻塞页面。 */
+  private reportCloudHistory(contentKey: string): void {
+    const uploader = this.historyUploader;
+    if (uploader === undefined) {
+      return;
+    }
+    uploader.add(contentKey).catch((_error: Error): void => {
+    });
   }
 
   private isCurrent(generation: number): boolean {

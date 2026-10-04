@@ -42,6 +42,7 @@ import {
   QuestionAnswerFeedRepository,
   QuestionAnswerSortOrder,
   QuestionTopicSummary,
+  ReadHistoryUploadRepository,
   SessionStatus,
   VoteRepository,
   SegmentReactionRepository,
@@ -165,6 +166,8 @@ struct ContentDetailPage {
   /** 推荐阅读卡片站内元数据仓库：赞同/评论计数与资源类型（正文 link-card 展示）。 */
   linkCardMetaRepository: LinkCardMetaRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
+  /** 阅读历史上云仓库（对齐上游 addReadHistory；未配置或游客态时不上报）。 */
+  historyUploader: ReadHistoryUploadRepository | undefined = undefined;
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
   voteRepository: VoteRepository | undefined = undefined;
@@ -316,7 +319,8 @@ struct ContentDetailPage {
     this.controller = new ContentDetailController(
       repository,
       this.openedContentStore,
-      (state: ContentDetailViewState): void => this.applyState(state)
+      (state: ContentDetailViewState): void => this.applyState(state),
+      this.historyUploader
     );
     this.controller.activate();
     this.controller.load(this.kind, this.activeContentId);
@@ -3338,6 +3342,8 @@ export struct QuestionDetailPage {
   /** 推荐阅读卡片站内元数据仓库：赞同/评论计数与资源类型（正文 link-card 展示）。 */
   linkCardMetaRepository: LinkCardMetaRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
+  /** 阅读历史上云仓库（对齐上游 addReadHistory；未配置或游客态时不上报）。 */
+  historyUploader: ReadHistoryUploadRepository | undefined = undefined;
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
   voteRepository: VoteRepository | undefined = undefined;
@@ -3360,6 +3366,7 @@ export struct QuestionDetailPage {
       repository: this.repository,
       linkCardMetaRepository: this.linkCardMetaRepository,
       openedContentStore: this.openedContentStore,
+      historyUploader: this.historyUploader,
       rules: this.rules,
       history: this.history,
       voteRepository: this.voteRepository,
@@ -3382,6 +3389,8 @@ export struct AnswerDetailPage {
   /** 推荐阅读卡片站内元数据仓库：赞同/评论计数与资源类型（正文 link-card 展示）。 */
   linkCardMetaRepository: LinkCardMetaRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
+  /** 阅读历史上云仓库（对齐上游 addReadHistory；未配置或游客态时不上报）。 */
+  historyUploader: ReadHistoryUploadRepository | undefined = undefined;
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
   voteRepository: VoteRepository | undefined = undefined;
@@ -3404,6 +3413,7 @@ export struct AnswerDetailPage {
       repository: this.repository,
       linkCardMetaRepository: this.linkCardMetaRepository,
       openedContentStore: this.openedContentStore,
+      historyUploader: this.historyUploader,
       rules: this.rules,
       history: this.history,
       voteRepository: this.voteRepository,
@@ -3425,6 +3435,8 @@ export struct ArticleDetailPage {
   /** 推荐阅读卡片站内元数据仓库：赞同/评论计数与资源类型（正文 link-card 展示）。 */
   linkCardMetaRepository: LinkCardMetaRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
+  /** 阅读历史上云仓库（对齐上游 addReadHistory；未配置或游客态时不上报）。 */
+  historyUploader: ReadHistoryUploadRepository | undefined = undefined;
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
   voteRepository: VoteRepository | undefined = undefined;
@@ -3446,6 +3458,7 @@ export struct ArticleDetailPage {
       repository: this.repository,
       linkCardMetaRepository: this.linkCardMetaRepository,
       openedContentStore: this.openedContentStore,
+      historyUploader: this.historyUploader,
       rules: this.rules,
       history: this.history,
       voteRepository: this.voteRepository,

@@ -85,6 +85,8 @@ import themeColorsTest from './ThemeColors.test';
 import immersiveMaterialPreferencesTest from './ImmersiveMaterialPreferences.test';
 import immersiveMaterialStylesTest from './ImmersiveMaterialStyles.test';
 import draftImageReferenceScanTest from './DraftImageReferenceScan.test';
+import readHistoryUploadRepositoryTest from './ReadHistoryUploadRepository.test';
+import lastReadTouchRepositoryTest from './LastReadTouchRepository.test';
 import linkCardMetaTest from './LinkCardMeta.test';
 
 export default function testsuite(): void {
@@ -176,4 +178,6 @@ export default function testsuite(): void {
   immersiveMaterialPreferencesTest();
   immersiveMaterialStylesTest();
   draftImageReferenceScanTest();
+  readHistoryUploadRepositoryTest();
+  lastReadTouchRepositoryTest();
 }

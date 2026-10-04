@@ -51,6 +51,8 @@ export interface ZhihuHttpRequest {
   accept?: string;
   useSession?: boolean;
   signWithZse?: boolean;
+  /** 对齐上游 Ktor HttpClient 并发语义：true 时不参与单飞占位（上报类请求专用），client.cancel() 不波及。 */
+  allowConcurrent?: boolean;
   /** 仅发布等网页写接口需要；令客户端从受保护会话 Cookie 提取 `_xsrf`。 */
   includeXsrfToken?: boolean;
   /** 读取到 `_xsrf` 时附带；游客会话缺失时仍允许请求。 */
@@ -369,7 +371,10 @@ export class ZhihuHttpClient {
   }
 
   async execute(request: ZhihuHttpRequest): Promise<ZhihuHttpResponse> {
-    if (this.activeRequest !== undefined) {
+    // allowConcurrent：对齐上游 Ktor HttpClient 的并发语义，供上报类请求使用——
+    // 不参与单飞占位（fire-and-forget，不允许被 client.cancel() 取消）。
+    const concurrent = request.allowConcurrent === true;
+    if (!concurrent && this.activeRequest !== undefined) {
       hilog.warn(0xD001, 'ZhihuHttp', 'rejected busy (single-flight)');
       throw new HttpFailure(HttpFailureKind.BUSY);
     }
@@ -394,7 +399,9 @@ export class ZhihuHttpClient {
       const preparedRequest = prepareZhihuHttpRequest(request, cookies);
       const transport = this.transportFactory.create();
       activeRequest = new ActiveZhihuRequest(transport);
-      this.activeRequest = activeRequest;
+      if (!concurrent) {
+        this.activeRequest = activeRequest;
+      }
       const pendingRequests: Array<Promise<ZhihuHttpResponse>> = [
         transport.request(preparedRequest),
         activeRequest.cancellation
@@ -416,7 +423,7 @@ export class ZhihuHttpClient {
       throw httpFailureFromTransport();
     } finally {
       if (activeRequest !== undefined) {
-        if (this.activeRequest === activeRequest) {
+        if (!concurrent && this.activeRequest === activeRequest) {
           this.activeRequest = undefined;
         }
         activeRequest.destroy();

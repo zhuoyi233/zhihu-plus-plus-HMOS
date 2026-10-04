@@ -28,6 +28,8 @@ import {
   DefaultRecentFollowingUsersRepository,
   DefaultSearchRepository,
   DefaultOnlineHistoryRepository,
+  DefaultReadHistoryUploadRepository,
+  DefaultLastReadTouchRepository,
   DefaultMobileNotificationRepository,
   DefaultVoteRepository,
   DefaultLinkCardMetaRepository,
@@ -42,6 +44,8 @@ import {
   NotificationSettingsGateway,
   OpenedContentStore,
   OnlineHistoryRepository,
+  LastReadTouchRepository,
+  ReadHistoryUploadRepository,
   PeopleContentRepository,
   PeopleDetailRepository,
   RecentFollowingUsersRepository,
@@ -137,6 +141,10 @@ struct Index {
   @State private peopleContentRepository?: PeopleContentRepository = undefined;
   @State private pinRepository?: PinRepository = undefined;
   @State private onlineHistoryRepository?: OnlineHistoryRepository = undefined;
+  /** 阅读历史上云仓库：打开问题/回答/文章/想法时对齐上游 addReadHistory 上报。 */
+  @State private readHistoryUploader?: ReadHistoryUploadRepository = undefined;
+  /** 上次阅读上报仓库：首页点击 read、feed 曝光 touch（对齐上游 lastread/touch）。 */
+  @State private lastReadTouchRepository?: LastReadTouchRepository = undefined;
   @State private voteRepository?: VoteRepository = undefined;
   /** 推荐阅读卡片站内元数据（赞同/评论计数与资源类型）。 */
   @State private linkCardMetaRepository?: LinkCardMetaRepository = undefined;
@@ -202,6 +210,8 @@ struct Index {
       this.peopleContentRepository = new DefaultPeopleContentRepository(new ZhihuHttpClient(session));
       this.pinRepository = new DefaultPinRepository(new ZhihuHttpClient(session));
       this.onlineHistoryRepository = new DefaultOnlineHistoryRepository(new ZhihuHttpClient(session));
+      this.readHistoryUploader = new DefaultReadHistoryUploadRepository(new ZhihuHttpClient(session), session);
+      this.lastReadTouchRepository = new DefaultLastReadTouchRepository(new ZhihuHttpClient(session), session);
       this.voteRepository = new DefaultVoteRepository(new ZhihuHttpClient(session));
       this.linkCardMetaRepository = new DefaultLinkCardMetaRepository(new ZhihuHttpClient(session));
       this.segmentReactionRepository = new DefaultSegmentReactionRepository(new ZhihuHttpClient(session));
@@ -311,6 +321,7 @@ struct Index {
   homeContent(reloadToken: number, navigate: (destination: AppDestination) => void) {
     HomeFeedPage({
       repository: this.homeRepository,
+      lastReadTouch: this.lastReadTouchRepository,
       reloadToken: reloadToken,
       navigate: navigate,
       rules: this.blockingRuleStore,
@@ -411,6 +422,7 @@ struct Index {
       repository: this.questionRepository,
       linkCardMetaRepository: this.linkCardMetaRepository,
       openedContentStore: this.openedContentStore,
+      historyUploader: this.readHistoryUploader,
       navigate: navigate,
       rules: this.blockingRuleStore,
       history: this.blockedFeedHistoryStore,
@@ -432,6 +444,7 @@ struct Index {
       repository: this.answerRepository,
       linkCardMetaRepository: this.linkCardMetaRepository,
       openedContentStore: this.openedContentStore,
+      historyUploader: this.readHistoryUploader,
       navigate: navigate,
       rules: this.blockingRuleStore,
       history: this.blockedFeedHistoryStore,
@@ -453,6 +466,7 @@ struct Index {
       repository: this.articleRepository,
       linkCardMetaRepository: this.linkCardMetaRepository,
       openedContentStore: this.openedContentStore,
+      historyUploader: this.readHistoryUploader,
       navigate: navigate,
       rules: this.blockingRuleStore,
       history: this.blockedFeedHistoryStore,
@@ -523,6 +537,7 @@ struct Index {
     PeopleDetailPage({
       identifier: id,
       repository: this.peopleRepository,
+      historyUploader: this.readHistoryUploader,
       contentRepository: this.peopleContentRepository,
       followRepository: this.followRepository,
       session: this.session,
@@ -541,6 +556,7 @@ struct Index {
       linkCardMetaRepository: this.linkCardMetaRepository,
       session: this.session,
       openedContentStore: this.openedContentStore,
+      historyUploader: this.readHistoryUploader,
       commentRepository: this.commentRepository,
       navigate: navigate,
       rules: this.blockingRuleStore,
