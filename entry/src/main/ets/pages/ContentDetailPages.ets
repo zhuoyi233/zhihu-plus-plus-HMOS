@@ -37,6 +37,7 @@ import {
   FollowMutationResult,
   FollowRepository,
   LoginSessionGateway,
+  LinkCardMetaRepository,
   OpenedContentStore,
   QuestionAnswerFeedRepository,
   QuestionAnswerSortOrder,
@@ -161,6 +162,8 @@ struct ContentDetailPage {
   private contentTitleHeightVp: number = 0;
   private pageActive: boolean = false;
   repository: ContentRepository | undefined = undefined;
+  /** 推荐阅读卡片站内元数据仓库：赞同/评论计数与资源类型（正文 link-card 展示）。 */
+  linkCardMetaRepository: LinkCardMetaRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
@@ -974,6 +977,7 @@ struct ContentDetailPage {
         NativeContentDocument({
           html: contentHtml(content),
           emptyMessage: contentEmptyMessage(content),
+          linkCardMetaRepository: this.linkCardMetaRepository,
           disableEdgeSpring: this.kind === ContentDetailKind.ANSWER,
           topInsetVp: this.immersiveReading ? 0 : FLOATING_TITLE_BAR_OFFSET,
           onVideoOpen: (videoId: string): void => this.openVideo(videoId),
@@ -1933,6 +1937,7 @@ struct ContentDetailPage {
     Refresh({ refreshing: $$this.refreshingAnswers, refreshingContent: this.indicator?.view() }) {
       NativeContentDocument({
         html: contentHtml(content), emptyMessage: contentEmptyMessage(content), collapsible: true,
+        linkCardMetaRepository: this.linkCardMetaRepository,
         topInsetVp: this.immersiveReading ? 0 : FLOATING_TITLE_BAR_OFFSET,
         onVideoOpen: (videoId: string): void => this.openVideo(videoId),
         onLinkClick: (url: string): void => this.openContentLink(url),
@@ -3330,6 +3335,8 @@ export struct QuestionDetailPage {
   questionAnswerFeedFactory: () => QuestionAnswerFeedRepository | undefined = () => undefined;
   contentId: string = '';
   repository: ContentRepository | undefined = undefined;
+  /** 推荐阅读卡片站内元数据仓库：赞同/评论计数与资源类型（正文 link-card 展示）。 */
+  linkCardMetaRepository: LinkCardMetaRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
@@ -3351,6 +3358,7 @@ export struct QuestionDetailPage {
       questionAnswerFeedFactory: this.questionAnswerFeedFactory,
       contentId: this.contentId,
       repository: this.repository,
+      linkCardMetaRepository: this.linkCardMetaRepository,
       openedContentStore: this.openedContentStore,
       rules: this.rules,
       history: this.history,
@@ -3371,6 +3379,8 @@ export struct AnswerDetailPage {
   questionAnswerFeedFactory: () => QuestionAnswerFeedRepository | undefined = () => undefined;
   contentId: string = '';
   repository: ContentRepository | undefined = undefined;
+  /** 推荐阅读卡片站内元数据仓库：赞同/评论计数与资源类型（正文 link-card 展示）。 */
+  linkCardMetaRepository: LinkCardMetaRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
@@ -3392,6 +3402,7 @@ export struct AnswerDetailPage {
       questionAnswerFeedFactory: this.questionAnswerFeedFactory,
       contentId: this.contentId,
       repository: this.repository,
+      linkCardMetaRepository: this.linkCardMetaRepository,
       openedContentStore: this.openedContentStore,
       rules: this.rules,
       history: this.history,
@@ -3411,6 +3422,8 @@ export struct AnswerDetailPage {
 export struct ArticleDetailPage {
   contentId: string = '';
   repository: ContentRepository | undefined = undefined;
+  /** 推荐阅读卡片站内元数据仓库：赞同/评论计数与资源类型（正文 link-card 展示）。 */
+  linkCardMetaRepository: LinkCardMetaRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
@@ -3431,6 +3444,7 @@ export struct ArticleDetailPage {
       kind: ContentDetailKind.ARTICLE,
       contentId: this.contentId,
       repository: this.repository,
+      linkCardMetaRepository: this.linkCardMetaRepository,
       openedContentStore: this.openedContentStore,
       rules: this.rules,
       history: this.history,

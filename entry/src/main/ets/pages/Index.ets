@@ -30,6 +30,8 @@ import {
   DefaultOnlineHistoryRepository,
   DefaultMobileNotificationRepository,
   DefaultVoteRepository,
+  DefaultLinkCardMetaRepository,
+  LinkCardMetaRepository,
   DefaultSegmentReactionRepository,
   DefaultSegmentCommentRepository,
   FeedRepository,
@@ -136,6 +138,8 @@ struct Index {
   @State private pinRepository?: PinRepository = undefined;
   @State private onlineHistoryRepository?: OnlineHistoryRepository = undefined;
   @State private voteRepository?: VoteRepository = undefined;
+  /** 推荐阅读卡片站内元数据（赞同/评论计数与资源类型）。 */
+  @State private linkCardMetaRepository?: LinkCardMetaRepository = undefined;
   @State private segmentReactionRepository?: SegmentReactionRepository = undefined;
   private segmentCommentRepositoryHttpClient: ZhihuHttpClient = new ZhihuHttpClient();
   private videoRepository?: VideoRepository = undefined;
@@ -199,6 +203,7 @@ struct Index {
       this.pinRepository = new DefaultPinRepository(new ZhihuHttpClient(session));
       this.onlineHistoryRepository = new DefaultOnlineHistoryRepository(new ZhihuHttpClient(session));
       this.voteRepository = new DefaultVoteRepository(new ZhihuHttpClient(session));
+      this.linkCardMetaRepository = new DefaultLinkCardMetaRepository(new ZhihuHttpClient(session));
       this.segmentReactionRepository = new DefaultSegmentReactionRepository(new ZhihuHttpClient(session));
       this.segmentCommentRepositoryHttpClient = new ZhihuHttpClient(session);
       this.followRepository = new DefaultFollowRepository(new ZhihuHttpClient(session));
@@ -404,6 +409,7 @@ struct Index {
     QuestionDetailPage({
       contentId: id,
       repository: this.questionRepository,
+      linkCardMetaRepository: this.linkCardMetaRepository,
       openedContentStore: this.openedContentStore,
       navigate: navigate,
       rules: this.blockingRuleStore,
@@ -424,6 +430,7 @@ struct Index {
     AnswerDetailPage({
       contentId: id,
       repository: this.answerRepository,
+      linkCardMetaRepository: this.linkCardMetaRepository,
       openedContentStore: this.openedContentStore,
       navigate: navigate,
       rules: this.blockingRuleStore,
@@ -444,6 +451,7 @@ struct Index {
     ArticleDetailPage({
       contentId: id,
       repository: this.articleRepository,
+      linkCardMetaRepository: this.linkCardMetaRepository,
       openedContentStore: this.openedContentStore,
       navigate: navigate,
       rules: this.blockingRuleStore,
@@ -530,6 +538,7 @@ struct Index {
     PinDetailPage({
       contentId: id,
       repository: this.pinRepository,
+      linkCardMetaRepository: this.linkCardMetaRepository,
       session: this.session,
       openedContentStore: this.openedContentStore,
       commentRepository: this.commentRepository,
