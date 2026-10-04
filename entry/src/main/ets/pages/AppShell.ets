@@ -1291,6 +1291,9 @@ export struct AppShell {
       .width('100%')
       .padding({ left: 12, right: 12 })
       .hitTestBehavior(HitTestMode.Transparent)
+    } else if (this.activeTopLevelTab() === TopLevelTab.HISTORY) {
+      // #48：历史配置为底栏页时，“我的”入口也复用此页，必须保留本地历史菜单。
+      HistoryTitleBar({ reserveBackButtonSpace: false })
     } else if (this.activeTopLevelTab() === TopLevelTab.FOLLOWING) {
       Column() {
         Row() {

@@ -24,6 +24,7 @@ interface HistoryMenuAction {
 @Component
 export struct HistoryTitleBar {
   title: string = '历史记录';
+  reserveBackButtonSpace: boolean = true;
 
   build() {
     Row({ space: 8 }) {
@@ -51,8 +52,8 @@ export struct HistoryTitleBar {
     }
     .width('100%')
     .height(48)
-    // 左侧 64vp 让出 HDS 默认返回键的区域（实测不 pad 会压到其触摸区，同 SearchTitleBar）。
-    .padding({ left: 64, right: 8 })
+    // 独立页面让出 HDS 返回键区域；底栏页面没有返回键，使用普通标题边距。
+    .padding({ left: this.reserveBackButtonSpace ? 64 : 16, right: 8 })
     .alignItems(VerticalAlign.Center)
   }
 
