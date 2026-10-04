@@ -1,3 +1,4 @@
+import { notificationItemRenderKey } from './NotificationItemRenderKey';
 import { isSafeDecimalContentId, AppDestination, AppDestinationName } from 'core';
 import {
   onThemeColor,
@@ -19,7 +20,7 @@ import { EmojiText } from './EmojiText';
 import { contentLinkDestination, timelineItemDestination } from './NotificationLinkResolver';
 import { notificationPlainText } from './PrivateMessageContent';
 import { NotificationTimelineController, NotificationTimelinePhase, NotificationTimelineViewState } from './NotificationTimelineState';
-import { FLOATING_TITLE_BAR_OFFSET } from './AppPageChrome';
+import { FeedPullDownIndicatorHost, FLOATING_TITLE_BAR_OFFSET } from './AppPageChrome';
 
 function relativeTime(created: number): string {
   if (created <= 0) {
@@ -63,12 +64,14 @@ function stripHtml(source: string): string {
 export struct NotificationTimelinePage {
   entryName: string = '';
   repository: MobileNotificationRepository | undefined = undefined;
+  repositoryFactory?: () => MobileNotificationRepository;
   settings: NotificationSettingsGateway | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {};
   @State private phase: NotificationTimelinePhase = NotificationTimelinePhase.IDLE;
   @State private items: Array<MobileNotificationTimelineItem> = [];
   @State private loadingMore: boolean = false;
+  @State @Watch('syncRefreshIndicator') private refreshing: boolean = false;
   @State private canLoadMore: boolean = false;
   @State private requiresLogin: boolean = false;
   @State private errorMessage: string = '';
@@ -77,12 +80,16 @@ export struct NotificationTimelinePage {
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: NotificationTimelineController;
 
+  private indicator?: FeedPullDownIndicatorHost;
+  private refreshInFlight: boolean = false;
+
   aboutToAppear(): void {
+    this.indicator = new FeedPullDownIndicatorHost(this.getUIContext(), FLOATING_TITLE_BAR_OFFSET);
     const context = this.getUIContext().getHostContext();
     if (context !== undefined) {
       emojiStore.ensureLoaded(context);
     }
-    const repository = this.repository;
+    const repository = this.repositoryFactory?.() ?? this.repository;
     const session = this.session;
     if (repository === undefined || session === undefined) {
       this.phase = NotificationTimelinePhase.ERROR;
@@ -105,59 +112,110 @@ export struct NotificationTimelinePage {
   aboutToDisappear(): void {
     this.controller?.deactivate();
     this.controller = undefined;
+    this.refreshInFlight = false;
+    this.refreshing = false;
+    this.indicator?.dispose();
+    this.indicator = undefined;
+  }
+
+  private syncRefreshIndicator(): void {
+    this.indicator?.setRefreshing(this.refreshing);
+  }
+
+  private async pullRefresh(): Promise<void> {
+    if (this.refreshInFlight) {
+      return;
+    }
+    const controller = this.controller;
+    if (controller === undefined || controller.snapshot().phase === NotificationTimelinePhase.LOADING) {
+      this.refreshing = false;
+      return;
+    }
+    this.refreshInFlight = true;
+    this.refreshing = true;
+    try {
+      await controller.loadInitial();
+    } finally {
+      if (this.controller === controller) {
+        this.refreshInFlight = false;
+        this.refreshing = false;
+      }
+    }
   }
 
   build() {
     Column() {
-      if (this.phase === NotificationTimelinePhase.IDLE ||
-        this.phase === NotificationTimelinePhase.LOADING) {
+      if ((this.phase === NotificationTimelinePhase.IDLE ||
+        this.phase === NotificationTimelinePhase.LOADING) && !this.refreshing) {
         this.statusPanel('正在加载消息…', false, 'notification_timeline_loading')
       } else if (this.phase === NotificationTimelinePhase.ERROR) {
         this.statusPanel(this.errorMessage, true, 'notification_timeline_error')
-      } else if (this.phase === NotificationTimelinePhase.EMPTY) {
-        this.statusPanel('这里还什么都没有', false, 'notification_timeline_empty')
       } else {
-        List({ space: 0 }) {
-          ForEach(this.items, (item: MobileNotificationTimelineItem) => {
-            ListItem() {
-              if (item.type === 'empty') {
-                this.emptyRow(item)
-              } else if (this.entryName === 'invite') {
-                this.invitationAnswerItem(item)
-              } else {
-                this.timelineItemRow(item)
+        Refresh({
+          refreshing: $$this.refreshing,
+          refreshingContent: this.indicator?.view(),
+          offset: 80,
+          friction: 100
+        }) {
+          List({ space: 0 }) {
+            if (this.items.length === 0) {
+              ListItem() {
+                Text('这里还什么都没有')
+                  .id('notification_timeline_empty')
+                  .fontSize($r('app.float.body_font_size'))
+                  .fontColor($r('app.color.secondary_text'))
+                  .textAlign(TextAlign.Center)
+                  .width('100%')
+                  .padding(24)
               }
             }
-          }, (item: MobileNotificationTimelineItem): string =>
-            `notification_timeline_${item.uniqueId.length > 0 ? item.uniqueId : item.id}`)
 
-          if (this.loadingMore) {
-            ListItem() {
-              Row() {
-                LoadingProgress()
-                  .width(20)
-                  .height(20)
-                  .color(this.resolvedThemeColor)
-                Text('正在加载更多…')
-                  .fontSize($r('app.float.secondary_font_size'))
-                  .fontColor($r('app.color.secondary_text'))
-                  .margin({ left: 8 })
+            ForEach(this.items, (item: MobileNotificationTimelineItem) => {
+              ListItem() {
+                if (item.type === 'empty') {
+                  this.emptyRow(item)
+                } else if (this.entryName === 'invite') {
+                  this.invitationAnswerItem(item)
+                } else {
+                  this.timelineItemRow(item)
+                }
               }
-              .id('notification_timeline_load_more')
-              .justifyContent(FlexAlign.Center)
-              .width('100%')
-              .padding(12)
+            }, (item: MobileNotificationTimelineItem): string =>
+              notificationItemRenderKey(item))
+
+            if (this.loadingMore) {
+              ListItem() {
+                Row() {
+                  LoadingProgress()
+                    .width(20)
+                    .height(20)
+                    .color(this.resolvedThemeColor)
+                  Text('正在加载更多…')
+                    .fontSize($r('app.float.secondary_font_size'))
+                    .fontColor($r('app.color.secondary_text'))
+                    .margin({ left: 8 })
+                }
+                .id('notification_timeline_load_more')
+                .justifyContent(FlexAlign.Center)
+                .width('100%')
+                .padding(12)
+              }
             }
           }
+          .id('notification_timeline_list')
+          .width('100%')
+          // 顶栏让位：内缩滚动内容起点，未滚动时首屏内容仍从标题栏下沿开始
+          .contentStartOffset(FLOATING_TITLE_BAR_OFFSET)
+          .height('100%')
+          .scrollBar(BarState.Off)
+          .edgeEffect(EdgeEffect.Spring)
+          .onReachEnd(() => this.controller?.loadMore())
         }
-        .id('notification_timeline_list')
+        .id('notification_timeline_pull_refresh')
         .width('100%')
-        // 顶栏让位：内缩滚动内容起点，未滚动时首屏内容仍从标题栏下沿开始
-        .contentStartOffset(FLOATING_TITLE_BAR_OFFSET)
         .layoutWeight(1)
-        .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.Spring)
-        .onReachEnd(() => this.controller?.loadMore())
+        .onRefreshing((): void => { void this.pullRefresh(); })
+        .onStateChange((status: RefreshStatus): void => this.indicator?.onStateChange(status))
       }
     }
     .id('notification_timeline_page')

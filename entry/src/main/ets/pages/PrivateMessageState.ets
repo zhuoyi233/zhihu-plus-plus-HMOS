@@ -50,6 +50,7 @@ export class PrivateMessageController {
   private nextCursor?: string;
   private reachedEnd: boolean = true;
   private sending: boolean = false;
+  private refreshingLatest: boolean = false;
   private loadingMore: boolean = false;
   private paginationBlocked: boolean = false;
   private requiresLogin: boolean = false;
@@ -121,12 +122,68 @@ export class PrivateMessageController {
     return this.fetchPage(generation, undefined);
   }
 
+  /** 前台静默增量更新：保留历史分页和发送回执，不用首屏加载态替换聊天界面。 */
+  async refreshLatest(): Promise<void> {
+    if (!this.active || this.refreshingLatest || this.loadingMore || this.sending ||
+      (this.phase !== PrivateMessagePhase.READY && this.phase !== PrivateMessagePhase.EMPTY) ||
+      this.session.getState().status !== SessionStatus.AUTHENTICATED) {
+      return;
+    }
+    const generation = this.generation;
+    this.refreshingLatest = true;
+    try {
+      const known = new Set<string>();
+      this.messages.forEach((message: ZhihuPrivateMessage): void => { known.add(privateMessageStableId(message)); });
+      const incoming: Array<ZhihuPrivateMessage> = [];
+      const cursors = new Set<string>();
+      let cursor: string | undefined = undefined;
+      let firstPage: ZhihuPrivateMessagePage | undefined = undefined;
+      do {
+        const page: ZhihuPrivateMessagePage = await this.repository.getPrivateMessagePage(this.peerId, cursor);
+        if (!this.isCurrent(generation)) {
+          return;
+        }
+        if (firstPage === undefined) {
+          firstPage = page;
+        }
+        incoming.push(...page.items);
+        const overlap: boolean = page.items.some((message: ZhihuPrivateMessage): boolean =>
+          known.has(privateMessageStableId(message)));
+        if (known.size === 0 || overlap || page.cursor.isEnd || page.cursor.next === undefined ||
+          cursors.has(page.cursor.next)) {
+          break;
+        }
+        cursor = page.cursor.next;
+        cursors.add(cursor as string);
+      } while (this.isCurrent(generation));
+      const merged = new Map<string, ZhihuPrivateMessage>();
+      this.messages.forEach((message: ZhihuPrivateMessage): void => {
+        merged.set(privateMessageStableId(message), message);
+      });
+      incoming.forEach((message: ZhihuPrivateMessage): void => {
+        merged.set(privateMessageStableId(message), message);
+      });
+      this.messages = Array.from(merged.values()).sort((left: ZhihuPrivateMessage, right: ZhihuPrivateMessage): number =>
+        left.createdTime - right.createdTime);
+      if (known.size === 0 && firstPage !== undefined) {
+        this.nextCursor = firstPage.cursor.next;
+        this.reachedEnd = firstPage.cursor.isEnd || firstPage.cursor.next === undefined;
+      }
+      this.phase = this.messages.length === 0 ? PrivateMessagePhase.EMPTY : PrivateMessagePhase.READY;
+      this.emit();
+    } catch (_error) {
+      // 自动刷新失败保留当前消息，下一轮重试，不打断输入。
+    } finally {
+      this.refreshingLatest = false;
+    }
+  }
+
   retry(): Promise<void> {
     return this.loadInitial();
   }
 
   async loadMore(): Promise<void> {
-    if (!this.active || this.phase === PrivateMessagePhase.LOADING || this.loadingMore ||
+    if (!this.active || this.phase === PrivateMessagePhase.LOADING || this.loadingMore || this.refreshingLatest ||
       this.paginationBlocked || this.reachedEnd || this.nextCursor === undefined) {
       return;
     }
@@ -213,9 +270,11 @@ export class PrivateMessageController {
       // 翻页游标（after_id）取的是更旧一批，必须前插到顶部，否则旧消息会
       // 被拼到最新消息之后，发出的消息就夹在了旧消息中间。
       const existing: Set<string> = new Set<string>();
-      this.messages.forEach((message: ZhihuPrivateMessage): void => {
-        existing.add(privateMessageStableId(message));
-      });
+      if (cursor !== undefined) {
+        this.messages.forEach((message: ZhihuPrivateMessage): void => {
+          existing.add(privateMessageStableId(message));
+        });
+      }
       const block: Array<ZhihuPrivateMessage> = [];
       for (let index = page.items.length - 1; index >= 0; index -= 1) {
         const message = page.items[index];
