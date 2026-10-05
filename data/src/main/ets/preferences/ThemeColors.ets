@@ -4,7 +4,7 @@
  * ArkUI ResourceColor 使用。
  */
 
-/** 默认主题色：知乎蓝。未设置或解析失败时的兜底值。 */
+/** 默认主题色：知乎（#0066FF）。未设置或解析失败时的兜底值。 */
 export const DEFAULT_THEME_COLOR = '#0066FF';
 
 export interface RgbColor {
@@ -32,6 +32,48 @@ export function normalizeThemeColor(value: string | undefined): string {
     return DEFAULT_THEME_COLOR;
   }
   return (value as string).trim().toUpperCase();
+}
+
+const HEX_INPUT_PATTERN: RegExp = /^#?[0-9a-fA-F]{6}$/;
+
+/**
+ * 解析用户在主题色输入框键入的 16 进制色值（可省 #，不区分大小写）。
+ * 合法返回大写 #RRGGBB；非法（位数不对、含非十六进制字符等）返回 undefined。
+ */
+export function parseHexThemeColorInput(value: string): string | undefined {
+  const text = value.trim();
+  if (!HEX_INPUT_PATTERN.test(text)) {
+    return undefined;
+  }
+  return `#${text.substring(text.length - 6).toUpperCase()}`;
+}
+
+function parseRgbChannel(value: string): number | undefined {
+  const text = value.trim();
+  if (!/^\d{1,3}$/.test(text)) {
+    return undefined;
+  }
+  const num = Number(text);
+  if (num > 255) {
+    return undefined;
+  }
+  return num;
+}
+
+/** 解析用户键入的 "r,g,b" 色值（中英文逗号均可、允许空格），非法返回 undefined。 */
+export function parseRgbThemeColorInput(value: string): RgbColor | undefined {
+  const parts = value.trim().split(/[,，]/);
+  if (parts.length !== 3) {
+    return undefined;
+  }
+  const r = parseRgbChannel(parts[0]);
+  const g = parseRgbChannel(parts[1]);
+  const b = parseRgbChannel(parts[2]);
+  if (r === undefined || g === undefined || b === undefined) {
+    return undefined;
+  }
+  const rgb: RgbColor = { r: r, g: g, b: b };
+  return rgb;
 }
 
 function clampChannel(value: number): number {
