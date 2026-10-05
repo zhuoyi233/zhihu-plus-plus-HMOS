@@ -88,6 +88,8 @@ export struct ThemeColorSettingsPage {
   /** 输入框聚焦标记：聚焦期间程序不回写文本，避免打字时内容被覆盖。 */
   private hexFieldEditing: boolean = false;
   private rgbFieldEditing: boolean = false;
+  /** 色盘拖动中标记：true 期间外层 Scroll 拦截滚动，避免拖色盘带动页面。 */
+  private paletteDragging: boolean = false;
   private store: AppPreferencesStore | undefined = undefined;
 
   aboutToAppear(): void {
@@ -164,6 +166,12 @@ export struct ThemeColorSettingsPage {
     .height('100%')
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring)
+    .onScrollFrameBegin((offset: number, _state: ScrollState): OnScrollFrameBeginHandlerResult => {
+      if (this.paletteDragging) {
+        return { offsetRemain: 0 };
+      }
+      return { offsetRemain: offset };
+    })
     .backgroundColor($r('app.color.page_background'))
   }
 
@@ -305,6 +313,16 @@ export struct ThemeColorSettingsPage {
       this.paletteHeight = Number(newValue.height);
     })
     .onTouch((event: TouchEvent): void => this.handlePaletteTouch(event))
+    .gesture(PanGesture({ direction: PanDirection.All, fingers: 1, distance: 5 })
+      .onActionStart((_event: GestureEvent): void => {
+        this.paletteDragging = true;
+      })
+      .onActionEnd((_event: GestureEvent): void => {
+        this.paletteDragging = false;
+      })
+      .onActionCancel((): void => {
+        this.paletteDragging = false;
+      }))
   }
 
   @Builder
@@ -501,6 +519,9 @@ export struct ThemeColorSettingsPage {
     if (touch === undefined) {
       return;
     }
+    if (event.type === TouchType.Down) {
+      this.paletteDragging = true;
+    }
     if (event.type === TouchType.Down || event.type === TouchType.Move) {
       const x = Math.min(Math.max(touch.x, 0), this.paletteWidth);
       const y = Math.min(Math.max(touch.y, 0), this.paletteHeight);
@@ -513,8 +534,11 @@ export struct ThemeColorSettingsPage {
       this.selectedPresetHex = '';
       this.syncInputsFromColor(true);
       this.broadcastCurrentColor();
-    } else if (event.type === TouchType.Up) {
-      this.persistCurrentColor();
+    } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+      this.paletteDragging = false;
+      if (event.type === TouchType.Up) {
+        this.persistCurrentColor();
+      }
     }
   }
 
