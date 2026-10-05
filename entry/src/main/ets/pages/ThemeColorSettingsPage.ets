@@ -5,6 +5,8 @@ import {
   HsvColor,
   hsvToRgb,
   normalizeThemeColor,
+  parseHexThemeColorInput,
+  parseRgbThemeColorInput,
   rgbToHex,
   rgbToHsv,
   RgbColor
@@ -12,7 +14,7 @@ import {
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 
 /**
- * 主题颜色配置页：12 个预设色（2 排 × 6 列）+ 自定义取色（色盘 + 亮度条）。
+ * 主题颜色配置页：13 个预设色（2 排 × 7 列）+ 自定义取色（色盘 + 亮度条）。
  * 选择写入 AppStorage 'themeColor' 并持久化；全局生效色由 AppShell 解析为
  * 'resolvedThemeColor' 广播，深浅色模式自动适配。
  */
@@ -25,7 +27,7 @@ interface PresetColorItem {
 const CUSTOM_COLOR_NAME = '自定义';
 
 const PRESET_COLORS: PresetColorItem[] = [
-  { name: '知乎蓝', hex: '#0066FF' },
+  { name: '知乎', hex: '#0066FF' },
   { name: 'IT红', hex: '#D22222' },
   { name: '橘红', hex: '#F44836' },
   { name: '橘黄', hex: '#F2821E' },
@@ -36,10 +38,11 @@ const PRESET_COLORS: PresetColorItem[] = [
   { name: '蓝色', hex: '#3F51B5' },
   { name: '青紫', hex: '#5538E9' },
   { name: '紫色', hex: '#9C27B0' },
-  { name: '初音', hex: '#39C5BB' }
+  { name: '初音', hex: '#39C5BB' },
+  { name: '天依', hex: '#66CCFF' }
 ];
 
-/** 网格数据源：12 预设 + 末尾自定义格。 */
+/** 网格数据源：13 预设 + 末尾自定义格。 */
 const GRID_ITEMS: PresetColorItem[] = [...PRESET_COLORS, { name: CUSTOM_COLOR_NAME, hex: '' }];
 
 /** 色盘横向色相渐变（左→右，满饱和满亮度）。 */
@@ -78,6 +81,13 @@ export struct ThemeColorSettingsPage {
   @State private paletteWidth: number = 1;
   @State private paletteHeight: number = 1;
   @State private statusMessage: string = '';
+  /** 16 进制输入框内容，随当前色同步；用户聚焦编辑期间不回写。 */
+  @State private hexInput: string = '';
+  /** RGB 输入框内容（r,g,b 逗号分隔），随当前色同步；聚焦编辑期间不回写。 */
+  @State private rgbInput: string = '';
+  /** 输入框聚焦标记：聚焦期间程序不回写文本，避免打字时内容被覆盖。 */
+  private hexFieldEditing: boolean = false;
+  private rgbFieldEditing: boolean = false;
   private store: AppPreferencesStore | undefined = undefined;
 
   aboutToAppear(): void {
@@ -111,7 +121,7 @@ export struct ThemeColorSettingsPage {
               }
             }, (item: PresetColorItem): string => item.name)
           }
-          .columnsTemplate('1fr 1fr 1fr 1fr 1fr 1fr')
+          .columnsTemplate('1fr 1fr 1fr 1fr 1fr 1fr 1fr')
           .rowsGap($r('app.float.spacing_medium'))
           .width('100%')
           .padding($r('app.float.card_padding'))
@@ -120,32 +130,7 @@ export struct ThemeColorSettingsPage {
         .borderRadius($r('app.float.card_radius'))
         .backgroundColor($r('app.color.surface_background'))
 
-        Column() {
-          Row() {
-            Text('16进制')
-              .fontSize($r('app.float.body_font_size'))
-              .fontColor($r('app.color.primary_text'))
-            Text(this.currentHex())
-              .id('themecolor_hex')
-              .fontSize($r('app.float.body_font_size'))
-              .fontColor(this.resolvedThemeColor)
-              .fontWeight(FontWeight.Medium)
-            Blank().layoutWeight(1)
-            Text('RGB')
-              .fontSize($r('app.float.body_font_size'))
-              .fontColor($r('app.color.primary_text'))
-            Text(this.currentRgbLabel())
-              .id('themecolor_rgb')
-              .fontSize($r('app.float.body_font_size'))
-              .fontColor(this.resolvedThemeColor)
-              .fontWeight(FontWeight.Medium)
-          }
-          .width('100%')
-          .padding($r('app.float.card_padding'))
-        }
-        .width('100%')
-        .borderRadius($r('app.float.card_radius'))
-        .backgroundColor($r('app.color.surface_background'))
+        this.hexRgbCard()
 
         Column({ space: $r('app.float.spacing_medium') }) {
           Text('自定义颜色')
@@ -224,6 +209,54 @@ export struct ThemeColorSettingsPage {
         this.selectPreset(item.hex);
       }
     })
+  }
+
+  @Builder
+  private hexRgbCard() {
+    Row({ space: $r('app.float.spacing_small') }) {
+      Text('16进制:')
+        .fontSize($r('app.float.body_font_size'))
+        .fontColor($r('app.color.primary_text'))
+      TextInput({ text: this.hexInput, placeholder: '#0066FF' })
+        .id('themecolor_hex_input')
+        .layoutWeight(1)
+        .height(40)
+        .fontSize($r('app.float.secondary_font_size'))
+        .padding({ left: 10, right: 10 })
+        .maxLength(7)
+        .textAlign(TextAlign.Center)
+        .enterKeyType(EnterKeyType.Done)
+        .caretColor(this.resolvedThemeColor)
+        .onChange((value: string): void => this.onHexInputChange(value))
+        .onSubmit((_enterKey: EnterKeyType, _event: SubmitEvent): void => this.commitHexField())
+        .onFocus((): void => {
+          this.hexFieldEditing = true;
+        })
+        .onBlur((): void => this.commitHexField())
+      Text('RGB:')
+        .fontSize($r('app.float.body_font_size'))
+        .fontColor($r('app.color.primary_text'))
+      TextInput({ text: this.rgbInput, placeholder: '210,34,34' })
+        .id('themecolor_rgb_input')
+        .layoutWeight(1.3)
+        .height(40)
+        .fontSize($r('app.float.secondary_font_size'))
+        .padding({ left: 6, right: 6 })
+        .maxLength(12)
+        .textAlign(TextAlign.Center)
+        .enterKeyType(EnterKeyType.Done)
+        .caretColor(this.resolvedThemeColor)
+        .onChange((value: string): void => this.onRgbInputChange(value))
+        .onSubmit((_enterKey: EnterKeyType, _event: SubmitEvent): void => this.commitRgbField())
+        .onFocus((): void => {
+          this.rgbFieldEditing = true;
+        })
+        .onBlur((): void => this.commitRgbField())
+    }
+    .width('100%')
+    .padding($r('app.float.card_padding'))
+    .borderRadius($r('app.float.card_radius'))
+    .backgroundColor($r('app.color.surface_background'))
   }
 
   @Builder
@@ -331,6 +364,7 @@ export struct ThemeColorSettingsPage {
         .onChange((next: number, mode: SliderChangeMode): void => {
           this.colorValue = Math.min(1, Math.max(0, next / 100));
           this.selectedPresetHex = '';
+          this.syncInputsFromColor(true);
           if (mode === SliderChangeMode.End || mode === SliderChangeMode.Click) {
             this.persistCurrentColor();
           } else {
@@ -352,9 +386,73 @@ export struct ThemeColorSettingsPage {
     return hsv;
   }
 
-  private currentRgbLabel(): string {
-    const rgb: RgbColor = hexToRgb(this.currentHex());
-    return `${rgb.r}, ${rgb.g}, ${rgb.b}`;
+  private presetHexOf(hex: string): string {
+    const preset = this.presetOf(hex);
+    return preset === undefined ? '' : preset.hex;
+  }
+
+  /** 16 进制输入实时预览：合法即应用（不落盘，等提交/失焦再落盘）。 */
+  private onHexInputChange(value: string): void {
+    this.hexInput = value;
+    const parsed = parseHexThemeColorInput(value);
+    if (parsed === undefined) {
+      return;
+    }
+    this.selectedPresetHex = this.presetHexOf(parsed);
+    this.syncHsvFromHex(parsed);
+    this.broadcastCurrentColor();
+  }
+
+  private commitHexField(): void {
+    this.hexFieldEditing = false;
+    const parsed = parseHexThemeColorInput(this.hexInput);
+    if (parsed === undefined) {
+      this.syncInputsFromColor(false);
+      return;
+    }
+    this.selectedPresetHex = this.presetHexOf(parsed);
+    this.syncHsvFromHex(parsed);
+    this.persistCurrentColor();
+    this.syncInputsFromColor(false);
+  }
+
+  /** RGB 输入实时预览：三个通道均合法才应用。 */
+  private onRgbInputChange(value: string): void {
+    this.rgbInput = value;
+    const parsed = parseRgbThemeColorInput(value);
+    if (parsed === undefined) {
+      return;
+    }
+    const hex = rgbToHex(parsed);
+    this.selectedPresetHex = this.presetHexOf(hex);
+    this.syncHsvFromHex(hex);
+    this.broadcastCurrentColor();
+  }
+
+  private commitRgbField(): void {
+    this.rgbFieldEditing = false;
+    const parsed = parseRgbThemeColorInput(this.rgbInput);
+    if (parsed === undefined) {
+      this.syncInputsFromColor(false);
+      return;
+    }
+    const hex = rgbToHex(parsed);
+    this.selectedPresetHex = this.presetHexOf(hex);
+    this.syncHsvFromHex(hex);
+    this.persistCurrentColor();
+    this.syncInputsFromColor(false);
+  }
+
+  /** 将当前色回写输入框；force 为 true 时无视聚焦标记（外部手势接管时防脏数据提交）。 */
+  private syncInputsFromColor(force: boolean): void {
+    const hex = this.currentHex();
+    const rgb: RgbColor = hexToRgb(hex);
+    if (force || !this.hexFieldEditing) {
+      this.hexInput = hex;
+    }
+    if (force || !this.rgbFieldEditing) {
+      this.rgbInput = `${rgb.r},${rgb.g},${rgb.b}`;
+    }
   }
 
   /** 当前色相/饱和度在满亮度下的颜色（亮度条渐变右端）。 */
@@ -382,6 +480,8 @@ export struct ThemeColorSettingsPage {
   private selectPreset(hex: string): void {
     this.selectedPresetHex = hex;
     this.syncHsvFromHex(hex);
+    // 预设点击是外部接管：即使输入框仍持有焦点也强制回写，避免失焦提交脏数据。
+    this.syncInputsFromColor(true);
     AppStorage.setOrCreate('themeColor', hex);
     void this.store?.saveThemeColor(hex).then((): void => {
       this.statusMessage = '';
@@ -411,6 +511,7 @@ export struct ThemeColorSettingsPage {
         this.saturation = y / this.paletteHeight;
       }
       this.selectedPresetHex = '';
+      this.syncInputsFromColor(true);
       this.broadcastCurrentColor();
     } else if (event.type === TouchType.Up) {
       this.persistCurrentColor();
@@ -441,5 +542,6 @@ export struct ThemeColorSettingsPage {
       this.saturation = hsv.s;
     }
     this.colorValue = hsv.v;
+    this.syncInputsFromColor(false);
   }
 }
