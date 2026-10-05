@@ -6,6 +6,7 @@ import {
   LoginSessionGateway,
   MobileNotificationRepository,
   themeColorContainerColor,
+  SessionStatus,
   ZhihuPrivateMessage,
   privateMessageStableId
 } from 'data';
@@ -51,6 +52,24 @@ function relativeTime(createdTime: number): string {
   }
 }
 
+function padTwo(value: number): string {
+  return value < 10 ? `0${value}` : `${value}`;
+}
+
+/** 精确到秒的本地时间（createdTime 为秒级 Unix 时间戳，精度取决于服务端返回值）。 */
+function fullTime(createdTime: number): string {
+  if (createdTime <= 0) {
+    return '';
+  }
+  try {
+    const date = new Date(createdTime * 1000);
+    return `${date.getFullYear()}-${padTwo(date.getMonth() + 1)}-${padTwo(date.getDate())} ` +
+      `${padTwo(date.getHours())}:${padTwo(date.getMinutes())}:${padTwo(date.getSeconds())}`;
+  } catch (_error) {
+    return '';
+  }
+}
+
 /** 私信会话页（对齐上游 PrivateMessageScreen：气泡列表 + 底部输入栏）。 */
 @Component
 export struct PrivateMessagePage {
@@ -71,6 +90,11 @@ export struct PrivateMessagePage {
   @State private sendError: string = '';
   @State private draft: string = '';
   @State private peerDisplayName: string = '';
+  @State private selfAvatarUrl: string = '';
+  /** 点击时间标签切换精确时间：记录处于"完整时间"态的消息 ID。 */
+  @State private fullTimeIds: Array<string> = [];
+  /** 每轮静默刷新递增，驱动相对时间重算（见 messageTimeLabel），不触发消息行重建。 */
+  @State private timeTick: number = 0;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: PrivateMessageController;
   private scroller: Scroller = new Scroller();
@@ -93,6 +117,10 @@ export struct PrivateMessagePage {
       this.phase = PrivateMessagePhase.ERROR;
       this.errorMessage = '私信数据源未配置';
       return;
+    }
+    const sessionState = session.getState();
+    if (sessionState.status === SessionStatus.AUTHENTICATED) {
+      this.selfAvatarUrl = sessionState.profile?.avatarUrl?.trim() ?? '';
     }
     this.controller = new PrivateMessageController(this.peerId, repository, session,
       (state: PrivateMessageViewState): void => this.applyState(state));
@@ -160,7 +188,7 @@ export struct PrivateMessagePage {
             ListItem() {
               this.messageBubble(message)
             }
-          }, (message: ZhihuPrivateMessage): string => `private_message_${JSON.stringify(message)}`)
+          }, (message: ZhihuPrivateMessage): string => `private_message_${privateMessageStableId(message)}`)
 
           if (this.loadingMore) {
             ListItem() {
@@ -263,7 +291,7 @@ export struct PrivateMessagePage {
     .alignItems(HorizontalAlign.Start)
   }
 
-  /** 气泡行（对齐上游 PrivateMessageBubble：收件左对齐带头像，发件右对齐主色气泡）。 */
+  /** 气泡行（收件左对齐带头像，发件右对齐主色气泡带本人头像）。 */
   @Builder
   private messageBubble(message: ZhihuPrivateMessage) {
     Row() {
@@ -287,7 +315,8 @@ export struct PrivateMessagePage {
             }, (segment: PrivateMessageSegment): string => `${segment.url}:${segment.text}`)
         }
           .fontSize($r('app.float.body_font_size'))
-          .width(this.isIncoming(message) ? '100%' : '88%')
+          // 气泡按内容自适应宽度，最长不超过行宽的 88%，收件贴左、发件贴右（见 Column alignItems）
+          .constraintSize({ maxWidth: '88%' })
           .padding({ left: 14, right: 14, top: 10, bottom: 10 })
           .borderRadius({
             topLeft: 16,
@@ -299,14 +328,26 @@ export struct PrivateMessagePage {
             ? $r('app.color.surface_background') : themeColorContainerColor(this.resolvedThemeColor))
 
         if (relativeTime(message.createdTime).length > 0) {
-          Text(relativeTime(message.createdTime))
+          Text(this.messageTimeLabel(message))
             .fontSize($r('app.float.caption_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .padding({ left: 4, right: 4, top: 2, bottom: 2 })
+            .id(`private_message_time_${privateMessageStableId(message)}`)
+            .onClick((): void => this.toggleFullTime(message))
         }
       }
       .alignItems(this.isIncoming(message) ? HorizontalAlign.Start : HorizontalAlign.End)
       .layoutWeight(1)
+
+      if (!this.isIncoming(message)) {
+        Image(this.selfAvatarUrl)
+          .width(34)
+          .height(34)
+          .borderRadius(17)
+          .backgroundColor($r('app.color.surface_background'))
+          .objectFit(ImageFit.Cover)
+          .margin({ left: 8 })
+      }
     }
     .id(`private_message_row_${privateMessageStableId(message)}`)
     .width('100%')
@@ -362,6 +403,27 @@ export struct PrivateMessagePage {
     return sender.id === this.peerId || sender.urlToken === this.peerId;
   }
 
+  private toggleFullTime(message: ZhihuPrivateMessage): void {
+    const id = privateMessageStableId(message);
+    const index = this.fullTimeIds.indexOf(id);
+    if (index >= 0) {
+      this.fullTimeIds = this.fullTimeIds.filter((item: string): boolean => item !== id);
+    } else {
+      this.fullTimeIds = this.fullTimeIds.concat([id]);
+    }
+  }
+
+  private messageTimeLabel(message: ZhihuPrivateMessage): string {
+    if (this.fullTimeIds.indexOf(privateMessageStableId(message)) >= 0) {
+      return fullTime(message.createdTime);
+    }
+    // 读取 timeTick 建立渲染依赖：静默刷新只重算相对时间文字，组件不重建（避免头像闪动）。
+    if (this.timeTick < 0) {
+      return '';
+    }
+    return relativeTime(message.createdTime);
+  }
+
   private openSegmentLink(segment: PrivateMessageSegment): void {
     if (segment.url.length === 0) {
       return;
@@ -402,6 +464,7 @@ export struct PrivateMessagePage {
     this.requiresLogin = state.requiresLogin;
     this.errorMessage = state.errorMessage ?? '';
     this.sendError = state.sendError ?? '';
+    this.timeTick += 1;
     if (state.peer !== undefined && state.peer.name.trim().length > 0) {
       this.peerDisplayName = state.peer.name;
     }

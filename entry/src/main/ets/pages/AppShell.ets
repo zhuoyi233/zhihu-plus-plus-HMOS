@@ -884,7 +884,8 @@ export struct AppShell {
           (destination: AppDestination): void => this.navigate(destination)
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
+      // 私信为聊天页：首帧无内容滚过标题栏，须用常驻沉浸样式，否则进入时顶栏透明
+      .titleBar({ style: getPersistentImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: { title: { mainTitle:
           ((destination as PrivateMessageDestination).peerName ?? '').length > 0
             ? ((destination as PrivateMessageDestination).peerName as string) : '私信' },
