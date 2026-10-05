@@ -88,6 +88,7 @@ import draftImageReferenceScanTest from './DraftImageReferenceScan.test';
 import readHistoryUploadRepositoryTest from './ReadHistoryUploadRepository.test';
 import lastReadTouchRepositoryTest from './LastReadTouchRepository.test';
 import linkCardMetaTest from './LinkCardMeta.test';
+import segmentReactionRepositoryTest from './SegmentReactionRepository.test';
 
 export default function testsuite(): void {
   apiLevelTest();
@@ -180,4 +181,5 @@ export default function testsuite(): void {
   draftImageReferenceScanTest();
   readHistoryUploadRepositoryTest();
   lastReadTouchRepositoryTest();
+  segmentReactionRepositoryTest();
 }
