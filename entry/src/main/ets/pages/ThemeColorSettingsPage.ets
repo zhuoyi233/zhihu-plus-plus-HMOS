@@ -248,7 +248,7 @@ export struct ThemeColorSettingsPage {
       Text('RGB:')
         .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.primary_text'))
-      TextInput({ text: this.rgbInput, placeholder: '210,34,34' })
+      TextInput({ text: this.rgbInput, placeholder: '0,102,255' })
         .id('themecolor_rgb_input')
         .layoutWeight(1.25)
         .height(40)
@@ -466,7 +466,7 @@ export struct ThemeColorSettingsPage {
       if (!this.rgbInputToastShown) {
         this.rgbInputToastShown = true;
         this.getUIContext().getPromptAction().showToast({
-          message: 'RGB 色值格式不正确，应为 r,g,b（0–255，如 210,34,34）',
+          message: 'RGB 色值格式不正确，应为 r,g,b（0–255，如 0,102,255）',
           duration: 2500
         });
       }
