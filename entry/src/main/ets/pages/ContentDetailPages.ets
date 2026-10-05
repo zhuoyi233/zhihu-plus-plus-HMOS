@@ -95,6 +95,8 @@ import { GlassCapsule } from './components/MaterialCanvas';
 import { getSpeechPlaybackService, SpeechPlaybackStatus } from '../platform/SpeechPlaybackService';
 import { accumulateAnswerSwitchDrag } from './AnswerSwitchGesture';
 import { readerBodyFontSize, readerBodyLineHeight } from './ReaderTypography';
+import { SegmentPill } from './components/SegmentPill';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 
 @Component
 struct ContentDetailPage {
@@ -454,7 +456,12 @@ struct ContentDetailPage {
     this.segmentInfos = next;
   }
 
-  /** 切换划线点赞（乐观更新 + 真实请求，失败回滚）。 */
+  /**
+   * 切换划线点赞（乐观更新 + 真实请求，失败回滚）。
+   * 结构约束（曾导致"全功能失效"的坑）：翻转 `segmentLikeBusy` 与回滚必须无条件执行，
+   * 收尾走 `finally`；失败分支里任何可能抛错的动作（toast 可能抛 BusinessError）都要自带
+   * try 兜底——否则一次异常就会让 busy 永久为 true，后续点赞/取消全被守卫挡掉且毫无反馈。
+   */
   private async onSegmentLike(): Promise<void> {
     if (this.segmentLikeBusy || this.segmentReactionRepository === undefined ||
       this.session === undefined || this.segmentSheetMarkIndex < 0) {
@@ -463,18 +470,19 @@ struct ContentDetailPage {
     if (this.kind !== ContentDetailKind.ANSWER && this.kind !== ContentDetailKind.ARTICLE) {
       return;
     }
-    const paragraph = this.segmentInfos.find((p: SegmentInfoParagraph): boolean => p.pid === this.segmentSheetPid);
+    const pid = this.segmentSheetPid;
+    const markIndex = this.segmentSheetMarkIndex;
+    const paragraph = this.segmentInfos.find((p: SegmentInfoParagraph): boolean => p.pid === pid);
     if (paragraph === undefined) {
       return;
     }
-    const mark = paragraph.marks[this.segmentSheetMarkIndex];
+    const mark = paragraph.marks[markIndex];
     const before = mark === undefined ? undefined : effectiveSegmentMeta(mark);
     if (before === undefined) {
       return;
     }
     const contentType: 'answer' | 'article' = this.kind === ContentDetailKind.ANSWER ? 'answer' : 'article';
     // 乐观更新：先翻转点赞态与计数，失败再回滚。
-    this.segmentLikeBusy = true;
     const optimistic: SegmentInfoMeta = {
       segIds: before.segIds,
       isLike: !before.isLike,
@@ -483,15 +491,29 @@ struct ContentDetailPage {
       myCommentCount: before.myCommentCount,
       isSpan: before.isSpan
     };
-    this.applySegmentMeta(this.segmentSheetPid, this.segmentSheetMarkIndex, optimistic);
+    this.segmentLikeBusy = true;
     try {
-      const result = await this.segmentReactionRepository.toggleSegmentLike(contentType, this.activeContentId, paragraph, this.segmentSheetMarkIndex);
-      this.applySegmentMeta(this.segmentSheetPid, this.segmentSheetMarkIndex, result);
-    } catch (_error) {
-      this.applySegmentMeta(this.segmentSheetPid, this.segmentSheetMarkIndex, before);
-      this.getUIContext().getPromptAction().showToast({ message: '操作失败，请稍后重试' });
+      this.applySegmentMeta(pid, markIndex, optimistic);
+      const result = await this.segmentReactionRepository.toggleSegmentLike(contentType, this.activeContentId, paragraph, markIndex);
+      this.applySegmentMeta(pid, markIndex, result);
+    } catch (error) {
+      hilog.warn(0xD001, 'SegmentReaction', 'toggle failed content=%{public}s like=%{public}s message=%{public}s',
+        this.activeContentId, `${before.isLike}`,
+        error instanceof Error ? error.message : `${error}`);
+      this.applySegmentMeta(pid, markIndex, before);
+      this.notifySegmentLikeFailure();
     } finally {
       this.segmentLikeBusy = false;
+    }
+  }
+
+  /** 失败提示：toast 自身抛错（BusinessError 401/100001）不得影响点赞态回滚与 busy 释放。 */
+  private notifySegmentLikeFailure(): void {
+    try {
+      this.getUIContext().getPromptAction().showToast({ message: '操作失败，请稍后重试' });
+    } catch (error) {
+      hilog.warn(0xD001, 'SegmentReaction', 'toast failed message=%{public}s',
+        error instanceof Error ? error.message : `${error}`);
     }
   }
 
@@ -522,6 +544,8 @@ struct ContentDetailPage {
    * 他人划线点赞/评论/复制操作面板。
    * 版式对齐上游段评弹层：小字标题"划线片段" + 放大并加引号的划线原文 + 胶囊化互动按钮，
    * 按钮统一使用 HarmonyOS 原生符号图标（点赞/评论带计数，复制为纯图标按钮）。
+   * 互动胶囊用 SegmentPill 组件（@Prop 承接状态）而非带参 @Builder：@Builder 参数按值传入，
+   * 已挂载节点不会随 @State 变化重新求值，点赞成功后胶囊会停在旧状态不刷新。
    */
   @Builder
   private segmentActionSheet() {
@@ -540,51 +564,30 @@ struct ContentDetailPage {
         .width('100%')
       if (this.currentSegmentMeta() !== undefined) {
         Row({ space: $r('app.float.spacing_small') }) {
-          // 点赞胶囊：图标 + 计数，已赞时图标与计数切到主题色（对齐上游段评点赞态）。
-          Button({ type: ButtonType.Normal, stateEffect: true }) {
-            Row({ space: 6 }) {
-              SymbolGlyph(this.currentSegmentMeta()!.isLike ? $r('sys.symbol.hand_thumbsup_fill') : $r('sys.symbol.hand_thumbsup'))
-                .fontSize(18)
-                .fontColor([this.currentSegmentMeta()!.isLike ? this.resolvedThemeColor : $r('app.color.primary_text')])
-              Text(`${this.currentSegmentMeta()!.likeCount}`)
-                .fontSize($r('app.float.secondary_font_size'))
-                .fontColor(this.currentSegmentMeta()!.isLike ? this.resolvedThemeColor : $r('app.color.primary_text'))
-            }
-            .justifyContent(FlexAlign.Center)
-            .width('100%')
-          }
-          .id('segment_sheet_like')
-          .layoutWeight(1)
-          .height($r('app.float.segment_action_button_height'))
-          .padding(0)
-          .backgroundColor($r('app.color.brand_primary_container'))
-          .borderRadius($r('app.float.segment_action_button_radius'))
-          .accessibilityText(this.currentSegmentMeta()!.isLike ? '取消点赞该划线' : '点赞该划线')
-          .onClick((): void => { void this.onSegmentLike(); })
+          // 点赞胶囊：状态开关——未赞为中性胶囊，已赞整块切主题色（对齐上游段评点赞态）。
+          SegmentPill({
+            icon: this.currentSegmentMeta()!.isLike
+              ? $r('sys.symbol.hand_thumbsup_fill') : $r('sys.symbol.hand_thumbsup'),
+            count: `${this.currentSegmentMeta()!.likeCount}`,
+            active: this.currentSegmentMeta()!.isLike,
+            iconAccent: false,
+            testId: 'segment_sheet_like',
+            label: this.currentSegmentMeta()!.isLike ? '取消点赞该划线' : '点赞该划线',
+            onTap: (): void => { void this.onSegmentLike(); }
+          })
 
-          // 评论胶囊：进入该划线的段评列表。
-          Button({ type: ButtonType.Normal, stateEffect: true }) {
-            Row({ space: 6 }) {
-              SymbolGlyph($r('sys.symbol.text_bubble_left_2'))
-                .fontSize(18)
-                .fontColor([$r('app.color.primary_text')])
-              Text(`${this.currentSegmentMeta()!.commentCount}`)
-                .fontSize($r('app.float.secondary_font_size'))
-                .fontColor($r('app.color.primary_text'))
+          // 评论胶囊：导航入口而非状态开关——底色与点赞同源，只让图标取强调色做区分。
+          SegmentPill({
+            icon: $r('sys.symbol.text_bubble_left_2'),
+            count: `${this.currentSegmentMeta()!.commentCount}`,
+            active: false,
+            iconAccent: true,
+            testId: 'segment_sheet_comment',
+            label: '查看该划线的评论',
+            onTap: (): void => {
+              this.segmentSheetShown = false;
+              this.openSegmentComments();
             }
-            .justifyContent(FlexAlign.Center)
-            .width('100%')
-          }
-          .id('segment_sheet_comment')
-          .layoutWeight(1)
-          .height($r('app.float.segment_action_button_height'))
-          .padding(0)
-          .backgroundColor($r('app.color.brand_primary_container'))
-          .borderRadius($r('app.float.segment_action_button_radius'))
-          .accessibilityText('查看该划线的评论')
-          .onClick((): void => {
-            this.segmentSheetShown = false;
-            this.openSegmentComments();
           })
 
           // 复制：纯图标按钮（无胶囊底），使用鸿蒙原生复制符号。
@@ -606,7 +609,7 @@ struct ContentDetailPage {
     }
     .id('segment_action_sheet')
     .width('100%')
-    .padding(20)
+    .padding({ top: 16, bottom: 24, left: 20, right: 20 })
   }
 
   private onImmersiveReadingChanged(): void {

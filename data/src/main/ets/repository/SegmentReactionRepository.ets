@@ -5,6 +5,7 @@ import {
   SegmentInfoMeta,
   SegmentInfoParagraph
 } from '../domain/DomainModels';
+import { HttpFailure, HttpFailureKind } from '../network/HttpFailure';
 import { ZhihuHttpClient, ZhihuHttpMethod, ZhihuHttpResponse } from '../network/ZhihuHttpClient';
 import { normalizeContentId } from './DefaultContentRepository';
 
@@ -14,6 +15,28 @@ export type SegmentContentType = 'answer' | 'article';
 export enum SegmentReactionRepositoryFailureKind {
   INVALID_ID = 'invalid_id',
   CANCELLED = 'cancelled'
+}
+
+/** 划线互动的重试策略：单飞客户端在"已有请求进行中"时会硬拒绝（BUSY），点赞这类用户
+ * 显式意图不能因此静默失败，需要在短窗口内重试等待占位释放。 */
+export interface SegmentReactionRetryPolicy {
+  /** 总尝试次数（含首次），至少 1。 */
+  maxAttempts: number;
+  /** 两次尝试之间的等待毫秒数。 */
+  delayMs: number;
+}
+
+const DEFAULT_SEGMENT_REACTION_RETRY_POLICY: SegmentReactionRetryPolicy = { maxAttempts: 3, delayMs: 250 };
+
+function waitForRetry(delayMs: number): Promise<void> {
+  return new Promise<void>((resolve: () => void): void => {
+    setTimeout((): void => resolve(), delayMs);
+  });
+}
+
+/** BUSY（单飞占位被占）与通用可重试失败（429/5xx/超时/网络）都值得短窗口重试；取消与参数错误不重试。 */
+function isRetryableSegmentFailure(failure: HttpFailure): boolean {
+  return failure.kind === HttpFailureKind.BUSY || failure.retryable;
 }
 
 export class SegmentReactionRepositoryFailure extends Error {
@@ -41,10 +64,12 @@ export interface SegmentReactionRepository {
 
 export class DefaultSegmentReactionRepository implements SegmentReactionRepository {
   private readonly httpClient: ZhihuHttpClient;
+  private readonly retryPolicy: SegmentReactionRetryPolicy;
   private generation: number = 0;
 
-  constructor(httpClient: ZhihuHttpClient) {
+  constructor(httpClient: ZhihuHttpClient, retryPolicy?: SegmentReactionRetryPolicy) {
     this.httpClient = httpClient;
+    this.retryPolicy = retryPolicy ?? DEFAULT_SEGMENT_REACTION_RETRY_POLICY;
   }
 
   cancel(): void {
@@ -90,7 +115,33 @@ export class DefaultSegmentReactionRepository implements SegmentReactionReposito
     };
   }
 
+  /**
+   * 执行一次划线互动请求，BUSY/可重试失败在短窗口内重试。
+   * 点赞/取消都是"用户点一下就要有结果"的动作：单飞占位被别的请求占用时直接失败会让
+   * 整个点赞功能看起来失效（第一次点刚好撞上占位就再也点不动），因此这里必须重试等待。
+   */
   private async execute(url: string, method: ZhihuHttpMethod, body?: string): Promise<ZhihuHttpResponse> {
+    const attempts = Math.max(1, this.retryPolicy.maxAttempts);
+    let lastFailure: HttpFailure | undefined = undefined;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      if (attempt > 0) {
+        await waitForRetry(this.retryPolicy.delayMs);
+      }
+      try {
+        return await this.executeOnce(url, method, body);
+      } catch (error) {
+        if (error instanceof HttpFailure && isRetryableSegmentFailure(error)) {
+          lastFailure = error;
+          continue;
+        }
+        // ArkTS 限制 throw 任意类型：非 HttpFailure 一律包装成具体 Error 再抛。
+        throw error instanceof Error ? error : new HttpFailure(HttpFailureKind.BUSY);
+      }
+    }
+    throw lastFailure ?? new HttpFailure(HttpFailureKind.BUSY);
+  }
+
+  private async executeOnce(url: string, method: ZhihuHttpMethod, body?: string): Promise<ZhihuHttpResponse> {
     const requestGeneration = this.generation;
     const response = await this.httpClient.execute({
       url: url,
