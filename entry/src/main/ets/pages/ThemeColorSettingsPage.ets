@@ -90,6 +90,9 @@ export struct ThemeColorSettingsPage {
   private rgbFieldEditing: boolean = false;
   /** 色盘拖动中标记：true 期间外层 Scroll 拦截滚动，避免拖色盘带动页面。 */
   private paletteDragging: boolean = false;
+  /** 非法输入 toast 去重标记：每次聚焦只提示一次（回车与失焦可能连续触发提交）。 */
+  private hexInputToastShown: boolean = false;
+  private rgbInputToastShown: boolean = false;
   private store: AppPreferencesStore | undefined = undefined;
 
   aboutToAppear(): void {
@@ -221,16 +224,16 @@ export struct ThemeColorSettingsPage {
 
   @Builder
   private hexRgbCard() {
-    Row({ space: $r('app.float.spacing_small') }) {
+    Row({ space: $r('app.float.spacing_xsmall') }) {
       Text('16进制:')
         .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.primary_text'))
       TextInput({ text: this.hexInput, placeholder: '#0066FF' })
         .id('themecolor_hex_input')
-        .layoutWeight(1)
+        .layoutWeight(1.05)
         .height(40)
         .fontSize($r('app.float.secondary_font_size'))
-        .padding({ left: 10, right: 10 })
+        .padding({ left: 4, right: 4 })
         .maxLength(7)
         .textAlign(TextAlign.Center)
         .enterKeyType(EnterKeyType.Done)
@@ -239,6 +242,7 @@ export struct ThemeColorSettingsPage {
         .onSubmit((_enterKey: EnterKeyType, _event: SubmitEvent): void => this.commitHexField())
         .onFocus((): void => {
           this.hexFieldEditing = true;
+          this.hexInputToastShown = false;
         })
         .onBlur((): void => this.commitHexField())
       Text('RGB:')
@@ -246,7 +250,7 @@ export struct ThemeColorSettingsPage {
         .fontColor($r('app.color.primary_text'))
       TextInput({ text: this.rgbInput, placeholder: '210,34,34' })
         .id('themecolor_rgb_input')
-        .layoutWeight(1.3)
+        .layoutWeight(1.25)
         .height(40)
         .fontSize($r('app.float.secondary_font_size'))
         .padding({ left: 6, right: 6 })
@@ -258,6 +262,7 @@ export struct ThemeColorSettingsPage {
         .onSubmit((_enterKey: EnterKeyType, _event: SubmitEvent): void => this.commitRgbField())
         .onFocus((): void => {
           this.rgbFieldEditing = true;
+          this.rgbInputToastShown = false;
         })
         .onBlur((): void => this.commitRgbField())
     }
@@ -425,6 +430,13 @@ export struct ThemeColorSettingsPage {
     this.hexFieldEditing = false;
     const parsed = parseHexThemeColorInput(this.hexInput);
     if (parsed === undefined) {
+      if (!this.hexInputToastShown) {
+        this.hexInputToastShown = true;
+        this.getUIContext().getPromptAction().showToast({
+          message: '16 进制色值格式不正确，应为 6 位十六进制（如 #66CCFF）',
+          duration: 2500
+        });
+      }
       this.syncInputsFromColor(false);
       return;
     }
@@ -451,6 +463,13 @@ export struct ThemeColorSettingsPage {
     this.rgbFieldEditing = false;
     const parsed = parseRgbThemeColorInput(this.rgbInput);
     if (parsed === undefined) {
+      if (!this.rgbInputToastShown) {
+        this.rgbInputToastShown = true;
+        this.getUIContext().getPromptAction().showToast({
+          message: 'RGB 色值格式不正确，应为 r,g,b（0–255，如 210,34,34）',
+          duration: 2500
+        });
+      }
       this.syncInputsFromColor(false);
       return;
     }
