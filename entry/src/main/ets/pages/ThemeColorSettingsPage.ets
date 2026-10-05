@@ -433,7 +433,7 @@ export struct ThemeColorSettingsPage {
       if (!this.hexInputToastShown) {
         this.hexInputToastShown = true;
         this.getUIContext().getPromptAction().showToast({
-          message: '16 进制色值格式不正确，应为 6 位十六进制（如 #66CCFF）',
+          message: '16 进制色值格式不正确，应为 6 位十六进制（如 #0066FF）',
           duration: 2500
         });
       }
