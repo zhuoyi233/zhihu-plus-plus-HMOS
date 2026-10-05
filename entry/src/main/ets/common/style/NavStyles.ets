@@ -116,13 +116,25 @@ export function getPersistentImmersiveTitleBarStyle(materialMode: ImmersiveMater
     };
   }
   return {
+    // API 23 上 HDS 不渲染静止态 originalStyle 的背景色，仅滚动效果机制激活后才有底色；
+    // 因此保留 COMMON_BLUR 滚动效果、把静止态底色从透明改为同一模糊色，
+    // 使首帧（含聊天页自动定位到底部时）顶栏即有沉浸底色。
     scrollEffectOpts: {
-      enableScrollEffect: false,
-      scrollEffectType: ScrollEffectType.COMMON_BLUR
+      enableScrollEffect: true,
+      scrollEffectType: ScrollEffectType.COMMON_BLUR,
+      blurEffectiveStartOffset: LengthMetrics.vp(0),
+      blurEffectiveEndOffset: LengthMetrics.vp(10)
     },
     originalStyle: {
       backgroundStyle: {
-        backgroundColor: $r('sys.color.ohos_id_color_navigation_background_blur')
+        // API 23 上 sys.color.ohos_id_color_navigation_background_blur 解析为透明，
+        // 须用与 API 26 滚动态一致的具体半透明色（随深浅色切换）。
+        backgroundColor: $r('app.color.immersive_title_background')
+      }
+    },
+    scrollEffectStyle: {
+      backgroundStyle: {
+        backgroundColor: $r('app.color.immersive_title_background')
       }
     }
   };
