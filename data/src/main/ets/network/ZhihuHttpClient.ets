@@ -12,6 +12,14 @@ export const ZHIHU_CONNECT_TIMEOUT_MS = 10000;
 export const ZHIHU_READ_TIMEOUT_MS = 15000;
 export const ZHIHU_RESPONSE_LIMIT_BYTES = 1024 * 1024;
 
+/**
+ * 单飞看门狗：正常请求由传输层 connectTimeout/readTimeout（合计最长约 25s）兜底落地；
+ * 该值只负责在传输层 promise 悬挂不落地（平台超时未生效，如 TLS 握手卡死、半开连接）时
+ * 强制结束 race 并释放单飞槽位，避免槽位被永久占位导致所有后续请求 BUSY。
+ * 因此取远大于平台超时之和的安全上限。
+ */
+export const ZHIHU_STUCK_REQUEST_WATCHDOG_MS = 60000;
+
 export enum ZhihuHttpMethod {
   GET = 'GET',
   POST = 'POST',
@@ -363,11 +371,14 @@ class ActiveZhihuRequest {
 export class ZhihuHttpClient {
   private readonly cookieProvider?: SessionCookieProvider;
   private readonly transportFactory: ZhihuHttpTransportFactory;
+  private readonly stuckRequestTimeoutMs: number;
   private activeRequest?: ActiveZhihuRequest;
 
-  constructor(cookieProvider?: SessionCookieProvider, transportFactory?: ZhihuHttpTransportFactory) {
+  constructor(cookieProvider?: SessionCookieProvider, transportFactory?: ZhihuHttpTransportFactory,
+    stuckRequestTimeoutMs: number = ZHIHU_STUCK_REQUEST_WATCHDOG_MS) {
     this.cookieProvider = cookieProvider;
     this.transportFactory = transportFactory ?? new NetworkKitHttpTransportFactory();
+    this.stuckRequestTimeoutMs = Math.max(1, stuckRequestTimeoutMs);
   }
 
   async execute(request: ZhihuHttpRequest): Promise<ZhihuHttpResponse> {
@@ -392,6 +403,7 @@ export class ZhihuHttpClient {
       throw new HttpFailure(HttpFailureKind.CLIENT);
     }
     let activeRequest: ActiveZhihuRequest | undefined = undefined;
+    let watchdogTimer: number = -1;
     try {
       const cookies = request.useSession === true || request.signWithZse === true || request.includeXsrfToken === true
         ? this.cookieProvider?.getCookies() ?? []
@@ -402,9 +414,18 @@ export class ZhihuHttpClient {
       if (!concurrent) {
         this.activeRequest = activeRequest;
       }
+      // 悬挂看门狗：传输层 promise 不落地时以 TIMEOUT 强制结束 race，
+      // finally 仍会清槽位并销毁传输；watchdog 输给正常落地时由 clearTimeout 回收。
+      const watchdog = new Promise<ZhihuHttpResponse>((_resolve, reject) => {
+        watchdogTimer = setTimeout((): void => {
+          hilog.warn(0xD001, 'ZhihuHttp', 'watchdog released stuck single-flight slot');
+          reject(new HttpFailure(HttpFailureKind.TIMEOUT));
+        }, this.stuckRequestTimeoutMs);
+      });
       const pendingRequests: Array<Promise<ZhihuHttpResponse>> = [
         transport.request(preparedRequest),
-        activeRequest.cancellation
+        activeRequest.cancellation,
+        watchdog
       ];
       const response = await Promise.race(pendingRequests);
       const failure = httpFailureFromStatus(response.statusCode);
@@ -422,6 +443,9 @@ export class ZhihuHttpClient {
       hilog.warn(0xD001, 'ZhihuHttp', 'kind=unexpected');
       throw httpFailureFromTransport();
     } finally {
+      if (watchdogTimer >= 0) {
+        clearTimeout(watchdogTimer);
+      }
       if (activeRequest !== undefined) {
         if (!concurrent && this.activeRequest === activeRequest) {
           this.activeRequest = undefined;

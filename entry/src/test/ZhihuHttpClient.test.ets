@@ -10,6 +10,7 @@ import {
   SessionCookie,
   SessionCookieProvider,
   ZhihuHttpClient,
+  ZhihuMobileHttpClient,
   ZhihuHttpMethod,
   ZhihuHttpRequest,
   ZhihuHttpResponse,
@@ -331,6 +332,44 @@ export default function zhihuHttpClientTest(): void {
       expect(failure?.kind).assertEqual(HttpFailureKind.CANCELLED);
       expect(replacement.statusCode).assertEqual(200);
       expect(factory.transport.destroyCount).assertEqual(1);
+      expect(factory.replacement.destroyCount).assertEqual(1);
+    });
+
+    it('releasesSingleFlightSlotWhenTransportHangs', 0, async () => {
+      const factory = new CancellingTransportFactory();
+      const client = new ZhihuHttpClient(undefined, factory, 20);
+      let failure: HttpFailure | undefined = undefined;
+      try {
+        await client.execute({ url: 'https://www.zhihu.com/api/v4/test' });
+      } catch (error) {
+        if (error instanceof HttpFailure) {
+          failure = error;
+        }
+      }
+      expect(failure?.kind).assertEqual(HttpFailureKind.TIMEOUT);
+      expect(failure?.retryable).assertTrue();
+      expect(factory.transport.destroyCount).assertEqual(1);
+      // 看门狗落地后槽位必须已释放：后续请求不再被 BUSY 拒绝。
+      const replacement = await client.execute({ url: 'https://www.zhihu.com/api/v4/replacement' });
+      expect(replacement.statusCode).assertEqual(200);
+      expect(factory.replacement.destroyCount).assertEqual(1);
+    });
+
+    it('releasesMobileSingleFlightSlotWhenTransportHangs', 0, async () => {
+      const factory = new CancellingTransportFactory();
+      const client = new ZhihuMobileHttpClient(new FixedCookieProvider(), factory, 20);
+      let failure: HttpFailure | undefined = undefined;
+      try {
+        await client.execute({ url: 'https://api.zhihu.com/v1/notifications' });
+      } catch (error) {
+        if (error instanceof HttpFailure) {
+          failure = error;
+        }
+      }
+      expect(failure?.kind).assertEqual(HttpFailureKind.TIMEOUT);
+      expect(factory.transport.destroyCount).assertEqual(1);
+      const replacement = await client.execute({ url: 'https://api.zhihu.com/v1/notifications' });
+      expect(replacement.statusCode).assertEqual(200);
       expect(factory.replacement.destroyCount).assertEqual(1);
     });
 

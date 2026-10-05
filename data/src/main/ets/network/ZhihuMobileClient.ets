@@ -1,9 +1,10 @@
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { SessionCookie, toCookieHeader } from '../session/CookieSession';
 import { HttpFailure, HttpFailureKind, httpFailureFromStatus, httpFailureFromTransport } from './HttpFailure';
 import { PreparedZhihuHttpRequest, SessionCookieProvider, ZhihuHttpMethod,
   ZhihuRequestHeaders, ZhihuHttpResponse, ZhihuHttpTransport, ZhihuHttpTransportFactory,
   NetworkKitHttpTransportFactory, ZHIHU_CONNECT_TIMEOUT_MS, ZHIHU_READ_TIMEOUT_MS,
-  ZHIHU_RESPONSE_LIMIT_BYTES } from './ZhihuHttpClient';
+  ZHIHU_RESPONSE_LIMIT_BYTES, ZHIHU_STUCK_REQUEST_WATCHDOG_MS } from './ZhihuHttpClient';
 
 /**
  * 移动端协议（api.zhihu.com）请求头，对齐上游 `AccountData.ANDROID_HEADERS`
@@ -137,11 +138,14 @@ class ActiveMobileRequest {
 export class ZhihuMobileHttpClient {
   private readonly cookieProvider?: SessionCookieProvider;
   private readonly transportFactory: ZhihuHttpTransportFactory;
+  private readonly stuckRequestTimeoutMs: number;
   private activeRequest?: ActiveMobileRequest;
 
-  constructor(cookieProvider?: SessionCookieProvider, transportFactory?: ZhihuHttpTransportFactory) {
+  constructor(cookieProvider?: SessionCookieProvider, transportFactory?: ZhihuHttpTransportFactory,
+    stuckRequestTimeoutMs: number = ZHIHU_STUCK_REQUEST_WATCHDOG_MS) {
     this.cookieProvider = cookieProvider;
     this.transportFactory = transportFactory ?? new NetworkKitHttpTransportFactory();
+    this.stuckRequestTimeoutMs = Math.max(1, stuckRequestTimeoutMs);
   }
 
   async execute(request: ZhihuMobileHttpRequest): Promise<ZhihuHttpResponse> {
@@ -152,6 +156,7 @@ export class ZhihuMobileHttpClient {
       throw new HttpFailure(HttpFailureKind.CLIENT);
     }
     let activeRequest: ActiveMobileRequest | undefined = undefined;
+    let watchdogTimer: number = -1;
     try {
       const cookies = this.cookieProvider?.getCookies() ?? [];
       const preparedRequest = prepareZhihuMobileHttpRequest(request, cookies);
@@ -159,9 +164,18 @@ export class ZhihuMobileHttpClient {
       const active: ActiveMobileRequest = new ActiveMobileRequest(transport);
       activeRequest = active;
       this.activeRequest = active;
+      // 悬挂看门狗：与 ZhihuHttpClient 一致，传输层 promise 不落地时以 TIMEOUT
+      // 强制结束 race，finally 仍会清槽位并销毁传输。
+      const watchdog = new Promise<ZhihuHttpResponse>((_resolve, reject) => {
+        watchdogTimer = setTimeout((): void => {
+          hilog.warn(0xD001, 'ZhihuMobileHttp', 'watchdog released stuck single-flight slot');
+          reject(new HttpFailure(HttpFailureKind.TIMEOUT));
+        }, this.stuckRequestTimeoutMs);
+      });
       const pending: Array<Promise<ZhihuHttpResponse>> = [
         transport.request(preparedRequest),
-        active.cancellation
+        active.cancellation,
+        watchdog
       ];
       const response = await Promise.race(pending);
       const failure = httpFailureFromStatus(response.statusCode);
@@ -175,6 +189,9 @@ export class ZhihuMobileHttpClient {
       }
       throw httpFailureFromTransport();
     } finally {
+      if (watchdogTimer >= 0) {
+        clearTimeout(watchdogTimer);
+      }
       if (activeRequest !== undefined) {
         if (this.activeRequest === activeRequest) {
           this.activeRequest = undefined;
