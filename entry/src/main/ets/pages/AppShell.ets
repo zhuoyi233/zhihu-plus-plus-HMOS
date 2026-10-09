@@ -5,7 +5,7 @@ import { HistoryTitleBar } from './HistoryTitleBar';
 import { AnswerTitleBar } from './AnswerTitleBar';
 import { ArticleTitleBar } from './ArticleTitleBar';
 import { peopleTitleText, PeopleTitleState } from './PeopleTitleBar';
-import { CommentTitleBar, commentTitleStateId } from './CommentTitleBar';
+import { CommentTitleBar, CommentTitleState, commentTitleStateId } from './CommentTitleBar';
 import { NotificationTitleBar, NOTIFICATION_HUB_REFRESH_TICK_KEY,
   NOTIFICATION_TIMELINE_REFRESH_TICK_KEY, NOTIFICATION_TIMELINE_ENTRY_KEY } from './NotificationTitleBar';
 import {
@@ -169,6 +169,7 @@ export struct AppShell {
   @StorageProp('detailImmersiveActive') private detailImmersiveActive: boolean = false;
   @StorageProp('detailTitleHiddenByScroll') private detailTitleHiddenByScroll: boolean = false;
   @StorageProp('peopleTitleStates') private peopleTitleStates: PeopleTitleState[] = [];
+  @StorageProp('commentTitleStates') private commentTitleStates: CommentTitleState[] = [];
   /** 全屏图片查看器打开中（详情页广播）：同样隐藏顶栏，使查看器真全屏。 */
   @StorageProp('imagePreviewUrl') private imagePreviewUrl: string = '';
   @State private installedVersionLabel: string = '正在读取已安装版本…';
@@ -602,7 +603,8 @@ export struct AppShell {
         }
       })
       .hideBackButton(true)
-      .hideTitleBar(false)
+      .hideTitleBar(this.commentTitleStates.find((state: CommentTitleState): boolean =>
+        state.id === commentTitleStateId(destination.contentType, destination.contentId))?.previewing ?? false)
       .onBackPressed((): boolean => {
         this.requestCommentPageBack(destination.contentType, destination.contentId);
         return true;
