@@ -10,6 +10,7 @@ import {
 } from 'data';
 import {
   ContentDetailController,
+  acceptsContentDocumentEvent,
   ContentDetailPhase,
   contentDetailIdentity,
   LoadedAnswerDetail,
@@ -88,6 +89,37 @@ class HttpFailingContentRepository implements ContentRepository {
 
 export default function contentDetailStateTest(): void {
   describe('contentDetailStateTest', () => {
+    it('acceptsNewDocumentEdgesWhileRejectingDepartedDocumentEvents', 0, () => {
+      const oldDetail: LoadedAnswerDetail = { kind: ContentDetailKind.ANSWER, value: answerFixture(), loadGeneration: 1 };
+      const newDetail: LoadedAnswerDetail = { kind: ContentDetailKind.ANSWER, value: answerFixture(), loadGeneration: 2 };
+      // 即使重新加载同一回答，也不能接收旧正文实例的惯性事件。
+      expect(acceptsContentDocumentEvent(ContentDetailPhase.LOADING, undefined, oldDetail)).assertFalse();
+      expect(acceptsContentDocumentEvent(ContentDetailPhase.READY, newDetail, oldDetail)).assertFalse();
+      // READY 后初次贴底必须立即同步，不依赖 load() 等待阅读记录写入结束。
+      // 模拟 ArkUI 对同一正文的不同包装，不能依赖对象引用相等。
+      const wrappedDetail: LoadedAnswerDetail = { kind: ContentDetailKind.ANSWER, value: answerFixture(), loadGeneration: 2 };
+      expect(acceptsContentDocumentEvent(ContentDetailPhase.READY, newDetail, wrappedDetail)).assertTrue();
+      expect(acceptsContentDocumentEvent(ContentDetailPhase.ERROR, undefined, newDetail)).assertFalse();
+    });
+    it('preservesDocumentGenerationAcrossSnapshotsAndRejectsPreviousLoad', 0, async () => {
+      const controller = new ContentDetailController(new ControlledContentRepository());
+      controller.activate();
+      await controller.load(ContentDetailKind.ANSWER, '2');
+      const first = controller.snapshot().content;
+      const copied = controller.snapshot().content;
+      expect(first !== undefined && copied !== undefined).assertTrue();
+      if (first === undefined || copied === undefined) { return; }
+      expect(acceptsContentDocumentEvent(ContentDetailPhase.READY, copied, first)).assertTrue();
+      await controller.load(ContentDetailKind.ANSWER, '2');
+      const reloaded = controller.snapshot().content;
+      expect(acceptsContentDocumentEvent(ContentDetailPhase.READY, reloaded, first)).assertFalse();
+      const latest = controller.snapshot().content;
+      expect(latest !== undefined).assertTrue();
+      if (latest !== undefined) {
+        expect(acceptsContentDocumentEvent(ContentDetailPhase.READY, reloaded, latest)).assertTrue();
+      }
+      controller.deactivate();
+    });
     it('loadsEveryKindAndMapsSemanticHeaderFields', 0, async () => {
       const repository = new ControlledContentRepository();
       const controller = new ContentDetailController(repository);

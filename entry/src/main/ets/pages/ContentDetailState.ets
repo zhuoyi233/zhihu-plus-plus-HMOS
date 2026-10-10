@@ -34,21 +34,35 @@ export enum OpenedRecordPhase {
 }
 
 export interface LoadedQuestionDetail {
+  /** 本次加载代次：跨 ArkUI 状态代理仍保持稳定。 */
+  readonly loadGeneration?: number;
   readonly kind: ContentDetailKind.QUESTION;
   readonly value: Question;
 }
 
 export interface LoadedAnswerDetail {
+  /** 本次加载代次：跨 ArkUI 状态代理仍保持稳定。 */
+  readonly loadGeneration?: number;
   readonly kind: ContentDetailKind.ANSWER;
   readonly value: Answer;
 }
 
 export interface LoadedArticleDetail {
+  /** 本次加载代次：跨 ArkUI 状态代理仍保持稳定。 */
+  readonly loadGeneration?: number;
   readonly kind: ContentDetailKind.ARTICLE;
   readonly value: Article;
 }
 
 export type LoadedContentDetail = LoadedQuestionDetail | LoadedAnswerDetail | LoadedArticleDetail;
+
+/** 只接受当前已显示正文的事件，阅读记录仍在写入不影响正文边界同步。 */
+export function acceptsContentDocumentEvent(phase: ContentDetailPhase, current: LoadedContentDetail | undefined,
+  source: LoadedContentDetail): boolean {
+  return phase === ContentDetailPhase.READY && current !== undefined &&
+    current.loadGeneration !== undefined && current.loadGeneration === source.loadGeneration &&
+    current.kind === source.kind && current.value.id === source.value.id;
+}
 
 export interface ContentDetailViewState {
   readonly phase: ContentDetailPhase;
@@ -130,7 +144,7 @@ export class ContentDetailController {
     this.phase = ContentDetailPhase.LOADING;
     this.emit();
     try {
-      const loaded = await this.fetch(kind, id);
+      const loaded = await this.fetch(kind, id, generation);
       if (!this.isCurrent(generation)) {
         return;
       }
@@ -156,14 +170,14 @@ export class ContentDetailController {
     }
   }
 
-  private async fetch(kind: ContentDetailKind, id: string): Promise<LoadedContentDetail> {
+  private async fetch(kind: ContentDetailKind, id: string, generation: number): Promise<LoadedContentDetail> {
     switch (kind) {
       case ContentDetailKind.QUESTION:
-        return { kind: kind, value: await this.repository.getQuestion(id) };
+        return { kind: kind, loadGeneration: generation, value: await this.repository.getQuestion(id) };
       case ContentDetailKind.ANSWER:
-        return { kind: kind, value: await this.repository.getAnswer(id) };
+        return { kind: kind, loadGeneration: generation, value: await this.repository.getAnswer(id) };
       case ContentDetailKind.ARTICLE:
-        return { kind: kind, value: await this.repository.getArticle(id) };
+        return { kind: kind, loadGeneration: generation, value: await this.repository.getArticle(id) };
     }
   }
 
@@ -295,6 +309,7 @@ function cloneLoadedContent(content: LoadedContentDetail): LoadedContentDetail {
     case ContentDetailKind.QUESTION:
       return {
         kind: content.kind,
+        loadGeneration: content.loadGeneration,
         value: {
           id: content.value.id,
           title: content.value.title,
@@ -314,6 +329,7 @@ function cloneLoadedContent(content: LoadedContentDetail): LoadedContentDetail {
     case ContentDetailKind.ANSWER:
       return {
         kind: content.kind,
+        loadGeneration: content.loadGeneration,
         value: {
           id: content.value.id,
           questionId: content.value.questionId,
@@ -338,6 +354,7 @@ function cloneLoadedContent(content: LoadedContentDetail): LoadedContentDetail {
     case ContentDetailKind.ARTICLE:
       return {
         kind: content.kind,
+        loadGeneration: content.loadGeneration,
         value: {
           id: content.value.id,
           title: content.value.title,
