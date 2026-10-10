@@ -7,6 +7,7 @@ import qrLoginScanPolicyTest from './QrLoginScanPolicy.test';
 import qrDesktopLoginScanFlowTest from './QrDesktopLoginScanFlow.test';
 import qrDesktopLoginConfirmationPolicyTest from './QrDesktopLoginConfirmationPolicy.test';
 import readerDocumentTest from './ReaderDocument.test';
+import readerImageSizingTest from './ReaderImageSizing.test';
 import segmentHighlightTest from './SegmentHighlight.test';
 import rdbSchemaTest from './RdbSchema.test';
 import zhihuLoginClientTest from './ZhihuLoginClient.test';
@@ -100,6 +101,7 @@ export default function testsuite(): void {
   qrDesktopLoginScanFlowTest();
   qrDesktopLoginConfirmationPolicyTest();
   readerDocumentTest();
+  readerImageSizingTest();
   linkCardMetaTest();
   segmentHighlightTest();
   rdbSchemaTest();
