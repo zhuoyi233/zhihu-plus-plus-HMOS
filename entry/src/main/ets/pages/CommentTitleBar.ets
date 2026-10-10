@@ -5,6 +5,7 @@ import { materialCanvas } from './components/MaterialCanvas';
 export interface CommentTitleState {
   id: string;
   replying: boolean;
+  previewing?: boolean;
 }
 
 export function commentTitleStateId(contentType: string, contentId: string): string {
@@ -14,7 +15,7 @@ export function commentTitleStateId(contentType: string, contentId: string): str
 export function publishCommentTitle(state: CommentTitleState): void {
   const states = AppStorage.get<CommentTitleState[]>('commentTitleStates') ?? [];
   const previous = states.find((item: CommentTitleState): boolean => item.id === state.id);
-  if (previous?.replying === state.replying) {
+  if (previous?.replying === state.replying && previous?.previewing === state.previewing) {
     return;
   }
   AppStorage.setOrCreate('commentTitleStates',

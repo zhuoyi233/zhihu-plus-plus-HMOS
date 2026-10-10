@@ -17,6 +17,7 @@ import {
 } from './CommentState';
 import { CommentLikeButton } from './CommentLikeButton';
 import { CommentLikeState, CommentLikeStateStore } from './CommentLikeState';
+import { ContentImagePreview } from './NativeContentDocument';
 import { EmojiText } from './EmojiText';
 import { HarmonyOSCapabilities } from '../common/platform/HarmonyOSCapabilities';
 import { FLOATING_TITLE_BAR_OFFSET } from './AppPageChrome';
@@ -39,6 +40,7 @@ export struct CommentPage {
   session: LoginSessionGateway | undefined = undefined;
   navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {
   };
+  @State private previewUrl: string = '';
   @State private rootDraft: string = '';
   @State private replyDraft: string = '';
   onDismiss: () => void = (): void => {
@@ -132,11 +134,24 @@ export struct CommentPage {
   }
 
   private handleBack(): void {
+    if (this.previewUrl.length > 0) {
+      this.setPreviewUrl('');
+      return;
+    }
     if (this.activeRoot !== undefined) {
       this.controller?.closeChildComments();
       return;
     }
     this.onDismiss();
+  }
+
+  private setPreviewUrl(url: string): void {
+    this.previewUrl = url;
+    publishCommentTitle({
+      id: this.titleStateId(),
+      replying: this.activeRoot !== undefined,
+      previewing: url.length > 0
+    });
   }
 
   private titleStateId(): string {
@@ -170,6 +185,12 @@ export struct CommentPage {
         .width('100%')
         .height('100%')
         .hitTestBehavior(HitTestMode.Transparent)
+      }
+      if (this.previewUrl.length > 0) {
+        ContentImagePreview({
+          url: this.previewUrl,
+          onClose: (): void => this.setPreviewUrl('')
+        })
       }
     }
     .width('100%')
@@ -441,9 +462,7 @@ export struct CommentPage {
             .margin({ top: 4 })
             .accessibilityText('查看评论图片')
             .onClick((): void => {
-              AppStorage.setOrCreate('imagePreviewUrl', commentImageUrl(comment.contentHtml));
-              // 预览叠层仍由详情页持有，退出评论页后展示。
-              this.onDismiss();
+              this.setPreviewUrl(commentImageUrl(comment.contentHtml));
             })
         }
         this.commentFooter(comment, showDelete)
@@ -946,7 +965,8 @@ export struct CommentPage {
     this.deleting = state.deleting;
     this.actionMessage = state.actionMessage ?? '';
     this.actionRequiresLogin = state.actionRequiresLogin;
-    publishCommentTitle({ id: this.titleStateId(), replying: state.activeRoot !== undefined });
+    publishCommentTitle({ id: this.titleStateId(), replying: state.activeRoot !== undefined,
+      previewing: this.previewUrl.length > 0 });
   }
 }
 
