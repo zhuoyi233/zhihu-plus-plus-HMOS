@@ -664,6 +664,11 @@ export struct AppShell {
           AppStorage.setOrCreate('imagePreviewUrl', '');
           return true;
         }
+        if (this.detailImmersiveActive) {
+          AppStorage.setOrCreate('detailImmersiveExitTick',
+            (AppStorage.get<number>('detailImmersiveExitTick') ?? 0) + 1);
+          return true;
+        }
         return false;
       })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])

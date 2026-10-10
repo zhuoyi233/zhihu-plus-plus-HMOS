@@ -1,5 +1,7 @@
 import { AppDestination, AppDestinationName } from 'core';
 import {
+  AnswerDoubleTapAction,
+  AppPreferencesStore,
   BlockedFeedHistoryGateway,
   BlockingRuleGateway,
   CommentRepository,
@@ -945,6 +947,8 @@ export struct PinDetailPage {
   @State private blockingMessage: string = '';
   @State private blockingBusy: boolean = false;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  @StorageProp('answerDoubleTapAction') private doubleTapAction: AnswerDoubleTapAction = AnswerDoubleTapAction.ASK;
+  private doubleTapMenuShown: boolean = false;
   private controller?: PinDetailController;
   private blockingAction?: BlockingActionController;
 
@@ -995,6 +999,47 @@ export struct PinDetailPage {
     });
   }
 
+  private onBodyDoubleTap(): void {
+    if (this.phase !== ReadOnlyDetailPhase.READY || this.doubleTapMenuShown) {
+      return;
+    }
+    if (this.doubleTapAction === AnswerDoubleTapAction.NONE) {
+      return;
+    }
+    if (this.doubleTapAction === AnswerDoubleTapAction.OPEN_COMMENTS) {
+      this.openPinComments();
+      return;
+    }
+    if (this.doubleTapAction !== AnswerDoubleTapAction.ASK) {
+      this.getUIContext().getPromptAction().showToast({ message: '想法详情暂不支持此动作，可在设置中选择打开评论' });
+      return;
+    }
+    this.doubleTapMenuShown = true;
+    this.getUIContext().getPromptAction().showActionMenu({
+      title: '设置双击正文动作（想法支持打开评论）',
+      buttons: [{ text: '设为无操作', color: this.resolvedThemeColor },
+        { text: '打开评论', color: this.resolvedThemeColor }]
+    }).then((result): void => {
+      this.doubleTapMenuShown = false;
+      const action = result.index === 1 ? AnswerDoubleTapAction.OPEN_COMMENTS : AnswerDoubleTapAction.NONE;
+      AppStorage.setOrCreate('answerDoubleTapAction', action);
+      const context = getAbilityContext();
+      if (context !== undefined) {
+        void new AppPreferencesStore(context).saveAnswerDoubleTapAction(action).catch((_error: Object): void => {});
+      }
+      if (action === AnswerDoubleTapAction.OPEN_COMMENTS) {
+        this.openPinComments();
+      }
+    }).catch((_error: Object): void => {
+      this.doubleTapMenuShown = false;
+    });
+  }
+
+  private openPinComments(): void {
+    if (this.commentRepository !== undefined && this.session !== undefined) {
+      this.navigate({ name: AppDestinationName.COMMENT, contentType: 'pin', contentId: this.contentId });
+    }
+  }
   /** 想法正文内联链接：站内内容走应用内导航，其余 http(s) 交系统浏览器。 */
   private openContentLink(url: string): void {
     const destination = contentLinkDestination(url);
@@ -1177,6 +1222,7 @@ export struct PinDetailPage {
         NativeContentDocument({
           html: pin.contentHtml,
           emptyMessage: '这条想法暂时没有正文',
+          onBodyDoubleTap: (): void => this.onBodyDoubleTap(),
           linkCardMetaRepository: this.linkCardMetaRepository,
           onLinkClick: (url: string): void => this.openContentLink(url)
         })

@@ -207,7 +207,7 @@ struct ContentDetailPage {
   /** 详情收藏态：任一收藏夹含此内容即已收藏（对齐上游 ArticleViewModel.isFavorited），驱动右下角书签图标 */
   @State private contentFavorited: boolean = false;
   private favoriteStateContentId: string = '';
-  /** 回答页双击正文动作（对齐上游 answerDoubleTapAction）：AppStorage 广播跨页同步
+  /** 详情页双击正文动作（对齐上游 answerDoubleTapAction）：AppStorage 广播跨页同步
    * （详情页 Ask 面板与设置页改动互见），默认询问并记住。 */
   @StorageProp('answerDoubleTapAction') private answerDoubleTapAction: AnswerDoubleTapAction =
     AnswerDoubleTapAction.ASK;
@@ -990,8 +990,8 @@ struct ContentDetailPage {
           onVideoOpen: (videoId: string): void => this.openVideo(videoId),
           onLinkClick: (url: string): void => this.openContentLink(url),
           // 文段上双击由正文 Text 的 onTouch 自行识别（见 DoubleTapDetector）；
-          // 此回调与下方父容器手势共同覆盖整个正文区域，onAnswerDoubleTap 内部幂等。
-          onBodyDoubleTap: (): void => this.onAnswerDoubleTap(),
+          // 此回调与下方父容器手势共同覆盖整个正文区域，onContentDoubleTap 内部幂等。
+          onBodyDoubleTap: (): void => this.onContentDoubleTap(),
           documentHeader: (): void => { this.contentHeader(content) },
           documentFooter: (): void => { this.contentDateFooter(content) },
           onScrollOffset: (offset: number): void => {
@@ -1071,7 +1071,7 @@ struct ContentDetailPage {
     .gesture(
       TapGesture({ count: 2 })
         .onAction((): void => {
-          this.onAnswerDoubleTap();
+          this.onContentDoubleTap();
         })
     )
   }
@@ -1949,6 +1949,7 @@ struct ContentDetailPage {
         onVideoOpen: (videoId: string): void => this.openVideo(videoId),
         onLinkClick: (url: string): void => this.openContentLink(url),
         documentHeader: (): void => { this.contentHeader(content) },
+        onBodyDoubleTap: (): void => this.onContentDoubleTap(),
         documentBodyFooter: (): void => { this.questionBodyFooter(content) },
         documentItems: (): void => { this.questionAnswerItems() },
         documentFooter: (): void => { this.questionAnswersFooter() },
@@ -2517,10 +2518,10 @@ struct ContentDetailPage {
     });
   }
 
-  /** 双击正文动作分发（对齐上游 performAnswerDoubleTapAction）：仅回答页生效；
+  /** 双击正文动作分发（对齐上游 performAnswerDoubleTapAction）：回答、文章与问题详情共用；
    * 震感仅点赞与打开评论区有；Ask 弹询问面板，选择后记住。 */
-  private onAnswerDoubleTap(): void {
-    if (this.kind !== ContentDetailKind.ANSWER) {
+  private onContentDoubleTap(): void {
+    if (this.phase !== ContentDetailPhase.READY || this.navigatorBusy) {
       return;
     }
     const action = this.answerDoubleTapAction;
@@ -2538,10 +2539,18 @@ struct ContentDetailPage {
     }
     if (action === AnswerDoubleTapAction.VOTE_UP) {
       performConfirmHaptic();
-      void this.voteController?.voteUpFromDoubleTap();
+      this.voteUpFromBodyDoubleTap();
       return;
     }
     this.doubleTapAskSheetShown = true;
+  }
+
+  private voteUpFromBodyDoubleTap(): void {
+    if (this.kind === ContentDetailKind.QUESTION) {
+      this.showMenuToast('问题详情不支持点赞，可在设置中选择打开评论或切换沉浸式');
+      return;
+    }
+    void this.voteController?.voteUpFromDoubleTap();
   }
 
   /** 读取双击动作偏好；失败保持默认 Ask，不影响双击可用性。 */
@@ -2568,7 +2577,7 @@ struct ContentDetailPage {
       });
     }
     this.getUIContext().getPromptAction()
-      .showToast({ message: `已将双击回答动作设为：${answerDoubleTapActionLabel(action)}` });
+      .showToast({ message: `已将双击正文动作设为：${answerDoubleTapActionLabel(action)}` });
   }
 
   private async moveAnswer(direction: number): Promise<void> {
@@ -2923,12 +2932,12 @@ struct ContentDetailPage {
   @Builder
   private doubleTapAskSheet() {
     Column({ space: $r('app.float.spacing_small') }) {
-      Text('设置双击回答动作')
+      Text('设置双击正文动作')
         .fontSize($r('app.float.heading_font_size'))
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.primary_text'))
         .width('100%')
-      Text('选择以后双击回答时默认执行的动作。选择后会立即保存到设置，你也可以稍后在设置中修改。')
+      Text('选择以后双击正文时默认执行的动作。选择后会立即保存到设置，你也可以稍后在设置中修改。')
         .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
@@ -2945,6 +2954,7 @@ struct ContentDetailPage {
         })
       Button('设为点赞', { type: ButtonType.Normal, stateEffect: true })
         .id('answer_double_tap_vote_up')
+        .enabled(this.kind !== ContentDetailKind.QUESTION)
         .width('100%')
         .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.primary_text'))
@@ -2954,7 +2964,7 @@ struct ContentDetailPage {
           this.doubleTapAskSheetShown = false;
           this.saveAnswerDoubleTapAction(AnswerDoubleTapAction.VOTE_UP);
           performConfirmHaptic();
-          void this.voteController?.voteUpFromDoubleTap();
+          this.voteUpFromBodyDoubleTap();
         })
       Button('设为打开评论区', { type: ButtonType.Normal, stateEffect: true })
         .id('answer_double_tap_open_comments')
