@@ -733,7 +733,7 @@ export struct NativeContentDocument {
   onLinkClick?: (url: string) => void;
   /** 推荐阅读卡片元数据仓库：解析站内链接并拉取赞同/评论计数；未配置时卡片回退为展示链接地址。 */
   linkCardMetaRepository?: LinkCardMetaRepository = undefined;
-  /** 正文区域双击回调（回答页双击赞同动作）。 */
+  /** 正文区域双击回调（各详情页按共享偏好执行动作）。 */
   onBodyDoubleTap?: () => void;
   /** 正文 Text 的双击识别器：开启选词的 Text 会吞掉手势系统事件，只能靠 onTouch 自行识别。 */
   private readonly bodyTapDetector: DoubleTapDetector = new DoubleTapDetector();

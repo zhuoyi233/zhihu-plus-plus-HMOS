@@ -233,7 +233,7 @@ export struct AppearanceSettingsPage {
             })
           }
           Divider().color($r('app.color.divider_color'))
-          this.selectSetting('双击回答动作', '双击回答正文时执行的动作，默认弹窗询问',
+          this.selectSetting('双击正文动作', '详情页双击正文时执行，默认询问；可用动作取决于页面',
             answerDoubleTapActionLabel(this.answerDoubleTapAction), this.answerDoubleTapSelectOptions(),
             this.answerDoubleTapIndex(), 'appearance_answer_double_tap',
             (index: number): void => {

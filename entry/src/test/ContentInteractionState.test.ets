@@ -352,6 +352,22 @@ export default function contentInteractionStateTest(): void {
       expect(controller.snapshot().voteupCount).assertEqual(10);
     });
 
+    it('doubleTapArticleVotesUpWithoutTogglingOff', 0, async () => {
+      const repository = new FakeVoteRepository();
+      const controller = new ContentVoteController(
+        repository, new FixedSessionGateway(SessionStatus.AUTHENTICATED),
+        ContentDetailKind.ARTICLE, 'article-double-tap'
+      );
+      controller.activate();
+      controller.applyInitial(articleContent(ContentVoteState.NEUTRAL, 20, false, 0));
+      await controller.voteUpFromDoubleTap();
+      await controller.voteUpFromDoubleTap();
+      expect(repository.voteCalls.length).assertEqual(1);
+      expect(repository.voteCalls[0].id).assertEqual('article-double-tap');
+      expect(repository.voteCalls[0].state).assertEqual(ContentVoteState.UP);
+      expect(controller.snapshot().voteState).assertEqual(ContentVoteState.UP);
+      expect(controller.snapshot().voteupCount).assertEqual(21);
+    });
     it('followsOptimisticallyAndRollsBackOnFailure', 0, async () => {
       const repository = new FakeFollowRepository();
       repository.result = { followerCount: 99 };
