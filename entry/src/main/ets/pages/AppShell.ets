@@ -168,6 +168,8 @@ export struct AppShell {
   /** 回答/文章详情页沉浸式阅读中（页面广播）：隐藏 NavDestination 顶栏（对齐上游 topBar={}）。 */
   @StorageProp('detailImmersiveActive') private detailImmersiveActive: boolean = false;
   @StorageProp('detailTitleHiddenByScroll') private detailTitleHiddenByScroll: boolean = false;
+  @StorageProp('answerOverscrollActive') private answerOverscrollActive: boolean = false;
+  @StorageProp('answerSwitchMode') private answerSwitchMode: string = 'vertical';
   @StorageProp('peopleTitleStates') private peopleTitleStates: PeopleTitleState[] = [];
   /** 全屏图片查看器打开中（详情页广播）：同样隐藏顶栏，使查看器真全屏。 */
   @StorageProp('imagePreviewUrl') private imagePreviewUrl: string = '';
@@ -681,7 +683,9 @@ export struct AppShell {
       .titleBar({ style: getPersistentImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.answerTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
       // 沉浸式/图片查看器中隐藏顶栏（对齐上游 topBar={}）；返回键优先关查看器、再退沉浸式。
-      .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll || this.imagePreviewUrl.length > 0)
+      // 纵向过滑须连同 HDS 材质背景一起隐藏；仅淡出 stackBuilder 内容仍会模糊遮挡预览。
+      .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll || this.imagePreviewUrl.length > 0 ||
+        (this.answerOverscrollActive && this.answerSwitchMode !== 'horizontal'))
       .onBackPressed((): boolean => {
         if (this.imagePreviewUrl.length > 0) {
           AppStorage.setOrCreate('imagePreviewUrl', '');
