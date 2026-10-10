@@ -72,6 +72,7 @@ import {
   ContentDetailController,
   ContentDetailPhase,
   ContentDetailViewState,
+  acceptsContentDocumentEvent,
   LoadedContentDetail,
   OpenedRecordPhase
 } from './ContentDetailState';
@@ -995,11 +996,9 @@ struct ContentDetailPage {
           documentHeader: (): void => { this.contentHeader(content) },
           documentFooter: (): void => { this.contentDateFooter(content) },
           onScrollOffset: (offset: number): void => {
-            // 快速贴底过滑切换回答时，moveAnswer 复位折叠态后、controller.load 置 LOADING
-            // 卸载旧文档前，旧 List 的残余惯性滚动回调仍会到达，把刚复位的折叠态重新打成
-            // 隐藏（新文档加载后未滚动前没有回调来纠正，底部操作栏便一直不显示）——
-            // 切换窗口（navigatorBusy / 非 READY）内的滚动回调一律忽略。
-            if (this.navigatorBusy || this.phase !== ContentDetailPhase.READY) { return; }
+            // 按正文实例过滤旧 List 的残余事件；新正文 READY 时可能仍在写阅读记录，
+            // 不能用 navigatorBusy 丢弃其初始滚动/边界通知。
+            if (!this.pageActive || !acceptsContentDocumentEvent(this.phase, this.content, content)) { return; }
             this.updateChromeHiddenByScroll(offset);
             if (this.kind === ContentDetailKind.ANSWER) {
               this.updateAnswerTitleScrolled(content, offset);
@@ -1008,17 +1007,14 @@ struct ContentDetailPage {
             }
           },
           onBottomEdgeChange: (atBottom: boolean): void => {
-            // 与 onScrollOffset 同一守卫：快速切换回答时旧文档的贴底回调（如惯性滚动
-            // 补触 onReachEnd）晚于 moveAnswer 的复位到达，会把 contentAtBottom 重新打成
-            // true——新文档从顶部渲染不会再发贴底纠正回调，FAB 便一直不显示。
-            if (this.navigatorBusy || this.phase !== ContentDetailPhase.READY) { return; }
+            if (!this.pageActive || !acceptsContentDocumentEvent(this.phase, this.content, content)) { return; }
             this.contentAtBottom = atBottom;
             // 贴底回显上下栏（对齐上游 ArticleTopBarState/ArticleBottomBarState 的
             // distanceFromBottom < heightPx 分支：拉到底/翻页到底时两栏强制回显）。
             this.revealChromeAtBottom(atBottom);
           },
           onTopEdgeChange: (atTop: boolean): void => {
-            if (this.navigatorBusy || this.phase !== ContentDetailPhase.READY) { return; }
+            if (!this.pageActive || !acceptsContentDocumentEvent(this.phase, this.content, content)) { return; }
             this.contentAtTop = atTop;
           },
           onPageTurnPastStart: (): void => {
@@ -2575,16 +2571,6 @@ struct ContentDetailPage {
     if (this.navigatorBusy) { return; }
     this.navigatorBusy = true;
     this.resetAnswerOverscroll(false);
-    // 新内容从顶部渲染：边界状态归位，避免沿用上一答的贴底状态误触发底部过滑。
-    this.contentAtBottom = false;
-    this.contentAtTop = true;
-    // 顶栏折叠态随新答复位：新内容从顶部渲染，问题标题回到视口内。
-    this.answerQuestionScrolled = false;
-    // 折叠的标题栏/底部操作栏随新答复位回显（对齐上游：切回答 = 新建 ScrollState，
-    // currentScroll == 0 时 offset.snapTo(0) 强制回显；本页组件复用 @State，需手动复位）。
-    this.chromeHiddenByScroll = false;
-    this.lastContentScrollOffset = 0;
-    AppStorage.setOrCreate('detailTitleHiddenByScroll', false);
     try {
       const id = await this.answerNavigator?.move(direction);
       this.navigatorRevision += 1;
@@ -2595,6 +2581,17 @@ struct ContentDetailPage {
           .showToast({ message: message.length > 0 ? message : '暂时无法切换回答' });
         return;
       }
+      // 取得目标后再复位，紧接着 load 卸载旧正文；分页等待/切换失败不破坏当前边界。
+      // 新内容从顶部渲染：边界状态归位，避免沿用上一答的贴底状态误触发底部过滑。
+      this.contentAtBottom = false;
+      this.contentAtTop = true;
+      // 顶栏折叠态随新答复位：新内容从顶部渲染，问题标题回到视口内。
+      this.answerQuestionScrolled = false;
+      // 折叠的标题栏/底部操作栏随新答复位回显（对齐上游：切回答 = 新建 ScrollState，
+      // currentScroll == 0 时 offset.snapTo(0) 强制回显；本页组件复用 @State，需手动复位）。
+      this.chromeHiddenByScroll = false;
+      this.lastContentScrollOffset = 0;
+      AppStorage.setOrCreate('detailTitleHiddenByScroll', false);
       this.voteController?.deactivate();
       this.voteController = undefined;
       this.favoriteDialogShown = false;
