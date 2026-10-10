@@ -3,9 +3,16 @@
     "tag_name": "HMOSv0.5.8",
     "name": "HMOSv0.5.8",
     "html_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.5.8",
-    "published_at": "",
-    "body": "# ZhihuPlusPlus-HMOS v0.5.8\n\n本次更新以**消息与私信体验升级**为重点，同时完善阅读历史同步与主题自定义，并修复多处阅读与交互问题。自 v0.5.7 起，发版准备前共 13 个提交。\n\n## 📨 消息与私信\n\n- 私信气泡按对话双方分侧延伸，展示双方头像，支持精确到时间的显示切换。\n- 完善消息刷新与未读状态同步，私信支持自动更新。\n\n## 📖 阅读与历史\n\n- 打开内容自动上报云端阅读历史，首页支持展示上次阅读内容。\n- 推荐阅读卡片展示赞同、评论数与站内资源类型。\n- 修复正文推荐阅读卡片与引用块解析问题。\n- 文章图片按原大小与屏幕占比钳制显示，避免异常拉伸。\n\n## 🎨 外观与主题\n\n- 主题颜色页支持 16 进制与 RGB 颜色输入，并调整预设色。\n- 修复深色模式状态栏对比度与主题恢复问题。\n\n## 🐞 问题修复\n\n- 修复回答滑动切换与图片预览遮挡的问题。\n- 修复详情页双击快捷动作失效的问题。\n- 修复评论图片预览关闭后错误返回回答页的问题。\n- 修复划线点赞失效与单飞槽位悬挂占位的问题。\n- 修复底栏历史页缺少本地记录菜单的问题。\n\n## 📥 下载与安装\n\n1. 下载下方附件 `ZhihuPlusPlus-HMOS-v0.5.8-unsigned.hap`\n2. 使用 [小白调试助手](https://github.com/likuai2010/auto-installer) 或 [HoKit](https://github.com/yabi-zzh/HoKit/releases) 自行签名\n3. 覆盖安装即可升级，原有登录状态、设置与历史数据会保留\n\n> [!IMPORTANT]\n> 要求设备系统为 **HarmonyOS 6.1.0（API 23）及以上**。\n> 本项目非知乎官方产品，内容来自知乎网站，服务端接口变化可能导致部分功能失效。",
-    "assets": []
+    "published_at": "2026-10-10T08:30:17Z",
+    "body": "# ZhihuPlusPlus-HMOS v0.5.8\r\n\r\n本次更新以**消息与私信体验升级**为重点，同时完善阅读历史同步与主题自定义，并修复多处阅读与交互问题。自 v0.5.7 起，发版准备前共 13 个提交。\r\n\r\n## 📨 消息与私信\r\n\r\n- 私信气泡按对话双方分侧延伸，展示双方头像，支持精确到时间的显示切换。\r\n- 完善消息刷新与未读状态同步，私信支持自动更新。\r\n\r\n## 📖 阅读与历史\r\n\r\n- 打开内容自动上报云端阅读历史，首页支持展示上次阅读内容。\r\n- 推荐阅读卡片展示赞同、评论数与站内资源类型。\r\n- 修复正文推荐阅读卡片与引用块解析问题。\r\n- 文章图片按原大小与屏幕占比钳制显示，避免异常拉伸。\r\n\r\n## 🎨 外观与主题\r\n\r\n- 主题颜色页支持 16 进制与 RGB 颜色输入，并调整预设色。\r\n- 修复深色模式状态栏对比度与主题恢复问题。\r\n\r\n## 🐞 问题修复\r\n\r\n- 修复回答滑动切换与图片预览遮挡的问题。\r\n- 修复详情页双击快捷动作失效的问题。\r\n- 修复评论图片预览关闭后错误返回回答页的问题。\r\n- 修复划线点赞失效与单飞槽位悬挂占位的问题。\r\n- 修复底栏历史页缺少本地记录菜单的问题。\r\n\r\n## 📥 下载与安装\r\n\r\n1. 下载下方附件 `ZhihuPlusPlus-HMOS-v0.5.8-unsigned.hap`\r\n2. 使用 [小白调试助手](https://github.com/likuai2010/auto-installer) 或 [HoKit](https://github.com/yabi-zzh/HoKit/releases) 自行签名\r\n3. 覆盖安装即可升级，原有登录状态、设置与历史数据会保留\r\n\r\n> [!IMPORTANT]\r\n> 要求设备系统为 **HarmonyOS 6.1.0（API 23）及以上**。\r\n> 本项目非知乎官方产品，内容来自知乎网站，服务端接口变化可能导致部分功能失效。\r\n",
+    "assets": [
+      {
+        "name": "ZhihuPlusPlus-HMOS-v0.5.8-unsigned.hap",
+        "browser_download_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/download/HMOSv0.5.8/ZhihuPlusPlus-HMOS-v0.5.8-unsigned.hap",
+        "size": 3221393,
+        "sha256": "1b3e8c37946abf580ae39298f401be4ed7d890212d74d011fc22492a77b82a02"
+      }
+    ]
   },
   {
     "tag_name": "HMOSv0.5.7",
