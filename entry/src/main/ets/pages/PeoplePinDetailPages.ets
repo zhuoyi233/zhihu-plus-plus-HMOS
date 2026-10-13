@@ -48,7 +48,6 @@ import {
   BlockingUserCandidate
 } from './BlockingActionState';
 import { GlassCapsule } from './components/MaterialCanvas';
-import { hdsMaterial } from '@kit.UIDesignKit';
 
 @Component
 struct ReadOnlyDetailStatusPanel {
@@ -961,16 +960,9 @@ export struct PinDetailPage {
   private doubleTapMenuShown: boolean = false;
   private controller?: PinDetailController;
   private likeController?: PinLikeController;
-  private immersiveMaterialSupported: boolean = false;
   private blockingAction?: BlockingActionController;
 
   aboutToAppear(): void {
-    try {
-      this.immersiveMaterialSupported =
-        hdsMaterial.getSystemMaterialTypes().includes(hdsMaterial.MaterialType.IMMERSIVE);
-    } catch (_error) {
-      this.immersiveMaterialSupported = false;
-    }
     // P3-7：返回栈重显（页面实例与状态保留）时 aboutToAppear 可能再次触发；
     // 控制器仍存活时直接复用，避免重建控制器并重载正文导致滚动位置丢失。
     if (this.controller !== undefined) {
@@ -1088,46 +1080,60 @@ export struct PinDetailPage {
   }
 
   build() {
-    Column() {
-      if (this.phase === ReadOnlyDetailPhase.IDLE || this.phase === ReadOnlyDetailPhase.LOADING) {
-        ReadOnlyDetailStatusPanel({
-          kind: 'pin',
-          message: '正在加载想法…',
-          loading: true,
-          navigate: this.navigate
-        })
-      } else if (this.phase === ReadOnlyDetailPhase.ERROR) {
-        ReadOnlyDetailStatusPanel({
-          kind: 'pin',
-          message: this.errorMessage,
-          requiresLogin: this.requiresLogin,
-          onRetry: (): void => {
-            this.controller?.load(this.contentId);
-          },
-          navigate: this.navigate
-        })
-      } else if (this.pin !== undefined) {
-        this.loadedPin(this.pin)
-      }
-      if (this.pendingUserBlock !== undefined) {
-        this.userBlockDialog()
-      }
-      if (this.keywordBlockVisible) {
-        this.keywordBlockDialog()
-      }
-      Column()
-        .bindSheet(this.pinActionsSheetShown, this.pinActionsSheet(), {
-          height: SheetSize.FIT_CONTENT,
-          dragBar: true,
-          showClose: false,
-          maskColor: '#66000000',
-          backgroundColor: $r('app.color.surface_background'),
-          onDisappear: (): void => {
-            if (this.pinActionsSheetShown) {
-              this.pinActionsSheetShown = false;
+    Stack() {
+      Column() {
+        if (this.phase === ReadOnlyDetailPhase.IDLE || this.phase === ReadOnlyDetailPhase.LOADING) {
+          ReadOnlyDetailStatusPanel({
+            kind: 'pin',
+            message: '正在加载想法…',
+            loading: true,
+            navigate: this.navigate
+          })
+        } else if (this.phase === ReadOnlyDetailPhase.ERROR) {
+          ReadOnlyDetailStatusPanel({
+            kind: 'pin',
+            message: this.errorMessage,
+            requiresLogin: this.requiresLogin,
+            onRetry: (): void => {
+              this.controller?.load(this.contentId);
+            },
+            navigate: this.navigate
+          })
+        } else if (this.pin !== undefined) {
+          this.loadedPin(this.pin)
+        }
+        if (this.pendingUserBlock !== undefined) {
+          this.userBlockDialog()
+        }
+        if (this.keywordBlockVisible) {
+          this.keywordBlockDialog()
+        }
+        Column()
+          .bindSheet(this.pinActionsSheetShown, this.pinActionsSheet(), {
+            height: SheetSize.FIT_CONTENT,
+            dragBar: true,
+            showClose: false,
+            maskColor: '#66000000',
+            backgroundColor: $r('app.color.surface_background'),
+            onDisappear: (): void => {
+              if (this.pinActionsSheetShown) {
+                this.pinActionsSheetShown = false;
+              }
             }
-          }
-        })
+          })
+      }
+      .width('100%')
+      .height('100%')
+      // 对齐回答详情页：底栏作为页级悬浮层，两个 HDS 材质画布独立承载，
+      // 不嵌入正文 builder；正文滚动到屏幕底边，空白区域不拦截滚动。
+      if (this.phase === ReadOnlyDetailPhase.READY && this.pin !== undefined) {
+        Stack({ alignContent: Alignment.Bottom }) {
+          this.bottomActionBar(this.pin)
+        }
+        .width('100%')
+        .height('100%')
+        .hitTestBehavior(HitTestMode.Transparent)
+      }
     }
     .id('pin_detail_page')
     .width('100%')
@@ -1137,7 +1143,7 @@ export struct PinDetailPage {
 
   @Builder
   private loadedPin(pin: PinDetail) {
-    Stack({ alignContent: Alignment.Bottom }) {
+    Column() {
       // 与回答/文章页共用正文列表：信息头随正文滚动，首屏为悬浮 HDS 顶栏让位。
       NativeContentDocument({
         html: pin.contentHtml,
@@ -1148,7 +1154,6 @@ export struct PinDetailPage {
         linkCardMetaRepository: this.linkCardMetaRepository,
         onLinkClick: (url: string): void => this.openContentLink(url)
       })
-      this.bottomActionBar(pin)
     }
     .width('100%')
     .height('100%')
@@ -1310,13 +1315,21 @@ export struct PinDetailPage {
         this.pinInteractionStatus()
       }
       Row({ space: $r('app.float.spacing_small') }) {
-        GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
-          this.pinLikeAction()
+        Row() {
+          // HDS ADAPTIVE 由共享画布按设备与全局挡位降级；不以 IMMERSIVE 能力
+          // 关闭整个 HDS 路径，否则纯色背景下普通模糊无法呈现胶囊轮廓。
+          GlassCapsule() {
+            this.pinLikeAction()
+          }
         }
+        .id('pin_detail_like_capsule')
         Blank().layoutWeight(1)
-        GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
-          this.pinRightActions(pin)
+        Row() {
+          GlassCapsule() {
+            this.pinRightActions(pin)
+          }
         }
+        .id('pin_detail_actions_capsule')
       }
       .id('pin_detail_bottom_actions')
       .width('100%')

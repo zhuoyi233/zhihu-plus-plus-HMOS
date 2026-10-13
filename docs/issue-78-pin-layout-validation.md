@@ -8,7 +8,9 @@
 
 参考上游 `PinScreen.kt` 的单一滚动区域，以及本地回答/文章详情的 `NativeContentDocument.documentHeader` 接入方式，将信息头移入正文列表。首屏使用共享 `FLOATING_TITLE_BAR_OFFSET` 让位，列表统一提供左右边距和底部操作栏避让。作者行沿用本地详情页头像、名称、简介样式，话题改为可换行布局。
 
-底栏复用回答详情页的 `GlassCapsule`，左侧为点赞与实时计数，右侧为评论与更多操作；按钮尺寸、主题色与手势条避让和回答页一致，支持既有材质能力检测与模糊降级。点赞按上游请求 `pins/{id}/voters/up`，POST 点赞、DELETE 取消；从 `virtuals.is_liked` / `isLiked` 读取初始状态，应用服务端 `liked_count`，请求失败回滚，未登录提示登录，双击点赞保持幂等。
+底栏复用回答详情页的 `GlassCapsule`，左侧为点赞与实时计数，右侧为评论与更多操作；按钮尺寸、主题色与手势条避让和回答页一致。点赞按上游请求 `pins/{id}/voters/up`，POST 点赞、DELETE 取消；从 `virtuals.is_liked` / `isLiked` 读取初始状态，应用服务端 `liked_count`，请求失败回滚，未登录提示登录，双击点赞保持幂等。
+
+后续材质修正：按回答详情页将底栏提升至根 Stack 的独立悬浮层，并分别包裹两个胶囊；避免在正文 builder 中固定初始状态。两个胶囊均使用 `GlassCapsule` 的 HDS 自适应画布，不再用 IMMERSIVE 类型能力检查关闭整个 HDS 路径。共享 `MaterialCanvas` 自行订阅 `immersiveMaterialLevel` / `immersiveMaterialSupport`，由既有统一策略决定等级和高挡降级，保留 `thermoCtrl`，未引入 API 26 专属 `uiMaterial`。
 
 ## 构建验证
 
@@ -43,3 +45,17 @@
 | 原底栏 | 重构后的底栏 | 点赞状态 |
 | --- | --- | --- |
 | ![原整行评论底栏](ui-screenshots/issue-78-bottom-bar-before.png) | ![点赞与评论操作胶囊](ui-screenshots/issue-78-after.png) | ![点赞成功且计数同步](ui-screenshots/issue-78-liked.png) |
+
+## 两个沉浸光感胶囊复核
+
+前序修复已本地提交为 `c4006621`；本节记录其后的材质修正。
+
+再次按顺序完成编译与 Hypium、完整签名 Debug 构建，两轮均为 795/795 通过，覆盖安装到 `127.0.0.1:5555` 后验收。
+
+同一条“刘看山”想法的布局树显示两个独立 HDS 画布：左侧 `pin_detail_like_capsule` / `hdsTabs` 为 `[42,2494,295,2662]`，右侧 `pin_detail_actions_capsule` / `hdsTabs` 为 `[849,2494,1214,2662]`。中间保持空白，正文视口仍为 `[0,137,1256,2760]`。截图确认纯白背景上也能看见两个完整胶囊，生效主题色与回答页一致。
+
+实际点击右胶囊评论按钮加载出评论；长文本转发滚到底后，正文末尾 y=2326，两个 HDS 胶囊仍位于 y=2494–2662，信息头随正文滚出屏幕，悬浮层未拦截正文滚动。
+
+| 回答详情页参考 | 想法页两个 HDS 胶囊 |
+| --- | --- |
+| ![回答详情页底栏](ui-screenshots/issue-78-answer-capsules-reference.png) | ![想法页沉浸光感胶囊](ui-screenshots/issue-78-immersive-capsules.png) |
