@@ -3,12 +3,14 @@ import {
   buildPeopleDetailUrl,
   buildPeopleContentUrl,
   buildPinDetailUrl,
+  buildPinLikeUrl,
   decodePeopleContentPage,
   decodePeopleDetail,
   decodePinDetail,
   DefaultPeopleRepository,
   DefaultPeopleContentRepository,
   DefaultPinRepository,
+  DefaultPinLikeRepository,
   DomainDecodeError,
   HttpFailure,
   HttpFailureKind,
@@ -25,6 +27,7 @@ import {
   SessionCookie,
   SessionCookieProvider,
   ZhihuHttpClient,
+  ZhihuHttpMethod,
   ZhihuHttpResponse,
   ZhihuHttpTransport,
   ZhihuHttpTransportFactory
@@ -98,6 +101,47 @@ class PendingDetailTransportFactory implements ZhihuHttpTransportFactory {
 
 export default function peoplePinDetailRepositoryTest(): void {
   describe('peoplePinDetailRepositoryTest', () => {
+    it('likesAndUnlikesPinWithSignedPostAndDelete', 0, async () => {
+      const factory = new DetailTransportFactory([
+        { statusCode: 200, body: '{"liked_count":57}' },
+        { statusCode: 200, body: '{"liked_count":56}' }
+      ]);
+      const repository = new DefaultPinLikeRepository(new ZhihuHttpClient(new DetailCookieProvider(), factory));
+      expect((await repository.setLiked('9007199254740993', true)).likeCount).assertEqual(57);
+      expect((await repository.setLiked('9007199254740993', false)).likeCount).assertEqual(56);
+      expect(factory.requests[0].url).assertEqual(
+        'https://www.zhihu.com/api/v4/pins/9007199254740993/voters/up');
+      expect(factory.requests[0].method).assertEqual(ZhihuHttpMethod.POST);
+      expect(factory.requests[1].method).assertEqual(ZhihuHttpMethod.DELETE);
+      expect(factory.requests[0].headers.Cookie?.includes('people-pin-session')).assertTrue();
+      expect(JSON.stringify(factory.requests[0].headers).includes('x-zse-96')).assertTrue();
+      let rejected: PinRepositoryFailure | undefined = undefined;
+      try { buildPinLikeUrl('1/2'); } catch (error) {
+        if (error instanceof PinRepositoryFailure) { rejected = error; }
+      }
+      expect(rejected?.kind).assertEqual(PinRepositoryFailureKind.INVALID_ID);
+    });
+
+    it('preservesOptimisticPinCountWhenResponseHasNoValidCount', 0, async () => {
+      const factory = new DetailTransportFactory([
+        { statusCode: 200, body: '{}' },
+        { statusCode: 200, body: '{"liked_count":-1}' },
+        { statusCode: 200, body: '{"liked_count":0}' }
+      ]);
+      const repository = new DefaultPinLikeRepository(new ZhihuHttpClient(new DetailCookieProvider(), factory));
+      expect((await repository.setLiked('123', true)).likeCount === undefined).assertTrue();
+      expect((await repository.setLiked('123', false)).likeCount === undefined).assertTrue();
+      expect((await repository.setLiked('123', false)).likeCount).assertEqual(0);
+    });
+
+    it('decodesPinInitialLikeStateFromVirtuals', 0, () => {
+      const snakeCase = PIN_JSON.replace('"topics":', '"virtuals":{"is_liked":true},"topics":');
+      const camelCase = PIN_JSON.replace('"topics":', '"virtuals":{"isLiked":true},"topics":');
+      expect(decodePinDetail(snakeCase, '9007199254740993').isLiked).assertTrue();
+      expect(decodePinDetail(camelCase, '9007199254740993').isLiked).assertTrue();
+      expect(decodePinDetail(PIN_JSON, '9007199254740993').isLiked).assertFalse();
+    });
+
     it('buildsFixedEndpointsAndRejectsPathInjection', 0, () => {
       expect(buildPeopleDetailUrl('alice-token')).assertEqual(
         'https://www.zhihu.com/api/v4/members/alice-token?include=allow_message%2Cis_followed%2Cis_following%2Cis_org%2C' +

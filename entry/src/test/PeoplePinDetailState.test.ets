@@ -219,6 +219,17 @@ export default function peoplePinDetailStateTest(): void {
       expect(controller.snapshot().requiresLogin).assertTrue();
     });
 
+    it('preservesPinLikeStateAcrossDetailSnapshots', 0, async () => {
+      const controller = new PinDetailController(new FixedPinRepository(),
+        new FixedSessionGateway(SessionStatus.AUTHENTICATED));
+      controller.activate();
+      await controller.load('1');
+      const state = controller.snapshot();
+      expect(state.pin?.isLiked).assertTrue();
+      if (state.pin !== undefined) { state.pin.isLiked = false; }
+      expect(controller.snapshot().pin?.isLiked).assertTrue();
+    });
+
     it('loadsPinAndClonesAuthorTopics', 0, async () => {
       const controller = new PinDetailController(
         new FixedPinRepository(),
@@ -354,6 +365,7 @@ function pinFixture(): PinDetail {
     contentHtml: '<p>想法正文</p>',
     url: 'https://www.zhihu.com/pin/1',
     likeCount: 56,
+    isLiked: true,
     commentCount: 7,
     createdAt: 1,
     updatedAt: 2,

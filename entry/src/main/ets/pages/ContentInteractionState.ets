@@ -6,6 +6,7 @@ import {
   HttpFailure,
   HttpFailureKind,
   LoginSessionGateway,
+  PinLikeRepository,
   SessionStatus,
   VoteRepository
 } from 'data';
@@ -34,6 +35,100 @@ export interface FollowViewState {
 
 export type ContentVoteObserver = (state: ContentVoteViewState) => void;
 export type FollowObserver = (state: FollowViewState) => void;
+
+export interface PinLikeViewState {
+  readonly liked: boolean;
+  readonly likeCount: number;
+  readonly pending: boolean;
+  readonly errorMessage?: string;
+  readonly requiresLogin: boolean;
+}
+
+/** 想法点赞：乐观计数、失败回滚、登录门禁及失活后的迟到响应隔离。 */
+export class PinLikeController {
+  private readonly repository: PinLikeRepository;
+  private readonly session: LoginSessionGateway;
+  private readonly contentId: string;
+  private readonly observer: (state: PinLikeViewState) => void;
+  private liked: boolean;
+  private likeCount: number;
+  private active: boolean = false;
+  private pending: boolean = false;
+  private errorMessage?: string;
+  private requiresLogin: boolean = false;
+  private generation: number = 0;
+
+  constructor(repository: PinLikeRepository, session: LoginSessionGateway, contentId: string,
+    liked: boolean, likeCount: number,
+    observer: (state: PinLikeViewState) => void = (_state: PinLikeViewState): void => {}) {
+    this.repository = repository;
+    this.session = session;
+    this.contentId = contentId;
+    this.liked = liked;
+    this.likeCount = likeCount;
+    this.observer = observer;
+  }
+
+  activate(): void {
+    this.active = true;
+    this.emit();
+  }
+
+  deactivate(): void {
+    this.active = false;
+    this.generation += 1;
+    this.repository.cancel();
+  }
+
+  snapshot(): PinLikeViewState {
+    return { liked: this.liked, likeCount: this.likeCount, pending: this.pending,
+      errorMessage: this.errorMessage, requiresLogin: this.requiresLogin };
+  }
+
+  async likeFromDoubleTap(): Promise<void> {
+    if (!this.liked) {
+      await this.toggleLike();
+    }
+  }
+
+  async toggleLike(): Promise<void> {
+    if (!this.active || this.pending) { return; }
+    if (this.session.getState().status !== SessionStatus.AUTHENTICATED) {
+      this.requiresLogin = true;
+      this.errorMessage = INTERACTION_LOGIN_REQUIRED_MESSAGE;
+      this.emit();
+      return;
+    }
+    const generation = this.generation;
+    const previousLiked = this.liked;
+    const previousCount = this.likeCount;
+    this.liked = !this.liked;
+    this.likeCount = Math.max(0, this.likeCount + (this.liked ? 1 : -1));
+    this.pending = true;
+    this.errorMessage = undefined;
+    this.requiresLogin = false;
+    this.emit();
+    try {
+      const result = await this.repository.setLiked(this.contentId, this.liked);
+      if (!this.active || generation !== this.generation) { return; }
+      this.likeCount = result.likeCount ?? this.likeCount;
+      this.pending = false;
+      this.emit();
+    } catch (error) {
+      if (!this.active || generation !== this.generation) { return; }
+      this.liked = previousLiked;
+      this.likeCount = previousCount;
+      this.pending = false;
+      this.requiresLogin = interactionRequiresLogin(error);
+      this.errorMessage = this.requiresLogin ? INTERACTION_LOGIN_REQUIRED_MESSAGE : INTERACTION_FAILED_MESSAGE;
+      this.emit();
+    }
+  }
+
+  private emit(): void {
+    if (this.active) { this.observer(this.snapshot()); }
+  }
+}
 
 /**
  * 回答/文章互动控制器：点赞、反对、感谢，乐观更新 + 失败回滚 + 登录门禁。

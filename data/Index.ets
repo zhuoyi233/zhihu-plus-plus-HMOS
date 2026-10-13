@@ -18,6 +18,8 @@ export * from './src/main/ets/domain/MobileNotificationModels';
 export * from './src/main/ets/domain/MobileNotificationDecoder';
 export * from './src/main/ets/domain/DailyStoryDetailDecoder';
 export * from './src/main/ets/domain/PeoplePinDetailDecoder';
+export * from './src/main/ets/repository/PinLikeRepository';
+export * from './src/main/ets/repository/DefaultPinLikeRepository';
 export * from './src/main/ets/domain/PeopleContentDecoder';
 export * from './src/main/ets/domain/SearchModels';
 export * from './src/main/ets/domain/ZhihuChannelFeedDecoder';

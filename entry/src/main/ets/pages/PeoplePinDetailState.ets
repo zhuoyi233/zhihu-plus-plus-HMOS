@@ -385,6 +385,7 @@ function clonePinDetail(pin: PinDetail): PinDetail {
     contentHtml: pin.contentHtml,
     url: pin.url,
     likeCount: pin.likeCount,
+    isLiked: pin.isLiked,
     commentCount: pin.commentCount,
     createdAt: pin.createdAt,
     updatedAt: pin.updatedAt,

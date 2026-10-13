@@ -41,6 +41,7 @@ export interface PinDetail {
   contentHtml: string;
   url: string;
   likeCount: number;
+  isLiked?: boolean;
   commentCount: number;
   createdAt: number;
   updatedAt: number;

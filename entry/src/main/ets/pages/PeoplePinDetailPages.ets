@@ -20,6 +20,7 @@ import {
   PeopleDetailRepository,
   PeopleProfile,
   PinDetail,
+  PinLikeRepository,
   PinRepository,
   PinTopic,
   themeColorContainerColor
@@ -31,10 +32,11 @@ import {
   PinDetailViewState,
   ReadOnlyDetailPhase
 } from './PeoplePinDetailState';
-import { FollowController, FollowViewState } from './ContentInteractionState';
+import { FollowController, FollowViewState, PinLikeController, PinLikeViewState } from './ContentInteractionState';
 import { PeopleContentController, PeopleContentPhase, PeopleContentViewState } from './PeopleContentState';
 import { publishPeopleTitle, removePeopleTitle } from './PeopleTitleBar';
 import { NativeContentDocument } from './NativeContentDocument';
+import { FLOATING_TITLE_BAR_OFFSET } from './AppPageChrome';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { createSystemShareService } from '../platform/SystemShareService';
 import { ShareOutcome, SharePayloadKind, ShareTextPayload } from '../platform/ShareContracts';
@@ -45,7 +47,8 @@ import {
   BlockingActionViewState,
   BlockingUserCandidate
 } from './BlockingActionState';
-import { ZhihuHdsActionBar } from './components/ZhihuHdsTabs';
+import { GlassCapsule } from './components/MaterialCanvas';
+import { hdsMaterial } from '@kit.UIDesignKit';
 
 @Component
 struct ReadOnlyDetailStatusPanel {
@@ -922,6 +925,7 @@ function peopleContentDestination(item: PeopleContentItem): AppDestination {
 export struct PinDetailPage {
   contentId: string = '';
   repository: PinRepository | undefined = undefined;
+  likeRepository: PinLikeRepository | undefined = undefined;
   /** 推荐阅读卡片站内元数据仓库：赞同/评论计数与资源类型（正文 link-card 展示）。 */
   linkCardMetaRepository: LinkCardMetaRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
@@ -946,17 +950,32 @@ export struct PinDetailPage {
   @State private shareStatus: string = '';
   @State private blockingMessage: string = '';
   @State private blockingBusy: boolean = false;
+  @State private liked: boolean = false;
+  @State private likeCount: number = 0;
+  @State private likePending: boolean = false;
+  @State private interactionErrorMessage: string = '';
+  @State private interactionRequiresLogin: boolean = false;
+  @StorageProp('bottomRectHeight') private bottomRectHeightVp: number = 0;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   @StorageProp('answerDoubleTapAction') private doubleTapAction: AnswerDoubleTapAction = AnswerDoubleTapAction.ASK;
   private doubleTapMenuShown: boolean = false;
   private controller?: PinDetailController;
+  private likeController?: PinLikeController;
+  private immersiveMaterialSupported: boolean = false;
   private blockingAction?: BlockingActionController;
 
   aboutToAppear(): void {
+    try {
+      this.immersiveMaterialSupported =
+        hdsMaterial.getSystemMaterialTypes().includes(hdsMaterial.MaterialType.IMMERSIVE);
+    } catch (_error) {
+      this.immersiveMaterialSupported = false;
+    }
     // P3-7：返回栈重显（页面实例与状态保留）时 aboutToAppear 可能再次触发；
     // 控制器仍存活时直接复用，避免重建控制器并重载正文导致滚动位置丢失。
     if (this.controller !== undefined) {
       this.controller.activate();
+      this.likeController?.activate();
       return;
     }
     if (this.repository === undefined || this.session === undefined) {
@@ -978,6 +997,8 @@ export struct PinDetailPage {
 
   aboutToDisappear(): void {
     this.controller?.deactivate();
+    this.likeController?.deactivate();
+    this.likeController = undefined;
     this.controller = undefined;
     this.blockingAction = undefined;
     this.pendingUserBlock = undefined;
@@ -1010,18 +1031,24 @@ export struct PinDetailPage {
       this.openPinComments();
       return;
     }
+    if (this.doubleTapAction === AnswerDoubleTapAction.VOTE_UP) {
+      void this.likeController?.likeFromDoubleTap();
+      return;
+    }
     if (this.doubleTapAction !== AnswerDoubleTapAction.ASK) {
       this.getUIContext().getPromptAction().showToast({ message: '想法详情暂不支持此动作，可在设置中选择打开评论' });
       return;
     }
     this.doubleTapMenuShown = true;
     this.getUIContext().getPromptAction().showActionMenu({
-      title: '设置双击正文动作（想法支持打开评论）',
+      title: '设置双击正文动作',
       buttons: [{ text: '设为无操作', color: this.resolvedThemeColor },
-        { text: '打开评论', color: this.resolvedThemeColor }]
+        { text: '打开评论', color: this.resolvedThemeColor },
+        { text: '点赞', color: this.resolvedThemeColor }]
     }).then((result): void => {
       this.doubleTapMenuShown = false;
-      const action = result.index === 1 ? AnswerDoubleTapAction.OPEN_COMMENTS : AnswerDoubleTapAction.NONE;
+      const action = result.index === 2 ? AnswerDoubleTapAction.VOTE_UP :
+        (result.index === 1 ? AnswerDoubleTapAction.OPEN_COMMENTS : AnswerDoubleTapAction.NONE);
       AppStorage.setOrCreate('answerDoubleTapAction', action);
       const context = getAbilityContext();
       if (context !== undefined) {
@@ -1029,6 +1056,8 @@ export struct PinDetailPage {
       }
       if (action === AnswerDoubleTapAction.OPEN_COMMENTS) {
         this.openPinComments();
+      } else if (action === AnswerDoubleTapAction.VOTE_UP) {
+        void this.likeController?.likeFromDoubleTap();
       }
     }).catch((_error: Object): void => {
       this.doubleTapMenuShown = false;
@@ -1107,138 +1136,124 @@ export struct PinDetailPage {
   }
 
   @Builder
-  private pageHeader() {
-    Row({ space: $r('app.float.spacing_small') }) {
-      Button({ type: ButtonType.Normal, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(20)
-          .fontColor([$r('app.color.primary_text')])
-      }
-        .id('pin_detail_back')
-        .width(40)
-        .height(40)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .accessibilityText('返回')
-        .onClick((): void => this.onBack())
-      Text(this.pin?.author.name ?? '想法')
-        .id('pin_detail_page_title')
-        .fontSize($r('app.float.heading_font_size'))
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.primary_text'))
-        .layoutWeight(1)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-      Button({ type: ButtonType.Normal, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.ellipsis_circle'))
-          .fontSize(20)
-          .fontColor([$r('app.color.primary_text')])
-      }
-        .id('pin_detail_more')
-        .width(40)
-        .height(40)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .accessibilityText('更多想法操作')
-        .enabled(this.pin !== undefined && !this.blockingBusy && this.blockingAction !== undefined)
-        .onClick((): void => {
-          this.pinActionsSheetShown = true;
-        })
-    }
-    .width('100%')
-    .padding({
-      left: $r('app.float.page_padding'),
-      right: $r('app.float.page_padding'),
-      top: $r('app.float.spacing_medium')
-    })
-    .backgroundColor($r('app.color.surface_background'))
-  }
-
-  @Builder
   private loadedPin(pin: PinDetail) {
-    Stack({ alignContent: Alignment.TopStart }) {
-      Column() {
-        Column({ space: $r('app.float.spacing_small') }) {
-        Text(pin.author.headline.length > 0 ? `${pin.author.name} · ${pin.author.headline}` : pin.author.name)
-          .id('pin_detail_author')
-          .fontSize($r('app.float.body_font_size'))
-          .fontColor(this.resolvedThemeColor)
-          .width('100%')
-          .onClick((): void => {
-            this.navigate({
-              name: AppDestinationName.PEOPLE,
-              id: pin.author.urlToken ?? pin.author.id
-            });
-          })
-        Text(`${pin.likeCount} 赞 · ${pin.commentCount} 条评论`)
-          .id('pin_detail_statistics')
-          .fontSize($r('app.float.secondary_font_size'))
-          .fontColor($r('app.color.secondary_text'))
-          .width('100%')
-        if (pin.createdAt > 0) {
-          Text(pinTimeText(pin))
-            .id('pin_detail_time')
-            .fontSize($r('app.float.secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .width('100%')
-        }
-        if (pin.topics.length > 0) {
-          Row({ space: $r('app.float.spacing_small') }) {
-            ForEach(pin.topics, (topic: PinTopic) => {
-              Text(`# ${topic.name}`)
-                .id(`pin_detail_topic_${topic.id}`)
-                .fontSize($r('app.float.secondary_font_size'))
-                .fontColor(this.resolvedThemeColor)
-            }, (topic: PinTopic): string => topic.id)
-          }
-          .width('100%')
-        }
-        if (this.blockingMessage.length > 0) {
-          Text(this.blockingMessage)
-            .id('pin_detail_blocking_status')
-            .fontSize($r('app.float.secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .width('100%')
-        }
-        if (this.shareStatus.length > 0) {
-          Text(this.shareStatus)
-            .id('pin_detail_share_status')
-            .fontSize($r('app.float.secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .width('100%')
-        }
-        if (this.openedRecordFailed) {
-          Text('本次打开记录未能保存，阅读不受影响')
-            .id('pin_detail_opened_record_failed')
-            .fontSize($r('app.float.secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-        }
-      }
-      .alignItems(HorizontalAlign.Start)
-      .width('100%')
-      .padding($r('app.float.page_padding'))
-      .backgroundColor($r('app.color.surface_background'))
-
-        NativeContentDocument({
-          html: pin.contentHtml,
-          emptyMessage: '这条想法暂时没有正文',
-          onBodyDoubleTap: (): void => this.onBodyDoubleTap(),
-          linkCardMetaRepository: this.linkCardMetaRepository,
-          onLinkClick: (url: string): void => this.openContentLink(url)
-        })
-          .layoutWeight(1)
-      }
-      .width('100%')
-      .height('100%')
-      Stack({ alignContent: Alignment.Bottom }) {
-        this.bottomActionBar(pin)
-      }
-      .width('100%')
-      .height('100%')
-      .hitTestBehavior(HitTestMode.Transparent)
+    Stack({ alignContent: Alignment.Bottom }) {
+      // 与回答/文章页共用正文列表：信息头随正文滚动，首屏为悬浮 HDS 顶栏让位。
+      NativeContentDocument({
+        html: pin.contentHtml,
+        emptyMessage: '这条想法暂时没有正文',
+        topInsetVp: FLOATING_TITLE_BAR_OFFSET,
+        documentHeader: (): void => { this.pinHeader(pin) },
+        onBodyDoubleTap: (): void => this.onBodyDoubleTap(),
+        linkCardMetaRepository: this.linkCardMetaRepository,
+        onLinkClick: (url: string): void => this.openContentLink(url)
+      })
+      this.bottomActionBar(pin)
     }
     .width('100%')
     .height('100%')
+  }
+
+  @Builder
+  private pinHeader(pin: PinDetail) {
+    Column({ space: $r('app.float.spacing_small') }) {
+      Row({ space: $r('app.float.spacing_small') }) {
+        Stack({ alignContent: Alignment.Center }) {
+          Column()
+            .width(40)
+            .height(40)
+            .borderRadius(20)
+            .backgroundColor($r('app.color.control_background'))
+          Text(pin.author.name.substring(0, 1))
+            .fontSize($r('app.float.body_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+          if (pin.author.avatarUrl !== undefined) {
+            Image(pin.author.avatarUrl)
+              .id('pin_detail_author_avatar')
+              .width(40)
+              .height(40)
+              .borderRadius(20)
+              .objectFit(ImageFit.Cover)
+          }
+        }
+        .width(40)
+        .height(40)
+        .clip(true)
+        Column({ space: 2 }) {
+          Text(pin.author.name)
+            .id('pin_detail_author')
+            .fontSize($r('app.float.body_font_size'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.primary_text'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          if (pin.author.headline.length > 0) {
+            Text(pin.author.headline)
+              .id('pin_detail_author_headline')
+              .fontSize($r('app.float.caption_font_size'))
+              .fontColor($r('app.color.secondary_text'))
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+      }
+      .id('pin_detail_author_row')
+      .width('100%')
+      .onClick((): void => {
+        this.navigate({ name: AppDestinationName.PEOPLE, id: pin.author.urlToken ?? pin.author.id });
+      })
+      Text(`${this.likeCount} 赞 · ${pin.commentCount} 条评论`)
+        .id('pin_detail_statistics')
+        .fontSize($r('app.float.secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
+      if (pin.createdAt > 0) {
+        Text(pinTimeText(pin))
+          .id('pin_detail_time')
+          .fontSize($r('app.float.secondary_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .width('100%')
+      }
+      if (pin.topics.length > 0) {
+        Flex({ wrap: FlexWrap.Wrap }) {
+          ForEach(pin.topics, (topic: PinTopic) => {
+            Text(`# ${topic.name}`)
+              .id(`pin_detail_topic_${topic.id}`)
+              .fontSize($r('app.float.secondary_font_size'))
+              .fontColor(this.resolvedThemeColor)
+              .margin({ right: 8, bottom: 8 })
+          }, (topic: PinTopic): string => topic.id)
+        }
+        .width('100%')
+      }
+      if (this.blockingMessage.length > 0) {
+        Text(this.blockingMessage)
+          .id('pin_detail_blocking_status')
+          .fontSize($r('app.float.secondary_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .width('100%')
+      }
+      if (this.shareStatus.length > 0) {
+        Text(this.shareStatus)
+          .id('pin_detail_share_status')
+          .fontSize($r('app.float.secondary_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .width('100%')
+      }
+      if (this.openedRecordFailed) {
+        Text('本次打开记录未能保存，阅读不受影响')
+          .id('pin_detail_opened_record_failed')
+          .fontSize($r('app.float.secondary_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+      }
+    }
+    .alignItems(HorizontalAlign.Start)
+    .width('100%')
+    // 列表统一提供左右边距，信息头只保留与正文之间的间距。
+    .padding({ bottom: $r('app.float.spacing_medium') })
+    .backgroundColor($r('app.color.surface_background'))
   }
 
   private applyState(state: PinDetailViewState): void {
@@ -1247,6 +1262,21 @@ export struct PinDetailPage {
     this.errorMessage = state.errorMessage ?? '';
     this.requiresLogin = state.requiresLogin;
     this.openedRecordFailed = state.openedRecordFailed;
+    if (state.pin !== undefined && this.likeController === undefined) {
+      this.liked = state.pin.isLiked ?? false;
+      this.likeCount = state.pin.likeCount;
+      if (this.likeRepository !== undefined && this.session !== undefined) {
+        this.likeController = new PinLikeController(this.likeRepository, this.session, this.contentId,
+          this.liked, this.likeCount, (likeState: PinLikeViewState): void => {
+            this.liked = likeState.liked;
+            this.likeCount = likeState.likeCount;
+            this.likePending = likeState.pending;
+            this.interactionErrorMessage = likeState.errorMessage ?? '';
+            this.interactionRequiresLogin = likeState.requiresLogin;
+          });
+        this.likeController.activate();
+      }
+    }
   }
 
   /** 想法分享只转交 HarmonyOS 系统面板，链接由共享服务执行白名单校验。 */
@@ -1274,54 +1304,107 @@ export struct PinDetailPage {
 
   @Builder
   private bottomActionBar(pin: PinDetail) {
-    ZhihuHdsActionBar() {
-      this.pinBottomActionBarContent(pin)
+    // 复用回答详情页的左右玻璃胶囊、按钮尺寸与手势条避让。
+    Column({ space: $r('app.float.spacing_xsmall') }) {
+      if (this.interactionErrorMessage.length > 0) {
+        this.pinInteractionStatus()
+      }
+      Row({ space: $r('app.float.spacing_small') }) {
+        GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
+          this.pinLikeAction()
+        }
+        Blank().layoutWeight(1)
+        GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
+          this.pinRightActions(pin)
+        }
+      }
+      .id('pin_detail_bottom_actions')
+      .width('100%')
+      .padding({
+        left: $r('app.float.page_padding'),
+        right: $r('app.float.page_padding'),
+        bottom: Math.max(this.bottomRectHeightVp, 0)
+      })
     }
+    .width('100%')
+    .zIndex(2)
+    .hitTestBehavior(HitTestMode.Default)
   }
 
   @Builder
-  private pinBottomActionBarContent(pin: PinDetail) {
-    Row() {
-      Text('参与讨论')
-        .fontSize($r('app.float.secondary_font_size'))
-        .fontColor($r('app.color.secondary_text'))
-        .layoutWeight(1)
-      Button({ type: ButtonType.Normal, stateEffect: true }) {
-        Row({ space: $r('app.float.spacing_small') }) {
-          SymbolGlyph($r('sys.symbol.message'))
-            .fontSize(22)
-            .fontColor([$r('app.color.secondary_text')])
-          Text(`${pin.commentCount}`)
-            .fontSize($r('app.float.body_font_size'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.secondary_text'))
-        }
-        .padding({ left: 8, right: 8, top: 6, bottom: 6 })
+  private pinLikeAction() {
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      Row({ space: 4 }) {
+        SymbolGlyph(this.liked ? $r('sys.symbol.hand_thumbsup_fill') : $r('sys.symbol.hand_thumbsup'))
+          .fontSize(20)
+          .fontColor([this.resolvedThemeColor])
+        Text(`${this.likeCount}`)
+          .fontSize($r('app.float.secondary_font_size'))
+          .fontWeight(this.liked ? FontWeight.Bold : FontWeight.Medium)
+          .fontColor(this.resolvedThemeColor)
       }
-      .id('pin_detail_comment_bar')
-      .height(50)
-      .padding(0)
-      .backgroundColor(Color.Transparent)
-      .accessibilityText(`查看 ${pin.commentCount} 条评论`)
-      .enabled(this.commentRepository !== undefined && this.session !== undefined)
-      .onClick((): void => {
-        this.navigate({
-          name: AppDestinationName.COMMENT,
-          contentType: 'pin',
-          contentId: this.contentId
-        });
-      })
+      .padding({ left: 8, right: 8, top: 8, bottom: 8 })
     }
-    .id('pin_detail_bottom_actions')
+    .id('pin_detail_like')
+    .height(36)
+    .backgroundColor(Color.Transparent)
+    .lightUpEffect(1)
+    .accessibilityText(`${this.liked ? '取消点赞' : '点赞'}，${this.likeCount} 赞`)
+    .enabled(this.likeController !== undefined && !this.likePending)
+    .onClick((): void => { void this.likeController?.toggleLike(); })
+  }
+
+  @Builder
+  private pinRightActions(pin: PinDetail) {
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      Row({ space: 4 }) {
+        SymbolGlyph($r('sys.symbol.message'))
+          .fontSize(20)
+          .fontColor([$r('app.color.secondary_text')])
+        Text(`${pin.commentCount}`)
+          .fontSize($r('app.float.secondary_font_size'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.secondary_text'))
+      }
+      .padding({ left: 6, right: 6, top: 8, bottom: 8 })
+    }
+    .id('pin_detail_comment_bar')
+    .height(36)
+    .backgroundColor(Color.Transparent)
+    .accessibilityText(`查看 ${pin.commentCount} 条评论`)
+    .enabled(this.commentRepository !== undefined && this.session !== undefined)
+    .onClick((): void => this.openPinComments())
+    Button({ type: ButtonType.Normal, stateEffect: false }) {
+      SymbolGlyph($r('sys.symbol.ellipsis_circle'))
+        .fontSize(20)
+        .fontColor([$r('app.color.secondary_text')])
+    }
+    .id('pin_detail_more')
+    .width(36)
+    .height(36)
+    .backgroundColor(Color.Transparent)
+    .accessibilityText('更多想法操作')
+    .onClick((): void => { this.pinActionsSheetShown = true; })
+  }
+
+  @Builder
+  private pinInteractionStatus() {
+    Row({ space: $r('app.float.spacing_small') }) {
+      Text(this.interactionErrorMessage)
+        .id('pin_interaction_status')
+        .fontSize($r('app.float.secondary_font_size'))
+        .fontColor($r('app.color.error_text'))
+        .layoutWeight(1)
+      if (this.interactionRequiresLogin) {
+        Button('去登录')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
+          .id('pin_interaction_login')
+          .onClick((): void => { this.navigate({ name: AppDestinationName.LOGIN }); })
+      }
+    }
     .width('100%')
-    .borderRadius(28)
-    .padding({
-      left: $r('app.float.page_padding'),
-      right: $r('app.float.page_padding'),
-      top: $r('app.float.spacing_small'),
-      bottom: $r('app.float.spacing_small')
-    })
-    .border({ width: { top: 0.5 }, color: $r('app.color.divider_color') })
+    .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding') })
   }
 
   @Builder

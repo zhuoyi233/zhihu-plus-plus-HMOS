@@ -208,6 +208,7 @@ export function decodePinDetail(json: string, expectedId: string): PinDetail {
   const object = root(json, '想法');
   rejectUpstreamError(object, '想法');
   const id = decimalId(object.get('id'), expectedId, 'pin.id');
+  const virtuals = optionalObject(object, 'virtuals', 'pin.virtuals');
   const topicsValue = object.get('topics');
   const topics: Array<PinTopic> = [];
   if (topicsValue !== undefined && !(topicsValue instanceof JsonNullValue)) {
@@ -230,6 +231,9 @@ export function decodePinDetail(json: string, expectedId: string): PinDetail {
       1024 * 1024),
     url: `https://www.zhihu.com/pin/${id}`,
     likeCount: nonNegativeInteger(optionalNumber(object, 'like_count', 'pin.like_count'), 'pin.like_count'),
+    isLiked: virtuals === undefined ? false :
+      (optionalBoolean(virtuals, 'is_liked', 'pin.virtuals.is_liked') ??
+        optionalBoolean(virtuals, 'isLiked', 'pin.virtuals.isLiked') ?? false),
     commentCount: nonNegativeInteger(optionalNumber(object, 'comment_count', 'pin.comment_count'),
       'pin.comment_count'),
     createdAt: nonNegativeInteger(optionalNumber(object, 'created', 'pin.created'), 'pin.created'),

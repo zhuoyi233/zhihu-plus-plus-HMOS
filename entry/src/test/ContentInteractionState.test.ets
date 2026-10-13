@@ -7,6 +7,8 @@ import {
   HttpFailure,
   HttpFailureKind,
   LoginSessionGateway,
+  PinLikeRepository,
+  PinLikeResult,
   SessionCookie,
   SessionLoginOperation,
   SessionState,
@@ -17,6 +19,7 @@ import {
 } from 'data';
 import {
   ContentVoteController,
+  PinLikeController,
   FollowController,
   INTERACTION_FAILED_MESSAGE,
   INTERACTION_LOGIN_REQUIRED_MESSAGE
@@ -150,8 +153,109 @@ class FakeFollowRepository implements FollowRepository {
   }
 }
 
+class FakePinLikeRepository implements PinLikeRepository {
+  readonly calls: Array<boolean> = [];
+  result: PinLikeResult = {};
+  failure?: HttpFailure;
+  waitForResponse: boolean = false;
+  resolve?: (result: PinLikeResult) => void;
+  cancelCount: number = 0;
+
+  async setLiked(_id: string, liked: boolean): Promise<PinLikeResult> {
+    this.calls.push(liked);
+    if (this.failure !== undefined) { throw this.failure; }
+    if (this.waitForResponse) {
+      return new Promise<PinLikeResult>((resolve: (result: PinLikeResult) => void): void => {
+        this.resolve = resolve;
+      });
+    }
+    return this.result;
+  }
+
+  cancel(): void { this.cancelCount += 1; }
+}
+
 export default function contentInteractionStateTest(): void {
   describe('contentInteractionStateTest', () => {
+    it('togglesPinLikeAndSynchronizesServerCount', 0, async () => {
+      const repository = new FakePinLikeRepository();
+      repository.result = { likeCount: 42 };
+      const controller = new PinLikeController(repository,
+        new FixedSessionGateway(SessionStatus.AUTHENTICATED), '123', false, 10);
+      controller.activate();
+      const pending = controller.toggleLike();
+      expect(controller.snapshot().liked).assertTrue();
+      expect(controller.snapshot().likeCount).assertEqual(11);
+      expect(controller.snapshot().pending).assertTrue();
+      await pending;
+      expect(controller.snapshot().likeCount).assertEqual(42);
+      repository.result = { likeCount: 41 };
+      await controller.toggleLike();
+      expect(controller.snapshot().liked).assertFalse();
+      expect(controller.snapshot().likeCount).assertEqual(41);
+      expect(repository.calls[0]).assertTrue();
+      expect(repository.calls[1]).assertFalse();
+    });
+
+    it('rollsBackPinLikeOnServerFailureAndAuthenticationFailure', 0, async () => {
+      const repository = new FakePinLikeRepository();
+      const controller = new PinLikeController(repository,
+        new FixedSessionGateway(SessionStatus.AUTHENTICATED), '123', true, 10);
+      controller.activate();
+      repository.failure = new HttpFailure(HttpFailureKind.SERVER, 500);
+      await controller.toggleLike();
+      expect(controller.snapshot().liked).assertTrue();
+      expect(controller.snapshot().likeCount).assertEqual(10);
+      expect(controller.snapshot().pending).assertFalse();
+      expect(controller.snapshot().errorMessage).assertEqual(INTERACTION_FAILED_MESSAGE);
+      repository.failure = new HttpFailure(HttpFailureKind.AUTHENTICATION, 401);
+      await controller.toggleLike();
+      expect(controller.snapshot().requiresLogin).assertTrue();
+      expect(controller.snapshot().errorMessage).assertEqual(INTERACTION_LOGIN_REQUIRED_MESSAGE);
+      expect(controller.snapshot().likeCount).assertEqual(10);
+    });
+
+    it('gatesPinLikeBehindLoginAndIgnoresInactiveActions', 0, async () => {
+      const repository = new FakePinLikeRepository();
+      const controller = new PinLikeController(repository,
+        new FixedSessionGateway(SessionStatus.GUEST), '123', false, 0);
+      await controller.toggleLike();
+      expect(repository.calls.length).assertEqual(0);
+      controller.activate();
+      await controller.toggleLike();
+      expect(controller.snapshot().requiresLogin).assertTrue();
+      expect(controller.snapshot().liked).assertFalse();
+      expect(repository.calls.length).assertEqual(0);
+    });
+
+    it('deduplicatesPendingPinLikesAndIgnoresLateResponse', 0, async () => {
+      const repository = new FakePinLikeRepository();
+      repository.waitForResponse = true;
+      const controller = new PinLikeController(repository,
+        new FixedSessionGateway(SessionStatus.AUTHENTICATED), '123', false, 10);
+      controller.activate();
+      const pending = controller.toggleLike();
+      await controller.toggleLike();
+      expect(repository.calls.length).assertEqual(1);
+      controller.deactivate();
+      repository.resolve?.({ likeCount: 99 });
+      await pending;
+      expect(controller.snapshot().likeCount).assertEqual(11);
+      expect(repository.cancelCount).assertEqual(1);
+    });
+
+    it('doubleTapPinLikeIsIdempotentAndKeepsOptimisticCount', 0, async () => {
+      const repository = new FakePinLikeRepository();
+      const controller = new PinLikeController(repository,
+        new FixedSessionGateway(SessionStatus.AUTHENTICATED), '123', false, 0);
+      controller.activate();
+      await controller.likeFromDoubleTap();
+      await controller.likeFromDoubleTap();
+      expect(controller.snapshot().liked).assertTrue();
+      expect(controller.snapshot().likeCount).assertEqual(1);
+      expect(repository.calls.length).assertEqual(1);
+    });
+
     it('appliesInitialVoteStateFromLoadedAnswer', 0, () => {
       const repository = new FakeVoteRepository();
       const controller = new ContentVoteController(

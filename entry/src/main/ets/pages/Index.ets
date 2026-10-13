@@ -23,6 +23,7 @@ import {
   DefaultPeopleContentRepository,
   DefaultPeopleRepository,
   DefaultPinRepository,
+  DefaultPinLikeRepository,
   DefaultPinPublishRepository,
   DefaultQuestionAnswerFeedRepository,
   DefaultRecentFollowingUsersRepository,
@@ -50,6 +51,7 @@ import {
   PeopleDetailRepository,
   RecentFollowingUsersRepository,
   PinRepository,
+  PinLikeRepository,
   SearchRepository,
   SessionRepository,
   DailyStoryRepository,
@@ -146,6 +148,7 @@ struct Index {
   /** 上次阅读上报仓库：首页点击 read、feed 曝光 touch（对齐上游 lastread/touch）。 */
   @State private lastReadTouchRepository?: LastReadTouchRepository = undefined;
   @State private voteRepository?: VoteRepository = undefined;
+  @State private pinLikeRepository?: PinLikeRepository = undefined;
   /** 推荐阅读卡片站内元数据（赞同/评论计数与资源类型）。 */
   @State private linkCardMetaRepository?: LinkCardMetaRepository = undefined;
   @State private segmentReactionRepository?: SegmentReactionRepository = undefined;
@@ -209,6 +212,7 @@ struct Index {
       this.peopleRepository = new DefaultPeopleRepository(new ZhihuHttpClient(session));
       this.peopleContentRepository = new DefaultPeopleContentRepository(new ZhihuHttpClient(session));
       this.pinRepository = new DefaultPinRepository(new ZhihuHttpClient(session));
+      this.pinLikeRepository = new DefaultPinLikeRepository(new ZhihuHttpClient(session));
       this.onlineHistoryRepository = new DefaultOnlineHistoryRepository(new ZhihuHttpClient(session));
       this.readHistoryUploader = new DefaultReadHistoryUploadRepository(new ZhihuHttpClient(session), session);
       this.lastReadTouchRepository = new DefaultLastReadTouchRepository(new ZhihuHttpClient(session), session);
@@ -553,6 +557,7 @@ struct Index {
     PinDetailPage({
       contentId: id,
       repository: this.pinRepository,
+      likeRepository: this.pinLikeRepository,
       linkCardMetaRepository: this.linkCardMetaRepository,
       session: this.session,
       openedContentStore: this.openedContentStore,
