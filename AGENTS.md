@@ -73,7 +73,7 @@ $hdc = "hdc"
   解析 dumpLayout 等 JSON/文本处理一律用 `node -e`（hvigor 已装 node，Git Bash 直接可用）。
 
 - Git Bash 下 `hdc file recv` 的远程路径会被 MSYS 改写，加 `MSYS_NO_PATHCONV=1` 前缀；
-  接收目录用仓库内临时目录（如 `.tmp_shots/`，用完删除）。
+  截图接收目录统一用仓库根目录的 `.tmp/shots/`（由 `.gitignore` 的 `.tmp/` 规则统一忽略，用完删除）。
 
 - 应用支持知乎链接直达：`aa start -a EntryAbility -b com.github.zhuoyi233.zhplus -U <zhihu url>`
   （经 `resolveZhihuLink` 路由），可跳过手动导航直接进入问题/回答/文章页。
@@ -95,7 +95,8 @@ $hdc = "hdc"
 
 - 提交风格：`<type>(harmony): <中文>`，如 `fix(harmony): 修复搜索响应解析`。
 
-- 提交前检查：`git status` 干净（build-profile.json5 因 skip-worktree 不参与提交）、无临时文件（`.tmp_*` 等）。
+- 提交前检查：`git status` 干净（build-profile.json5 因 skip-worktree 不参与提交）、无临时文件入库
+  （临时文件统一放 `.tmp/`，截图放 `.tmp/shots/`，均由 Git 忽略）。
 
 - 版本号映射：`versionCode` 由 `versionName` 按固定公式推导，二者在 `AppScope/app.json5` 一并更新：
   `versionCode = (主版本号 + 1) × 1000000 + 次版本号 × 100 + 修订号`（如 `0.2.1 → 1000201`，
@@ -138,20 +139,30 @@ $hdc = "hdc"
 - **诚实原则**（PR #1 先例）：已知问题如实单列（可加 `## 已知问题` 节），明确"本次提交不宣称
   该问题已修复"；验证状态未完成就写未完成，不夸大。
 
-- **截图/附件**：UI 改动附截图，统一放 `docs/ui-screenshots/` 后在正文中以表格引用
-  （文件名 `ui-adaptation-NN.jpg` 类推），不外链临时地址。
-  - 截图须随代码提交，并在获准推送分支后，用 Markdown 图片语法引用仓库内图片：
-    `![图片说明](https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/blob/<完整提交SHA>/docs/ui-screenshots/<文件名>?raw=true)`。
-    开头的 `!` 用于直接展示图片，`?raw=true` 用于读取图片内容；普通 `[说明](URL)` 只显示链接。
-  - 使用实际包含截图的完整提交 SHA（可通过 `git rev-parse HEAD` 获取），固定图片版本，
-    避免分支后续更新影响 PR 截图；不要把占位符直接写入 PR。
-  - 修复前后截图放入两列表格并排展示，例如（替换 SHA 和文件名后使用）：
+- **截图/附件**：UI 改动附截图，通过 GitHub CLI 的 `--attach` 上传为 GitHub 附件，
+  **截图无需入库或随代码提交**；本地截图与正文草稿统一暂存于仓库根目录的 `.tmp/shots/`，
+  由 `.gitignore` 的 `.tmp/` 规则统一忽略，确认上传成功后清理。
+  - 修复前后截图必须在正文中以两列表格并排展示，使用 Markdown 图片语法 `![说明](路径)`，
+    不用仅显示链接的 `[说明](路径)`。正文草稿先引用本地图片，例如 `.tmp/shots/pr-body.md` 中写：
 
     ```markdown
     | 修复前 | 修复后 |
     | --- | --- |
-    | ![修复前](https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/blob/<完整提交SHA>/docs/ui-screenshots/issue-47-before.png?raw=true) | ![修复后](https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/blob/<完整提交SHA>/docs/ui-screenshots/issue-47-after.png?raw=true) |
+    | ![修复前](./before.png) | ![修复后](./after.png) |
     ```
+
+  - 获准创建或更新 PR 后，用 `--body-file` 提交完整正文，并为每张本地图片重复传入 `--attach`。
+    以下命令在仓库根目录执行（替换实际 PR 编号与文件名）：
+
+    ```powershell
+    gh pr edit 123 --repo zhuoyi233/zhihu-plus-plus-HMOS --body-file .tmp/shots/pr-body.md --attach .tmp/shots/before.png --attach .tmp/shots/after.png
+    ```
+
+    `gh` 会将表格中的本地图片路径自动替换为上传后的 GitHub 附件 URL，并保留表格位置与图片说明；
+    创建 PR 时同样可使用 `gh pr create --body-file ... --attach ...`，并传入实际标题、源分支与目标分支。
+  - 操作前确认 `gh pr edit --help` 支持 `--attach`；操作后读取 PR 正文，确认表格中每张图片均已
+    替换为有效附件 URL，无本地路径或占位符残留。部分附件上传失败时，命令可能已更新 PR，
+    应先检查实际正文再补传失败项，避免重复上传。不得把本地路径直接作为最终 PR 图片地址。
 
 - **分支方向**：功能分支（`feature/<name>`）或累计分支（`dev`）→ `main`；创建/推送 PR 属外发
   操作，仅当用户**当次明确要求**时执行（对齐"严格禁止 push"节）。
