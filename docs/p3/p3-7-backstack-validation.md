@@ -47,7 +47,7 @@ P3-7 是**贯穿性治理切片**：不新建大功能，只对 P3 1-4 已合入
   （每次屏蔽应重新输入关键词），重开即重新触发，无状态残留或串台。**结论：符合预期，无需改动。**
 - **收藏弹窗（favoriteDialog，`CollectionDialogComponent`）**：选择列表数据来自仓库（每次打开重新加载，反映
   最新收藏状态，符合预期）；弹窗内「新建收藏夹」表单草稿（标题/描述/公开开关）位于弹层组件内部，关闭整个弹窗
-  会丢失草稿。按 CLAUDE.md「可关闭编辑器的草稿应提升到弹层之外并按编辑目标隔离」的经验，此属**已知小缺口**：
+  会丢失草稿。可关闭编辑器的草稿应由弹层之外的状态持有，并按编辑目标隔离，此属**已知小缺口**：
   建议在主代理合并时把 `createTitle/createDescription/createIsPublic/showCreate` 提升到
   `ContentDetailPage` 并回传（改动涉及 `ContentDetailPages.ets` + `CollectionDialogComponent.ets`，为避免与
   P3-5 评论 worker 冲突块过大，本批不直接动，给出具体建议见「建议合并时处理」）。
@@ -55,8 +55,8 @@ P3-7 是**贯穿性治理切片**：不新建大功能，只对 P3 1-4 已合入
 ### 3. 导航去重 —— 已修复（核心治理）
 
 **问题**：原 `P1Shell.navigate()` 只与**栈顶**比较（`shouldPushP1Destination`），同一目标（name+参数）若已在
-栈中**非栈顶**位置，会再次 push 造成重复页面；返回时可能只是露出前一个重复页面（CLAUDE.md「返回栈上下文保存」
-教训）。`isInfrastructureDestination` 使用 `MOVE_TO_TOP_SINGLETON` 按 **name** 匹配，对参数化页面（如
+栈中**非栈顶**位置，会再次 push 造成重复页面；返回时可能只是露出前一个重复页面，而没有回到原来的浏览上下文。
+`isInfrastructureDestination` 使用 `MOVE_TO_TOP_SINGLETON` 按 **name** 匹配，对参数化页面（如
 PEOPLE/QUESTION，不同 id 是不同页面）不适用——不能按 name 去重。
 
 **修复**（`core/.../navigation/StartupDestinationChannel.ets` + `P1Shell.ets`）：
@@ -121,7 +121,7 @@ PEOPLE/QUESTION，不同 id 是不同页面）不适用——不能按 name 去�
 ## 建议合并时处理
 
 1. **收藏弹窗新建表单草稿提升**：把 `CollectionDialogComponent` 的 `showCreate/createTitle/createDescription/
-   createIsPublic` 提升到 `ContentDetailPage`（调用方持有、关闭重开回传），对齐 CLAUDE.md 草稿约定；涉及
+   createIsPublic` 提升到 `ContentDetailPage`（调用方持有、关闭重开回传），使草稿在弹层关闭后仍保留，并按编辑目标隔离；涉及
    `ContentDetailPages.ets` 与 `CollectionDialogComponent.ets`，为避免与 P3-5 评论 worker 冲突块过大，本批未动。
 2. **进程重建导航路径持久化**：见上文第 4 节，建议单独立项。
 3. **「忽略 vs 移栈顶」取舍**：若真机验收发现「同一目标已在栈中时点击无反馈」影响体验，可将

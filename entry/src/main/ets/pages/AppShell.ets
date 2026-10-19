@@ -2540,7 +2540,7 @@ export struct AppShell {
     const paths: Array<NavPathInfo> | undefined = this.pathStack.getPathStack();
     if (paths !== undefined && paths.length > 0) {
       // P3-7：同一目标（name+参数）已在返回栈任何位置时不再重复入栈，
-      // 防止「返回时只是露出前一个重复页面」（CLAUDE.md 返回栈教训）。
+      // 防止返回时只是露出前一个重复页面，而没有回到原来的浏览上下文。
       // 参数化页面不能使用按 name 匹配的 MOVE_TO_TOP_SINGLETON，必须按身份查重。
       const existingIndex = findAppDestinationStackIndex(paths, destination);
       if (existingIndex >= 0) {
