@@ -75,6 +75,7 @@ export struct ChannelFeedPage {
   @StorageProp('feedCardStyle') private feedCardStyle: string = 'divider';
   @StorageProp('fabOpacity') private fabOpacity: number = 100;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  @StorageProp('followingTimeOrder') @Watch('applyFollowingOrder') private followingTimeOrder: boolean = false;
   // 下拉刷新自定义加载圆圈（refreshingContent 需 ComponentContent，随页面销毁释放）
   private indicator?: FeedPullDownIndicatorHost = undefined;
   @Consume('channelFeedInteractionBridge') private interactionBridge: ChannelFeedInteractionBridge =
@@ -110,6 +111,7 @@ export struct ChannelFeedPage {
     // P3-7：返回栈重显（页面实例与状态保留）时 aboutToAppear 可能再次触发；
     // 控制器仍存活时直接复用，避免重建控制器并重载列表导致滚动位置丢失。
     if (this.controller !== undefined) {
+      this.controller.setFollowingTimeOrder(this.followingTimeOrder);
       this.controller.activate();
       this.registerTitleBarActions();
       this.loadDateFromTitleBar();
@@ -124,6 +126,7 @@ export struct ChannelFeedPage {
     this.controller = new ChannelFeedController(this.source, repository, (state: ChannelFeedViewState): void => {
       this.applyState(state);
     });
+    this.controller.setFollowingTimeOrder(this.followingTimeOrder);
     this.registerTitleBarActions();
     this.controller.activate();
     if (this.source === ChannelFeedSource.DAILY && this.dailyDateSelectionTick > 0) {
@@ -170,6 +173,10 @@ export struct ChannelFeedPage {
 
   private reloadAfterAuthentication(): void {
     this.controller?.refresh();
+  }
+
+  private applyFollowingOrder(): void {
+    this.controller?.setFollowingTimeOrder(this.followingTimeOrder);
   }
 
   /** 本页所属的顶级页签：关注页两个子源都挂在“关注”页签下。 */

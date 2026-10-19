@@ -187,7 +187,14 @@ struct Index {
     const blockingMatcher = new BlockingRuleMatcher(blockingRuleStore, preferencesStore,
       ContentBlockingStrategy.RULES_ONLY);
     sessionOwner.restoreDeferred().catch((_error: Error): void => {
-    }).then((): void => {
+    }).then(async (): Promise<void> => {
+      // 在 AppShell 和关注页挂载前恢复，避免异步读取覆盖用户刚做出的排序选择。
+      const followingTabIndex = await preferencesStore.loadFollowingFeedTabIndex()
+        .catch((_error: Error): number => 0);
+      const followingTimeOrder = await preferencesStore.loadFollowingTimeOrder()
+        .catch((_error: Error): boolean => false);
+      AppStorage.setOrCreate('followingSelectedTabIndex', followingTabIndex);
+      AppStorage.setOrCreate('followingTimeOrder', followingTimeOrder);
       this.session = session;
       this.openedContentStore = openedContentStore;
       this.blockingRuleStore = blockingRuleStore;
@@ -341,6 +348,7 @@ struct Index {
       recommendRepository: this.followingRecommendRepository,
       usersRepository: this.followingUsersRepository,
       dynamicRepository: this.followingRepository,
+      preferences: this.preferencesStore,
       reloadToken: reloadToken,
       selectedTabIndex: selectedTabIndex,
       navigate: navigate,

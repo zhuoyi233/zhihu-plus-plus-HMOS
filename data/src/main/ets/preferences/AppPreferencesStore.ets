@@ -69,6 +69,8 @@ const FAB_OPACITY_KEY = 'fabOpacity';
 const SHOW_FEED_THUMBNAIL_KEY = 'showFeedThumbnail';
 const SHOW_REFRESH_FAB_KEY = 'showRefreshFab';
 const FEED_CARD_STYLE_KEY = 'feedCardStyle';
+const FOLLOWING_FEED_TAB_INDEX_KEY = 'followingFeedTabIndex';
+const FOLLOWING_TIME_ORDER_KEY = 'followingTimeOrder';
 const DEVELOPER_MODE_KEY = 'developer';
 const SPEECH_SPEED_KEY = 'readingSpeechSpeed';
 const SPEECH_PITCH_KEY = 'readingSpeechPitch';
@@ -512,6 +514,70 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
 
   constructor(context: common.Context) {
     this.context = context;
+  }
+
+  /** 0 为推荐频道，1 为动态频道；频道选择与动态排序独立保存。 */
+  async loadFollowingFeedTabIndex(): Promise<number> {
+    await this.saveQueue;
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      return (await store.get(FOLLOWING_FEED_TAB_INDEX_KEY, 0)) === 1 ? 1 : 0;
+    } catch (error) {
+      const detail = error instanceof Error ? error : undefined;
+      throw new Error(appPreferencesFailureMessage('Following feed order load', detail));
+    }
+  }
+
+  saveFollowingFeedTabIndex(index: number): Promise<void> {
+    const normalized = index === 1 ? 1 : 0;
+    const operation = this.saveQueue.then(
+      (): Promise<void> => this.writeFollowingFeedTabIndex(normalized),
+      (): Promise<void> => this.writeFollowingFeedTabIndex(normalized)
+    );
+    this.saveQueue = operation.then((): void => {}, (): void => {});
+    return operation;
+  }
+
+  private async writeFollowingFeedTabIndex(index: number): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      await store.put(FOLLOWING_FEED_TAB_INDEX_KEY, index);
+      await store.flush();
+    } catch (error) {
+      const detail = error instanceof Error ? error : undefined;
+      throw new Error(appPreferencesFailureMessage('Following feed order save', detail));
+    }
+  }
+
+  async loadFollowingTimeOrder(): Promise<boolean> {
+    await this.saveQueue;
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      return (await store.get(FOLLOWING_TIME_ORDER_KEY, false)) === true;
+    } catch (error) {
+      const detail = error instanceof Error ? error : undefined;
+      throw new Error(appPreferencesFailureMessage('Following time order load', detail));
+    }
+  }
+
+  saveFollowingTimeOrder(enabled: boolean): Promise<void> {
+    const operation = this.saveQueue.then(
+      (): Promise<void> => this.writeFollowingTimeOrder(enabled),
+      (): Promise<void> => this.writeFollowingTimeOrder(enabled)
+    );
+    this.saveQueue = operation.then((): void => {}, (): void => {});
+    return operation;
+  }
+
+  private async writeFollowingTimeOrder(enabled: boolean): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      await store.put(FOLLOWING_TIME_ORDER_KEY, enabled);
+      await store.flush();
+    } catch (error) {
+      const detail = error instanceof Error ? error : undefined;
+      throw new Error(appPreferencesFailureMessage('Following time order save', detail));
+    }
   }
 
   async loadDeveloperMode(): Promise<boolean> {
