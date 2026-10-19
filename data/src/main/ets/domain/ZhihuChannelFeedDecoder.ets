@@ -25,6 +25,7 @@ import {
   StrictJsonError
 } from 'core';
 import { decodeFeedPage, DomainDecodeError, DomainDecodeFailureKind } from './ZhihuDomainDecoder';
+import { htmlExcerptToText } from './HtmlExcerpt';
 
 function root(json: string, label: string): JsonObjectValue {
   try {
@@ -307,7 +308,7 @@ export function decodeQuestionAnswerFeedPage(json: string): ChannelFeedPage {
       kind: kind,
       id: targetId,
       title: title,
-      excerpt: jsonString(target.get('excerpt')) ?? '',
+      excerpt: htmlExcerptToText(jsonString(target.get('excerpt')) ?? ''),
       url: jsonString(target.get('url')) ?? '',
       voteupCount: jsonNumber(target.get('voteup_count')),
       commentCount: jsonNumber(target.get('comment_count')),

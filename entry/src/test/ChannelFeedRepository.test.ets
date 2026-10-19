@@ -15,6 +15,7 @@ import {
   DefaultChannelFeedRepository,
   decodeChannelContentPage,
   decodeDailyFeedPage,
+  decodeQuestionAnswerFeedPage,
   FOLLOWING_FEED_BASE_URL,
   FOLLOWING_RECOMMEND_FEED_BASE_URL,
   HOT_FEED_BASE_URL,
@@ -245,6 +246,56 @@ export default function channelFeedRepositoryTest(): void {
       expect(factory.requests[1].headers.Cookie).assertEqual('z_c0=session-token; d_c0=device-token');
       expect(JSON.stringify(factory.requests[1].headers).includes('x-zse-96')).assertTrue();
       expect(provider.readCount).assertEqual(2);
+    });
+
+    it('rendersFollowingHtmlExcerptsAsReadableText', 0, () => {
+      const excerpt = 'Q： <a href="https://www.zhihu.com/question/123/answer/456" ' +
+        'data-draft-type="text-link" data-title="1 > 0">游戏有哪些设计？</a>' +
+        '<a class="member_mention" href="https://www.zhihu.com/people/author">@作者</a>' +
+        '：<b>扛着柱子的 boss</b><br>下一段&nbsp;&amp;&quot;引文&quot;';
+      const page = decodeChannelContentPage('{"data":[{"id":"moment","moment_desc":"发表了文章",' +
+        '"target":{"type":"article","id":"203","title":"瞎扯","excerpt":' +
+        JSON.stringify(excerpt) + '}}],"paging":{"is_end":true}}');
+      expect(page.items.length).assertEqual(1);
+      if (page.items[0].kind === ChannelFeedItemKind.CONTENT) {
+        expect(page.items[0].feedItem.target.excerpt).assertEqual(
+          'Q： 游戏有哪些设计？ @作者 ： 扛着柱子的 boss 下一段 &"引文"');
+        expect(page.items[0].feedItem.target.id).assertEqual('203');
+        expect(page.items[0].feedItem.actionText).assertEqual('发表了文章');
+      } else {
+        expect(false).assertTrue();
+      }
+    });
+
+    it('preservesPlainExcerptTextAndDropsTruncatedMarkup', 0, () => {
+      const excerpts: Array<string> = [
+        '普通摘要：1 < 2，3 > 2',
+        '&lt;示例&gt; &amp;lt;原文&amp;gt;',
+        '<p>完整文字</p><a href="https://www.zhihu.com/unfinished',
+        '正文<!--截断注释'
+      ];
+      const expected: Array<string> = [
+        '普通摘要：1 < 2，3 > 2', '<示例> &lt;原文&gt;', '完整文字', '正文'
+      ];
+      excerpts.forEach((excerpt: string, index: number): void => {
+        const page = decodeChannelContentPage('{"data":[{"id":"moment","target":' +
+          '{"type":"answer","id":"101","question":{"title":"问题"},"excerpt":' +
+          JSON.stringify(excerpt) + '}}],"paging":{"is_end":true}}');
+        expect(page.items.length).assertEqual(1);
+        if (page.items[0].kind === ChannelFeedItemKind.CONTENT) {
+          expect(page.items[0].feedItem.target.excerpt).assertEqual(expected[index]);
+        } else {
+          expect(false).assertTrue();
+        }
+      });
+      const answers = decodeQuestionAnswerFeedPage('{"data":[{"target":{"type":"answer",' +
+        '"id":"101","excerpt":"<em>回答</em>&nbsp;摘要"}}],"paging":{"is_end":true}}');
+      expect(answers.items.length).assertEqual(1);
+      if (answers.items[0].kind === ChannelFeedItemKind.CONTENT) {
+        expect(answers.items[0].feedItem.target.excerpt).assertEqual('回答 摘要');
+      } else {
+        expect(false).assertTrue();
+      }
     });
 
     it('skipsTargetlessMomentsEntries', 0, async () => {
