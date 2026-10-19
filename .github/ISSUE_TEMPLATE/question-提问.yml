@@ -35,8 +35,8 @@ body:
   - type: input
     id: device
     attributes:
-      label: 手机设备及型号
-      placeholder: "例如：Pixel 7 Pro / 小米 13 Pro"
+      label: 设备及型号
+      placeholder: "例如：华为 Mate 系列（请填写具体型号） / HarmonyOS 手机模拟器（API 23）"
     validations:
       required: true
 
@@ -44,16 +44,17 @@ body:
     id: os-version
     attributes:
       label: 操作系统版本
-      placeholder: "例如：Android 14 / HyperOS 3.0"
+      description: 请填写设备实际的 HarmonyOS 版本，建议同时提供完整系统构建号。
+      placeholder: "例如：HarmonyOS 6.1.0（API 23）"
     validations:
       required: true
 
   - type: input
     id: app-version
     attributes:
-      label: 知乎++ 版本
-      description: 可以在账号设置页面长按版本号复制。
-      placeholder: "例如：22"
+      label: 应用版本（知乎++鸿蒙版）
+      description: 在“我的 → 关于与诊断 → 应用与版本”查看已安装版本，请同时填写版本名和版本号。
+      placeholder: "例如：0.5.8（版本号 1000508）"
     validations:
       required: true
 

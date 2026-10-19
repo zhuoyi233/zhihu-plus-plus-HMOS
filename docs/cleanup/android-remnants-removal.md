@@ -1,4 +1,24 @@
-# 安卓残留清理分析：可删除文件清单
+# 安卓残留清理分析（历史归档）
+
+> [!NOTE]
+> 本文保存 2026-08-15 的分析记录。下方清单、命令、分支状态和验证数字均对应当时快照，
+> 不作为当前待办或可直接执行的清理指令。当前开发与验证规则以根目录 `AGENTS.md` 为准。
+
+## 清理状态（2026-10-19 复核）
+
+- 安卓源码目录、Gradle 构建链及安卓专用 workflow 已从当前工作树移除；
+  `.github/workflows/` 当前仅保留鸿蒙 CI `harmonyos.yml`。
+- `AGENTS.md` 和 `README.md` 已改为鸿蒙版说明；旧 `CLAUDE.md`、`.agents/skills/`、
+  `.claude/`、`.memory/` 已不在当前工作树中。
+- 本地提交 `88b2e04d` 已移除 `.codex/config.toml`、`.mcp.json`、仅含 Kotlin 规则的
+  `.editorconfig`、失效的 `.github/copilot-instructions.md` 以及安卓专用
+  `docs/ai-ui-design-guide.md`，并移除 `.gitattributes` 中失效的模型/tokenizer/AAR LFS 规则。
+- 鸿蒙四模块、构建脚本、更新清单、应用截图和许可文件继续保留。
+- 本次复核依据工作树文件与引用检查，未重新执行下方历史记录中的构建、测试或上游 worktree 验证。
+
+---
+
+以下为原始分析记录。
 
 > 分析日期：2026-08-15
 > 目标：识别 dev 分支工作区中「安卓项目需要、但鸿蒙移植无关」的文件，支持安全移除。
