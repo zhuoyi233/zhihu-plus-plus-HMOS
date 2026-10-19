@@ -93,10 +93,24 @@ $hdc = "hdc"
   规范自行生成 commit message 并做合理的提交拆分，无需逐次询问；与任务无关的未跟踪文件不得
   顺势带入。
 
-- 提交风格：`<type>(harmony): <中文>`，如 `fix(harmony): 修复搜索响应解析`。
+- 提交风格：默认用 `<type>: <中文摘要>`，如 `fix: 修复搜索响应解析`，省略固定的 `(harmony)`。
+  需要区分具体模块或功能范围时，可选用 `<type>(<scope>): <中文摘要>`，如
+  `fix(reader): 修复阅读进度恢复`，不强制每条提交都写 scope。新规范适用于后续提交，历史提交不改写。
 
-- 提交前检查：`git status` 干净（build-profile.json5 因 skip-worktree 不参与提交）、无临时文件入库
-  （临时文件统一放 `.tmp/`，截图放 `.tmp/shots/`，均由 Git 忽略）。
+- 类型选择：`feat` 新功能；`fix` 缺陷修复；`refactor` 保持外部行为不变的重构；`perf` 性能优化；
+  `docs` 文档；`test` 测试；`build` 构建与依赖；`ci` 自动化流程；`style` 仅代码格式调整；
+  `chore` 不属于上述类型的其他维护。界面外观变化按实际用途选择 `feat` 或 `fix`，不用 `style`。
+
+- 摘要与正文：摘要说明具体变化，避免“优化代码”“修复问题”等模糊表述。简单改动只写标题；
+  复杂改动按需补充原因、关键行为变化和实际验证情况，无需套用 PR 四段式正文模板。
+
+- 提交拆分：一次提交围绕一个可独立说明的目的，配套代码、测试和文档一起提交，无关改动分开；
+  不按文件机械拆分。
+
+- 提交检查：提交前用 `git status` 和 `git diff --cached` 确认暂存区仅包含本次相关改动，
+  无临时文件或敏感配置入库（build-profile.json5 的本地签名配置由 skip-worktree 隐藏；
+  临时文件统一放 `.tmp/`，截图放 `.tmp/shots/`，均由 Git 忽略）。提交后确认预期改动已提交，
+  保留用户其他未提交的工作，不为追求工作区干净而清理或顺势提交无关改动。
 
 - 版本号映射：`versionCode` 由 `versionName` 按固定公式推导，二者在 `AppScope/app.json5` 一并更新：
   `versionCode = (主版本号 + 1) × 1000000 + 次版本号 × 100 + 修订号`（如 `0.2.1 → 1000201`，
@@ -109,7 +123,7 @@ $hdc = "hdc"
   `pwsh -NoProfile -File scripts/update-release-catalog.ps1 -SeedPending -Version <x.y.z> -NotesFile <文稿>`
   预置本版本说明进两份清单（**构建必须在其后**，发行 HAP 才能自带"本版本更新内容"；发布说明经
   `gh release create --notes-file` 复用同一文稿）→ 完整验证（发行 HAP 以 `-BuildMode release` 出包）→
-  提交（`chore(harmony): 应用版本号升至 x.y.z`）→
+  提交（`chore: 应用版本号升至 x.y.z`）→
   附注 tag（`git tag -a HMOSv0.2.1 -m "<一句里程碑中文摘要>"`）→ 推送仅在用户明确要求时执行
   （`git push origin dev` + 显式列出 HMOS tag）。仓库继承的上游 `0.x`/`nightly` tag 是 zly2006 的
   发布记录，**不要推送**，远端只保留 `HMOS*` tag。发版后续（GitHub 发布 Release、更新静态清单）
@@ -125,8 +139,8 @@ $hdc = "hdc"
 
 以 PR #2 的四段式正文为标准模板（参考 PR #1 的经验教训），生成/整理 PR 时按此结构撰写：
 
-- **标题**：沿用提交风格 `<type>(harmony): <中文摘要>`；版本合入类 PR 摘要中带版本号，
-  如 `feat(harmony): v0.2.1 沉浸光效适配与全量修复合入 main`。
+- **标题**：沿用提交风格，默认用 `<type>: <中文摘要>`，需要区分范围时可选加 scope；
+  版本合入类 PR 摘要中带版本号，如 `feat: v0.2.1 沉浸光效适配与全量修复合入 main`。
 
 - **正文固定四节**（简体中文，`##` 二级标题，顺序不变）：
   1. `## 概述`——1~3 句：本 PR 做了什么、合并范围/分支关系（如"dev 相对 main 的累计变更一次性合入"）。
