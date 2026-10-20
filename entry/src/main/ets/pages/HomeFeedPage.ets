@@ -375,22 +375,30 @@ export struct HomeFeedPage {
   @Builder
   private feedCard(item: FeedItem) {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
-      Column({ space: $r('app.float.spacing_small') }) {
+      Column({ space: $r('app.float.spacing_xsmall') }) {
         if ((item.target.qualityFilterReason ?? '').length > 0) {
           // 对齐上游 RULES：用原因替换正文，标题、摘要、作者、来源与图片均不展示。
-          Row({ space: $r('app.float.spacing_small') }) {
-            Text(item.target.qualityFilterReason ?? '')
-              .id(`home_quality_rule_${item.target.kind}_${item.target.id}`)
-              .fontSize($r('app.float.body_font_size'))
-              .fontColor($r('app.color.secondary_text'))
-              .layoutWeight(1)
-            this.feedCardMenuButton(item)
-          }
-          .width('100%')
-          this.feedCardMetrics(item)
+          Text(item.target.qualityFilterReason ?? '')
+            .id(`home_quality_rule_${item.target.kind}_${item.target.id}`)
+            .fontSize($r('app.float.body_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .width('100%')
         } else {
           this.feedCardContent(item)
         }
+        // 对齐上游 FeedCardContent：页脚（details）行与右下角“更多”菜单同排。
+        Row({ space: $r('app.float.spacing_small') }) {
+          Text(homeFeedDetailsLabel(item))
+            .id(`home_feed_footer_${item.target.kind}_${item.target.id}`)
+            .fontSize($r('app.float.secondary_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .layoutWeight(1)
+          this.feedCardMenuButton(item)
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
       }
       .alignItems(HorizontalAlign.Start)
       .width('100%')
@@ -431,39 +439,8 @@ export struct HomeFeedPage {
   }
 
   @Builder
-  private feedCardMetrics(item: FeedItem) {
-    Text(homeFeedFooterLabel(item))
-      .id(`home_feed_footer_${item.target.kind}_${item.target.id}`)
-      .fontSize($r('app.float.secondary_font_size'))
-      .fontColor($r('app.color.secondary_text'))
-      .maxLines(2)
-      .textOverflow({ overflow: TextOverflow.Ellipsis })
-      .width('100%')
-  }
-
-  @Builder
   private feedCardContent(item: FeedItem) {
-    Row({ space: $r('app.float.spacing_xsmall') }) {
-      if (item.target.mobileFooterText === undefined || (item.recommendationReason?.trim() ?? '').length > 0) {
-        Text(homeFeedActionLabel(item))
-          .fontSize($r('app.float.secondary_font_size'))
-          .fontColor($r('app.color.secondary_text'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .layoutWeight(1)
-      } else {
-        Blank().layoutWeight(1)
-      }
-      Text(feedKindLabel(item.target.kind))
-        .fontSize($r('app.float.secondary_font_size'))
-        .fontColor(this.resolvedThemeColor)
-
-      // 对齐上游 FeedCardMenuBox：右上角紧凑“更多”符号图标，屏蔽等操作收进菜单。
-      this.feedCardMenuButton(item)
-    }
-    .width('100%')
-
-    // 对齐上游 FeedCard：标题 2 行、摘要 3 行、作者与元信息各 1 行，控制一屏卡片数量。
+    // 对齐上游 FeedCard 标准排版：标题 → 头像与昵称 → 摘要（3 行截断）→ 缩略图 → 页脚。
     Text(item.target.title)
       .fontSize($r('app.float.heading_font_size'))
       .fontWeight(FontWeight.Medium)
@@ -472,48 +449,58 @@ export struct HomeFeedPage {
       .textOverflow({ overflow: TextOverflow.Ellipsis })
       .width('100%')
 
-    if (this.showFeedThumbnail && (item.target.thumbnailUrl ?? '').length > 0) {
-      Image(item.target.thumbnailUrl)
-        .width('100%')
-        .height(128)
-        .borderRadius($r('app.float.spacing_small'))
-        .objectFit(ImageFit.Cover)
-        .alt('内容缩略图')
-    }
-
-    if (item.target.excerpt.trim().length > 0) {
-      Text(item.target.excerpt)
-        .fontSize($r('app.float.body_font_size'))
-        .fontColor($r('app.color.secondary_text'))
-        .maxLines(3)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .width('100%')
-    }
-
-    Row({ space: $r('app.float.spacing_medium') }) {
-      if (item.target.author !== undefined) {
+    if (item.target.author !== undefined) {
+      Row({ space: $r('app.float.spacing_xsmall') }) {
+        if ((item.target.author.avatarUrl ?? '').length > 0) {
+          Image(item.target.author.avatarUrl)
+            .width(20)
+            .height(20)
+            .borderRadius(10)
+            .alt('用户头像')
+        }
         Text(item.target.author.name)
           .fontSize($r('app.float.secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .layoutWeight(1)
-      } else {
-        Blank().layoutWeight(1)
       }
-      if (item.target.mobileFooterText === undefined) {
-        Text(`${item.target.voteupCount ?? '—'} 赞同`)
-          .fontSize($r('app.float.secondary_font_size'))
-          .fontColor($r('app.color.secondary_text'))
-        Text(`${item.target.commentCount ?? '—'} 评论`)
-          .fontSize($r('app.float.secondary_font_size'))
-          .fontColor($r('app.color.secondary_text'))
+      .alignItems(VerticalAlign.Center)
+    }
+
+    Row({ space: $r('app.float.spacing_small') }) {
+      Column({ space: $r('app.float.spacing_xsmall') }) {
+        if (item.target.excerpt.trim().length > 0) {
+          Text(item.target.excerpt)
+            .fontSize($r('app.float.body_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .maxLines(3)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width('100%')
+        }
+        if ((item.recommendationReason?.trim() ?? '').length > 0 ||
+          (item.target.mobileFooterText === undefined && (item.actionText?.trim() ?? '').length > 0)) {
+          Text(homeFeedActionLabel(item))
+            .fontSize($r('app.float.secondary_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .width('100%')
+        }
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(2)
+
+      if (this.showFeedThumbnail && (item.target.thumbnailUrl ?? '').length > 0) {
+        Image(item.target.thumbnailUrl)
+          .width(60)
+          .height(60)
+          .borderRadius($r('app.float.spacing_small'))
+          .objectFit(ImageFit.Cover)
+          .alt('内容缩略图')
       }
     }
     .width('100%')
-    if (item.target.mobileFooterText !== undefined) {
-      this.feedCardMetrics(item)
-    }
+    .alignItems(VerticalAlign.Center)
   }
 
   private openFeedItem(item: FeedItem): void {
@@ -768,6 +755,17 @@ export function homeFeedActionLabel(item: FeedItem): string {
   }
   const actionText = item.actionText?.trim() ?? '';
   return actionText.length > 0 ? actionText : '推荐内容';
+}
+
+/** 对齐上游 details：类型标注（回答/文章等）与统计拼成页脚文字。 */
+export function homeFeedDetailsLabel(item: FeedItem): string {
+  if (item.target.mobileFooterText !== undefined) {
+    // 移动卡片保留服务端页脚原文（已含“手机版推荐”来源标注），不重复拼接。
+    return homeFeedFooterLabel(item);
+  }
+  // Web 卡对齐上游 detailsText：`回答 · N 赞同 · N 评论`。
+  const stats = `${item.target.voteupCount ?? '—'} 赞同 · ${item.target.commentCount ?? '—'} 评论`;
+  return `${feedKindLabel(item.target.kind)} · ${stats}`;
 }
 
 export function homeFeedFooterLabel(item: FeedItem): string {
