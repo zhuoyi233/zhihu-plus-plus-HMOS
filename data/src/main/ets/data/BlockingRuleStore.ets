@@ -301,25 +301,26 @@ export function qualityFilterReason(content: BlockableContentSummary,
     return undefined;
   }
   const voteupCount = content.voteupCountUpperBound ?? content.voteupCount;
+  // 文案对齐上游 Feed.kt filterReason：“规则：<类型>；<条件>，未关注作者”。
   if (content.contentKind === 'answer' && content.authorIsFollowing === false &&
     voteupCount !== undefined && voteupCount < preferences.answerVoteupThreshold) {
-    return `回答赞同数低于 ${preferences.answerVoteupThreshold}`;
+    return `规则：回答；赞数 < ${preferences.answerVoteupThreshold}，未关注作者`;
   }
   if (content.contentKind === 'article' && content.authorIsFollowing === false &&
     ((voteupCount !== undefined && voteupCount < preferences.articleVoteupThreshold) ||
       (content.authorFollowerCount !== undefined &&
         content.authorFollowerCount < preferences.articleFollowersThreshold))) {
-    return '文章赞同数或作者粉丝数低于阈值';
+    return `规则：文章；作者粉丝数 < ${preferences.articleFollowersThreshold} 或赞数 < ${preferences.articleVoteupThreshold}，未关注作者`;
   }
   if (content.contentKind === 'video' && content.authorIsFollowing === false &&
     voteupCount !== undefined && voteupCount < preferences.videoVoteThreshold &&
     content.authorFollowerCount !== undefined && content.authorFollowerCount < preferences.videoFollowersThreshold) {
-    return '视频赞同数或作者粉丝数低于阈值';
+    return `规则：视频；作者粉丝数 < ${preferences.videoFollowersThreshold} 且赞数 < ${preferences.videoVoteThreshold}`;
   }
   if (content.contentKind === 'question' && content.answerCount !== undefined &&
     content.answerCount < preferences.questionAnswerThreshold && content.followerCount !== undefined &&
     content.followerCount < preferences.questionFollowersThreshold) {
-    return '问题回答数或关注数低于阈值';
+    return `规则：问题；回答数 < ${preferences.questionAnswerThreshold}，关注数 < ${preferences.questionFollowersThreshold}`;
   }
   return undefined;
 }

@@ -244,7 +244,7 @@ export default function homeFeedStateTest(): void {
       mobile.target.mobileFooterText = '1934 赞同 · 699 收藏';
       mobile.target.commentCount = undefined;
       expect(homeFeedFooterLabel(mobile)).assertEqual('1934 赞同 · 699 收藏 · 手机版推荐');
-      mobile.target.qualityFilterReason = '回答赞同数低于 2000';
+      mobile.target.qualityFilterReason = '规则：回答；赞数 < 2000，未关注作者';
       expect(homeFeedFooterLabel(mobile)).assertEqual('1934 赞同 · 699 收藏 · 手机版推荐');
       mobile.target.mobileFooterText = '1.9 万赞同 · 3069 评论';
       expect(homeFeedFooterLabel(mobile)).assertEqual('1.9 万赞同 · 3069 评论 · 手机版推荐');

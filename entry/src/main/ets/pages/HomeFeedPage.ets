@@ -377,7 +377,14 @@ export struct HomeFeedPage {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
       Column({ space: $r('app.float.spacing_xsmall') }) {
         if ((item.target.qualityFilterReason ?? '').length > 0) {
-          // 对齐上游 RULES：用原因替换正文，标题、摘要、作者、来源与图片均不展示。
+          // 对齐上游 FeedDisplayItem（isFiltered）：标题显示“已屏蔽”，原因放摘要位置，
+          // 标题/摘要/作者/来源与图片均不展示，页脚与菜单行保留。
+          Text('已屏蔽')
+            .id(`home_quality_blocked_${item.target.kind}_${item.target.id}`)
+            .fontSize($r('app.float.heading_font_size'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.primary_text'))
+            .width('100%')
           Text(item.target.qualityFilterReason ?? '')
             .id(`home_quality_rule_${item.target.kind}_${item.target.id}`)
             .fontSize($r('app.float.body_font_size'))

@@ -269,7 +269,7 @@ export default function blockingRuleMatcherTest(): void {
       value.voteupCount = 0;
       value.authorIsFollowing = false;
       const rules = await matcher.createSession();
-      expect(rules.qualityReason?.(value)).assertEqual('回答赞同数低于 10');
+      expect(rules.qualityReason?.(value)).assertEqual('规则：回答；赞数 < 10，未关注作者');
       expect(rules.match(value)).assertUndefined();
 
       recommendation.value.qualityFilterMode = QualityFilterMode.HIDE;

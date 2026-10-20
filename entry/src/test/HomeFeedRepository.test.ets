@@ -379,7 +379,7 @@ export default function homeFeedRepositoryTest(): void {
       expect(rules.items.length).assertEqual(1);
       expect(rules.items[0].target.voteupCount).assertEqual(0);
       expect(rules.items[0].target.author?.id).assertEqual('real-author');
-      expect(rules.items[0].target.qualityFilterReason).assertEqual('回答赞同数低于 10');
+      expect(rules.items[0].target.qualityFilterReason).assertEqual('规则：回答；赞数 < 10，未关注作者');
 
       matcher.session.preferences.qualityFilterMode = QualityFilterMode.HIDE;
       const hidden = await repository.loadHomePage();
@@ -402,7 +402,7 @@ export default function homeFeedRepositoryTest(): void {
       expect(ambiguous.items[0].target.qualityFilterReason).assertUndefined();
       matcher.session.preferences.answerVoteupThreshold = 20000;
       const belowThreshold = await repository.loadHomePage();
-      expect(belowThreshold.items[0].target.qualityFilterReason).assertEqual('回答赞同数低于 20000');
+      expect(belowThreshold.items[0].target.qualityFilterReason).assertEqual('规则：回答；赞数 < 20000，未关注作者');
     });
 
     it('ranksCachedCandidatesLocallyWithoutNetworkRequests', 0, async () => {
@@ -468,7 +468,7 @@ export default function homeFeedRepositoryTest(): void {
     it('preservesQualityPlaceholderIdentityAndOriginalNavigationTarget', 0, async () => {
       const factory = new SequenceFeedTransportFactory([{ statusCode: 200, body: FIRST_PAGE }]);
       const matcher = new RecordingFeedBlockingMatcher();
-      matcher.session.reason = '文章赞同数或作者粉丝数低于阈值';
+      matcher.session.reason = '规则：文章；作者粉丝数 < 100 或赞数 < 20，未关注作者';
       const repository = new DefaultFeedRepository(new ZhihuHttpClient(new CountingSessionProvider(), factory), matcher);
       const page = await repository.loadHomePage();
       expect(page.items.length).assertEqual(1);
