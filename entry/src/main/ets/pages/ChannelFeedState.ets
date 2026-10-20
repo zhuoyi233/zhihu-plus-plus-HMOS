@@ -1,6 +1,7 @@
 import {
   channelFeedItemIdentity,
   ChannelFeedItem,
+  ChannelFeedItemKind,
   ChannelFeedPage,
   ChannelFeedRepository,
   ChannelFeedSource,
@@ -83,6 +84,7 @@ export class ChannelFeedController {
   private restartFirstPageOnActivate: boolean = false;
   private errorMessage?: string;
   private selectedDailyDate?: string;
+  private followingTimeOrder: boolean = false;
 
   constructor(source: ChannelFeedSource, repository: ChannelFeedRepository,
     observer: ChannelFeedStateObserver = (_state: ChannelFeedViewState): void => {
@@ -121,13 +123,23 @@ export class ChannelFeedController {
   snapshot(): ChannelFeedViewState {
     return {
       phase: this.phase,
-      items: this.items.slice(),
+      items: this.followingTimeOrder
+        ? mergeChannelFeedItems([], this.items, this.source) : this.items.slice(),
       refreshing: this.refreshing,
       loadingMore: this.loadingMore,
       canLoadMore: !this.paginationBlocked && this.hasNextPage(),
       requiresLogin: this.requiresLogin,
       errorMessage: this.errorMessage
     };
+  }
+
+  /** 排序只改变展示顺序，保留原始响应顺序、分页游标与在途请求。 */
+  setFollowingTimeOrder(enabled: boolean): void {
+    if (this.source !== ChannelFeedSource.FOLLOWING || this.followingTimeOrder === enabled) {
+      return;
+    }
+    this.followingTimeOrder = enabled;
+    this.emit();
   }
 
   loadInitial(): Promise<void> {
@@ -313,7 +325,8 @@ export class ChannelFeedController {
   }
 }
 
-export function mergeChannelFeedItems(current: Array<ChannelFeedItem>, incoming: Array<ChannelFeedItem>):
+export function mergeChannelFeedItems(current: Array<ChannelFeedItem>, incoming: Array<ChannelFeedItem>,
+  source?: ChannelFeedSource):
   Array<ChannelFeedItem> {
   const merged: Array<ChannelFeedItem> = [];
   const identities: Set<string> = new Set<string>();
@@ -324,7 +337,25 @@ export function mergeChannelFeedItems(current: Array<ChannelFeedItem>, incoming:
       merged.push(item);
     }
   });
+  if (source === ChannelFeedSource.FOLLOWING) {
+    // 使用关注动态本身的时间，不能按 target 的发布时间排序：赞同旧文章也是新动态。
+    // 跨页去重后对整体排序，缺少时间的条目放在末尾，相同时间保留原顺序。
+    merged.sort((left: ChannelFeedItem, right: ChannelFeedItem): number =>
+      followingActivityTime(right) - followingActivityTime(left));
+  }
   return merged;
+}
+
+function followingActivityTime(item: ChannelFeedItem): number {
+  if (item.kind !== ChannelFeedItemKind.CONTENT) {
+    return 0;
+  }
+  const created = item.feedItem.createdAt;
+  if (Number.isFinite(created) && created > 0) {
+    return created;
+  }
+  const updated = item.feedItem.updatedAt;
+  return Number.isFinite(updated) && updated > 0 ? updated : 0;
 }
 
 export function channelFeedTitle(source: ChannelFeedSource): string {

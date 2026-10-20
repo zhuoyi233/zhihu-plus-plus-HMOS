@@ -148,9 +148,11 @@ export class DefaultOnlineHistoryRepository implements OnlineHistoryRepository {
   private requestedCursors: Set<string> = new Set<string>();
   private deliveredIdentities: Set<string> = new Set<string>();
   private generation: number = 0;
+  private readonly onClear?: () => Promise<void>;
 
-  constructor(httpClient: ZhihuHttpClient) {
+  constructor(httpClient: ZhihuHttpClient, onClear?: () => Promise<void>) {
     this.httpClient = httpClient;
+    this.onClear = onClear;
   }
 
   cancel(): void {
@@ -226,6 +228,7 @@ export class DefaultOnlineHistoryRepository implements OnlineHistoryRepository {
     }
     this.requestedCursors = new Set<string>();
     this.deliveredIdentities = new Set<string>();
+    await this.onClear?.();
   }
 
   async deleteEntry(contentKey: string): Promise<void> {

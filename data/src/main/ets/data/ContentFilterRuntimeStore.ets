@@ -10,7 +10,6 @@ import {
 import { BlockedFeedHistoryGateway } from './BlockedFeedHistoryStore';
 
 const VIEW_TABLE = 'content_filter_views';
-const MAX_CONTENT_FILTER_RECORDS = 10000;
 
 export class ContentFilterRuntimeStore implements ContentFilterRuntimeGateway {
   private readonly database: AppDatabase;
@@ -22,31 +21,32 @@ export class ContentFilterRuntimeStore implements ContentFilterRuntimeGateway {
     this.history = history;
   }
 
-  async loadSnapshot(): Promise<ContentFilterRuntimeSnapshot> {
+  async loadSnapshot(candidateKeys?: Array<string>): Promise<ContentFilterRuntimeSnapshot> {
     await this.mutationQueue;
     const store = await this.database.open();
     const viewCounts: Record<string, number> = {};
-    const views = await store.query(new relationalStore.RdbPredicates(VIEW_TABLE), ['content_key', 'view_count']);
-    try {
-      if (views.goToFirstRow()) {
-        do {
-          viewCounts[views.getString(views.getColumnIndex('content_key'))] =
-            views.getLong(views.getColumnIndex('view_count'));
-        } while (views.goToNextRow());
-      }
-    } finally {
-      views.close();
-    }
     const openedKeys: Array<string> = [];
-    const opened = await store.query(new relationalStore.RdbPredicates('opened_content'), ['content_key']);
-    try {
-      if (opened.goToFirstRow()) {
-        do {
-          openedKeys.push(opened.getString(opened.getColumnIndex('content_key')));
-        } while (opened.goToNextRow());
-      }
-    } finally {
-      opened.close();
+    const unique: Array<string> = candidateKeys === undefined ? [] : Array.from(new Set<string>(candidateKeys));
+    const batches: Array<Array<string>> = [];
+    if (candidateKeys === undefined) batches.push([]);
+    for (let offset = 0; offset < unique.length; offset += 500) batches.push(unique.slice(offset, offset + 500));
+    for (const batch of batches) {
+      const where = candidateKeys === undefined ? '' :
+        ` WHERE content_key IN (${batch.map((_key: string): string => '?').join(',')})`;
+      const args: Array<relationalStore.ValueType> = [];
+      batch.forEach((key: string): void => { args.push(key); });
+      const views = await store.querySql('SELECT content_key, view_count FROM content_filter_views' + where, args);
+      try {
+        if (views.goToFirstRow()) {
+          do { viewCounts[views.getString(0)] = views.getLong(1); } while (views.goToNextRow());
+        }
+      } finally { views.close(); }
+      const opened = await store.querySql('SELECT content_key FROM opened_content' + where, args);
+      try {
+        if (opened.goToFirstRow()) {
+          do { openedKeys.push(opened.getString(0)); } while (opened.goToNextRow());
+        }
+      } finally { opened.close(); }
     }
     return { viewCounts: viewCounts, openedKeys: openedKeys };
   }
@@ -93,11 +93,6 @@ export class ContentFilterRuntimeStore implements ContentFilterRuntimeGateway {
       const store = await this.database.open();
       await store.delete(new relationalStore.RdbPredicates(VIEW_TABLE).lessThan('last_viewed_at', cutoff));
       await this.history.deleteBefore?.(cutoff);
-      const stats = await this.readComputedStats(store);
-      if (stats.totalSeen > MAX_CONTENT_FILTER_RECORDS) {
-        await store.delete(new relationalStore.RdbPredicates(VIEW_TABLE));
-        await this.history.clear();
-      }
     });
   }
 

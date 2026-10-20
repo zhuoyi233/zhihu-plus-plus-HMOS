@@ -40,8 +40,7 @@ export class OpenedContentStore implements ReadHistoryGateway {
       if (rowId === -1) {
         throw new Error('Opened content upsert failed');
       }
-      await store.executeSql('DELETE FROM opened_content WHERE content_key NOT IN (' +
-        'SELECT content_key FROM opened_content ORDER BY opened_at DESC, content_key DESC LIMIT 1000)');
+      // 1000 条仅限制历史页的展示数量，实际打开身份持续保留，供首页已读过滤使用。
     });
     this.mutationQueue = operation.then((): void => {}, (): void => {});
     return operation;

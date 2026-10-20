@@ -95,6 +95,8 @@ export * from './src/main/ets/preferences/RecommendationFilterPreferences';
 export * from './src/main/ets/preferences/SpeechPreferences';
 export * from './src/main/ets/data/AppDatabase';
 export * from './src/main/ets/data/OpenedContentStore';
+export * from './src/main/ets/data/RemoteReadStore';
+export * from './src/main/ets/repository/RemoteHistorySync';
 export * from './src/main/ets/data/ContentDraftStore';
 export * from './src/main/ets/data/DraftImageReferenceCollector';
 export * from './src/main/ets/data/DraftModels';

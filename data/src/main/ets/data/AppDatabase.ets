@@ -44,16 +44,17 @@ export function pendingSchemaVersions(currentVersion: number): Array<number> {
 
 export class AppDatabase {
   private readonly context: common.Context;
-  private readonly config: relationalStore.StoreConfig = {
-    name: DATABASE_NAME,
-    securityLevel: relationalStore.SecurityLevel.S1
-  };
+  private readonly config: relationalStore.StoreConfig;
   private store: relationalStore.RdbStore | undefined = undefined;
   private opening: Promise<relationalStore.RdbStore> | undefined = undefined;
   private closing: Promise<void> | undefined = undefined;
 
-  constructor(context: common.Context) {
+  constructor(context: common.Context, databaseName: string = DATABASE_NAME) {
+    if (!/^[A-Za-z0-9_]+\.db$/.test(databaseName)) {
+      throw new Error('Invalid database name');
+    }
     this.context = context;
+    this.config = { name: databaseName, securityLevel: relationalStore.SecurityLevel.S1 };
   }
 
   async open(): Promise<relationalStore.RdbStore> {
@@ -149,7 +150,15 @@ export class AppDatabase {
 
     store.beginTransaction();
     try {
-      for (let index = 0; index < migration.statements.length; index += 1) {
+      // PR #93 的早期调试包也使用 v9，但只新增了提问者字段，没有服务器已读表。
+      // 在执行 main 的 v10 ALTER 前补齐幂等建表；正式版 v8/main v9 的路径不受影响。
+      if (migration.toVersion === 10) {
+        for (const sql of schemaMigrationTo(9).statements) {
+          await store.executeSql(sql);
+        }
+      }
+      const hasQuestionAuthorColumn = migration.toVersion === 11 && await this.hasQuestionAuthorColumn(store);
+      for (let index = 0; index < migration.statements.length && !hasQuestionAuthorColumn; index += 1) {
         await store.executeSql(migration.statements[index]);
       }
       store.version = migration.toVersion;
@@ -161,6 +170,21 @@ export class AppDatabase {
       }
       const message = error instanceof Error ? error.message : 'Database migration failed';
       throw new Error(message);
+    }
+  }
+
+  private async hasQuestionAuthorColumn(store: relationalStore.RdbStore): Promise<boolean> {
+    const columns = await store.querySql('PRAGMA table_info(blocked_users)');
+    try {
+      const nameIndex = columns.getColumnIndex('name');
+      if (columns.goToFirstRow()) {
+        do {
+          if (columns.getString(nameIndex) === 'question_author_only') return true;
+        } while (columns.goToNextRow());
+      }
+      return false;
+    } finally {
+      columns.close();
     }
   }
 

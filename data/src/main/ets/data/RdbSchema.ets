@@ -4,7 +4,7 @@ export interface SchemaMigration {
   statements: Array<string>;
 }
 
-export const CURRENT_SCHEMA_VERSION: number = 9;
+export const CURRENT_SCHEMA_VERSION: number = 11;
 
 export function schemaMigrationTo(targetVersion: number): SchemaMigration {
   if (targetVersion === 1) {
@@ -107,6 +107,24 @@ export function schemaMigrationTo(targetVersion: number): SchemaMigration {
     return {
       fromVersion: 8,
       toVersion: 9,
+      statements: [
+        'CREATE TABLE IF NOT EXISTS remote_read_content (' +
+          'account_key TEXT NOT NULL, content_key TEXT NOT NULL, PRIMARY KEY (account_key, content_key))',
+        'CREATE TABLE IF NOT EXISTS remote_history_sync (account_key TEXT PRIMARY KEY, read_time INTEGER NOT NULL)'
+      ]
+    };
+  }
+  if (targetVersion === 10) {
+    return {
+      fromVersion: 9,
+      toVersion: 10,
+      statements: ['ALTER TABLE remote_history_sync ADD COLUMN last_attempt INTEGER']
+    };
+  }
+  if (targetVersion === 11) {
+    return {
+      fromVersion: 10,
+      toVersion: 11,
       statements: ['ALTER TABLE blocked_users ADD COLUMN question_author_only INTEGER NOT NULL DEFAULT 0']
     };
   }

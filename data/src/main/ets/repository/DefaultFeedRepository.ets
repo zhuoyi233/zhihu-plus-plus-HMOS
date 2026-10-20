@@ -17,6 +17,7 @@ import { FeedRepository } from './FeedRepository';
 import { ContentRepository } from './ContentRepository';
 import { resolveFeedTopics } from './FeedTopicResolver';
 import { QuestionTopicSummary } from '../domain/DomainModels';
+import { RemoteHistorySync } from './RemoteHistorySync';
 
 export const HOME_FEED_INCLUDE =
   'data[*].content,excerpt,headline,target.voteup_count,target.vote_count,target.comment_count,' +
@@ -123,6 +124,7 @@ export class DefaultFeedRepository implements FeedRepository {
   private readonly sessionProvider?: SessionCookieProvider;
   private readonly topicRepository?: ContentRepository;
   private readonly topicCache: Map<string, Array<QuestionTopicSummary>> = new Map();
+  private readonly remoteHistory?: RemoteHistorySync;
   private requestedCursors: Set<string> = new Set<string>();
   private deliveredItemIdentities: Set<string> = new Set<string>();
   private generation: number = 0;
@@ -133,7 +135,7 @@ export class DefaultFeedRepository implements FeedRepository {
   constructor(httpClient: ZhihuHttpClient = new ZhihuHttpClient(), blockingMatcher?: ContentBlockingMatcher,
     recommendationPreferences?: RecommendationFilterPreferencesGateway, startupCache?: HomeFeedStartupCacheGateway,
     mobileHttpClient?: ZhihuMobileHttpClient, sessionProvider?: SessionCookieProvider,
-    topicRepository?: ContentRepository) {
+    remoteHistory?: RemoteHistorySync, topicRepository?: ContentRepository) {
     this.httpClient = httpClient;
     this.blockingMatcher = blockingMatcher;
     this.recommendationPreferences = recommendationPreferences;
@@ -141,6 +143,17 @@ export class DefaultFeedRepository implements FeedRepository {
     this.mobileHttpClient = mobileHttpClient;
     this.sessionProvider = sessionProvider;
     this.topicRepository = topicRepository;
+    this.remoteHistory = remoteHistory;
+  }
+
+  subscribeRemoteReads(listener: () => void): () => void {
+    return this.remoteHistory?.subscribe(listener) ?? ((): void => {});
+  }
+
+  startRemoteReadSync(): void { void this.remoteHistory?.start(); }
+
+  async filterRemoteReads(items: Array<FeedItem>): Promise<Array<FeedItem>> {
+    try { return await this.remoteHistory?.filter(items) ?? items; } catch (_error) { return items; }
   }
 
   cancel(): void {
@@ -168,6 +181,7 @@ export class DefaultFeedRepository implements FeedRepository {
       throw new FeedRepositoryFailure(FeedRepositoryFailureKind.INVALID_CURSOR);
     }
     this.requireConfiguredLogin(preferences);
+    void this.remoteHistory?.start();
     const cursorKey = this.cursorKey(cursor, preferences.recommendationMode);
     if (cursor !== undefined && this.requestedCursors.has(cursorKey)) {
       throw new FeedRepositoryFailure(FeedRepositoryFailureKind.REPEATED_CURSOR);
@@ -183,18 +197,23 @@ export class DefaultFeedRepository implements FeedRepository {
     if (requestGeneration !== this.generation) {
       throw new FeedRepositoryFailure(FeedRepositoryFailureKind.CANCELLED);
     }
-    let visibleItems = decodedPage.items;
+    await this.remoteHistory?.awaitRecentPage();
+    let visibleItems = await this.filterRemoteReads(decodedPage.items);
+    if (requestGeneration !== this.generation) {
+      throw new FeedRepositoryFailure(FeedRepositoryFailureKind.CANCELLED);
+    }
     if (this.blockingMatcher !== undefined) {
-      const blockingSession: ContentBlockingSession = await this.blockingMatcher.createSession();
+      const blockingSession: ContentBlockingSession = await this.blockingMatcher.createSession(
+        visibleItems.map((item: FeedItem): string => feedItemIdentity(item)));
       if (blockingSession.requiresTopicMetadata === true && this.topicRepository !== undefined) {
-        for (let index = 0; index < decodedPage.items.length; index += 1) {
-          await this.enrichTopicMetadata(decodedPage.items[index]);
+        for (let index = 0; index < visibleItems.length; index += 1) {
+          await this.enrichTopicMetadata(visibleItems[index]);
           if (requestGeneration !== this.generation) {
             throw new FeedRepositoryFailure(FeedRepositoryFailureKind.CANCELLED);
           }
         }
       }
-      visibleItems = decodedPage.items.filter((item: FeedItem): boolean => {
+      visibleItems = visibleItems.filter((item: FeedItem): boolean => {
         const summary = blockableFeedSummary(item);
         // 每次按当前会话重算，关闭质量屏蔽/启用反向屏蔽后不得沿用旧原因。
         item.target.qualityFilterReason = blockingSession.qualityReason?.(summary);

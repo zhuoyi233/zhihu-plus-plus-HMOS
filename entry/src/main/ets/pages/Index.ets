@@ -29,6 +29,9 @@ import {
   DefaultRecentFollowingUsersRepository,
   DefaultSearchRepository,
   DefaultOnlineHistoryRepository,
+  HttpRemoteHistorySource,
+  RemoteReadStore,
+  RemoteHistorySync,
   DefaultReadHistoryUploadRepository,
   DefaultLastReadTouchRepository,
   DefaultMobileNotificationRepository,
@@ -54,6 +57,7 @@ import {
   PinLikeRepository,
   SearchRepository,
   SessionRepository,
+  SessionStatus,
   DailyStoryRepository,
   DraftRepository,
   EncryptedDraftBodyStore,
@@ -187,14 +191,26 @@ struct Index {
     const blockingMatcher = new BlockingRuleMatcher(blockingRuleStore, preferencesStore,
       ContentBlockingStrategy.RULES_ONLY);
     sessionOwner.restoreDeferred().catch((_error: Error): void => {
-    }).then((): void => {
+    }).then(async (): Promise<void> => {
+      // 在 AppShell 和关注页挂载前恢复，避免异步读取覆盖用户刚做出的排序选择。
+      const followingTabIndex = await preferencesStore.loadFollowingFeedTabIndex()
+        .catch((_error: Error): number => 0);
+      const followingTimeOrder = await preferencesStore.loadFollowingTimeOrder()
+        .catch((_error: Error): boolean => false);
+      AppStorage.setOrCreate('followingSelectedTabIndex', followingTabIndex);
+      AppStorage.setOrCreate('followingTimeOrder', followingTimeOrder);
       this.session = session;
       this.openedContentStore = openedContentStore;
       this.blockingRuleStore = blockingRuleStore;
       this.blockedFeedHistoryStore = blockedFeedHistoryStore;
       this.preferencesStore = preferencesStore;
+      const remoteHistory = new RemoteHistorySync(new HttpRemoteHistorySource(new ZhihuHttpClient(session)),
+        new RemoteReadStore(getAppDatabase(context)), (): string => {
+          const state = session.getState();
+          return state.status === SessionStatus.AUTHENTICATED ? state.profile?.id ?? '' : '';
+        }, preferencesStore);
       this.homeRepository = new DefaultFeedRepository(new ZhihuHttpClient(session), homeBlockingMatcher,
-        preferencesStore, preferencesStore, new ZhihuMobileHttpClient(session), session,
+        preferencesStore, preferencesStore, new ZhihuMobileHttpClient(session), session, remoteHistory,
         new DefaultContentRepository(new ZhihuHttpClient(session)));
       this.searchRepository = new DefaultSearchRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.followingRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
@@ -214,7 +230,8 @@ struct Index {
       this.peopleContentRepository = new DefaultPeopleContentRepository(new ZhihuHttpClient(session));
       this.pinRepository = new DefaultPinRepository(new ZhihuHttpClient(session));
       this.pinLikeRepository = new DefaultPinLikeRepository(new ZhihuHttpClient(session));
-      this.onlineHistoryRepository = new DefaultOnlineHistoryRepository(new ZhihuHttpClient(session));
+      this.onlineHistoryRepository = new DefaultOnlineHistoryRepository(new ZhihuHttpClient(session),
+        (): Promise<void> => remoteHistory.clear());
       this.readHistoryUploader = new DefaultReadHistoryUploadRepository(new ZhihuHttpClient(session), session);
       this.lastReadTouchRepository = new DefaultLastReadTouchRepository(new ZhihuHttpClient(session), session);
       this.voteRepository = new DefaultVoteRepository(new ZhihuHttpClient(session));
@@ -343,6 +360,7 @@ struct Index {
       recommendRepository: this.followingRecommendRepository,
       usersRepository: this.followingUsersRepository,
       dynamicRepository: this.followingRepository,
+      preferences: this.preferencesStore,
       reloadToken: reloadToken,
       selectedTabIndex: selectedTabIndex,
       navigate: navigate,

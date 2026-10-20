@@ -11,6 +11,9 @@ export const ZHIHU_USER_AGENT =
 export const ZHIHU_CONNECT_TIMEOUT_MS = 10000;
 export const ZHIHU_READ_TIMEOUT_MS = 15000;
 export const ZHIHU_RESPONSE_LIMIT_BYTES = 1024 * 1024;
+// 关注动态会夹带完整正文与聚合条目，真实分页响应可超过 1 MiB。
+// 仅这两个 Feed 接口放宽至 4 MiB，其他接口保留原有接收边界。
+export const ZHIHU_MOMENTS_RESPONSE_LIMIT_BYTES = 4 * 1024 * 1024;
 
 /**
  * 单飞看门狗：正常请求由传输层 connectTimeout/readTimeout（合计最长约 25s）兜底落地；
@@ -283,7 +286,9 @@ export function prepareZhihuHttpRequest(
     connectTimeout: ZHIHU_CONNECT_TIMEOUT_MS,
     readTimeout: ZHIHU_READ_TIMEOUT_MS,
     maxRedirects: 0,
-    maxLimit: ZHIHU_RESPONSE_LIMIT_BYTES
+    maxLimit: /^https:\/\/www\.zhihu\.com\/api\/v3\/moments(?:\?|$)/.test(request.url) ||
+      /^https:\/\/api\.zhihu\.com\/moments_v3(?:\?|$)/.test(request.url)
+      ? ZHIHU_MOMENTS_RESPONSE_LIMIT_BYTES : ZHIHU_RESPONSE_LIMIT_BYTES
   };
 }
 

@@ -29,7 +29,8 @@ import {
   ZhihuHttpResponse,
   ZhihuHttpTransport,
   ZhihuHttpTransportFactory,
-  ZhihuMobileHttpClient
+  ZhihuMobileHttpClient,
+  RemoteReadGateway, RemoteReadRecord, RemoteHistorySource, RemoteHistoryPage, RemoteHistorySync
 } from 'data';
 
 class FixedRecommendationPreferences implements RecommendationFilterPreferencesGateway {
@@ -58,6 +59,22 @@ class MemoryHomeFeedCache implements HomeFeedStartupCacheGateway {
     else this.web = response;
     return Promise.resolve();
   }
+}
+
+class CachedFeedRemoteReads implements RemoteReadGateway {
+  async claimSync(_account: string, _now: number): Promise<boolean> { return false; }
+  async watermark(_account: string): Promise<number> { return 0; }
+  async importPage(_account: string, _records: Array<RemoteReadRecord>): Promise<void> {}
+  async saveWatermark(_account: string, _time: number): Promise<void> {}
+  async readKeys(_account: string, keys: Array<string>): Promise<Array<string>> {
+    return keys.filter((key: string): boolean => key === 'answer:200');
+  }
+  async clear(_account: string): Promise<void> {}
+}
+
+class UnusedFeedHistorySource implements RemoteHistorySource {
+  async load(_url: string): Promise<RemoteHistoryPage> { throw new Error('Sync is already claimed'); }
+  cancel(): void {}
 }
 
 class CountingSessionProvider implements SessionCookieProvider {
@@ -171,8 +188,10 @@ class RecordingFeedBlockingSession implements ContentBlockingSession {
 class RecordingFeedBlockingMatcher implements ContentBlockingMatcher {
   readonly session: RecordingFeedBlockingSession = new RecordingFeedBlockingSession();
   createCount: number = 0;
+  candidateKeys: Array<string> = [];
 
-  createSession(): Promise<ContentBlockingSession> {
+  createSession(candidateKeys?: Array<string>): Promise<ContentBlockingSession> {
+    this.candidateKeys = candidateKeys ?? [];
     this.createCount += 1;
     return Promise.resolve(this.session);
   }
@@ -471,6 +490,44 @@ export default function homeFeedRepositoryTest(): void {
       expect(page.items[0].target.id).assertEqual('1');
     });
 
+    it('combinesRemoteReadAndTopicFilteringWithoutRestoringReadCards', 0, async () => {
+      const mobileCard = MOBILE_PAGE.substring(MOBILE_PAGE.indexOf('[') + 1, MOBILE_PAGE.indexOf('],"paging"'));
+      const mobile = '{"data":[' + mobileCard + ',' +
+        mobileCard.replace(/100/g, '101').replace(/200/g, '201') + ',' +
+        mobileCard.replace(/100/g, '102').replace(/200/g, '202') + '],"paging":{"is_end":true}}';
+      const web = '{"data":[' + [200, 201, 202].map((id: number): string =>
+        '{"id":"feed-' + id + '","target":{"type":"answer","id":"' + id +
+        '","title":"组合过滤","author":{"id":"author-1","name":"作者","is_following":false},"question":{"id":"' +
+        (id - 100) + '","title":"问题"}}}').join(',') + '],"paging":{"is_end":true}}';
+      for (const mode of [RecommendationMode.WEB, RecommendationMode.ANDROID]) {
+        const preferences = new FixedRecommendationPreferences();
+        preferences.value.recommendationMode = mode;
+        preferences.value.loginForRecommendation = false;
+        const feed = new SequenceFeedTransportFactory([{ statusCode: 200,
+          body: mode === RecommendationMode.WEB ? web : mobile }]);
+        const details = new SequenceFeedTransportFactory([
+          { statusCode: 200, body: '{"id":"101","title":"问题","topics":[{"id":"11","name":"屏蔽话题"}]}' },
+          { statusCode: 200, body: '{"id":"102","title":"问题","topics":[{"id":"12","name":"保留话题"}]}' }
+        ]);
+        const matcher = new RecordingFeedBlockingMatcher();
+        matcher.session.requiresTopicMetadata = true;
+        matcher.session.blockedTopicId = '11';
+        const remote = new RemoteHistorySync(new UnusedFeedHistorySource(), new CachedFeedRemoteReads(),
+          (): string => 'account', preferences);
+        const repository = new DefaultFeedRepository(new ZhihuHttpClient(undefined, feed), matcher,
+          preferences, undefined, undefined, undefined, remote,
+          new DefaultContentRepository(new ZhihuHttpClient(new CountingSessionProvider(), details)));
+        const page = await repository.loadHomePage();
+        expect(page.items.length).assertEqual(1);
+        expect(page.items[0].target.id).assertEqual('202');
+        expect(matcher.candidateKeys.join(',')).assertEqual('answer:201,answer:202');
+        expect(matcher.session.summaries.length).assertEqual(2);
+        expect(details.requests.length).assertEqual(2);
+        expect(details.requests[0].url.includes('/questions/101?')).assertTrue();
+        expect(details.requests[1].url.includes('/questions/102?')).assertTrue();
+      }
+    });
+
     it('filtersMissingTopicMetadataAndCachesItAcrossRefreshes', 0, async () => {
       const factory = new SequenceFeedTransportFactory([{ statusCode: 200, body: MOBILE_PAGE },
         { statusCode: 200, body: MOBILE_PAGE }]);
@@ -483,7 +540,7 @@ export default function homeFeedRepositoryTest(): void {
       preferences.value.recommendationMode = RecommendationMode.ANDROID;
       preferences.value.loginForRecommendation = false;
       const repository = new DefaultFeedRepository(new ZhihuHttpClient(undefined, factory), matcher,
-        preferences, undefined, undefined, undefined,
+        preferences, undefined, undefined, undefined, undefined,
         new DefaultContentRepository(new ZhihuHttpClient(new CountingSessionProvider(), details)));
       expect((await repository.loadHomePage()).items.length).assertEqual(0);
       expect((await repository.loadHomePage()).items.length).assertEqual(0);
@@ -496,7 +553,7 @@ export default function homeFeedRepositoryTest(): void {
       const factory = new SequenceFeedTransportFactory([{ statusCode: 200, body: FIRST_PAGE }]);
       const details = new SequenceFeedTransportFactory([]);
       const repository = new DefaultFeedRepository(new ZhihuHttpClient(new CountingSessionProvider(), factory),
-        new RecordingFeedBlockingMatcher(), undefined, undefined, undefined, undefined,
+        new RecordingFeedBlockingMatcher(), undefined, undefined, undefined, undefined, undefined,
         new DefaultContentRepository(new ZhihuHttpClient(new CountingSessionProvider(), details)));
       expect((await repository.loadHomePage()).items.length).assertEqual(1);
       expect(details.requests.length).assertEqual(0);
@@ -514,7 +571,7 @@ export default function homeFeedRepositoryTest(): void {
       preferences.value.recommendationMode = RecommendationMode.ANDROID;
       preferences.value.loginForRecommendation = false;
       const repository = new DefaultFeedRepository(new ZhihuHttpClient(undefined, factory), matcher,
-        preferences, undefined, undefined, undefined,
+        preferences, undefined, undefined, undefined, undefined,
         new DefaultContentRepository(new ZhihuHttpClient(new CountingSessionProvider(), details)));
       expect((await repository.loadHomePage()).items.length).assertEqual(1);
       expect((await repository.loadHomePage()).items.length).assertEqual(0);

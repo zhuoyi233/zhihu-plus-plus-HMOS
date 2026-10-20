@@ -126,6 +126,31 @@ export default function zhihuHttpClientTest(): void {
       expect(prepared.maxLimit).assertEqual(1024 * 1024);
     });
 
+    it('allowsLargeFollowingPagesWithoutExpandingOtherResponseLimits', 0, () => {
+      const timeline = prepareZhihuHttpRequest({
+        url: 'https://www.zhihu.com/api/v3/moments?limit=10&desktop=true'
+      });
+      const timelineNext = prepareZhihuHttpRequest({
+        url: 'https://www.zhihu.com/api/v3/moments?offset=1791622293000&limit=10'
+      });
+      const recommend = prepareZhihuHttpRequest({
+        url: 'https://api.zhihu.com/moments_v3?feed_type=recommend&offset=10'
+      });
+      expect(timeline.maxLimit).assertEqual(4 * 1024 * 1024);
+      expect(timelineNext.maxLimit).assertEqual(4 * 1024 * 1024);
+      expect(recommend.maxLimit).assertEqual(4 * 1024 * 1024);
+      const unchanged: Array<string> = [
+        'https://www.zhihu.com/api/v3/moments/alice/activities',
+        'https://www.zhihu.com/api/v3/moments_other',
+        'https://api.zhihu.com/moments_v3_other',
+        'https://www.zhihu.com/api/v3/feed/topstory/hot-lists/total',
+        'https://daily.zhihu.com/api/4/stories/latest'
+      ];
+      unchanged.forEach((url: string): void => {
+        expect(prepareZhihuHttpRequest({ url: url }).maxLimit).assertEqual(1024 * 1024);
+      });
+    });
+
     it('rejectsUntrustedUrlsWithoutReadingSession', 0, async () => {
       const rejectedUrls: Array<string> = [
         'http://www.zhihu.com/api/v4/me',

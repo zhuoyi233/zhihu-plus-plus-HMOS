@@ -49,21 +49,23 @@ export default function persistenceTest(): void {
     });
 
     it('plansOnlyContiguousPendingMigrations', 0, () => {
-      expect(pendingSchemaVersions(0).join(',')).assertEqual('1,2,3,4,5,6,7,8,9');
-      expect(pendingSchemaVersions(1).join(',')).assertEqual('2,3,4,5,6,7,8,9');
-      expect(pendingSchemaVersions(2).join(',')).assertEqual('3,4,5,6,7,8,9');
-      expect(pendingSchemaVersions(3).join(',')).assertEqual('4,5,6,7,8,9');
-      expect(pendingSchemaVersions(4).join(',')).assertEqual('5,6,7,8,9');
-      expect(pendingSchemaVersions(5).join(',')).assertEqual('6,7,8,9');
-      expect(pendingSchemaVersions(6).join(',')).assertEqual('7,8,9');
-      expect(pendingSchemaVersions(7).join(',')).assertEqual('8,9');
-      expect(pendingSchemaVersions(8).join(',')).assertEqual('9');
-      expect(pendingSchemaVersions(9).length).assertEqual(0);
+      expect(pendingSchemaVersions(0).join(',')).assertEqual('1,2,3,4,5,6,7,8,9,10,11');
+      expect(pendingSchemaVersions(1).join(',')).assertEqual('2,3,4,5,6,7,8,9,10,11');
+      expect(pendingSchemaVersions(2).join(',')).assertEqual('3,4,5,6,7,8,9,10,11');
+      expect(pendingSchemaVersions(3).join(',')).assertEqual('4,5,6,7,8,9,10,11');
+      expect(pendingSchemaVersions(4).join(',')).assertEqual('5,6,7,8,9,10,11');
+      expect(pendingSchemaVersions(5).join(',')).assertEqual('6,7,8,9,10,11');
+      expect(pendingSchemaVersions(6).join(',')).assertEqual('7,8,9,10,11');
+      expect(pendingSchemaVersions(7).join(',')).assertEqual('8,9,10,11');
+      expect(pendingSchemaVersions(8).join(',')).assertEqual('9,10,11');
+      expect(pendingSchemaVersions(9).join(',')).assertEqual('10,11');
+      expect(pendingSchemaVersions(10).join(',')).assertEqual('11');
+      expect(pendingSchemaVersions(11).length).assertEqual(0);
     });
 
     it('rejectsInvalidDatabaseVersions', 0, () => {
       expect(() => pendingSchemaVersions(-1)).assertThrowError('Unsupported schema version: -1');
-      expect(() => pendingSchemaVersions(10)).assertThrowError('Unsupported schema version: 10');
+      expect(() => pendingSchemaVersions(12)).assertThrowError('Unsupported schema version: 12');
       expect(() => pendingSchemaVersions(1.5)).assertThrowError('Unsupported schema version: 1.5');
     });
 

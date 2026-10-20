@@ -11,6 +11,7 @@ import {
   UserProfile
 } from './DomainModels';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { htmlExcerptToText } from './HtmlExcerpt';
 import {
   JsonArrayValue,
   jsonBoolean,
@@ -318,7 +319,7 @@ function feedTargetFromObject(object: JsonObjectValue): FeedTargetSummary {
     kind: kind,
     id: requiredId(object.get('id'), 'feed.target.id'),
     title: title,
-    excerpt: textOrEmpty(object.get('excerpt'), 'feed.target.excerpt'),
+    excerpt: htmlExcerptToText(textOrEmpty(object.get('excerpt'), 'feed.target.excerpt')),
     url: textOrEmpty(object.get('url'), 'feed.target.url'),
     voteupCount: optionalNumberStrict(
       kind === FeedTargetKind.VIDEO ? object.get('vote_count') : object.get('voteup_count'),

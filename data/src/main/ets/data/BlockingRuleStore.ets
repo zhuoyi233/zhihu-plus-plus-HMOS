@@ -119,7 +119,7 @@ export interface ContentBlockingSession {
 }
 
 export interface ContentBlockingMatcher {
-  createSession(): Promise<ContentBlockingSession>;
+  createSession(candidateKeys?: Array<string>): Promise<ContentBlockingSession>;
 }
 
 export enum ContentBlockingStrategy {
@@ -145,7 +145,7 @@ export interface ContentFilterStats {
 }
 
 export interface ContentFilterRuntimeGateway {
-  loadSnapshot(): Promise<ContentFilterRuntimeSnapshot>;
+  loadSnapshot(candidateKeys?: Array<string>): Promise<ContentFilterRuntimeSnapshot>;
   recordOutcomes(outcomes: Array<ContentFilterOutcome>): Promise<void>;
   loadStats(): Promise<ContentFilterStats>;
   cleanupOldData(cutoff: number): Promise<void>;
@@ -358,15 +358,17 @@ export function matchRecommendationFilters(content: BlockableContentSummary,
   if (!preferences.filterFollowedUserContent && content.authorIsFollowing === true) {
     return undefined;
   }
+  if (preferences.enableContentFilter && content.authorIsFollowing !== true &&
+    (content.opened === true || (content.viewCount ?? 0) > 0)) {
+    return { kind: BlockingRuleKind.SMART, ruleId: content.contentId ?? 'content',
+      reason: '已读过且未关注作者' };
+  }
   if (promotional !== undefined) {
     return promotional;
   }
   const qualityReason = qualityFilterReason(content, preferences);
   if (qualityReason !== undefined && preferences.qualityFilterMode === QualityFilterMode.HIDE) {
     return { kind: BlockingRuleKind.QUALITY, ruleId: content.contentKind ?? 'content', reason: qualityReason };
-  }
-  if (preferences.enableContentFilter && content.opened !== true && (content.viewCount ?? 0) >= 2) {
-    return { kind: BlockingRuleKind.SMART, ruleId: content.contentId ?? 'content', reason: '已展示超过2次且未点击' };
   }
   return undefined;
 }
@@ -387,7 +389,7 @@ export class BlockingRuleMatcher implements ContentBlockingMatcher {
     this.runtime = runtime;
   }
 
-  async createSession(): Promise<ContentBlockingSession> {
+  async createSession(candidateKeys?: Array<string>): Promise<ContentBlockingSession> {
     try {
       const snapshot = await this.rules.loadSnapshot();
       const preferences = await this.preferences.loadBlockingPreferences();
@@ -398,7 +400,7 @@ export class BlockingRuleMatcher implements ContentBlockingMatcher {
         throw new Error('Home content blocking dependencies unavailable');
       }
       const recommendation = await this.recommendationPreferences.loadRecommendationFilterPreferences();
-      const runtimeSnapshot = await this.runtime.loadSnapshot();
+      const runtimeSnapshot = await this.runtime.loadSnapshot(candidateKeys);
       return new BlockingRuleMatchSession(this.strategy, snapshot, preferences, recommendation, runtimeSnapshot,
         this.runtime);
     } catch (_error) {

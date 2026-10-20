@@ -66,6 +66,7 @@ export struct ContentFilterSettingsPage {
   @State private thresholdKey: ThresholdKey = 'answerVoteupThreshold';
   @State private thresholdInput: string = '';
   @State private resetConfirmation: boolean = false;
+  @State private advancedThresholdsExpanded: boolean = false;
   @State private stats: ContentFilterStats = { totalSeen: 0, totalFiltered: 0, filterRate: 0, lastFilteredAt: 0 };
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
 
@@ -117,20 +118,31 @@ export struct ContentFilterSettingsPage {
           this.thresholdSetting('文章最低赞数', '低于此赞数或作者粉丝低于对应阈值的文章会被过滤',
             'articleVoteupThreshold', true, 'filter_article_vote_threshold')
           Divider().color($r('app.color.divider_color'))
-          this.thresholdSetting('文章最低粉丝数', '文章作者粉丝数低于此值时应用质量过滤',
-            'articleFollowersThreshold', true, 'filter_article_follower_threshold')
-          Divider().color($r('app.color.divider_color'))
-          this.thresholdSetting('视频最低赞数', '视频赞同数低于此值时应用质量过滤',
-            'videoVoteThreshold', true, 'filter_video_vote_threshold')
-          Divider().color($r('app.color.divider_color'))
-          this.thresholdSetting('视频最低粉丝数', '视频作者粉丝数低于此值时应用质量过滤',
-            'videoFollowersThreshold', true, 'filter_video_follower_threshold')
-          Divider().color($r('app.color.divider_color'))
-          this.thresholdSetting('问题最低回答数', '问题回答数低于此值时应用质量过滤',
-            'questionAnswerThreshold', true, 'filter_question_answer_threshold')
-          Divider().color($r('app.color.divider_color'))
-          this.thresholdSetting('问题最低关注数', '问题关注数低于此值时应用质量过滤',
-            'questionFollowersThreshold', true, 'filter_question_follower_threshold')
+          // 按分支重建入口，避免 @Builder 的描述参数固化在首次渲染值。
+          if (this.advancedThresholdsExpanded) {
+            this.navigationSetting('其他质量过滤阈值', '文章粉丝数、视频和问题规则 · 收起',
+              'filter_advanced_thresholds', (): void => { this.advancedThresholdsExpanded = false; })
+          } else {
+            this.navigationSetting('其他质量过滤阈值', '文章粉丝数、视频和问题规则 · 展开',
+              'filter_advanced_thresholds', (): void => { this.advancedThresholdsExpanded = true; })
+          }
+          if (this.advancedThresholdsExpanded) {
+            Divider().color($r('app.color.divider_color'))
+            this.thresholdSetting('文章最低粉丝数', '文章作者粉丝数低于此值时应用质量过滤',
+              'articleFollowersThreshold', true, 'filter_article_follower_threshold')
+            Divider().color($r('app.color.divider_color'))
+            this.thresholdSetting('视频最低赞数', '视频赞同数低于此值时应用质量过滤',
+              'videoVoteThreshold', true, 'filter_video_vote_threshold')
+            Divider().color($r('app.color.divider_color'))
+            this.thresholdSetting('视频最低粉丝数', '视频作者粉丝数低于此值时应用质量过滤',
+              'videoFollowersThreshold', true, 'filter_video_follower_threshold')
+            Divider().color($r('app.color.divider_color'))
+            this.thresholdSetting('问题最低回答数', '问题回答数低于此值时应用质量过滤',
+              'questionAnswerThreshold', true, 'filter_question_answer_threshold')
+            Divider().color($r('app.color.divider_color'))
+            this.thresholdSetting('问题最低关注数', '问题关注数低于此值时应用质量过滤',
+              'questionFollowersThreshold', true, 'filter_question_follower_threshold')
+          }
         }
         .width('100%')
         .borderRadius($r('app.float.card_radius'))
@@ -138,14 +150,20 @@ export struct ContentFilterSettingsPage {
 
         this.sectionTitle('智能与规则过滤')
         Column() {
-          this.switchSetting('启用智能内容过滤', '自动过滤首页展示超过2次但用户未点击的内容，减少重复推荐',
+          this.switchSetting('启用智能内容过滤', '过滤本机和服务器已读，以及已展示过的内容；已读保留已关注作者',
             this.filter.enableContentFilter, true, 'filter_smart_enabled', (value: boolean): void =>
               this.updateFilterBoolean('enableContentFilter', value))
           Divider().color($r('app.color.divider_color'))
-          this.switchSetting('过滤已关注用户内容', '关闭后，已关注作者的内容始终显示',
-            this.filter.filterFollowedUserContent, this.filter.enableContentFilter,
-            'filter_followed_user', (value: boolean): void =>
-              this.updateFilterBoolean('filterFollowedUserContent', value))
+          // 按值传给 @Builder 的 enabled 不会更新已挂载控件；切换分支重建，保持与总开关联动。
+          if (this.filter.enableContentFilter) {
+            this.switchSetting('过滤已关注用户内容', '关闭后，已关注作者的内容始终显示',
+              this.filter.filterFollowedUserContent, true, 'filter_followed_user', (value: boolean): void =>
+                this.updateFilterBoolean('filterFollowedUserContent', value))
+          } else {
+            this.switchSetting('过滤已关注用户内容', '关闭后，已关注作者的内容始终显示',
+              this.filter.filterFollowedUserContent, false, 'filter_followed_user', (value: boolean): void =>
+                this.updateFilterBoolean('filterFollowedUserContent', value))
+          }
           Divider().color($r('app.color.divider_color'))
           this.ruleSwitchSetting('启用关键词屏蔽', '屏蔽包含特定关键词的内容',
             this.rules.keywordBlockingEnabled, 'keywordBlockingEnabled', 'filter_keyword_enabled')
@@ -155,9 +173,11 @@ export struct ContentFilterSettingsPage {
           Divider().color($r('app.color.divider_color'))
           this.ruleSwitchSetting('启用主题屏蔽', '屏蔽包含特定主题的内容',
             this.rules.topicBlockingEnabled, 'topicBlockingEnabled', 'filter_topic_enabled')
-          Divider().color($r('app.color.divider_color'))
-          this.thresholdSetting('主题屏蔽阈值', '命中的已屏蔽主题数量达到此值时过滤内容',
-            'topicBlockingThreshold', this.rules.topicBlockingEnabled, 'filter_topic_threshold')
+          if (this.rules.topicBlockingEnabled) {
+            Divider().color($r('app.color.divider_color'))
+            this.thresholdSetting('主题屏蔽阈值', '命中的已屏蔽主题数量达到此值时过滤内容',
+              'topicBlockingThreshold', true, 'filter_topic_threshold')
+          }
         }
         .width('100%')
         .borderRadius($r('app.float.card_radius'))
@@ -196,10 +216,12 @@ export struct ContentFilterSettingsPage {
           Divider().color($r('app.color.divider_color'))
           this.navigationSetting('屏蔽记录', '查看最近被过滤或手动隐藏的内容', 'filter_open_history',
             this.onOpenBlockedHistory)
-          Divider().color($r('app.color.divider_color'))
-          this.navigationSetting('过滤统计', '查看当前保留记录的过滤率，并清理或重置数据', 'filter_statistics', (): void => {
-            void this.openStats();
-          })
+          if (this.filter.enableContentFilter) {
+            Divider().color($r('app.color.divider_color'))
+            this.navigationSetting('过滤统计', '查看当前保留记录的过滤率，并清理或重置数据', 'filter_statistics', (): void => {
+              void this.openStats();
+            })
+          }
         }
         .width('100%')
         .borderRadius($r('app.float.card_radius'))
