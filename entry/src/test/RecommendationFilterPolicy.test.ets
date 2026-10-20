@@ -137,8 +137,20 @@ export default function recommendationFilterPolicyTest(): void {
     it('filtersRepeatedUnopenedContentAndSupportsReverseBlocking', 0, () => {
       const preferences: RecommendationFilterPreferences = defaultRecommendationFilterPreferences();
       const repeated = content();
+      expect(matchRecommendationFilters(repeated, preferences)).assertUndefined();
+      repeated.viewCount = 0;
+      expect(matchRecommendationFilters(repeated, preferences)).assertUndefined();
+      repeated.viewCount = 1;
+      expect(matchRecommendationFilters(repeated, preferences)?.reason).assertEqual('已读过且未关注作者');
       repeated.viewCount = 2;
       expect(matchRecommendationFilters(repeated, preferences)?.kind).assertEqual(BlockingRuleKind.SMART);
+      repeated.authorIsFollowing = true;
+      preferences.filterFollowedUserContent = true;
+      expect(matchRecommendationFilters(repeated, preferences)).assertUndefined();
+      repeated.authorIsFollowing = false;
+      preferences.enableContentFilter = false;
+      expect(matchRecommendationFilters(repeated, preferences)).assertUndefined();
+      preferences.enableContentFilter = true;
       repeated.opened = true;
       expect(matchRecommendationFilters(repeated, preferences)?.reason).assertEqual('已读过且未关注作者');
       preferences.reverseBlock = true;

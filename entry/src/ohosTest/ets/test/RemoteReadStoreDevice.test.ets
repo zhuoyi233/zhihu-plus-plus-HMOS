@@ -242,6 +242,35 @@ export default function remoteReadStoreDeviceTest(): void {
       expect((await matcher.createSession(['answer:1'])).match(summary)?.kind).assertEqual(BlockingRuleKind.REVERSE);
     });
 
+    it('filtersTheSecondRecommendationAfterOnePersistedExposureWithoutAnOpen', 0, async () => {
+      const preferences = new DevicePreferences();
+      const runtime = new ContentFilterRuntimeStore(database, new BlockedFeedHistoryStore(database));
+      const matcher = new BlockingRuleMatcher(new BlockingRuleStore(database), preferences,
+        ContentBlockingStrategy.HOME_FULL, preferences, runtime);
+      const summary: BlockableContentSummary = {
+        contentId: 'exposure-only', contentKind: 'answer', title: '首次曝光', excerpt: '', topicIds: []
+      };
+      const first = await matcher.createSession(['answer:exposure-only']);
+      expect(first.match(summary)).assertUndefined();
+      await first.flush?.();
+      await database.close();
+      const saved = await runtime.loadSnapshot(['answer:exposure-only']);
+      expect(saved.viewCounts['answer:exposure-only']).assertEqual(1);
+      expect(saved.openedKeys.length).assertEqual(0);
+      const second = await matcher.createSession(['answer:exposure-only', 'article:exposure-only']);
+      expect(second.match(summary)?.reason).assertEqual('已读过且未关注作者');
+      expect(second.match({ contentId: 'exposure-only', contentKind: 'article', title: '', excerpt: '', topicIds: [] }))
+        .assertUndefined();
+      await second.flush?.();
+      expect((await runtime.loadSnapshot(['answer:exposure-only'])).viewCounts['answer:exposure-only']).assertEqual(1);
+      preferences.value.filterFollowedUserContent = true;
+      expect((await matcher.createSession(['answer:exposure-only'])).match({
+        contentId: 'exposure-only', contentKind: 'answer', title: '', excerpt: '', topicIds: [], authorIsFollowing: true
+      })).assertUndefined();
+      preferences.value.enableContentFilter = false;
+      expect((await matcher.createSession(['answer:exposure-only'])).match(summary)).assertUndefined();
+    });
+
     it('retainsLocalReadIdentitiesBeyondTheDisplayLimitAndLoadsOnlyCandidateBatches', 0, async () => {
       const local = new OpenedContentStore(database);
       const keys: Array<string> = [];

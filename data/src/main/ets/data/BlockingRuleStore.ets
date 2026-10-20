@@ -351,9 +351,9 @@ export function matchRecommendationFilters(content: BlockableContentSummary,
     return undefined;
   }
   if (preferences.enableContentFilter && content.authorIsFollowing !== true &&
-    (content.opened === true || (content.viewCount ?? 0) >= 2)) {
+    (content.opened === true || (content.viewCount ?? 0) > 0)) {
     return { kind: BlockingRuleKind.SMART, ruleId: content.contentId ?? 'content',
-      reason: content.opened === true ? '已读过且未关注作者' : '已展示超过2次且未点击' };
+      reason: '已读过且未关注作者' };
   }
   if (promotional !== undefined) {
     return promotional;
