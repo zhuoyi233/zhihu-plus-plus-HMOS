@@ -12,8 +12,10 @@ export default function rdbSchemaTest(): void {
       const sixth = schemaMigrationTo(6);
       const seventh = schemaMigrationTo(7);
       const eighth = schemaMigrationTo(8);
+      const ninth = schemaMigrationTo(9);
+      const tenth = schemaMigrationTo(10);
 
-      expect(CURRENT_SCHEMA_VERSION).assertEqual(8);
+      expect(CURRENT_SCHEMA_VERSION).assertEqual(10);
       expect(first.fromVersion).assertEqual(0);
       expect(first.toVersion).assertEqual(second.fromVersion);
       expect(second.toVersion).assertEqual(third.fromVersion);
@@ -22,7 +24,9 @@ export default function rdbSchemaTest(): void {
       expect(fifth.toVersion).assertEqual(sixth.fromVersion);
       expect(sixth.toVersion).assertEqual(seventh.fromVersion);
       expect(seventh.toVersion).assertEqual(eighth.fromVersion);
-      expect(eighth.toVersion).assertEqual(CURRENT_SCHEMA_VERSION);
+      expect(eighth.toVersion).assertEqual(ninth.fromVersion);
+      expect(ninth.toVersion).assertEqual(tenth.fromVersion);
+      expect(tenth.toVersion).assertEqual(CURRENT_SCHEMA_VERSION);
       expect(eighth.statements[0]).assertEqual('DROP TABLE IF EXISTS content_filter_stats');
     });
 
@@ -87,7 +91,7 @@ export default function rdbSchemaTest(): void {
     it('rejectsUnknownSchemaVersion', 0, () => {
       let rejected = false;
       try {
-        schemaMigrationTo(9);
+        schemaMigrationTo(11);
       } catch (_error) {
         rejected = true;
       }

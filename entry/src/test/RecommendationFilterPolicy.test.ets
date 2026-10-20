@@ -140,11 +140,25 @@ export default function recommendationFilterPolicyTest(): void {
       repeated.viewCount = 2;
       expect(matchRecommendationFilters(repeated, preferences)?.kind).assertEqual(BlockingRuleKind.SMART);
       repeated.opened = true;
-      expect(matchRecommendationFilters(repeated, preferences)).assertUndefined();
+      expect(matchRecommendationFilters(repeated, preferences)?.reason).assertEqual('已读过且未关注作者');
       preferences.reverseBlock = true;
       expect(matchRecommendationFilters(repeated, preferences)?.kind).assertEqual(BlockingRuleKind.REVERSE);
       repeated.isPaid = true;
       expect(matchRecommendationFilters(repeated, preferences)).assertUndefined();
+    });
+
+    it('filtersLocalReadsOnTheirFirstRecommendationAndKeepsTheFollowedAuthorException', 0, () => {
+      const preferences = defaultRecommendationFilterPreferences();
+      const opened = content();
+      opened.opened = true;
+      opened.viewCount = 0;
+      expect(matchRecommendationFilters(opened, preferences)?.kind).assertEqual(BlockingRuleKind.SMART);
+      opened.authorIsFollowing = true;
+      preferences.filterFollowedUserContent = true;
+      expect(matchRecommendationFilters(opened, preferences)).assertUndefined();
+      opened.authorIsFollowing = false;
+      preferences.enableContentFilter = false;
+      expect(matchRecommendationFilters(opened, preferences)).assertUndefined();
     });
   });
 }

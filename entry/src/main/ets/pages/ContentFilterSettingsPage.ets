@@ -138,7 +138,7 @@ export struct ContentFilterSettingsPage {
 
         this.sectionTitle('智能与规则过滤')
         Column() {
-          this.switchSetting('启用智能内容过滤', '自动过滤首页展示超过2次但用户未点击的内容，减少重复推荐',
+          this.switchSetting('启用智能内容过滤', '过滤本机和服务器已读，以及多次展示未点击的内容；已读保留已关注作者',
             this.filter.enableContentFilter, true, 'filter_smart_enabled', (value: boolean): void =>
               this.updateFilterBoolean('enableContentFilter', value))
           Divider().color($r('app.color.divider_color'))

@@ -29,6 +29,9 @@ import {
   DefaultRecentFollowingUsersRepository,
   DefaultSearchRepository,
   DefaultOnlineHistoryRepository,
+  HttpRemoteHistorySource,
+  RemoteReadStore,
+  RemoteHistorySync,
   DefaultReadHistoryUploadRepository,
   DefaultLastReadTouchRepository,
   DefaultMobileNotificationRepository,
@@ -54,6 +57,7 @@ import {
   PinLikeRepository,
   SearchRepository,
   SessionRepository,
+  SessionStatus,
   DailyStoryRepository,
   DraftRepository,
   EncryptedDraftBodyStore,
@@ -193,8 +197,13 @@ struct Index {
       this.blockingRuleStore = blockingRuleStore;
       this.blockedFeedHistoryStore = blockedFeedHistoryStore;
       this.preferencesStore = preferencesStore;
+      const remoteHistory = new RemoteHistorySync(new HttpRemoteHistorySource(new ZhihuHttpClient(session)),
+        new RemoteReadStore(getAppDatabase(context)), (): string => {
+          const state = session.getState();
+          return state.status === SessionStatus.AUTHENTICATED ? state.profile?.id ?? '' : '';
+        }, preferencesStore);
       this.homeRepository = new DefaultFeedRepository(new ZhihuHttpClient(session), homeBlockingMatcher,
-        preferencesStore, preferencesStore, new ZhihuMobileHttpClient(session), session);
+        preferencesStore, preferencesStore, new ZhihuMobileHttpClient(session), session, remoteHistory);
       this.searchRepository = new DefaultSearchRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.followingRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.followingRecommendRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
@@ -213,7 +222,8 @@ struct Index {
       this.peopleContentRepository = new DefaultPeopleContentRepository(new ZhihuHttpClient(session));
       this.pinRepository = new DefaultPinRepository(new ZhihuHttpClient(session));
       this.pinLikeRepository = new DefaultPinLikeRepository(new ZhihuHttpClient(session));
-      this.onlineHistoryRepository = new DefaultOnlineHistoryRepository(new ZhihuHttpClient(session));
+      this.onlineHistoryRepository = new DefaultOnlineHistoryRepository(new ZhihuHttpClient(session),
+        (): Promise<void> => remoteHistory.clear());
       this.readHistoryUploader = new DefaultReadHistoryUploadRepository(new ZhihuHttpClient(session), session);
       this.lastReadTouchRepository = new DefaultLastReadTouchRepository(new ZhihuHttpClient(session), session);
       this.voteRepository = new DefaultVoteRepository(new ZhihuHttpClient(session));

@@ -70,6 +70,11 @@ export class HomeFeedController {
   private retryLoadMore: boolean = false;
   private paginationRetryRequired: boolean = false;
   private refreshPending: boolean = false;
+  private unsubscribeRemoteReads?: () => void;
+  private readonly browsed: Set<string> = new Set<string>();
+  private visibleRangeKnown: boolean = false;
+  private remoteFilterPending: boolean = false;
+  private remoteFilterRunning: boolean = false;
 
   constructor(repository: FeedRepository, observer: HomeFeedStateObserver = (_state: HomeFeedViewState): void => {
   }) {
@@ -82,6 +87,13 @@ export class HomeFeedController {
       return;
     }
     this.active = true;
+    this.unsubscribeRemoteReads = this.repository.subscribeRemoteReads?.((): void => {
+      this.remoteFilterPending = true;
+      void this.filterUnbrowsedTail();
+    });
+    this.repository.startRemoteReadSync?.();
+    this.remoteFilterPending = true;
+    void this.filterUnbrowsedTail();
     this.refreshing = false;
     this.loadingMore = false;
     this.phase = this.items.length > 0 ? HomeFeedPhase.READY : HomeFeedPhase.IDLE;
@@ -93,6 +105,8 @@ export class HomeFeedController {
       return;
     }
     this.active = false;
+    this.unsubscribeRemoteReads?.();
+    this.unsubscribeRemoteReads = undefined;
     this.generation += 1;
     this.refreshing = false;
     this.loadingMore = false;
@@ -110,6 +124,44 @@ export class HomeFeedController {
       errorMessage: this.errorMessage,
       requiresLogin: this.requiresLogin
     };
+  }
+
+  /** 记录曾经到达过的最远可见位置，异步同步结果不能移除用户已浏览的前缀。 */
+  markVisibleThrough(index: number): void {
+    if (!this.active || index < 0) return;
+    this.visibleRangeKnown = true;
+    for (let current = 0; current <= index && current < this.items.length; current += 1) {
+      this.browsed.add(feedItemIdentity(this.items[current]));
+    }
+    void this.filterUnbrowsedTail();
+  }
+
+  private async filterUnbrowsedTail(): Promise<void> {
+    if (!this.active || !this.visibleRangeKnown || !this.remoteFilterPending || this.remoteFilterRunning ||
+      this.refreshing || this.loadingMore || this.phase === HomeFeedPhase.INITIAL_LOADING ||
+      this.repository.filterRemoteReads === undefined) return;
+    const generation = this.generation;
+    this.remoteFilterPending = false;
+    this.remoteFilterRunning = true;
+    const candidates = this.items.filter((item: FeedItem): boolean => !this.browsed.has(feedItemIdentity(item)));
+    try {
+      const kept = await this.repository.filterRemoteReads(candidates);
+      if (!this.isCurrent(generation)) return;
+      const removed = new Set<string>(candidates.map((item: FeedItem): string => feedItemIdentity(item)));
+      kept.forEach((item: FeedItem): void => { removed.delete(feedItemIdentity(item)); });
+      // await 期间仍可滚动，按最新的已浏览前缀再检查一次。
+      this.items = this.items.filter((item: FeedItem): boolean =>
+        this.browsed.has(feedItemIdentity(item)) || !removed.has(feedItemIdentity(item)));
+      if (removed.size > 0) {
+        this.phase = this.items.length > 0 ? HomeFeedPhase.READY : HomeFeedPhase.EMPTY;
+        this.emit();
+      }
+    } catch (_error) {
+      // 同步或本地查询失败不影响已展示推荐。
+    } finally {
+      this.remoteFilterRunning = false;
+      if (this.remoteFilterPending) void this.filterUnbrowsedTail();
+    }
   }
 
   loadInitial(): Promise<void> {
@@ -184,6 +236,7 @@ export class HomeFeedController {
       if (this.isCurrent(generation)) {
         this.loadingMore = false;
         this.emit();
+        void this.filterUnbrowsedTail();
         if (this.refreshPending) {
           this.refreshPending = false;
           void this.refresh();
@@ -210,6 +263,9 @@ export class HomeFeedController {
         return;
       }
       this.items = mergeUniqueFeedItems([], page.items);
+      this.browsed.clear();
+      this.visibleRangeKnown = false;
+      this.remoteFilterPending = true;
       this.applyCursor(page);
       this.phase = this.items.length > 0 ? HomeFeedPhase.READY : HomeFeedPhase.EMPTY;
       this.retryLoadMore = this.items.length === 0 && this.hasNextPage();
@@ -228,6 +284,7 @@ export class HomeFeedController {
       if (this.isCurrent(generation)) {
         this.refreshing = false;
         this.emit();
+        void this.filterUnbrowsedTail();
         if (this.refreshPending) {
           this.refreshPending = false;
           void this.refresh();

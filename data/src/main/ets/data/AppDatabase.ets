@@ -44,16 +44,17 @@ export function pendingSchemaVersions(currentVersion: number): Array<number> {
 
 export class AppDatabase {
   private readonly context: common.Context;
-  private readonly config: relationalStore.StoreConfig = {
-    name: DATABASE_NAME,
-    securityLevel: relationalStore.SecurityLevel.S1
-  };
+  private readonly config: relationalStore.StoreConfig;
   private store: relationalStore.RdbStore | undefined = undefined;
   private opening: Promise<relationalStore.RdbStore> | undefined = undefined;
   private closing: Promise<void> | undefined = undefined;
 
-  constructor(context: common.Context) {
+  constructor(context: common.Context, databaseName: string = DATABASE_NAME) {
+    if (!/^[A-Za-z0-9_]+\.db$/.test(databaseName)) {
+      throw new Error('Invalid database name');
+    }
     this.context = context;
+    this.config = { name: databaseName, securityLevel: relationalStore.SecurityLevel.S1 };
   }
 
   async open(): Promise<relationalStore.RdbStore> {

@@ -224,7 +224,10 @@ export struct HomeFeedPage {
                 .padding({ top: 12, bottom: 12 })
               }
             }
-            .onScrollIndex((start: number): void => {
+            .onScrollIndex((start: number, end: number): void => {
+              const leading = (this.errorMessage.length > 0 ? 1 : 0) +
+                (isUpdateAnnouncementVisible(this.pendingUpdateVersion, this.dismissedUpdateVersion) ? 1 : 0);
+              this.controller?.markVisibleThrough(end - leading);
               const previous = this.firstVisibleIndex;
               this.firstVisibleIndex = start;
               if (start > previous) {

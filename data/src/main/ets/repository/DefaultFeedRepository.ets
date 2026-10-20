@@ -14,6 +14,7 @@ import {
   RecommendationMode
 } from '../preferences/RecommendationFilterPreferences';
 import { FeedRepository } from './FeedRepository';
+import { RemoteHistorySync } from './RemoteHistorySync';
 
 export const HOME_FEED_INCLUDE =
   'data[*].content,excerpt,headline,target.voteup_count,target.vote_count,target.comment_count,' +
@@ -118,6 +119,7 @@ export class DefaultFeedRepository implements FeedRepository {
   private readonly startupCache?: HomeFeedStartupCacheGateway;
   private readonly mobileHttpClient?: ZhihuMobileHttpClient;
   private readonly sessionProvider?: SessionCookieProvider;
+  private readonly remoteHistory?: RemoteHistorySync;
   private requestedCursors: Set<string> = new Set<string>();
   private deliveredItemIdentities: Set<string> = new Set<string>();
   private generation: number = 0;
@@ -127,13 +129,25 @@ export class DefaultFeedRepository implements FeedRepository {
 
   constructor(httpClient: ZhihuHttpClient = new ZhihuHttpClient(), blockingMatcher?: ContentBlockingMatcher,
     recommendationPreferences?: RecommendationFilterPreferencesGateway, startupCache?: HomeFeedStartupCacheGateway,
-    mobileHttpClient?: ZhihuMobileHttpClient, sessionProvider?: SessionCookieProvider) {
+    mobileHttpClient?: ZhihuMobileHttpClient, sessionProvider?: SessionCookieProvider,
+    remoteHistory?: RemoteHistorySync) {
     this.httpClient = httpClient;
     this.blockingMatcher = blockingMatcher;
     this.recommendationPreferences = recommendationPreferences;
     this.startupCache = startupCache;
     this.mobileHttpClient = mobileHttpClient;
     this.sessionProvider = sessionProvider;
+    this.remoteHistory = remoteHistory;
+  }
+
+  subscribeRemoteReads(listener: () => void): () => void {
+    return this.remoteHistory?.subscribe(listener) ?? ((): void => {});
+  }
+
+  startRemoteReadSync(): void { void this.remoteHistory?.start(); }
+
+  async filterRemoteReads(items: Array<FeedItem>): Promise<Array<FeedItem>> {
+    try { return await this.remoteHistory?.filter(items) ?? items; } catch (_error) { return items; }
   }
 
   cancel(): void {
@@ -160,6 +174,7 @@ export class DefaultFeedRepository implements FeedRepository {
       throw new FeedRepositoryFailure(FeedRepositoryFailureKind.INVALID_CURSOR);
     }
     this.requireConfiguredLogin(preferences);
+    void this.remoteHistory?.start();
     const cursorKey = this.cursorKey(cursor, preferences.recommendationMode);
     if (cursor !== undefined && this.requestedCursors.has(cursorKey)) {
       throw new FeedRepositoryFailure(FeedRepositoryFailureKind.REPEATED_CURSOR);
@@ -175,10 +190,15 @@ export class DefaultFeedRepository implements FeedRepository {
     if (requestGeneration !== this.generation) {
       throw new FeedRepositoryFailure(FeedRepositoryFailureKind.CANCELLED);
     }
-    let visibleItems = decodedPage.items;
+    await this.remoteHistory?.awaitRecentPage();
+    let visibleItems = await this.filterRemoteReads(decodedPage.items);
+    if (requestGeneration !== this.generation) {
+      throw new FeedRepositoryFailure(FeedRepositoryFailureKind.CANCELLED);
+    }
     if (this.blockingMatcher !== undefined) {
-      const blockingSession: ContentBlockingSession = await this.blockingMatcher.createSession();
-      visibleItems = decodedPage.items.filter((item: FeedItem): boolean => {
+      const blockingSession: ContentBlockingSession = await this.blockingMatcher.createSession(
+        visibleItems.map((item: FeedItem): string => feedItemIdentity(item)));
+      visibleItems = visibleItems.filter((item: FeedItem): boolean => {
         const summary = blockableFeedSummary(item);
         const reason = blockingSession.qualityReason?.(summary);
         if (reason !== undefined) {

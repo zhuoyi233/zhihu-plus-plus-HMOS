@@ -53,6 +53,31 @@ class RejectedHomeFeedRepository implements FeedRepository {
   }
 }
 
+class RemoteReadFeedRepository extends ControlledFeedRepository {
+  listener?: () => void;
+  readonly read: Set<string> = new Set<string>();
+  filterCount: number = 0;
+  pendingFilter?: (items: Array<FeedItem>) => void;
+  delayFilter: boolean = false;
+
+  subscribeRemoteReads(listener: () => void): () => void {
+    this.listener = listener;
+    return (): void => { this.listener = undefined; };
+  }
+
+  async filterRemoteReads(items: Array<FeedItem>): Promise<Array<FeedItem>> {
+    this.filterCount += 1;
+    if (this.delayFilter) {
+      return new Promise<Array<FeedItem>>((resolve): void => { this.pendingFilter = resolve; });
+    }
+    return items.filter((item: FeedItem): boolean => !this.read.has(item.id));
+  }
+}
+
+async function flushRemoteFilter(): Promise<void> {
+  for (let index = 0; index < 12; index += 1) await Promise.resolve();
+}
+
 class MissingSessionHomeFeedRepository implements FeedRepository {
   async loadHomePage(_cursor?: string): Promise<FeedPage> {
     throw new HttpFailure(HttpFailureKind.AUTHENTICATION);
@@ -64,6 +89,63 @@ class MissingSessionHomeFeedRepository implements FeedRepository {
 
 export default function homeFeedStateTest(): void {
   describe('homeFeedStateTest', () => {
+    it('filtersLateRemoteReadsOnlyBeyondTheBrowsedPrefixWithoutReloadingRecommendations', 0, async () => {
+      const repository = new RemoteReadFeedRepository();
+      const controller = new HomeFeedController(repository);
+      controller.activate();
+      const first = controller.loadInitial();
+      repository.succeed(0, page([feed('first'), feed('second'), feed('third')], 'next'));
+      await first;
+      controller.markVisibleThrough(1);
+      await flushRemoteFilter();
+      repository.read.add('first');
+      repository.read.add('second');
+      repository.read.add('third');
+      repository.listener?.();
+      await flushRemoteFilter();
+      expect(controller.snapshot().items.map((item: FeedItem): string => item.id).join(','))
+        .assertEqual('first,second');
+      expect(repository.cursors.length).assertEqual(1);
+      expect(controller.snapshot().canLoadMore).assertTrue();
+      expect(controller.snapshot().refreshing).assertFalse();
+    });
+
+    it('rechecksTheBrowsedPrefixWhenTheUserScrollsDuringAnAsyncReadQuery', 0, async () => {
+      const repository = new RemoteReadFeedRepository();
+      const controller = new HomeFeedController(repository);
+      controller.activate();
+      const first = controller.loadInitial();
+      repository.succeed(0, page([feed('first'), feed('second'), feed('third')], 'next'));
+      await first;
+      controller.markVisibleThrough(0);
+      await flushRemoteFilter();
+      repository.delayFilter = true;
+      repository.listener?.();
+      controller.markVisibleThrough(1);
+      repository.pendingFilter?.([]);
+      await flushRemoteFilter();
+      expect(controller.snapshot().items.map((item: FeedItem): string => item.id).join(','))
+        .assertEqual('first,second');
+    });
+
+    it('detachesRemoteReadUpdatesWhileInactiveAndChecksAgainOnReentry', 0, async () => {
+      const repository = new RemoteReadFeedRepository();
+      const controller = new HomeFeedController(repository);
+      controller.activate();
+      const first = controller.loadInitial();
+      repository.succeed(0, page([feed('first'), feed('second')], 'next'));
+      await first;
+      controller.markVisibleThrough(0);
+      await flushRemoteFilter();
+      controller.deactivate();
+      expect(repository.listener).assertUndefined();
+      repository.read.add('second');
+      controller.activate();
+      await flushRemoteFilter();
+      expect(controller.snapshot().items.length).assertEqual(1);
+      expect(repository.cursors.length).assertEqual(1);
+    });
+
     it('loadsFirstPageAndDeduplicatesItems', 0, async () => {
       const repository = new ControlledFeedRepository();
       const controller = new HomeFeedController(repository);
