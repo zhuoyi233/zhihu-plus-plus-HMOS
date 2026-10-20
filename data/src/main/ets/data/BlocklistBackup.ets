@@ -49,6 +49,8 @@ export interface BlocklistBackupPayload {
   exportTime: number;
   keywords: Array<BlockedKeywordBackupEntry>;
   users: Array<BlockedUserBackupEntry>;
+  /** 与上游 v2 questionAuthors 字段兼容。 */
+  questionAuthors?: Array<BlockedUserBackupEntry>;
   topics: Array<BlockedTopicBackupEntry>;
 }
 
@@ -68,10 +70,13 @@ export function encodeBlocklistBackup(snapshot: BlockingRuleSnapshot): string {
       caseSensitive: rule.caseSensitive,
       isRegex: rule.isRegex
     })),
-    users: snapshot.users.map((rule: BlockedUserRule): BlockedUserBackupEntry => ({
+    users: snapshot.users.filter((rule: BlockedUserRule): boolean => rule.questionAuthorOnly !== true)
+      .map((rule: BlockedUserRule): BlockedUserBackupEntry => ({
       userId: rule.userId,
       userName: rule.userName
     })),
+    questionAuthors: snapshot.users.filter((rule: BlockedUserRule): boolean => rule.questionAuthorOnly === true)
+      .map((rule: BlockedUserRule): BlockedUserBackupEntry => ({ userId: rule.userId, userName: rule.userName })),
     topics: snapshot.topics.map((rule: BlockedTopicRule): BlockedTopicBackupEntry => ({
       topicId: rule.topicId,
       topicName: rule.topicName
@@ -100,7 +105,8 @@ export function decodeBlocklistBackup(text: string): BlocklistBackupPayload {
     version: version,
     exportTime: exportTime,
     keywords: readBackupKeywords(object),
-    users: readBackupUsers(object),
+    users: readBackupUsers(object, 'users'),
+    questionAuthors: readBackupUsers(object, 'questionAuthors'),
     topics: readBackupTopics(object)
   };
 }
@@ -139,6 +145,17 @@ export async function importBlocklistBackupPayload(payload: BlocklistBackupPaylo
       const userId = validateBlockingIdentifier(entry.userId);
       const userName = validateBlockingName(entry.userName);
       pending.push(rules.addUser(userId, userName));
+      users += 1;
+    } catch (_error) {
+      skipped += 1;
+    }
+  });
+
+  (payload.questionAuthors ?? []).forEach((entry: BlockedUserBackupEntry): void => {
+    try {
+      const userId = validateBlockingIdentifier(entry.userId);
+      const userName = validateBlockingName(entry.userName);
+      pending.push(rules.addUser(userId, userName, true));
       users += 1;
     } catch (_error) {
       skipped += 1;
@@ -194,8 +211,8 @@ function readBackupKeywords(object: JsonObjectValue): Array<BlockedKeywordBackup
   });
 }
 
-function readBackupUsers(object: JsonObjectValue): Array<BlockedUserBackupEntry> {
-  return readBackupEntries(object, 'users', (entry: JsonObjectValue): BlockedUserBackupEntry => {
+function readBackupUsers(object: JsonObjectValue, field: string): Array<BlockedUserBackupEntry> {
+  return readBackupEntries(object, field, (entry: JsonObjectValue): BlockedUserBackupEntry => {
     const userId = jsonString(entry.get('userId'));
     const userName = jsonString(entry.get('userName'));
     if (userId === undefined || userName === undefined) {

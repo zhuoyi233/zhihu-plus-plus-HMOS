@@ -24,6 +24,7 @@ export default function mobileHomeFeedDecoderTest(): void {
   describe('mobileHomeFeedDecoderTest', () => {
     it('decodesObservedDescriptionFooterAndBusinessAuthorMetadata', 0, () => {
       const target = footer('20 赞同 · 17 评论');
+      expect(target.questionId).assertEqual('100');
       expect(target.voteupCount).assertEqual(20);
       expect(target.commentCount).assertEqual(17);
       expect(target.author?.id).assertEqual('author-stable-id');

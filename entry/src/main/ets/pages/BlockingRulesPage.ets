@@ -566,7 +566,7 @@ export struct BlockingRulesPage {
         List({ space: 10 }) {
           ForEach(this.viewState.users, (rule: BlockedUserRule) => {
             ListItem() {
-              this.namedRuleRow(rule.userName, rule.userId, (): void => {
+              this.namedRuleRow(rule.questionAuthorOnly === true ? `提问者：${rule.userName}` : rule.userName, rule.userId, (): void => {
                 this.controller?.deleteUser(rule.userId);
               })
             }

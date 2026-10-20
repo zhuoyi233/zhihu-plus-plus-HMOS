@@ -61,11 +61,12 @@ export class BlockingActionController {
     });
   }
 
-  blockUser(userId: string, userName: string, context: BlockingActionContext): Promise<void> {
+  blockUser(userId: string, userName: string, context: BlockingActionContext,
+    questionAuthorOnly: boolean = false): Promise<void> {
     return this.perform(async (): Promise<void> => {
-      await this.rules.addUser(userId, userName);
+      await this.rules.addUser(userId, userName, questionAuthorOnly);
       await this.record(BlockingRuleKind.USER, userId, userName, context);
-    }, `已屏蔽用户：${userName}`);
+    }, `${questionAuthorOnly ? '已屏蔽提问者' : '已屏蔽用户'}：${userName}`);
   }
 
   blockKeyword(keyword: string, context: BlockingActionContext): Promise<void> {

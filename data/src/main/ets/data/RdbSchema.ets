@@ -4,7 +4,7 @@ export interface SchemaMigration {
   statements: Array<string>;
 }
 
-export const CURRENT_SCHEMA_VERSION: number = 8;
+export const CURRENT_SCHEMA_VERSION: number = 9;
 
 export function schemaMigrationTo(targetVersion: number): SchemaMigration {
   if (targetVersion === 1) {
@@ -101,6 +101,13 @@ export function schemaMigrationTo(targetVersion: number): SchemaMigration {
       fromVersion: 7,
       toVersion: 8,
       statements: ['DROP TABLE IF EXISTS content_filter_stats']
+    };
+  }
+  if (targetVersion === 9) {
+    return {
+      fromVersion: 8,
+      toVersion: 9,
+      statements: ['ALTER TABLE blocked_users ADD COLUMN question_author_only INTEGER NOT NULL DEFAULT 0']
     };
   }
   throw new Error(`Unsupported schema target version: ${targetVersion}`);

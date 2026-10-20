@@ -337,6 +337,7 @@ function copyBlockingRulesState(state: BlockingRulesViewState): BlockingRulesVie
     users: state.users.map((rule: BlockedUserRule): BlockedUserRule => ({
       userId: rule.userId,
       userName: rule.userName,
+      questionAuthorOnly: rule.questionAuthorOnly,
       createdAt: rule.createdAt
     })),
     topics: state.topics.map((rule: BlockedTopicRule): BlockedTopicRule => ({

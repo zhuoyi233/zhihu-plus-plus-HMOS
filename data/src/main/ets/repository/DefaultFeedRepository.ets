@@ -14,11 +14,14 @@ import {
   RecommendationMode
 } from '../preferences/RecommendationFilterPreferences';
 import { FeedRepository } from './FeedRepository';
+import { ContentRepository } from './ContentRepository';
+import { resolveFeedTopics } from './FeedTopicResolver';
+import { QuestionTopicSummary } from '../domain/DomainModels';
 
 export const HOME_FEED_INCLUDE =
   'data[*].content,excerpt,headline,target.voteup_count,target.vote_count,target.comment_count,' +
     'target.answer_count,target.follower_count,target.author.badge_v2,target.author.is_following,' +
-    'target.author.follower_count,target.bound_topic_ids,target.question.bound_topic_ids,target.question.author';
+    'target.author.follower_count,target.bound_topic_ids,target.question.bound_topic_ids,target.question.author,target.topics,target.question.topics';
 const HOME_FEED_INCLUDE_QUERY = `include=${encodeURIComponent(HOME_FEED_INCLUDE).replace(/\*/g, '%2A')}`;
 export const HOME_FEED_URL =
   `https://www.zhihu.com/api/v3/feed/topstory/recommend?desktop=true&page_number=1&limit=10&action=down&` +
@@ -118,6 +121,8 @@ export class DefaultFeedRepository implements FeedRepository {
   private readonly startupCache?: HomeFeedStartupCacheGateway;
   private readonly mobileHttpClient?: ZhihuMobileHttpClient;
   private readonly sessionProvider?: SessionCookieProvider;
+  private readonly topicRepository?: ContentRepository;
+  private readonly topicCache: Map<string, Array<QuestionTopicSummary>> = new Map();
   private requestedCursors: Set<string> = new Set<string>();
   private deliveredItemIdentities: Set<string> = new Set<string>();
   private generation: number = 0;
@@ -127,19 +132,22 @@ export class DefaultFeedRepository implements FeedRepository {
 
   constructor(httpClient: ZhihuHttpClient = new ZhihuHttpClient(), blockingMatcher?: ContentBlockingMatcher,
     recommendationPreferences?: RecommendationFilterPreferencesGateway, startupCache?: HomeFeedStartupCacheGateway,
-    mobileHttpClient?: ZhihuMobileHttpClient, sessionProvider?: SessionCookieProvider) {
+    mobileHttpClient?: ZhihuMobileHttpClient, sessionProvider?: SessionCookieProvider,
+    topicRepository?: ContentRepository) {
     this.httpClient = httpClient;
     this.blockingMatcher = blockingMatcher;
     this.recommendationPreferences = recommendationPreferences;
     this.startupCache = startupCache;
     this.mobileHttpClient = mobileHttpClient;
     this.sessionProvider = sessionProvider;
+    this.topicRepository = topicRepository;
   }
 
   cancel(): void {
     this.generation += 1;
     this.httpClient.cancel();
     this.mobileHttpClient?.cancel();
+    this.topicRepository?.cancel();
   }
 
   async loadHomePage(cursor?: string): Promise<FeedPage> {
@@ -178,6 +186,14 @@ export class DefaultFeedRepository implements FeedRepository {
     let visibleItems = decodedPage.items;
     if (this.blockingMatcher !== undefined) {
       const blockingSession: ContentBlockingSession = await this.blockingMatcher.createSession();
+      if (blockingSession.requiresTopicMetadata === true && this.topicRepository !== undefined) {
+        for (let index = 0; index < decodedPage.items.length; index += 1) {
+          await this.enrichTopicMetadata(decodedPage.items[index]);
+          if (requestGeneration !== this.generation) {
+            throw new FeedRepositoryFailure(FeedRepositoryFailureKind.CANCELLED);
+          }
+        }
+      }
       visibleItems = decodedPage.items.filter((item: FeedItem): boolean => {
         const summary = blockableFeedSummary(item);
         // 每次按当前会话重算，关闭质量屏蔽/启用反向屏蔽后不得沿用旧原因。
@@ -212,6 +228,27 @@ export class DefaultFeedRepository implements FeedRepository {
       items: items,
       cursor: cursorLoops ? terminalCursor(decodedPage.cursor) : decodedPage.cursor
     };
+  }
+
+  private async enrichTopicMetadata(item: FeedItem): Promise<void> {
+    if (item.target.topicIds.length > 0) {
+      return;
+    }
+    const identity = feedItemIdentity(item);
+    try {
+      let topics = this.topicCache.get(identity);
+      if (topics === undefined) {
+        topics = await resolveFeedTopics(item, this.topicRepository);
+        if (this.topicCache.size >= 100) {
+          this.topicCache.clear();
+        }
+        this.topicCache.set(identity, topics);
+      }
+      item.target.topics = topics;
+      item.target.topicIds = topics.map((topic: QuestionTopicSummary): string => topic.id);
+    } catch (_error) {
+      // 详情失败不能使整页推荐失败，也不能将未知话题当作命中；下次刷新可重试。
+    }
   }
 
   private requireConfiguredLogin(preferences: RecommendationFilterPreferences): void {

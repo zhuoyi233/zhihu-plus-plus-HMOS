@@ -246,6 +246,19 @@ export default function blockingRuleMatcherTest(): void {
       expect(matchBlockingRules(value, rules, defaultBlockingPreferences())?.reason).assertEqual('屏蔽提问者：提问者');
     });
 
+    it('questionAuthorOnlyRuleDoesNotHideTheirAnswersToOtherQuestions', 0, () => {
+      const rules = emptyRules();
+      rules.users = [{ userId: 'author-1', userName: '提问者', createdAt: 1, questionAuthorOnly: true }];
+      const value = content();
+      value.contentKind = 'answer';
+      expect(matchBlockingRules(value, rules, defaultBlockingPreferences())).assertUndefined();
+      value.questionAuthorId = 'author-1';
+      expect(matchBlockingRules(value, rules, defaultBlockingPreferences())?.reason).assertEqual('屏蔽提问者：提问者');
+      value.questionAuthorId = undefined;
+      value.contentKind = 'question';
+      expect(matchBlockingRules(value, rules, defaultBlockingPreferences())?.kind).assertEqual(BlockingRuleKind.USER);
+    });
+
     it('rulesOnlyDoesNotApplyRecommendationDefaults', 0, async () => {
       const rules = new CountingRuleGateway();
       const preferences = new CountingPreferencesGateway();

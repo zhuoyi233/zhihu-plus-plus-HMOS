@@ -3,6 +3,7 @@ import {
   buildHomeFeedRequestUrl,
   canonicalHomeFeedCursorKey,
   DefaultFeedRepository,
+  DefaultContentRepository,
   FeedRepositoryFailure,
   FeedRepositoryFailureKind,
   BlockableContentSummary,
@@ -145,6 +146,8 @@ class CancellationFeedTransportFactory implements ZhihuHttpTransportFactory {
 }
 
 class RecordingFeedBlockingSession implements ContentBlockingSession {
+  requiresTopicMetadata: boolean = false;
+  blockedTopicId?: string;
   readonly summaries: Array<BlockableContentSummary> = [];
   reason?: string;
 
@@ -154,6 +157,9 @@ class RecordingFeedBlockingSession implements ContentBlockingSession {
 
   match(content: BlockableContentSummary): BlockingMatch | undefined {
     this.summaries.push(content);
+    if (this.blockedTopicId !== undefined && content.topicIds.includes(this.blockedTopicId)) {
+      return { kind: BlockingRuleKind.TOPIC, ruleId: this.blockedTopicId, reason: '屏蔽话题' };
+    }
     return content.title.includes('屏蔽') ? {
       kind: BlockingRuleKind.KEYWORD,
       ruleId: '1',
@@ -230,7 +236,7 @@ const EXPECTED_HOME_FEED_INCLUDE_QUERY =
   'include=data%5B%2A%5D.content%2Cexcerpt%2Cheadline%2Ctarget.voteup_count%2Ctarget.vote_count%2C' +
     'target.comment_count%2Ctarget.answer_count%2Ctarget.follower_count%2Ctarget.author.badge_v2%2C' +
     'target.author.is_following%2Ctarget.author.follower_count%2Ctarget.bound_topic_ids%2C' +
-    'target.question.bound_topic_ids%2Ctarget.question.author';
+    'target.question.bound_topic_ids%2Ctarget.question.author%2Ctarget.topics%2Ctarget.question.topics';
 
 export default function homeFeedRepositoryTest(): void {
   describe('homeFeedRepositoryTest', () => {
@@ -463,6 +469,56 @@ export default function homeFeedRepositoryTest(): void {
       expect(matcher.session.summaries[1].voteupCount).assertUndefined();
       expect(page.items.length).assertEqual(1);
       expect(page.items[0].target.id).assertEqual('1');
+    });
+
+    it('filtersMissingTopicMetadataAndCachesItAcrossRefreshes', 0, async () => {
+      const factory = new SequenceFeedTransportFactory([{ statusCode: 200, body: MOBILE_PAGE },
+        { statusCode: 200, body: MOBILE_PAGE }]);
+      const details = new SequenceFeedTransportFactory([{ statusCode: 200,
+        body: '{"id":"100","title":"问题","topics":[{"id":"11","name":"话题"}]}' }]);
+      const matcher = new RecordingFeedBlockingMatcher();
+      matcher.session.requiresTopicMetadata = true;
+      matcher.session.blockedTopicId = '11';
+      const preferences = new FixedRecommendationPreferences();
+      preferences.value.recommendationMode = RecommendationMode.ANDROID;
+      preferences.value.loginForRecommendation = false;
+      const repository = new DefaultFeedRepository(new ZhihuHttpClient(undefined, factory), matcher,
+        preferences, undefined, undefined, undefined,
+        new DefaultContentRepository(new ZhihuHttpClient(new CountingSessionProvider(), details)));
+      expect((await repository.loadHomePage()).items.length).assertEqual(0);
+      expect((await repository.loadHomePage()).items.length).assertEqual(0);
+      expect(details.requests.length).assertEqual(1);
+      expect(details.requests[0].url.includes('/questions/100?')).assertTrue();
+      expect(matcher.session.summaries[0].topicIds[0]).assertEqual('11');
+    });
+
+    it('doesNotFetchDetailsWhenTopicBlockingHasNoActiveRules', 0, async () => {
+      const factory = new SequenceFeedTransportFactory([{ statusCode: 200, body: FIRST_PAGE }]);
+      const details = new SequenceFeedTransportFactory([]);
+      const repository = new DefaultFeedRepository(new ZhihuHttpClient(new CountingSessionProvider(), factory),
+        new RecordingFeedBlockingMatcher(), undefined, undefined, undefined, undefined,
+        new DefaultContentRepository(new ZhihuHttpClient(new CountingSessionProvider(), details)));
+      expect((await repository.loadHomePage()).items.length).assertEqual(1);
+      expect(details.requests.length).assertEqual(0);
+    });
+
+    it('keepsFeedAvailableAndRetriesAfterTopicDetailFailure', 0, async () => {
+      const factory = new SequenceFeedTransportFactory([{ statusCode: 200, body: MOBILE_PAGE },
+        { statusCode: 200, body: MOBILE_PAGE }]);
+      const details = new SequenceFeedTransportFactory([{ statusCode: 500, body: '{}' }, { statusCode: 200,
+        body: '{"id":"100","title":"问题","topics":[{"id":"11","name":"话题"}]}' }]);
+      const matcher = new RecordingFeedBlockingMatcher();
+      matcher.session.requiresTopicMetadata = true;
+      matcher.session.blockedTopicId = '11';
+      const preferences = new FixedRecommendationPreferences();
+      preferences.value.recommendationMode = RecommendationMode.ANDROID;
+      preferences.value.loginForRecommendation = false;
+      const repository = new DefaultFeedRepository(new ZhihuHttpClient(undefined, factory), matcher,
+        preferences, undefined, undefined, undefined,
+        new DefaultContentRepository(new ZhihuHttpClient(new CountingSessionProvider(), details)));
+      expect((await repository.loadHomePage()).items.length).assertEqual(1);
+      expect((await repository.loadHomePage()).items.length).assertEqual(0);
+      expect(details.requests.length).assertEqual(2);
     });
 
     it('preservesQualityPlaceholderIdentityAndOriginalNavigationTarget', 0, async () => {

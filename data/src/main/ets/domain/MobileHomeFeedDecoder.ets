@@ -39,13 +39,17 @@ function actionRoute(card: JsonObjectValue): string | undefined {
 }
 
 interface MobileRouteTarget {
+  questionId?: string;
   kind: FeedTargetKind;
   id: string;
 }
 
 function routeTarget(url: string): MobileRouteTarget | undefined {
   const answer = /\/question\/[1-9][0-9]{0,29}\/answer\/([1-9][0-9]{0,29})(?:[/?#]|$)/.exec(url);
-  if (answer !== null) return { kind: FeedTargetKind.ANSWER, id: answer[1] };
+  if (answer !== null) {
+    const question = /\/question\/([1-9][0-9]{0,29})\/answer\//.exec(url);
+    return { kind: FeedTargetKind.ANSWER, id: answer[1], questionId: question?.[1] };
+  }
   const article = /\/p\/([1-9][0-9]{0,29})(?:[/?#]|$)/.exec(url);
   if (article !== null) return { kind: FeedTargetKind.ARTICLE, id: article[1] };
   const question = /\/question\/([1-9][0-9]{0,29})(?:[/?#]|$)/.exec(url);
@@ -219,6 +223,7 @@ function decodeCard(value: JsonValue): FeedItem | undefined {
     target: {
       kind: target.kind,
       id: target.id,
+      questionId: target.questionId,
       title: title,
       excerpt: excerpt,
       url: url,

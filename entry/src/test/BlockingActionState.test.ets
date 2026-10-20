@@ -42,8 +42,8 @@ class FakeBlockingRules implements BlockingRuleGateway {
     return Promise.resolve();
   }
 
-  addUser(userId: string, userName: string): Promise<void> {
-    this.users.unshift({ userId: userId, userName: userName, createdAt: 1 });
+  addUser(userId: string, userName: string, questionAuthorOnly: boolean = false): Promise<void> {
+    this.users.unshift({ userId: userId, userName: userName, createdAt: 1, questionAuthorOnly: questionAuthorOnly });
     return Promise.resolve();
   }
 
@@ -149,6 +149,14 @@ export default function blockingActionStateTest(): void {
       expect(rules.keywords[0].keyword).assertEqual('广告');
       expect(history.records[0].kind).assertEqual(BlockingRuleKind.KEYWORD);
       expect(history.records[0].ruleId).assertEqual('广告');
+    });
+
+    it('keepsQuestionAuthorOnlyScopeWhenSavingMenuAction', 0, async () => {
+      const rules = new FakeBlockingRules();
+      const controller = new BlockingActionController(rules, new FakeHistory());
+      await controller.blockUser('asker-1', '提问者', CONTEXT, true);
+      expect(rules.users[0].questionAuthorOnly).assertTrue();
+      expect(controller.snapshot().message).assertEqual('已屏蔽提问者：提问者');
     });
 
     it('rejectsInvalidKeywordWithoutWrites', 0, async () => {

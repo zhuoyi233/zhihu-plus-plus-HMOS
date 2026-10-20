@@ -7,6 +7,7 @@ import {
   FeedTargetSummary,
   PageCursor,
   Question,
+  QuestionTopicSummary,
   UserProfile
 } from './DomainModels';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -172,6 +173,27 @@ function optionalUser(value: JsonValue | undefined): UserProfile | undefined {
   return userFromObject(object);
 }
 
+/** 菜单只展示真实 ID 与名称均完整的话题；异常可选项不影响整张卡片解码。 */
+function feedTopics(target: JsonObjectValue): Array<QuestionTopicSummary> {
+  const source = jsonObject(target.get('question')) ?? target;
+  const values = source.get('topics');
+  const topics: Array<QuestionTopicSummary> = [];
+  if (!(values instanceof JsonArrayValue)) {
+    return topics;
+  }
+  values.items.forEach((value: JsonValue): void => {
+    const topic = jsonObject(value);
+    const idValue = topic?.get('id');
+    const id = jsonString(idValue) ?? jsonIntegerLiteral(idValue);
+    const name = jsonString(topic?.get('name'))?.trim() ?? '';
+    if (id !== undefined && /^[1-9][0-9]{0,29}$/.test(id) && name.length > 0 &&
+      !topics.some((entry: QuestionTopicSummary): boolean => entry.id === id)) {
+      topics.push({ id: id, name: name });
+    }
+  });
+  return topics;
+}
+
 function topicIdsFromObject(target: JsonObjectValue): Array<string> {
   const values: Array<JsonValue> = [];
   appendArrayValues(target.get('bound_topic_ids'), values, 'feed.target.bound_topic_ids');
@@ -179,7 +201,7 @@ function topicIdsFromObject(target: JsonObjectValue): Array<string> {
   if (question !== undefined) {
     appendArrayValues(question.get('bound_topic_ids'), values, 'feed.target.question.bound_topic_ids');
   }
-  const result: Array<string> = [];
+  const result: Array<string> = feedTopics(target).map((topic: QuestionTopicSummary): string => topic.id);
   values.forEach((value: JsonValue): void => {
     let id: string | undefined;
     const integerLiteral = jsonIntegerLiteral(value);
@@ -261,6 +283,11 @@ export function decodeArticle(json: string): Article {
   };
 }
 
+function optionalId(value: JsonValue | undefined): string | undefined {
+  const id = jsonString(value) ?? jsonIntegerLiteral(value);
+  return id !== undefined && /^[1-9][0-9]{0,29}$/.test(id) ? id : undefined;
+}
+
 function feedTargetFromObject(object: JsonObjectValue): FeedTargetSummary {
   const type = requiredText(object.get('type'), 'feed.target.type');
   let kind: FeedTargetKind;
@@ -306,6 +333,8 @@ function feedTargetFromObject(object: JsonObjectValue): FeedTargetSummary {
     followerCount: kind === FeedTargetKind.QUESTION
       ? optionalNumberStrict(object.get('follower_count'), 'feed.target.follower_count') : undefined,
     author: optionalUser(object.get('author')),
+    questionId: optionalId(questionObject?.get('id')),
+    topics: feedTopics(object),
     questionAuthor: optionalUser(questionObject?.get('author')),
     authorFollowerCount: optionalNumberStrict(
       authorObject?.get('follower_count') ?? authorObject?.get('followers_count'),

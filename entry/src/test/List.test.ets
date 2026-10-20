@@ -1,3 +1,4 @@
+import homeFeedMenuStateTest from './HomeFeedMenuState.test';
 import apiLevelTest from './ApiLevel.test';
 import backgroundWorkPolicyTest from './BackgroundWorkPolicy.test';
 import cookieSessionTest from './CookieSession.test';
@@ -117,6 +118,7 @@ export default function testsuite(): void {
   homeFeedRepositoryTest();
   mobileHomeFeedDecoderTest();
   homeFeedStateTest();
+  homeFeedMenuStateTest();
   sessionRepositoryTest();
   zhihuQrLoginClientTest();
   searchRepositoryTest();

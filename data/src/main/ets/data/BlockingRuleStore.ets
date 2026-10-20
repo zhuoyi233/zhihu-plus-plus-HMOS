@@ -40,6 +40,8 @@ export interface BlockedKeywordRule {
 }
 
 export interface BlockedUserRule {
+  /** 仅屏蔽其提出的问题，不屏蔽其回答其他问题的内容。 */
+  questionAuthorOnly?: boolean;
   userId: string;
   userName: string;
   createdAt: number;
@@ -96,7 +98,7 @@ export interface BlockingMatch {
 export interface BlockingRuleGateway {
   loadSnapshot(): Promise<BlockingRuleSnapshot>;
   addKeyword(keyword: string, caseSensitive: boolean, isRegex: boolean): Promise<void>;
-  addUser(userId: string, userName: string): Promise<void>;
+  addUser(userId: string, userName: string, questionAuthorOnly?: boolean): Promise<void>;
   addTopic(topicId: string, topicName: string): Promise<void>;
   deleteKeyword(id: number): Promise<void>;
   deleteUser(userId: string): Promise<void>;
@@ -110,6 +112,7 @@ export interface BlockingPreferencesGateway {
 }
 
 export interface ContentBlockingSession {
+  readonly requiresTopicMetadata?: boolean;
   match(content: BlockableContentSummary): BlockingMatch | undefined;
   qualityReason?(content: BlockableContentSummary): string | undefined;
   flush?(): Promise<void>;
@@ -239,7 +242,8 @@ export function matchBlockingRules(content: BlockableContentSummary, snapshot: B
   preferences: BlockingPreferences): BlockingMatch | undefined {
   const normalizedPreferences = normalizeBlockingPreferences(preferences);
   if (normalizedPreferences.userBlockingEnabled && content.authorId !== undefined) {
-    const user = snapshot.users.find((candidate: BlockedUserRule): boolean => candidate.userId === content.authorId);
+    const user = snapshot.users.find((candidate: BlockedUserRule): boolean => candidate.userId === content.authorId &&
+      (candidate.questionAuthorOnly !== true || content.contentKind === 'question'));
     if (user !== undefined) {
       return { kind: BlockingRuleKind.USER, ruleId: user.userId, reason: `屏蔽用户：${user.userName}` };
     }
@@ -404,6 +408,7 @@ export class BlockingRuleMatcher implements ContentBlockingMatcher {
 }
 
 class BlockingRuleMatchSession implements ContentBlockingSession {
+  readonly requiresTopicMetadata: boolean;
   private readonly strategy: ContentBlockingStrategy;
   private readonly snapshot: BlockingRuleSnapshot;
   private readonly preferences: BlockingPreferences;
@@ -419,6 +424,7 @@ class BlockingRuleMatchSession implements ContentBlockingSession {
     this.strategy = strategy;
     this.snapshot = copyBlockingRuleSnapshot(snapshot);
     this.preferences = normalizeBlockingPreferences(preferences);
+    this.requiresTopicMetadata = this.preferences.topicBlockingEnabled && this.snapshot.topics.length > 0;
     this.recommendation = recommendation;
     this.runtimeSnapshot = runtimeSnapshot;
     this.runtime = runtime;
@@ -524,7 +530,7 @@ export class BlockingRuleStore implements BlockingRuleGateway {
     });
   }
 
-  addUser(userId: string, userName: string): Promise<void> {
+  addUser(userId: string, userName: string, questionAuthorOnly: boolean = false): Promise<void> {
     const normalizedId = validateBlockingIdentifier(userId);
     const normalizedName = validateBlockingName(userName);
     const createdAt = Date.now();
@@ -533,8 +539,21 @@ export class BlockingRuleStore implements BlockingRuleGateway {
       const values: relationalStore.ValuesBucket = {
         user_id: normalizedId,
         user_name: normalizedName,
+        question_author_only: questionAuthorOnly ? 1 : 0,
         created_at: createdAt
       };
+      // 普通用户屏蔽范围更广；再次选择“屏蔽提问者”不能把已有规则缩窄。
+      if (questionAuthorOnly) {
+        const existing = await store.query(new relationalStore.RdbPredicates(USER_TABLE)
+          .equalTo('user_id', normalizedId), ['question_author_only']);
+        try {
+          if (existing.goToFirstRow() && existing.getLong(existing.getColumnIndex('question_author_only')) === 0) {
+            return;
+          }
+        } finally {
+          existing.close();
+        }
+      }
       const rowId = await store.insert(USER_TABLE, values, relationalStore.ConflictResolution.ON_CONFLICT_REPLACE);
       if (rowId === -1) {
         throw new Error('Blocked user insert failed');
@@ -636,7 +655,7 @@ export class BlockingRuleStore implements BlockingRuleGateway {
     const store = await this.database.open();
     const predicates = new relationalStore.RdbPredicates(USER_TABLE)
       .orderByDesc('created_at').orderByDesc('user_id').limitAs(MAX_BLOCKING_RULES_PER_KIND);
-    const resultSet = await store.query(predicates, ['user_id', 'user_name', 'created_at']);
+    const resultSet = await store.query(predicates, ['user_id', 'user_name', 'question_author_only', 'created_at']);
     const result: Array<BlockedUserRule> = [];
     try {
       if (resultSet.goToFirstRow()) {
@@ -644,6 +663,7 @@ export class BlockingRuleStore implements BlockingRuleGateway {
           result.push({
             userId: resultSet.getString(resultSet.getColumnIndex('user_id')),
             userName: resultSet.getString(resultSet.getColumnIndex('user_name')),
+            questionAuthorOnly: resultSet.getLong(resultSet.getColumnIndex('question_author_only')) === 1,
             createdAt: resultSet.getLong(resultSet.getColumnIndex('created_at'))
           });
         } while (resultSet.goToNextRow());
@@ -703,6 +723,7 @@ function copyBlockingRuleSnapshot(snapshot: BlockingRuleSnapshot): BlockingRuleS
     users: snapshot.users.map((rule: BlockedUserRule): BlockedUserRule => ({
       userId: rule.userId,
       userName: rule.userName,
+      questionAuthorOnly: rule.questionAuthorOnly,
       createdAt: rule.createdAt
     })),
     topics: snapshot.topics.map((rule: BlockedTopicRule): BlockedTopicRule => ({

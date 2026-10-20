@@ -33,8 +33,8 @@ class FakeBlockingRules implements BlockingRuleGateway {
     return Promise.resolve();
   }
 
-  addUser(userId: string, userName: string): Promise<void> {
-    this.users.unshift({ userId: userId, userName: userName, createdAt: 1 });
+  addUser(userId: string, userName: string, questionAuthorOnly: boolean = false): Promise<void> {
+    this.users.unshift({ userId: userId, userName: userName, createdAt: 1, questionAuthorOnly: questionAuthorOnly });
     return Promise.resolve();
   }
 
@@ -90,6 +90,21 @@ export default function blocklistBackupTest(): void {
       expect(payload.users[0].userId).assertEqual('user-1');
       expect(payload.topics.length).assertEqual(1);
       expect(payload.topics[0].topicName).assertEqual('话题一');
+    });
+
+    it('roundTripsQuestionAuthorsWithoutTurningThemIntoGeneralUserRules', 0, async () => {
+      const snapshot = sampleSnapshot();
+      snapshot.users.push({ userId: 'asker', userName: '提问者', createdAt: 1, questionAuthorOnly: true });
+      const backup = encodeBlocklistBackup(snapshot);
+      const payload = decodeBlocklistBackup(backup);
+      expect(payload.users.length).assertEqual(1);
+      expect(payload.questionAuthors?.[0].userId).assertEqual('asker');
+      const rules = new FakeBlockingRules();
+      await importBlocklistBackup(backup, rules);
+      expect(rules.users.find((rule: BlockedUserRule): boolean => rule.userId === 'asker')?.questionAuthorOnly)
+        .assertTrue();
+      expect(rules.users.find((rule: BlockedUserRule): boolean => rule.userId === 'user-1')?.questionAuthorOnly)
+        .assertFalse();
     });
 
     it('decodesBackupWithoutOptionalFields', 0, () => {
