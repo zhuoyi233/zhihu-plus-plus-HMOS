@@ -112,25 +112,25 @@ export struct ContentFilterSettingsPage {
           this.qualityModeSetting()
           Divider().color($r('app.color.divider_color'))
           this.thresholdSetting('回答最低赞数', '低于此赞同数的未关注作者回答会被过滤',
-            'answerVoteupThreshold', this.filter.answerVoteupThreshold, true, 'filter_answer_vote_threshold')
+            'answerVoteupThreshold', true, 'filter_answer_vote_threshold')
           Divider().color($r('app.color.divider_color'))
           this.thresholdSetting('文章最低赞数', '低于此赞数或作者粉丝低于对应阈值的文章会被过滤',
-            'articleVoteupThreshold', this.filter.articleVoteupThreshold, true, 'filter_article_vote_threshold')
+            'articleVoteupThreshold', true, 'filter_article_vote_threshold')
           Divider().color($r('app.color.divider_color'))
           this.thresholdSetting('文章最低粉丝数', '文章作者粉丝数低于此值时应用质量过滤',
-            'articleFollowersThreshold', this.filter.articleFollowersThreshold, true, 'filter_article_follower_threshold')
+            'articleFollowersThreshold', true, 'filter_article_follower_threshold')
           Divider().color($r('app.color.divider_color'))
           this.thresholdSetting('视频最低赞数', '视频赞同数低于此值时应用质量过滤',
-            'videoVoteThreshold', this.filter.videoVoteThreshold, true, 'filter_video_vote_threshold')
+            'videoVoteThreshold', true, 'filter_video_vote_threshold')
           Divider().color($r('app.color.divider_color'))
           this.thresholdSetting('视频最低粉丝数', '视频作者粉丝数低于此值时应用质量过滤',
-            'videoFollowersThreshold', this.filter.videoFollowersThreshold, true, 'filter_video_follower_threshold')
+            'videoFollowersThreshold', true, 'filter_video_follower_threshold')
           Divider().color($r('app.color.divider_color'))
           this.thresholdSetting('问题最低回答数', '问题回答数低于此值时应用质量过滤',
-            'questionAnswerThreshold', this.filter.questionAnswerThreshold, true, 'filter_question_answer_threshold')
+            'questionAnswerThreshold', true, 'filter_question_answer_threshold')
           Divider().color($r('app.color.divider_color'))
           this.thresholdSetting('问题最低关注数', '问题关注数低于此值时应用质量过滤',
-            'questionFollowersThreshold', this.filter.questionFollowersThreshold, true, 'filter_question_follower_threshold')
+            'questionFollowersThreshold', true, 'filter_question_follower_threshold')
         }
         .width('100%')
         .borderRadius($r('app.float.card_radius'))
@@ -157,8 +157,7 @@ export struct ContentFilterSettingsPage {
             this.rules.topicBlockingEnabled, 'topicBlockingEnabled', 'filter_topic_enabled')
           Divider().color($r('app.color.divider_color'))
           this.thresholdSetting('主题屏蔽阈值', '命中的已屏蔽主题数量达到此值时过滤内容',
-            'topicBlockingThreshold', this.rules.topicBlockingThreshold, this.rules.topicBlockingEnabled,
-            'filter_topic_threshold')
+            'topicBlockingThreshold', this.rules.topicBlockingEnabled, 'filter_topic_threshold')
         }
         .width('100%')
         .borderRadius($r('app.float.card_radius'))
@@ -308,8 +307,20 @@ export struct ContentFilterSettingsPage {
     }.width('100%').padding($r('app.float.card_padding')).alignItems(VerticalAlign.Center)
   }
 
+  /** Builder 体内经 this 读取 @State 才能随保存刷新；按值传参只固化首渲染快照（本次缺陷根因）。 */
+  private thresholdValue(key: ThresholdKey): number {
+    if (key === 'topicBlockingThreshold') return this.rules.topicBlockingThreshold;
+    if (key === 'answerVoteupThreshold') return this.filter.answerVoteupThreshold;
+    if (key === 'articleVoteupThreshold') return this.filter.articleVoteupThreshold;
+    if (key === 'articleFollowersThreshold') return this.filter.articleFollowersThreshold;
+    if (key === 'videoVoteThreshold') return this.filter.videoVoteThreshold;
+    if (key === 'videoFollowersThreshold') return this.filter.videoFollowersThreshold;
+    if (key === 'questionAnswerThreshold') return this.filter.questionAnswerThreshold;
+    return this.filter.questionFollowersThreshold;
+  }
+
   @Builder
-  private thresholdSetting(title: string, description: string, key: ThresholdKey, value: number,
+  private thresholdSetting(title: string, description: string, key: ThresholdKey,
     enabled: boolean, testId: string) {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
       Row({ space: $r('app.float.spacing_medium') }) {
@@ -318,11 +329,12 @@ export struct ContentFilterSettingsPage {
           Text(description).fontSize($r('app.float.secondary_font_size'))
             .fontColor($r('app.color.secondary_text')).width('100%')
         }.alignItems(HorizontalAlign.Start).layoutWeight(1)
-        Text(`${value}`).fontSize($r('app.float.body_font_size')).fontColor($r('app.color.secondary_text'))
+        Text(`${this.thresholdValue(key)}`).fontSize($r('app.float.body_font_size'))
+          .fontColor($r('app.color.secondary_text'))
         SymbolGlyph($r('sys.symbol.chevron_right')).fontSize(16).fontColor([$r('app.color.secondary_text')])
       }.width('100%').alignItems(VerticalAlign.Center)
     }.id(testId).width('100%').padding($r('app.float.card_padding')).backgroundColor(Color.Transparent)
-      .enabled(enabled).opacity(enabled ? 1 : 0.45).onClick((): void => this.openThreshold(key, value))
+      .enabled(enabled).opacity(enabled ? 1 : 0.45).onClick((): void => this.openThreshold(key))
   }
 
   @Builder
@@ -457,9 +469,9 @@ export struct ContentFilterSettingsPage {
     }).catch((_error: Error): void => { this.statusMessage = '设置保存失败，请重试'; });
   }
 
-  private openThreshold(key: ThresholdKey, value: number): void {
+  private openThreshold(key: ThresholdKey): void {
     this.thresholdKey = key;
-    this.thresholdInput = `${value}`;
+    this.thresholdInput = `${this.thresholdValue(key)}`;
     this.settingsSheetKind = 'threshold';
     this.settingsSheetShown = true;
   }
