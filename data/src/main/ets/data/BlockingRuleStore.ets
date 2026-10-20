@@ -295,7 +295,8 @@ function boundedBlockableText(content: BlockableContentSummary): string {
 
 export function qualityFilterReason(content: BlockableContentSummary,
   preferences: RecommendationFilterPreferences): string | undefined {
-  if (preferences.qualityFilterMode === QualityFilterMode.OFF || content.authorIsFollowing === true) {
+  if (preferences.qualityFilterMode === QualityFilterMode.OFF || preferences.reverseBlock ||
+    content.authorIsFollowing === true) {
     return undefined;
   }
   if (content.contentKind === 'answer' && content.authorIsFollowing === false &&

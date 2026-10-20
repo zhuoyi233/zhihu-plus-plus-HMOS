@@ -376,88 +376,28 @@ export struct HomeFeedPage {
   private feedCard(item: FeedItem) {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
       Column({ space: $r('app.float.spacing_small') }) {
-        Row({ space: $r('app.float.spacing_xsmall') }) {
-          Text(homeFeedActionLabel(item))
-            .fontSize($r('app.float.secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .layoutWeight(1)
-          Text(feedKindLabel(item.target.kind))
-            .fontSize($r('app.float.secondary_font_size'))
-            .fontColor(this.resolvedThemeColor)
-
-          // 对齐上游 FeedCardMenuBox：右上角紧凑“更多”符号图标，屏蔽等操作收进菜单。
-          Button({ type: ButtonType.Normal, stateEffect: true }) {
-            SymbolGlyph($r('sys.symbol.ellipsis_circle'))
-              .fontSize(18)
-              .fontColor([$r('app.color.secondary_text')])
-          }
-          .id(`home_feed_block_${item.target.kind}_${item.target.id}`)
-          .width(32)
-          .height(32)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .enabled(!this.blockingBusy && this.blockingAction !== undefined)
-          .bindMenu(this.feedBlockMenu(item))
-          .accessibilityText('屏蔽作者或关键词')
-        }
-        .width('100%')
-
-        // 对齐上游 FeedCard：标题 2 行、摘要 3 行、作者与元信息各 1 行，控制一屏卡片数量。
-        Text(item.target.title)
-          .fontSize($r('app.float.heading_font_size'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.primary_text'))
-          .maxLines(2)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .width('100%')
-
         if ((item.target.qualityFilterReason ?? '').length > 0) {
-          Text(`质量屏蔽规则：${item.target.qualityFilterReason}`)
-            .id(`home_quality_rule_${item.target.kind}_${item.target.id}`)
-            .fontSize($r('app.float.secondary_font_size'))
-            .fontColor(this.resolvedThemeColor)
-            .width('100%')
-        }
-
-        if (this.showFeedThumbnail && (item.target.thumbnailUrl ?? '').length > 0) {
-          Image(item.target.thumbnailUrl)
-            .width('100%')
-            .height(128)
-            .borderRadius($r('app.float.spacing_small'))
-            .objectFit(ImageFit.Cover)
-            .alt('内容缩略图')
-        }
-
-        if (item.target.excerpt.trim().length > 0) {
-          Text(item.target.excerpt)
-            .fontSize($r('app.float.body_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .maxLines(3)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-        }
-
-        Row({ space: $r('app.float.spacing_medium') }) {
-          if (item.target.author !== undefined) {
-            Text(item.target.author.name)
+          // 对齐上游 RULES：用原因替换正文，标题、摘要、作者、来源与图片均不展示。
+          Row({ space: $r('app.float.spacing_small') }) {
+            Text(item.target.qualityFilterReason ?? '')
+              .id(`home_quality_rule_${item.target.kind}_${item.target.id}`)
+              .fontSize($r('app.float.body_font_size'))
+              .fontColor($r('app.color.secondary_text'))
+              .layoutWeight(1)
+            this.feedCardMenuButton(item)
+          }
+          .width('100%')
+          Row({ space: $r('app.float.spacing_medium') }) {
+            Text(`${item.target.voteupCount ?? '—'} 赞同`)
               .fontSize($r('app.float.secondary_font_size'))
               .fontColor($r('app.color.secondary_text'))
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .layoutWeight(1)
-          } else {
-            Blank().layoutWeight(1)
+            Text(`${item.target.commentCount ?? '—'} 评论`)
+              .fontSize($r('app.float.secondary_font_size'))
+              .fontColor($r('app.color.secondary_text'))
           }
-          Text(`${item.target.voteupCount ?? '—'} 赞同`)
-            .fontSize($r('app.float.secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-          Text(`${item.target.commentCount ?? '—'} 评论`)
-            .fontSize($r('app.float.secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
+        } else {
+          this.feedCardContent(item)
         }
-        .width('100%')
       }
       .alignItems(HorizontalAlign.Start)
       .width('100%')
@@ -474,8 +414,93 @@ export struct HomeFeedPage {
       color: $r('app.color.divider_color'),
       radius: this.feedCardStyle === 'card' ? $r('app.float.card_radius') : 0
     })
-    .accessibilityText(`打开${feedKindLabel(item.target.kind)}：${item.target.title}`)
+    .accessibilityText((item.target.qualityFilterReason ?? '').length > 0
+      ? `已屏蔽：${item.target.qualityFilterReason}`
+      : `打开${feedKindLabel(item.target.kind)}：${item.target.title}`)
     .onClick((): void => this.openFeedItem(item))
+  }
+
+  @Builder
+  private feedCardMenuButton(item: FeedItem) {
+    Button({ type: ButtonType.Normal, stateEffect: true }) {
+      SymbolGlyph($r('sys.symbol.ellipsis_circle'))
+        .fontSize(18)
+        .fontColor([$r('app.color.secondary_text')])
+    }
+    .id(`home_feed_block_${item.target.kind}_${item.target.id}`)
+    .width(32)
+    .height(32)
+    .padding(0)
+    .backgroundColor(Color.Transparent)
+    .enabled(!this.blockingBusy && this.blockingAction !== undefined)
+    .bindMenu(this.feedBlockMenu(item))
+    .accessibilityText('更多选项')
+  }
+
+  @Builder
+  private feedCardContent(item: FeedItem) {
+    Row({ space: $r('app.float.spacing_xsmall') }) {
+      Text(homeFeedActionLabel(item))
+        .fontSize($r('app.float.secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .layoutWeight(1)
+      Text(feedKindLabel(item.target.kind))
+        .fontSize($r('app.float.secondary_font_size'))
+        .fontColor(this.resolvedThemeColor)
+
+      // 对齐上游 FeedCardMenuBox：右上角紧凑“更多”符号图标，屏蔽等操作收进菜单。
+      this.feedCardMenuButton(item)
+    }
+    .width('100%')
+
+    // 对齐上游 FeedCard：标题 2 行、摘要 3 行、作者与元信息各 1 行，控制一屏卡片数量。
+    Text(item.target.title)
+      .fontSize($r('app.float.heading_font_size'))
+      .fontWeight(FontWeight.Medium)
+      .fontColor($r('app.color.primary_text'))
+      .maxLines(2)
+      .textOverflow({ overflow: TextOverflow.Ellipsis })
+      .width('100%')
+
+    if (this.showFeedThumbnail && (item.target.thumbnailUrl ?? '').length > 0) {
+      Image(item.target.thumbnailUrl)
+        .width('100%')
+        .height(128)
+        .borderRadius($r('app.float.spacing_small'))
+        .objectFit(ImageFit.Cover)
+        .alt('内容缩略图')
+    }
+
+    if (item.target.excerpt.trim().length > 0) {
+      Text(item.target.excerpt)
+        .fontSize($r('app.float.body_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .maxLines(3)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%')
+    }
+
+    Row({ space: $r('app.float.spacing_medium') }) {
+      if (item.target.author !== undefined) {
+        Text(item.target.author.name)
+          .fontSize($r('app.float.secondary_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+      } else {
+        Blank().layoutWeight(1)
+      }
+      Text(`${item.target.voteupCount ?? '—'} 赞同`)
+        .fontSize($r('app.float.secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+      Text(`${item.target.commentCount ?? '—'} 评论`)
+        .fontSize($r('app.float.secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+    }
+    .width('100%')
   }
 
   private openFeedItem(item: FeedItem): void {
@@ -528,6 +553,12 @@ export struct HomeFeedPage {
 
   private feedBlockMenu(item: FeedItem): Array<MenuElement> {
     const menu: Array<MenuElement> = [];
+    if ((item.target.qualityFilterReason ?? '').length > 0) {
+      menu.push({
+        value: '调整质量屏蔽',
+        action: (): void => this.navigate({ name: AppDestinationName.RECOMMENDATION_FILTER_SETTINGS })
+      });
+    }
     const author = item.target.author;
     if (author !== undefined) {
       menu.push({

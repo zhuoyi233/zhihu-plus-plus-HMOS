@@ -17,6 +17,7 @@ import {
   isSafeBlockingRegex,
   matchBlockingRules,
   normalizeBlockingPreferences,
+  QualityFilterMode,
   validateBlockingIdentifier,
   RecommendationFilterPreferences,
   RecommendationFilterPreferencesGateway,
@@ -84,10 +85,11 @@ class CountingPreferencesGateway implements BlockingPreferencesGateway {
 
 class CountingRecommendationGateway implements RecommendationFilterPreferencesGateway {
   loadCount: number = 0;
+  value: RecommendationFilterPreferences = defaultRecommendationFilterPreferences();
 
   loadRecommendationFilterPreferences(): Promise<RecommendationFilterPreferences> {
     this.loadCount += 1;
-    return Promise.resolve(defaultRecommendationFilterPreferences());
+    return Promise.resolve(this.value);
   }
 
   saveRecommendationFilterPreferences(_value: RecommendationFilterPreferences): Promise<void> {
@@ -256,6 +258,35 @@ export default function blockingRuleMatcherTest(): void {
       rules.snapshot.users = [{ userId: 'author-1', userName: '用户', createdAt: 1 }];
       const refreshed = await matcher.createSession();
       expect(refreshed.match(paid)?.kind).assertEqual(BlockingRuleKind.USER);
+    });
+
+    it('distinguishesQualityPlaceholdersHiddenCardsAndUnfilteredCards', 0, async () => {
+      const recommendation = new CountingRecommendationGateway();
+      const matcher = new BlockingRuleMatcher(new CountingRuleGateway(), new CountingPreferencesGateway(),
+        ContentBlockingStrategy.HOME_FULL, recommendation, new CountingRuntimeGateway());
+      const value = content();
+      value.contentKind = 'answer';
+      value.voteupCount = 0;
+      value.authorIsFollowing = false;
+      const rules = await matcher.createSession();
+      expect(rules.qualityReason?.(value)).assertEqual('回答赞同数低于 10');
+      expect(rules.match(value)).assertUndefined();
+
+      recommendation.value.qualityFilterMode = QualityFilterMode.HIDE;
+      const hide = await matcher.createSession();
+      expect(hide.match(value)?.kind).assertEqual(BlockingRuleKind.QUALITY);
+
+      recommendation.value.qualityFilterMode = QualityFilterMode.OFF;
+      const off = await matcher.createSession();
+      expect(off.qualityReason?.(value)).assertUndefined();
+      expect(off.match(value)).assertUndefined();
+
+      recommendation.value.qualityFilterMode = QualityFilterMode.RULES;
+      recommendation.value.reverseBlock = true;
+      value.isPaid = true;
+      const reverse = await matcher.createSession();
+      expect(reverse.qualityReason?.(value)).assertUndefined();
+      expect(reverse.match(value)).assertUndefined();
     });
 
     it('homeFullLoadsEachSnapshotOnceAndFlushesOnce', 0, async () => {

@@ -77,13 +77,26 @@ export default function recommendationFilterPolicyTest(): void {
       expect(qualityFilterReason(answer, preferences)).assertUndefined();
     });
 
-    it('distinguishesQualityRuleAnnotationFromHiddenContent', 0, () => {
+    it('distinguishesQualityPlaceholderFromHiddenContent', 0, () => {
       const preferences = defaultRecommendationFilterPreferences();
       const answer = content();
       answer.voteupCount = 0;
       expect(matchRecommendationFilters(answer, preferences)).assertUndefined();
       preferences.qualityFilterMode = QualityFilterMode.HIDE;
       expect(matchRecommendationFilters(answer, preferences)?.kind).assertEqual(BlockingRuleKind.QUALITY);
+    });
+
+    it('disablesQualityPlaceholdersAndHidingDuringReverseBlocking', 0, () => {
+      const preferences = defaultRecommendationFilterPreferences();
+      const answer = content();
+      answer.voteupCount = 0;
+      answer.isPaid = true;
+      preferences.reverseBlock = true;
+      expect(qualityFilterReason(answer, preferences)).assertUndefined();
+      expect(matchRecommendationFilters(answer, preferences)).assertUndefined();
+      preferences.qualityFilterMode = QualityFilterMode.HIDE;
+      expect(qualityFilterReason(answer, preferences)).assertUndefined();
+      expect(matchRecommendationFilters(answer, preferences)).assertUndefined();
     });
 
     it('doesNotTreatMissingQualitySignalsAsZero', 0, () => {

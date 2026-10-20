@@ -180,10 +180,8 @@ export class DefaultFeedRepository implements FeedRepository {
       const blockingSession: ContentBlockingSession = await this.blockingMatcher.createSession();
       visibleItems = decodedPage.items.filter((item: FeedItem): boolean => {
         const summary = blockableFeedSummary(item);
-        const reason = blockingSession.qualityReason?.(summary);
-        if (reason !== undefined) {
-          item.target.qualityFilterReason = reason;
-        }
+        // 每次按当前会话重算，关闭质量屏蔽/启用反向屏蔽后不得沿用旧原因。
+        item.target.qualityFilterReason = blockingSession.qualityReason?.(summary);
         return blockingSession.match(summary) === undefined;
       });
       await blockingSession.flush?.();

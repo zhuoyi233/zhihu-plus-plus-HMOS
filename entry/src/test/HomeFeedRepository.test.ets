@@ -143,6 +143,11 @@ class CancellationFeedTransportFactory implements ZhihuHttpTransportFactory {
 
 class RecordingFeedBlockingSession implements ContentBlockingSession {
   readonly summaries: Array<BlockableContentSummary> = [];
+  reason?: string;
+
+  qualityReason(_content: BlockableContentSummary): string | undefined {
+    return this.reason;
+  }
 
   match(content: BlockableContentSummary): BlockingMatch | undefined {
     this.summaries.push(content);
@@ -383,6 +388,19 @@ export default function homeFeedRepositoryTest(): void {
       expect(matcher.session.summaries[1].voteupCount).assertUndefined();
       expect(page.items.length).assertEqual(1);
       expect(page.items[0].target.id).assertEqual('1');
+    });
+
+    it('preservesQualityPlaceholderIdentityAndOriginalNavigationTarget', 0, async () => {
+      const factory = new SequenceFeedTransportFactory([{ statusCode: 200, body: FIRST_PAGE }]);
+      const matcher = new RecordingFeedBlockingMatcher();
+      matcher.session.reason = '文章赞同数或作者粉丝数低于阈值';
+      const repository = new DefaultFeedRepository(new ZhihuHttpClient(new CountingSessionProvider(), factory), matcher);
+      const page = await repository.loadHomePage();
+      expect(page.items.length).assertEqual(1);
+      expect(page.items[0].target.qualityFilterReason).assertEqual(matcher.session.reason);
+      expect(page.items[0].target.id).assertEqual('article-1');
+      expect(page.cursor.next).assertEqual(
+        'https://www.zhihu.com/api/v3/feed/topstory/recommend?include=stale&%6fffset=2');
     });
 
     it('deduplicatesItemsAcrossPagesAndStopsLoopingCursor', 0, async () => {
