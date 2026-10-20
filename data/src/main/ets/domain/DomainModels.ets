@@ -197,6 +197,8 @@ export interface FeedTargetSummary {
   excerpt: string;
   url: string;
   voteupCount?: number;
+  /** 移动卡片“万/亿”缩写统计的保守上界；质量过滤不能把缩写当精确值。 */
+  voteupCountUpperBound?: number;
   commentCount?: number;
   thumbnailUrl?: string;
   answerCount?: number;

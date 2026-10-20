@@ -19,6 +19,7 @@ import zhihuHttpClientTest from './ZhihuHttpClient.test';
 import persistenceTest from './Persistence.test';
 import appNavigationTest from './AppNavigation.test';
 import homeFeedRepositoryTest from './HomeFeedRepository.test';
+import mobileHomeFeedDecoderTest from './MobileHomeFeedDecoder.test';
 import homeFeedStateTest from './HomeFeedState.test';
 import sessionRepositoryTest from './SessionRepository.test';
 import zhihuQrLoginClientTest from './ZhihuQrLoginClient.test';
@@ -114,6 +115,7 @@ export default function testsuite(): void {
   persistenceTest();
   appNavigationTest();
   homeFeedRepositoryTest();
+  mobileHomeFeedDecoderTest();
   homeFeedStateTest();
   sessionRepositoryTest();
   zhihuQrLoginClientTest();

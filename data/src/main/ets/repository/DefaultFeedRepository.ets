@@ -418,6 +418,7 @@ function blockableFeedSummary(item: FeedItem): BlockableContentSummary {
     url: item.target.url,
     topicIds: item.target.topicIds,
     voteupCount: item.target.voteupCount,
+    voteupCountUpperBound: item.target.voteupCountUpperBound,
     answerCount: item.target.answerCount,
     followerCount: item.target.followerCount,
     isPaid: item.target.isPaid

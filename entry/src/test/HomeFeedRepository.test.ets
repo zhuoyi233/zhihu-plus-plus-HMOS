@@ -19,6 +19,9 @@ import {
   RecommendationFilterPreferencesGateway,
   RecommendationMode,
   defaultRecommendationFilterPreferences,
+  matchRecommendationFilters,
+  QualityFilterMode,
+  qualityFilterReason,
   SessionCookie,
   SessionCookieProvider,
   ZhihuHttpClient,
@@ -167,6 +170,38 @@ class RecordingFeedBlockingMatcher implements ContentBlockingMatcher {
     this.createCount += 1;
     return Promise.resolve(this.session);
   }
+}
+
+class QualityFeedBlockingSession implements ContentBlockingSession {
+  readonly preferences: RecommendationFilterPreferences = defaultRecommendationFilterPreferences();
+
+  qualityReason(content: BlockableContentSummary): string | undefined {
+    return qualityFilterReason(content, this.preferences);
+  }
+
+  match(content: BlockableContentSummary): BlockingMatch | undefined {
+    return matchRecommendationFilters(content, this.preferences);
+  }
+}
+
+class QualityFeedBlockingMatcher implements ContentBlockingMatcher {
+  readonly session: QualityFeedBlockingSession = new QualityFeedBlockingSession();
+
+  createSession(): Promise<ContentBlockingSession> {
+    return Promise.resolve(this.session);
+  }
+}
+
+function descriptionMobilePage(footer: string): string {
+  return '{"data":[{"id":"mobile-description","type":"ComponentCard",' +
+    '"action":{"parameter":"route_url=https%3A%2F%2Fwww.zhihu.com%2Fquestion%2F100%2Fanswer%2F200"},' +
+    '"children":[{"type":"Text","id":"Text","text":"描述型卡片"},' +
+    '{"type":"Text","id":"text_pin_summary","text":"摘要"},' +
+    '{"type":"Line","style":"LineAuthor_default","elements":[{"type":"Text","text":"作者"}]},' +
+    '{"type":"Line","id":"feed_footer","style":"lineFooterDescription_default",' +
+    '"elements":[{"type":"Text","text":' + JSON.stringify(footer) + '}]}],' +
+    '"extra":{"business_ext_map":{"userInfo":{"memberHashId":"real-author","followState":"none"}}}}],' +
+    '"paging":{"is_end":true}}';
 }
 
 const FIRST_PAGE = '{"data":[{"id":"feed-1","target":{"type":"article",' +
@@ -328,6 +363,46 @@ export default function homeFeedRepositoryTest(): void {
       expect(page.items[0].target.author?.name).assertEqual('移动作�?');
       expect(page.items[0].target.authorFollowerCount).assertEqual(200);
       expect(page.items[0].target.authorIsFollowing).assertFalse();
+    });
+
+    it('appliesQualityPlaceholdersAndHidingToDescriptionBasedMobileCards', 0, async () => {
+      const response = descriptionMobilePage('0 赞同 · 0 评论');
+      const factory = new SequenceFeedTransportFactory([
+        { statusCode: 200, body: response }, { statusCode: 200, body: response }
+      ]);
+      const preferences = new FixedRecommendationPreferences();
+      preferences.value.recommendationMode = RecommendationMode.ANDROID;
+      preferences.value.loginForRecommendation = false;
+      const matcher = new QualityFeedBlockingMatcher();
+      const repository = new DefaultFeedRepository(new ZhihuHttpClient(undefined, factory), matcher, preferences);
+      const rules = await repository.loadHomePage();
+      expect(rules.items.length).assertEqual(1);
+      expect(rules.items[0].target.voteupCount).assertEqual(0);
+      expect(rules.items[0].target.author?.id).assertEqual('real-author');
+      expect(rules.items[0].target.qualityFilterReason).assertEqual('回答赞同数低于 10');
+
+      matcher.session.preferences.qualityFilterMode = QualityFilterMode.HIDE;
+      const hidden = await repository.loadHomePage();
+      expect(hidden.items.length).assertEqual(0);
+    });
+
+    it('carriesAbbreviatedVoteBoundsThroughTheRepositoryQualitySummary', 0, async () => {
+      const response = descriptionMobilePage('1.9 万赞同 · 3069 评论');
+      const factory = new SequenceFeedTransportFactory([
+        { statusCode: 200, body: response }, { statusCode: 200, body: response }
+      ]);
+      const preferences = new FixedRecommendationPreferences();
+      preferences.value.recommendationMode = RecommendationMode.ANDROID;
+      preferences.value.loginForRecommendation = false;
+      const matcher = new QualityFeedBlockingMatcher();
+      matcher.session.preferences.answerVoteupThreshold = 19001;
+      const repository = new DefaultFeedRepository(new ZhihuHttpClient(undefined, factory), matcher, preferences);
+      const ambiguous = await repository.loadHomePage();
+      expect(ambiguous.items[0].target.voteupCount).assertEqual(19000);
+      expect(ambiguous.items[0].target.qualityFilterReason).assertUndefined();
+      matcher.session.preferences.answerVoteupThreshold = 20000;
+      const belowThreshold = await repository.loadHomePage();
+      expect(belowThreshold.items[0].target.qualityFilterReason).assertEqual('回答赞同数低于 20000');
     });
 
     it('ranksCachedCandidatesLocallyWithoutNetworkRequests', 0, async () => {

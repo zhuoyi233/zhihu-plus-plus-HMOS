@@ -289,6 +289,25 @@ export default function blockingRuleMatcherTest(): void {
       expect(reverse.match(value)).assertUndefined();
     });
 
+    it('preservesAbbreviatedVoteBoundsWhenAddingRuntimeState', 0, async () => {
+      const recommendation = new CountingRecommendationGateway();
+      recommendation.value.qualityFilterMode = QualityFilterMode.HIDE;
+      recommendation.value.answerVoteupThreshold = 19001;
+      const matcher = new BlockingRuleMatcher(new CountingRuleGateway(), new CountingPreferencesGateway(),
+        ContentBlockingStrategy.HOME_FULL, recommendation, new CountingRuntimeGateway());
+      const value = content();
+      value.contentId = '123';
+      value.contentKind = 'answer';
+      value.authorIsFollowing = false;
+      value.voteupCount = 19000;
+      value.voteupCountUpperBound = 19999;
+      const ambiguous = await matcher.createSession();
+      expect(ambiguous.match(value)).assertUndefined();
+      recommendation.value.answerVoteupThreshold = 20000;
+      const blocked = await matcher.createSession();
+      expect(blocked.match(value)?.kind).assertEqual(BlockingRuleKind.QUALITY);
+    });
+
     it('homeFullLoadsEachSnapshotOnceAndFlushesOnce', 0, async () => {
       const rules = new CountingRuleGateway();
       const preferences = new CountingPreferencesGateway();

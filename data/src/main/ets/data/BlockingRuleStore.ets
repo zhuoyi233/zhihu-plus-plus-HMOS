@@ -79,6 +79,7 @@ export interface BlockableContentSummary {
   authorIsFollowing?: boolean;
   topicIds: Array<string>;
   voteupCount?: number;
+  voteupCountUpperBound?: number;
   answerCount?: number;
   followerCount?: number;
   isPaid?: boolean;
@@ -299,18 +300,19 @@ export function qualityFilterReason(content: BlockableContentSummary,
     content.authorIsFollowing === true) {
     return undefined;
   }
+  const voteupCount = content.voteupCountUpperBound ?? content.voteupCount;
   if (content.contentKind === 'answer' && content.authorIsFollowing === false &&
-    content.voteupCount !== undefined && content.voteupCount < preferences.answerVoteupThreshold) {
+    voteupCount !== undefined && voteupCount < preferences.answerVoteupThreshold) {
     return `回答赞同数低于 ${preferences.answerVoteupThreshold}`;
   }
   if (content.contentKind === 'article' && content.authorIsFollowing === false &&
-    ((content.voteupCount !== undefined && content.voteupCount < preferences.articleVoteupThreshold) ||
+    ((voteupCount !== undefined && voteupCount < preferences.articleVoteupThreshold) ||
       (content.authorFollowerCount !== undefined &&
         content.authorFollowerCount < preferences.articleFollowersThreshold))) {
     return '文章赞同数或作者粉丝数低于阈值';
   }
   if (content.contentKind === 'video' && content.authorIsFollowing === false &&
-    content.voteupCount !== undefined && content.voteupCount < preferences.videoVoteThreshold &&
+    voteupCount !== undefined && voteupCount < preferences.videoVoteThreshold &&
     content.authorFollowerCount !== undefined && content.authorFollowerCount < preferences.videoFollowersThreshold) {
     return '视频赞同数或作者粉丝数低于阈值';
   }
@@ -468,6 +470,7 @@ class BlockingRuleMatchSession implements ContentBlockingSession {
       authorIsFollowing: content.authorIsFollowing,
       topicIds: content.topicIds.slice(),
       voteupCount: content.voteupCount,
+      voteupCountUpperBound: content.voteupCountUpperBound,
       answerCount: content.answerCount,
       followerCount: content.followerCount,
       isPaid: content.isPaid,
