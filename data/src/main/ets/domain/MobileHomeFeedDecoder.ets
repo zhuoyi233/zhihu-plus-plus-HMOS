@@ -130,6 +130,37 @@ interface MobileFooterCount {
   upperBound: number;
 }
 
+function footerDescription(children: Array<JsonValue>): string | undefined {
+  for (let index = 0; index < children.length; index += 1) {
+    const child = objectValue(children[index]);
+    const style = jsonString(child?.get('style'))?.toLowerCase() ?? '';
+    if (jsonString(child?.get('type')) !== 'Line' ||
+      (jsonString(child?.get('id')) !== 'feed_footer' && !style.startsWith('linefooter'))) continue;
+    const elements = arrayValue(child?.get('elements'));
+    const text = jsonString(findObject(elements, 'type', 'Text')?.get('text'));
+    if (text !== undefined) return text;
+  }
+  return undefined;
+}
+
+function mobileFooterText(children: Array<JsonValue>): string {
+  const vote = reactionCount(children, 'Vote');
+  const comment = reactionCount(children, 'Comment');
+  const collect = reactionCount(children, 'Collect');
+  // 对齐上游：完整 reaction 生成三项统计，否则保留服务端页脚原文（包括收藏与“万”缩写）。
+  if (vote !== undefined && comment !== undefined && collect !== undefined) {
+    return `${vote} 赞同 · ${comment} 评论 · ${collect} 收藏`;
+  }
+  const description = footerDescription(children);
+  if (description !== undefined) return description;
+  // 无原文的残缺旧卡片仅展示已有统计，不补造缺失项。
+  const parts: Array<string> = [];
+  if (vote !== undefined) parts.push(`${vote} 赞同`);
+  if (comment !== undefined) parts.push(`${comment} 评论`);
+  if (collect !== undefined) parts.push(`${collect} 收藏`);
+  return parts.join(' · ');
+}
+
 function footerCount(children: Array<JsonValue>, label: string): MobileFooterCount | undefined {
   for (let index = 0; index < children.length; index += 1) {
     const child = objectValue(children[index]);
@@ -194,6 +225,7 @@ function decodeCard(value: JsonValue): FeedItem | undefined {
       voteupCount: voteCount ?? voteFooter?.count,
       voteupCountUpperBound: voteFooter?.upperBound,
       commentCount: commentCount,
+      mobileFooterText: mobileFooterText(children),
       author: mobileAuthor(authorLine, authorMetadata),
       authorFollowerCount: authorMetadata.followerCount,
       authorIsFollowing: authorMetadata.isFollowing,

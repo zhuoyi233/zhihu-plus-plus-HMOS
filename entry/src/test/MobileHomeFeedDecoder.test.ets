@@ -38,6 +38,7 @@ export default function mobileHomeFeedDecoderTest(): void {
       const collected = footer('1,234 赞同 · 126 收藏');
       expect(collected.voteupCount).assertEqual(1234);
       expect(collected.commentCount).assertUndefined();
+      expect(collected.mobileFooterText).assertEqual('1,234 赞同 · 126 收藏');
     });
 
     it('preservesConservativeBoundsForAbbreviatedCounts', 0, () => {
@@ -45,6 +46,7 @@ export default function mobileHomeFeedDecoderTest(): void {
       expect(tenThousands.voteupCount).assertEqual(19000);
       expect(tenThousands.voteupCountUpperBound).assertEqual(19999);
       expect(tenThousands.commentCount).assertEqual(3069);
+      expect(tenThousands.mobileFooterText).assertEqual('1.9 万赞同 · 3069 评论');
       const hundredMillions = footer('1.2亿赞同 · 1万评论');
       expect(hundredMillions.voteupCount).assertEqual(120000000);
       expect(hundredMillions.voteupCountUpperBound).assertEqual(129999999);
@@ -66,9 +68,24 @@ export default function mobileHomeFeedDecoderTest(): void {
       const missing = decodeMobileHomeFeedPage(card('[]')).items[0].target;
       expect(missing.voteupCount).assertUndefined();
       expect(missing.commentCount).assertUndefined();
+      expect(missing.mobileFooterText).assertEqual('');
       const placeholders = footer('赞同 · 暂无评论');
       expect(placeholders.voteupCount).assertUndefined();
       expect(placeholders.commentCount).assertUndefined();
+    });
+
+    it('formatsCompleteStructuredFooterAndRetainsIncompleteFooterDescription', 0, () => {
+      const complete = decodeMobileHomeFeedPage(card('[{"reaction":"Vote","count":0},' +
+        '{"reaction":"Comment","count":2},{"reaction":"Collect","count":3},' +
+        '{"type":"Text","text":"旧文字"}]')).items[0].target;
+      expect(complete.mobileFooterText).assertEqual('0 赞同 · 2 评论 · 3 收藏');
+      const incomplete = decodeMobileHomeFeedPage(card('[{"reaction":"Vote","count":7},' +
+        '{"reaction":"Collect","count":9},{"type":"Text","text":"7 赞同 · 9 收藏"}]')).items[0].target;
+      expect(incomplete.mobileFooterText).assertEqual('7 赞同 · 9 收藏');
+      expect(incomplete.commentCount).assertUndefined();
+      const legacy = decodeMobileHomeFeedPage(card('[{"reaction":"Vote","count":7},' +
+        '{"reaction":"Comment","count":2}]')).items[0].target;
+      expect(legacy.mobileFooterText).assertEqual('7 赞同 · 2 评论');
     });
 
     it('preservesUnknownFollowStatesAndPrefersExplicitFollowBooleans', 0, () => {

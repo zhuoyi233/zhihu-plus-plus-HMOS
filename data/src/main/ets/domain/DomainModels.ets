@@ -200,6 +200,8 @@ export interface FeedTargetSummary {
   /** 移动卡片“万/亿”缩写统计的保守上界；质量过滤不能把缩写当精确值。 */
   voteupCountUpperBound?: number;
   commentCount?: number;
+  /** 移动推荐页脚的展示文字；空串表示没有统计，仅展示来源标注。 */
+  mobileFooterText?: string;
   thumbnailUrl?: string;
   answerCount?: number;
   visitCount?: number;

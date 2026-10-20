@@ -387,14 +387,7 @@ export struct HomeFeedPage {
             this.feedCardMenuButton(item)
           }
           .width('100%')
-          Row({ space: $r('app.float.spacing_medium') }) {
-            Text(`${item.target.voteupCount ?? '—'} 赞同`)
-              .fontSize($r('app.float.secondary_font_size'))
-              .fontColor($r('app.color.secondary_text'))
-            Text(`${item.target.commentCount ?? '—'} 评论`)
-              .fontSize($r('app.float.secondary_font_size'))
-              .fontColor($r('app.color.secondary_text'))
-          }
+          this.feedCardMetrics(item)
         } else {
           this.feedCardContent(item)
         }
@@ -438,14 +431,29 @@ export struct HomeFeedPage {
   }
 
   @Builder
+  private feedCardMetrics(item: FeedItem) {
+    Text(homeFeedFooterLabel(item))
+      .id(`home_feed_footer_${item.target.kind}_${item.target.id}`)
+      .fontSize($r('app.float.secondary_font_size'))
+      .fontColor($r('app.color.secondary_text'))
+      .maxLines(2)
+      .textOverflow({ overflow: TextOverflow.Ellipsis })
+      .width('100%')
+  }
+
+  @Builder
   private feedCardContent(item: FeedItem) {
     Row({ space: $r('app.float.spacing_xsmall') }) {
-      Text(homeFeedActionLabel(item))
-        .fontSize($r('app.float.secondary_font_size'))
-        .fontColor($r('app.color.secondary_text'))
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .layoutWeight(1)
+      if (item.target.mobileFooterText === undefined || (item.recommendationReason?.trim() ?? '').length > 0) {
+        Text(homeFeedActionLabel(item))
+          .fontSize($r('app.float.secondary_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+      } else {
+        Blank().layoutWeight(1)
+      }
       Text(feedKindLabel(item.target.kind))
         .fontSize($r('app.float.secondary_font_size'))
         .fontColor(this.resolvedThemeColor)
@@ -493,14 +501,19 @@ export struct HomeFeedPage {
       } else {
         Blank().layoutWeight(1)
       }
-      Text(`${item.target.voteupCount ?? '—'} 赞同`)
-        .fontSize($r('app.float.secondary_font_size'))
-        .fontColor($r('app.color.secondary_text'))
-      Text(`${item.target.commentCount ?? '—'} 评论`)
-        .fontSize($r('app.float.secondary_font_size'))
-        .fontColor($r('app.color.secondary_text'))
+      if (item.target.mobileFooterText === undefined) {
+        Text(`${item.target.voteupCount ?? '—'} 赞同`)
+          .fontSize($r('app.float.secondary_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+        Text(`${item.target.commentCount ?? '—'} 评论`)
+          .fontSize($r('app.float.secondary_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+      }
     }
     .width('100%')
+    if (item.target.mobileFooterText !== undefined) {
+      this.feedCardMetrics(item)
+    }
   }
 
   private openFeedItem(item: FeedItem): void {
@@ -755,4 +768,12 @@ export function homeFeedActionLabel(item: FeedItem): string {
   }
   const actionText = item.actionText?.trim() ?? '';
   return actionText.length > 0 ? actionText : '推荐内容';
+}
+
+export function homeFeedFooterLabel(item: FeedItem): string {
+  const mobileFooter = item.target.mobileFooterText;
+  if (mobileFooter !== undefined) {
+    return mobileFooter.trim().length > 0 ? `${mobileFooter} · 手机版推荐` : '手机版推荐';
+  }
+  return `${item.target.voteupCount ?? '—'} 赞同 · ${item.target.commentCount ?? '—'} 评论`;
 }

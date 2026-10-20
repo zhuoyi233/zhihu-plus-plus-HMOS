@@ -5,7 +5,7 @@ import {
   HomeFeedPhase,
   mergeUniqueFeedItems
 } from '../main/ets/pages/HomeFeedState';
-import { homeFeedActionLabel, homeFeedDestination } from '../main/ets/pages/HomeFeedPage';
+import { homeFeedActionLabel, homeFeedDestination, homeFeedFooterLabel } from '../main/ets/pages/HomeFeedPage';
 
 interface PendingRequest {
   resolve: (page: FeedPage) => void;
@@ -237,6 +237,20 @@ export default function homeFeedStateTest(): void {
       web.verb = 'TOPIC_ACKNOWLEDGED_ANSWER';
       web.recommendationReason = undefined;
       expect(homeFeedActionLabel(web)).assertEqual('推荐内容');
+    });
+
+    it('showsOriginalMobileFooterWithoutInventingCommentPlaceholders', 0, () => {
+      const mobile = feed('mobile');
+      mobile.target.mobileFooterText = '1934 赞同 · 699 收藏';
+      mobile.target.commentCount = undefined;
+      expect(homeFeedFooterLabel(mobile)).assertEqual('1934 赞同 · 699 收藏 · 手机版推荐');
+      mobile.target.qualityFilterReason = '回答赞同数低于 2000';
+      expect(homeFeedFooterLabel(mobile)).assertEqual('1934 赞同 · 699 收藏 · 手机版推荐');
+      mobile.target.mobileFooterText = '1.9 万赞同 · 3069 评论';
+      expect(homeFeedFooterLabel(mobile)).assertEqual('1.9 万赞同 · 3069 评论 · 手机版推荐');
+      mobile.target.mobileFooterText = '';
+      expect(homeFeedFooterLabel(mobile)).assertEqual('手机版推荐');
+      expect(homeFeedFooterLabel(feed('web'))).assertEqual('2 赞同 · 1 评论');
     });
 
     it('hidesRawProtocolVerbFromCards', 0, () => {
