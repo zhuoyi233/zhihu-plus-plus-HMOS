@@ -6,21 +6,37 @@
 （前缀拼接 raw 直连地址，含同样的 10 分钟防缓存参数）竞速，首个结构有效响应
 获胜，并使用 10 分钟进程内缓存。不支持 raw 路径的代理返回的 HTML 错误页会被
 结构校验计入失败，无需维护支持性白名单。静态源与代理全部不可用时，版本检查
-回退到 GitHub Releases Atom；HAP 内置清单提供离线兜底（见下文预置条目）。
+回退到 GitHub Releases Atom；HAP 内置清单提供离线兜底。
 运行时不请求 `api.github.com` 的 Release 接口。
 
-每个版本发布前（构建 HAP 之前），维护者写好发布说明文稿并运行：
+每个版本将版本号与 `docs/release-notes/HMOSv<x.y.z>.md` 一起提交，PR 前按顺序通过
+编译/Hypium、Debug 与 Release 验证。合入 `main` 后，先在待发版提交再次执行正式出包命令：
 
 ```powershell
-pwsh -NoProfile -File scripts/update-release-catalog.ps1 -SeedPending -Version x.y.z -NotesFile <文稿>
+pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall -BuildMode release
 ```
 
-脚本把该版本的发布说明（无附件元数据，`published_at` 留空）置顶写入仓库
-静态清单与 HAP 内置清单。发行 HAP 构建先于本版本 Release 发布，内置清单
-天然无法携带本版本说明，预置条目即补上这一固有缺口：升级后首次启动的
-"本版本更新内容"页与离线时的"已是最新版本"判定均由内置数据兜底。发布说明
-文稿与 `gh release create --notes-file` 共用同一文件，保证应用内展示与
-Release 页一致。
+验证通过后，确认 HEAD 仍是该提交且没有待发布的源码改动，再由维护者手动在该 `main` 提交创建
+`HMOSv<x.y.z>` 附注 tag。创建 Release 草稿时使用这次验证通过的 HAP；如源码或提交有变化，先重新验证。
+tag 后如需重建，必须检出 tag 对应提交并重新运行上述命令，不能以之前的验证结果代替。
+
+脚本要求文稿首行为 `# ZhihuPlusPlus-HMOS v<versionName>` 且包含正文，缺失或版本不符时拒绝构建。
+Release 打包期间自动将当前文稿与已发布历史合并到 HAP 内置的 `update/version.json` 和
+`update/releases.json`，为当前版本提供离线更新说明和“已是最新版本”兜底。
+临时资源成功或失败后均恢复，`assets/update/` 不参与构建期改写；正常工作树中的两份清单
+仍保持相同的正式发布数据。因此从 `main` 或 tag 重新构建无需手动预置，也无需提交占位清单。
+旧 `update-release-catalog.ps1 -SeedPending` 模式已移除。
+
+当前包无法预先知道自身 SHA-256，内置当前条目不携带附件信息，重建已发布版本时也会清除旧附件哈希。
+在线下载与校验使用正式发布后生成的清单。发布说明文稿与 `gh release create --notes-file`
+复用同一文件，保证应用内展示与 Release 页一致。
+
+构建与 Hypium 通过后，脚本在复制版本命名产物前解压检查未签名和签名 HAP：
+两份内置清单必须包含唯一的当前版本、完整正文与文稿一致，当前条目不得带有旧附件元数据。
+说明缺失、版本错误、正文不完整或残留旧哈希均导致交付失败。
+正式交付必须使用该命令，不能把 DevEco/devecocli/hvigor 裸构建产物直接当作已验证发行包。
+交付记录须包含完整路径、版本、大小和 SHA-256，避免不同工作树的同名文件混用。
+创建 Release 时先保存草稿，正式发布仍需维护者当次明确确认。
 
 每次正式 Release 发布后，维护者运行：
 
@@ -29,12 +45,25 @@ pwsh -NoProfile -File scripts/update-release-catalog.ps1
 ```
 
 脚本读取已发布的 `HMOSv*` Release，排除草稿、预发布和上游 Android tag，
-并用真实附件 URL/大小/SHA-256、发布时间覆盖预置占位条目，同时更新仓库
-静态清单与 HAP 内置清单。应核对最新版本、未签名 HAP 附件与发布说明，再随
-下一次代码变更提交；**推送远端前必须已完成覆盖**——预置条目无附件可下载，
-若先于发布推上 `main`，旧版客户端会看到无法下载的"待发布版本"。远端 `main`
+并写入真实附件 URL/大小/SHA-256、发布时间，同时更新仓库静态清单与 HAP 内置清单。
+写入前必须验证每个版本有唯一的 `ZhihuPlusPlus-HMOS-v<version>-unsigned.hap`，附件版本与 tag 一致，
+URL 对应当前仓库、tag 和文件名，大小为正整数，GitHub digest 为完整的 SHA-256。
+任何版本校验失败或 API 请求失败均中止，不覆盖原清单；`releases.json` 在单版本时也保持数组结构。
+应核对最新版本、未签名 HAP 附件与发布说明，再随下一次代码变更提交；用户明确要求时可单独提交/创建 PR。
+在线清单只保存正式发布数据，禁止提交构建期占位条目。远端 `main`
 包含新清单后，旧版客户端也能发现该版本。若清单尚未部署，Atom 可发现新版本，
 但下载源会等到附件元数据可用时才展示。
+
+若替换正式 Release 的 HAP 附件，即使版本号与下载 URL 相同，其大小或 SHA-256 也会变化。
+替换后必须再次运行清单脚本、核对新附件摘要，并经授权提交/推送更新；旧清单会使新附件下载校验失败。
+清单描述的是已发布包，不要求将它重新塞进该包再替换附件，否则每次重打包都会改变摘要。
+
+构建期注入、资源恢复、损坏包拦截及正式清单生成的脚本回归验证（清单测试使用模拟 API，不访问网络）：
+
+```powershell
+pwsh -NoProfile -File scripts/test-release-notes.ps1
+pwsh -NoProfile -File scripts/test-release-catalog.ps1
+```
 
 页面的 18 个下载源由同一条真实未签名 HAP URL 生成：前 17 个为代理，
 最后一个为 GitHub 官方源。清单附件携带 GitHub 提供的 SHA-256 摘要，系统
