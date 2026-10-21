@@ -1,6 +1,6 @@
 import { http } from '@kit.NetworkKit';
 import { AppReleaseDetailResult, AppReleaseDetailStatus, AppUpdateCheckResult, AppUpdateRelease } from './AppUpdateModels';
-import { decodeLatestRelease, decodeLatestReleaseAtom, decodeReleaseDetail, resolveAppUpdateCheck } from './AppUpdateParser';
+import { decodeLatestRelease, decodeLatestReleaseAtom, decodeReleaseDetail, resolveAppUpdateCheck, resolveBundledAppUpdateCheck } from './AppUpdateParser';
 import { proxiedCatalogUrls } from './AppUpdateSources';
 
 /**
@@ -75,12 +75,7 @@ export class AppUpdateClient {
       }
       return resolveAppUpdateCheck(localVersionName, fallback, '');
     }
-    const bundled = decodeLatestRelease(AppUpdateClient.bundledLatestJson);
-    if (bundled !== undefined && bundled.versionName === localVersionName) {
-      return resolveAppUpdateCheck(localVersionName, bundled, '');
-    }
-    return resolveAppUpdateCheck(localVersionName, undefined,
-      '检查更新失败：静态更新源与 Releases 备用源均不可用');
+    return resolveBundledAppUpdateCheck(localVersionName, AppUpdateClient.bundledLatestJson);
   }
 
   /** 远端清单可能落后于最新发布而缺 sha256；版本一致时用随包内置清单补齐，供下载后校验。 */

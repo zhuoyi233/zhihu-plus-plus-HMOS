@@ -103,14 +103,14 @@ try {
     Assert-True ((@(Get-FixtureHashes $root) -join ',') -eq ($before -join ',')) '失败后资源未恢复'
   }
 
-  Test-Case '正确恢复空文件和原本不存在的资源' {
+  Test-Case '拒绝空文件和原本不存在的资源，避免掩盖注入残留' {
     $root = New-Fixture 'empty-and-missing'
     $latestPath = Join-Path $root 'entry/src/main/resources/rawfile/update/version.json'
     $releasesPath = Join-Path $root 'entry/src/main/resources/rawfile/update/releases.json'
     [IO.File]::WriteAllBytes($latestPath, [byte[]]::new(0))
     Remove-Item -LiteralPath $releasesPath
     $notes = Get-ReleaseNotesBody $root '0.5.9'
-    Assert-Rejected { Invoke-WithBundledReleaseNotes $root '0.5.9' $notes { throw '模拟中断' } } '模拟中断'
+    Assert-Rejected { Invoke-WithBundledReleaseNotes $root '0.5.9' $notes { throw '不应构建' } } '上次注入残留'
     Assert-True ((Test-Path -LiteralPath $latestPath) -and (Get-Item $latestPath).Length -eq 0) '空文件未保留'
     Assert-True (-not (Test-Path -LiteralPath $releasesPath)) '新增临时资源未移除'
   }
@@ -124,6 +124,7 @@ try {
     }
     ConvertTo-Json -InputObject (@($publishedCurrent) + $old) -Depth 8 |
       Set-Content (Join-Path $root 'assets/update/releases.json') -Encoding utf8
+    Copy-Item (Join-Path $root 'assets/update/releases.json') (Join-Path $root 'entry/src/main/resources/rawfile/update/releases.json')
     $before = @(Get-FixtureHashes $root)
     $notes = Get-ReleaseNotesBody $root '0.5.9'
     $hap = Join-Path $root 'rebuilt.hap'
@@ -162,6 +163,65 @@ try {
     Assert-Rejected { Get-ReleaseNotesBody $invalidNotesRoot '0.5.9' } '缺少发布说明文稿'
   }
 
+  Test-Case '显式文稿覆盖支持无归档文稿的历史迁移，仍校验版本' {
+    $external = Join-Path $invalidNotesRoot 'historical-notes.md'
+    Set-Content $external "# ZhihuPlusPlus-HMOS v0.5.6`n`n历史说明" -Encoding utf8
+    $notes = Get-ReleaseNotesBody $invalidNotesRoot '0.5.6' 'historical-notes.md'
+    Assert-True ($notes.Contains('历史说明')) '未读取指定文稿'
+    Assert-Rejected { Get-ReleaseNotesBody $invalidNotesRoot '0.5.9' $external } '发布说明必须'
+    Assert-Rejected { Get-ReleaseNotesBody $invalidNotesRoot '0.5.6' 'missing.md' } '缺少发布说明'
+  }
+
+  foreach ($catalogName in @('version.json', 'releases.json')) {
+    Test-Case "拒绝 $catalogName 注入残留且不覆盖现场" {
+      $root = New-Fixture "stale-$catalogName"
+      Set-Content (Join-Path $root "entry/src/main/resources/rawfile/update/$catalogName") '{"assets":[]}' -Encoding utf8
+      $before = @(Get-FixtureHashes $root)
+      $notes = Get-ReleaseNotesBody $root '0.5.9'
+      Assert-Rejected { Invoke-WithBundledReleaseNotes $root '0.5.9' $notes { throw '不应构建' } } '上次注入残留'
+      Assert-True ((@(Get-FixtureHashes $root) -join ',') -eq ($before -join ',')) '残留现场被改写'
+    }
+  }
+
+  Test-Case '重建旧版本时保留已知最新版与降序历史，当前说明仍完整' {
+    $root = New-Fixture 'older-rebuild'
+    $future = [pscustomobject]@{
+      tag_name = 'HMOSv0.6.0'; name = 'HMOSv0.6.0'; body = '已知新版本'
+      published_at = '2026-10-21T00:00:00Z'; assets = @(@{ sha256 = 'future-hash' })
+    }
+    $old = Get-Content (Join-Path $root 'assets/update/releases.json') -Raw | ConvertFrom-Json -NoEnumerate
+    foreach ($dir in @('assets/update', 'entry/src/main/resources/rawfile/update')) {
+      ConvertTo-Json -InputObject (@($future) + $old) -Depth 8 | Set-Content (Join-Path $root "$dir/releases.json")
+      ConvertTo-Json $future -Depth 8 | Set-Content (Join-Path $root "$dir/version.json")
+    }
+    $notes = Get-ReleaseNotesBody $root '0.5.9'
+    $hap = Join-Path $root 'older.hap'
+    Invoke-WithBundledReleaseNotes $root '0.5.9' $notes {
+      $latest = Get-Content (Join-Path $root 'entry/src/main/resources/rawfile/update/version.json') -Raw | ConvertFrom-Json
+      $history = Get-Content (Join-Path $root 'entry/src/main/resources/rawfile/update/releases.json') -Raw | ConvertFrom-Json -NoEnumerate
+      Assert-True (($history.tag_name -join ',') -eq 'HMOSv0.6.0,HMOSv0.5.9,HMOSv0.5.8') '历史未按版本降序'
+      Assert-True ($latest.tag_name -eq 'HMOSv0.6.0') '最新版本被降级'
+      New-TestHap $hap $latest $history
+      New-TestHap (Join-Path $root 'wrong-latest.hap') $history[1] $history
+    }
+    Assert-HapReleaseNotes $hap '0.5.9' $notes
+    Assert-Rejected { Assert-HapReleaseNotes (Join-Path $root 'wrong-latest.hap') '0.5.9' $notes } '最新版本与历史清单不一致'
+  }
+
+  Test-Case '构建记录关联 HEAD、工作区状态、正文和实际产物摘要' {
+    $root = New-Fixture 'build-record'
+    $hap = Join-Path $root 'record.hap'
+    Set-Content $hap 'fixture hap bytes'
+    $state = [pscustomobject]@{ head = 'abc123'; dirty = $true; status = @(' M AppScope/app.json5') }
+    Write-ReleaseBuildRecord $hap '0.5.9' 'notes' $state $state 'override.md'
+    $record = Get-Content "$hap.build.json" -Raw | ConvertFrom-Json
+    Assert-True ($record.source_before.head -eq 'abc123' -and $record.source_after.dirty) '源码状态丢失'
+    Assert-True ($record.source_before.status[0] -eq ' M AppScope/app.json5') '脏状态明细丢失'
+    Assert-True ($record.artifact.sha256 -eq (Get-FileHash $hap -Algorithm SHA256).Hash -and
+      $record.artifact.size -eq (Get-Item $hap).Length) '产物指纹错误'
+    Assert-True ($record.notes_file_override -eq 'override.md' -and $record.normalized_notes_sha256.Length -eq 64) '文稿信息丢失'
+  }
+
   $archiveRoot = New-Fixture 'bad-packages'
   $expectedNotes = Get-ReleaseNotesBody $archiveRoot '0.5.9'
   $validCurrent = [pscustomobject]@{ tag_name = 'HMOSv0.5.9'; body = $expectedNotes; published_at = ''; assets = @() }
@@ -182,7 +242,7 @@ try {
       $truncated = [pscustomobject]@{ tag_name = 'HMOSv0.5.9'; body = '# ZhihuPlusPlus-HMOS v0.5.9'; published_at = ''; assets = @() }
       if ($catalogName -eq 'version.json') { New-TestHap $path $truncated @($validCurrent) }
       else { New-TestHap $path $validCurrent @($truncated) }
-      Assert-Rejected { Assert-HapReleaseNotes $path '0.5.9' $expectedNotes } '内置说明与发布文稿不一致'
+      Assert-Rejected { Assert-HapReleaseNotes $path '0.5.9' $expectedNotes } '内置说明与发布文稿不一致|最新版本与历史清单不一致'
     }
   }
   Test-Case '拒绝重复的当前版本条目' {

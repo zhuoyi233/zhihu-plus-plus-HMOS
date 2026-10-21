@@ -239,3 +239,13 @@ export function resolveAppUpdateCheck(localVersionName: string, release: AppUpda
   };
   return result;
 }
+
+/** 离线内置清单可提示已知的新版本；旧于本机的清单不能证明本机已是最新。 */
+export function resolveBundledAppUpdateCheck(localVersionName: string, payload: string): AppUpdateCheckResult {
+  const bundled = decodeLatestRelease(payload);
+  if (bundled !== undefined && compareVersionNames(bundled.versionName, localVersionName) >= 0) {
+    return resolveAppUpdateCheck(localVersionName, bundled, '');
+  }
+  return resolveAppUpdateCheck(localVersionName, undefined,
+    '检查更新失败：静态更新源与 Releases 备用源均不可用');
+}

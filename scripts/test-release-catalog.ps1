@@ -37,13 +37,13 @@ function New-Release {
 
 function Invoke-Fixture {
   param([string[]]$ResponseText, [int]$ApiExitCode = 0,
-    [string]$Repository = 'fixture/fixture')
+    [string]$Repository = 'fixture/fixture', [string[]]$ExcludeReleaseTag = @())
   # 在隔离项目中执行实际脚本；本地函数替代 gh，不触发网络请求。
   function gh {
     $global:LASTEXITCODE = $ApiExitCode
     $ResponseText
   }
-  & (Join-Path $fixtureRoot 'scripts/update-release-catalog.ps1') -Repository $Repository
+  & (Join-Path $fixtureRoot 'scripts/update-release-catalog.ps1') -Repository $Repository -ExcludeReleaseTag $ExcludeReleaseTag
 }
 
 function Get-CatalogHashes {
@@ -53,10 +53,10 @@ function Get-CatalogHashes {
 }
 
 function Assert-Rejected {
-  param([string[]]$ResponseText, [string]$Pattern, [int]$ApiExitCode = 0)
+  param([string[]]$ResponseText, [string]$Pattern, [int]$ApiExitCode = 0, [string[]]$ExcludeReleaseTag = @())
   $before = Get-CatalogHashes
   $rejected = $false
-  try { Invoke-Fixture -ResponseText $ResponseText -ApiExitCode $ApiExitCode } catch {
+  try { Invoke-Fixture -ResponseText $ResponseText -ApiExitCode $ApiExitCode -ExcludeReleaseTag $ExcludeReleaseTag } catch {
     if ($_.Exception.Message -notmatch $Pattern) { throw }
     $rejected = $true
   }
@@ -133,6 +133,20 @@ try {
   }
   Test-Case '无正式版本时保留原清单' { Assert-Rejected @() '无法获取' }
   Test-Case '损坏的 API JSON 保留原清单' { Assert-Rejected '{broken' 'JSON' }
+  Test-Case '允许显式排除损坏历史版本，仍生成有效最新版并告警' {
+    $bad = New-Release '0.5.9'; $bad.assets = @()
+    $response = @((New-Release), $bad) | ForEach-Object { ConvertTo-Json $_ -Depth 8 -Compress }
+    $warnings = @()
+    Invoke-Fixture -ResponseText $response -ExcludeReleaseTag 'HMOSv0.5.9' 3>&1 | ForEach-Object { $warnings += $_ }
+    $history = Get-Content (Join-Path $fixtureRoot $catalogPaths[1]) -Raw | ConvertFrom-Json -NoEnumerate
+    Assert-True ($history.Count -eq 1 -and $history[0].tag_name -eq 'HMOSv0.6.0') '排除无效'
+    Assert-True (($warnings -join '') -match '显式排除历史版本') '缺少降级告警'
+  }
+  Test-Case '拒绝排除最新版或不存在的 tag，防止误跳过校验' {
+    $response = ConvertTo-Json (New-Release) -Depth 8 -Compress
+    Assert-Rejected -ResponseText $response -Pattern '不能排除' -ExcludeReleaseTag 'HMOSv0.6.0'
+    Assert-Rejected -ResponseText $response -Pattern '不能排除' -ExcludeReleaseTag 'HMOSv0.1.0'
+  }
   Test-Case '仓库现有正式清单的全部附件可通过新校验' {
     $existing = Get-Content (Join-Path $repositoryRoot 'assets/update/releases.json') -Raw | ConvertFrom-Json
     $response = @($existing | ForEach-Object {

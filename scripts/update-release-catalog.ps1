@@ -1,6 +1,8 @@
 [CmdletBinding()]
 param(
-  [string]$Repository = 'zhuoyi233/zhihu-plus-plus-HMOS'
+  [string]$Repository = 'zhuoyi233/zhihu-plus-plus-HMOS',
+  # 明确撤下损坏的历史版本，不能跳过最新正式版本的校验。
+  [string[]]$ExcludeReleaseTag = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -25,8 +27,19 @@ $response = @(gh api "repos/$Repository/releases?per_page=100" --paginate --jq '
 if ($LASTEXITCODE -ne 0) {
   throw '无法获取已发布的 HMOS Release，未更新静态清单'
 }
-$releases = @($response | ConvertFrom-Json |
+$published = @($response | ConvertFrom-Json |
   Where-Object { -not $_.draft -and -not $_.prerelease -and $_.tag_name -match '^HMOSv\d+(\.\d+)+$' } |
+  Sort-Object { [version]($_.tag_name -replace '^HMOSv', '') } -Descending)
+if ($published.Count -eq 0) {
+  throw '无法获取已发布的 HMOS Release，未更新静态清单'
+}
+foreach ($tag in $ExcludeReleaseTag) {
+  if ($tag -cnotin @($published.tag_name) -or $tag -ceq $published[0].tag_name) {
+    throw "不能排除最新正式版本或不存在的历史 tag：$tag，未更新静态清单"
+  }
+  Write-Warning "显式排除历史版本 $tag：该版本将从在线与随包历史清单撤下，下次生成仍需明确指定此参数。"
+}
+$releases = @($published | Where-Object { $_.tag_name -cnotin $ExcludeReleaseTag } |
   ForEach-Object {
     $release = $_
     $version = $release.tag_name -replace '^HMOSv', ''

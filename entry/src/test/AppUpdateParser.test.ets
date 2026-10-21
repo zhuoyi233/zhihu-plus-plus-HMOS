@@ -11,6 +11,7 @@ import {
   isUpdateAnnouncementVisible,
   parseHmosTagVersion,
   resolveAppUpdateCheck,
+  resolveBundledAppUpdateCheck,
   shouldAutoCheckForUpdate,
   updateDownloadSources
 } from 'data';
@@ -28,6 +29,23 @@ function releaseFixture(tag: string, version: string): AppUpdateRelease {
 
 export default function appUpdateParserTest(): void {
   describe('appUpdateParserTest', () => {
+    it('offlineRebuildReportsKnownNewerRelease', 0, () => {
+      const result = resolveBundledAppUpdateCheck('0.5.7', '{"tag_name":"HMOSv0.5.9"}');
+      expect(result.status).assertEqual(AppUpdateCheckStatus.UPDATE_AVAILABLE);
+      expect(result.release?.versionName).assertEqual('0.5.9');
+    });
+
+    it('offlineCurrentVersionUsesBundledFallback', 0, () => {
+      const result = resolveBundledAppUpdateCheck('0.5.9', '{"tag_name":"HMOSv0.5.9"}');
+      expect(result.status).assertEqual(AppUpdateCheckStatus.UP_TO_DATE);
+    });
+
+    it('offlineStaleOrInvalidCatalogCannotClaimLatest', 0, () => {
+      expect(resolveBundledAppUpdateCheck('0.6.0', '{"tag_name":"HMOSv0.5.9"}').status)
+        .assertEqual(AppUpdateCheckStatus.FAILED);
+      expect(resolveBundledAppUpdateCheck('0.6.0', '').status).assertEqual(AppUpdateCheckStatus.FAILED);
+    });
+
     it('parsesHmosTagPrefixesToVersionNames', 0, () => {
       expect(parseHmosTagVersion('HMOSv0.2.1')).assertEqual('0.2.1');
       expect(parseHmosTagVersion('v0.2.1')).assertEqual('0.2.1');

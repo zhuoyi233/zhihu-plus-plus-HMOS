@@ -5,14 +5,17 @@ function ConvertTo-NormalizedReleaseNotes {
 }
 
 function Get-ReleaseNotesBody {
-  param([string]$RepositoryRoot, [string]$VersionName)
+  param([string]$RepositoryRoot, [string]$VersionName, [string]$NotesFile = '')
 
   if ($VersionName -notmatch '^\d+\.\d+\.\d+$') {
     throw "无效的发行版本号：$VersionName"
   }
   $notesPath = Join-Path $RepositoryRoot "docs/release-notes/HMOSv$VersionName.md"
+  if (-not [string]::IsNullOrWhiteSpace($NotesFile)) {
+    $notesPath = if ([IO.Path]::IsPathRooted($NotesFile)) { $NotesFile } else { Join-Path $RepositoryRoot $NotesFile }
+  }
   if (-not (Test-Path -LiteralPath $notesPath -PathType Leaf)) {
-    throw "Release 构建缺少发布说明文稿：$notesPath。请先将文稿随版本号提交。"
+    throw "Release 构建缺少发布说明文稿：$notesPath。请先将文稿随版本号提交；历史版本迁移可显式指定 -NotesFile。"
   }
   $body = ConvertTo-NormalizedReleaseNotes (Get-Content -LiteralPath $notesPath -Raw -Encoding utf8)
   $heading = "# ZhihuPlusPlus-HMOS v$VersionName"
@@ -20,6 +23,55 @@ function Get-ReleaseNotesBody {
     throw "发布说明必须以 $heading 开头并包含正文：$notesPath"
   }
   return $body
+}
+
+function Assert-BundledCatalogBaseline {
+  param([string]$RepositoryRoot)
+  foreach ($name in @('version.json', 'releases.json')) {
+    $source = Join-Path $RepositoryRoot "assets/update/$name"
+    $bundled = Join-Path $RepositoryRoot "entry/src/main/resources/rawfile/update/$name"
+    if (-not (Test-Path -LiteralPath $source -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $bundled -PathType Leaf) -or
+        (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ne
+        (Get-FileHash -LiteralPath $bundled -Algorithm SHA256).Hash) {
+      throw "检测到两处清单不一致或缺失，可能是上次注入残留：$name。请核对 git diff，备份有意改动后恢复 rawfile/update 与 assets/update 一致，再重试。"
+    }
+  }
+}
+
+function Get-ReleaseSourceState {
+  param([string]$RepositoryRoot)
+  $head = git -C $RepositoryRoot rev-parse --verify HEAD
+  if ($LASTEXITCODE -ne 0) { throw '无法记录 Release 构建提交' }
+  $status = @(git -C $RepositoryRoot status --porcelain=v1 --untracked-files=all)
+  if ($LASTEXITCODE -ne 0) { throw '无法记录 Release 工作区状态' }
+  Write-Host "Release 源码 HEAD：$head"
+  Write-Host "Release git status --porcelain：`n$($status -join "`n")"
+  if ($status.Count -gt 0) {
+    Write-Warning '本次使用含未提交改动的工作区验证，产物不能直接作为该 HEAD/tag 的正式发行包；提交后须重新验证。'
+  }
+  return [pscustomobject]@{ head = [string]$head; dirty = $status.Count -gt 0; status = $status }
+}
+
+function Write-ReleaseBuildRecord {
+  param([string]$HapPath, [string]$VersionName, [string]$NotesBody,
+    [Object]$SourceBefore, [Object]$SourceAfter, [string]$NotesFile = '')
+  $hap = Get-Item -LiteralPath $HapPath
+  $hasher = [Security.Cryptography.SHA256]::Create()
+  try { $notesHash = [Convert]::ToHexString($hasher.ComputeHash([Text.Encoding]::UTF8.GetBytes($NotesBody))).ToLowerInvariant() }
+  finally { $hasher.Dispose() }
+  $record = [ordered]@{
+    version = $VersionName; built_at = [DateTime]::UtcNow.ToString('o')
+    source_before = $SourceBefore; source_after = $SourceAfter
+    notes_file_override = $NotesFile; normalized_notes_sha256 = $notesHash
+    artifact = [ordered]@{
+      path = $hap.FullName; size = $hap.Length
+      sha256 = (Get-FileHash -LiteralPath $hap.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+  }
+  $path = "$HapPath.build.json"
+  ConvertTo-Json -InputObject $record -Depth 8 | Set-Content -LiteralPath $path -Encoding utf8
+  Write-Host "Release 构建记录：$path"
 }
 
 function Invoke-WithBundledReleaseNotes {
@@ -40,6 +92,7 @@ function Invoke-WithBundledReleaseNotes {
       throw "在线清单含待发布占位条目：$($release.tag_name)。请先恢复已发布清单。"
     }
   }
+  Assert-BundledCatalogBaseline -RepositoryRoot $RepositoryRoot
   # 当前包不能内置自身的哈希；重建已发布版本时也必须移除旧附件元数据。
   $current = [pscustomobject][ordered]@{
     tag_name = "HMOSv$VersionName"
@@ -49,10 +102,11 @@ function Invoke-WithBundledReleaseNotes {
     body = $NotesBody
     assets = @()
   }
-  $releases = @($current) + @($published | Where-Object { $_.tag_name -ne $current.tag_name })
+  $releases = @(@($current) + @($published | Where-Object { $_.tag_name -ne $current.tag_name }) |
+    Sort-Object { [version]($_.tag_name -replace '^HMOSv', '') } -Descending)
   $bundledDirectory = Join-Path $RepositoryRoot 'entry/src/main/resources/rawfile/update'
   $payloads = @{
-    'version.json' = ConvertTo-Json -InputObject $current -Depth 8
+    'version.json' = ConvertTo-Json -InputObject $releases[0] -Depth 8
     'releases.json' = ConvertTo-Json -InputObject $releases -Depth 8
   }
   $snapshots = @()
@@ -90,6 +144,7 @@ function Assert-HapReleaseNotes {
 
   Add-Type -AssemblyName System.IO.Compression.FileSystem
   $archive = [IO.Compression.ZipFile]::OpenRead($HapPath)
+  $catalogs = @{}
   try {
     foreach ($name in @('version.json', 'releases.json')) {
       $entryPath = "resources/rawfile/update/$name"
@@ -104,8 +159,11 @@ function Assert-HapReleaseNotes {
         throw "发行 HAP 内置清单格式不正确：$entryPath"
       }
       $releases = @($json)
+      $catalogs[$name] = $json
+      # version.json 始终代表已知最高版本；重建旧版本时，当前说明仅要求存在于历史清单。
+      if ($name -eq 'version.json') { continue }
       $currentReleases = @($releases | Where-Object { $_.tag_name -eq "HMOSv$VersionName" })
-      if ($releases.Count -eq 0 -or $releases[0].tag_name -ne "HMOSv$VersionName" -or $currentReleases.Count -ne 1) {
+      if ($releases.Count -eq 0 -or $currentReleases.Count -ne 1) {
         throw "发行 HAP 内置清单缺少唯一的当前版本 HMOSv${VersionName}：$entryPath"
       }
       $body = ConvertTo-NormalizedReleaseNotes $currentReleases[0].body
@@ -116,6 +174,13 @@ function Assert-HapReleaseNotes {
       if (@($currentReleases[0].assets).Count -ne 0 -or -not [string]::IsNullOrEmpty($currentReleases[0].published_at)) {
         throw "发行 HAP 当前版本内置了过期附件信息：$entryPath"
       }
+    }
+    $history = @($catalogs['releases.json'])
+    $sorted = @($history | Sort-Object { [version]($_.tag_name -replace '^HMOSv', '') } -Descending)
+    if (($history.tag_name -join ',') -cne ($sorted.tag_name -join ',') -or
+        (ConvertTo-Json -InputObject $catalogs['version.json'] -Depth 8 -Compress) -cne
+        (ConvertTo-Json -InputObject $history[0] -Depth 8 -Compress)) {
+      throw '发行 HAP 最新版本与历史清单不一致，或历史清单未按版本降序排列'
     }
   } finally {
     $archive.Dispose()
