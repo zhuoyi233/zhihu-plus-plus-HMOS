@@ -1,5 +1,20 @@
 [
   {
+    "tag_name": "HMOSv0.5.9",
+    "name": "HMOSv0.5.9",
+    "html_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.5.9",
+    "published_at": "2026-10-21T03:50:08Z",
+    "body": "# ZhihuPlusPlus-HMOS v0.5.9\r\n\r\n本次更新以**首页推荐与内容过滤体验升级**为重点，补齐服务器已读历史同步与话题屏蔽，完善关注动态排序和想法详情交互。自 v0.5.8 起，发版准备前共 9 个提交。\r\n\r\n## ✨ 首页与关注\r\n\r\n- 首页卡片调整为标题、作者、摘要和页脚的排版顺序，缩略图与摘要并排展示，更多菜单移至右下角。\r\n- 移动推荐卡片保留服务端页脚统计原文，完善质量指标解析与推荐信息展示。\r\n- 首页卡片菜单对齐安卓 Lite，支持加载内容关联话题并添加话题屏蔽，长名称可完整查看。\r\n- 关注页保留“推荐 / 动态”频道，动态新增“默认 / 按时间”排序，频道与排序选择独立保存。\r\n\r\n## 🛡️ 已读同步与内容过滤\r\n\r\n- 同步当前账号的服务器阅读历史，首页智能过滤结合本机与服务器已读记录隐藏已读内容，并保留已关注作者例外。\r\n- 历史同步在后台执行，首页最多等待首屏 300 毫秒，后续结果仅过滤尚未浏览的列表尾部。\r\n- 本机与服务器已读身份持续保留，历史页的展示数量上限不再裁剪已读身份。\r\n- 未关注作者的内容曝光一次后，再次推荐时可由智能过滤隐藏；支持通过设置调整过滤行为。\r\n- 完善智能过滤与关注作者选项、统计入口和质量阈值的开关联动，修复阈值保存后显示不及时的问题。\r\n- 质量屏蔽卡片展示被屏蔽内容的标题与原因，区分提问者专属屏蔽范围，并完善屏蔽规则备份兼容。\r\n\r\n## 🐞 问题修复\r\n\r\n- 修复关注流响应较大时分页加载失败的问题。\r\n- 修复信息流与个人页摘要直接显示 HTML 标签的问题，保留链接和提及文字。\r\n- 修复想法详情排版与点赞交互，补齐独立的沉浸光感底栏胶囊。\r\n\r\n## 📥 下载与安装\r\n\r\n1. 下载下方附件 `ZhihuPlusPlus-HMOS-v0.5.9-unsigned.hap`\r\n2. 使用 [小白调试助手](https://github.com/likuai2010/auto-installer) 或 [HoKit](https://github.com/yabi-zzh/HoKit/releases) 自行签名\r\n3. 覆盖安装即可升级，原有登录状态、设置与历史数据会保留\r\n\r\n> [!IMPORTANT]\r\n> 要求设备系统为 **HarmonyOS 6.1.0（API 23）及以上**。\r\n> 服务器已读历史同步需要登录，已读内容过滤受智能内容过滤设置控制。\r\n> 本项目非知乎官方产品，内容来自知乎网站，服务端接口变化可能导致部分功能失效。",
+    "assets": [
+      {
+        "name": "ZhihuPlusPlus-HMOS-v0.5.9-unsigned.hap",
+        "browser_download_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/download/HMOSv0.5.9/ZhihuPlusPlus-HMOS-v0.5.9-unsigned.hap",
+        "size": 3291859,
+        "sha256": "701e8e2d900c4cc1904749eee6618adddf33c1f51e91fcae48db4fe3668ace1e"
+      }
+    ]
+  },
+  {
     "tag_name": "HMOSv0.5.8",
     "name": "HMOSv0.5.8",
     "html_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.5.8",
