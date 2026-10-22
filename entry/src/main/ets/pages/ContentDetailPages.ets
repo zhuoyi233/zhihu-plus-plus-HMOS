@@ -1685,7 +1685,18 @@ struct ContentDetailPage {
           if (content.kind === ContentDetailKind.QUESTION) {
             Flex({ wrap: FlexWrap.Wrap }) {
               this.questionStatItem($r('sys.symbol.eye'), `${content.value.visitCount ?? 0} 浏览`)
-              this.questionStatItem($r('sys.symbol.heart'), `${this.followController === undefined ? content.value.followerCount : this.followerCount} 关注`)
+              // 动态计数直接由 Text 读取 @State，避免作为 @Builder 的值参数保留首次渲染快照。
+              Row({ space: 4 }) {
+                SymbolGlyph($r('sys.symbol.heart'))
+                  .fontSize(14)
+                  .fontColor([$r('app.color.secondary_text')])
+                Text(`${this.followController === undefined ? content.value.followerCount : this.followerCount} 关注`)
+                  .id('question_detail_follower_count')
+                  .fontSize($r('app.float.secondary_font_size'))
+                  .fontColor($r('app.color.secondary_text'))
+              }
+              .alignItems(VerticalAlign.Center)
+              .margin({ right: $r('app.float.spacing_medium'), bottom: 4 })
               this.questionStatItem($r('sys.symbol.message'), `${content.value.commentCount} 评论`)
             }
             .id('question_detail_statistics')
