@@ -65,11 +65,13 @@ export struct QuestionTitleBar {
       Stack({ alignContent: Alignment.Start }) {
         Text('问题').id('question_top_label')
           .fontSize($r('app.float.heading_font_size'))
+          .maxFontScale(1.3)
           .fontColor($r('app.color.primary_text')).fontWeight(FontWeight.Medium)
           .opacity(this.state()?.scrolled ? 0 : 1)
           .translate({ y: this.state()?.scrolled ? -8 : 0 })
         Text(this.state()?.title ?? '')
           .id('question_top_title').fontSize($r('app.float.heading_font_size'))
+            .maxFontScale(1.3)
           .fontColor($r('app.color.primary_text')).fontWeight(FontWeight.Medium)
           .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
           .opacity(this.state()?.scrolled ? 1 : 0)

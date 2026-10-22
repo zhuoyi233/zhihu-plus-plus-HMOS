@@ -8,11 +8,49 @@ import {
   scrollbarThumbTravelVp,
   scrollbarTrackHeightVp
 } from '../main/ets/pages/ReaderScrollGeometry';
+import {
+  readerBottomInsetVp,
+  readerCaptionLineHeightFp,
+  readerCompactActions,
+  readerHorizontalPaddingVp
+} from '../main/ets/pages/ReaderViewportLayout';
 
 const EPSILON = 0.000001;
 
 export default function readerScrollGeometryTest(): void {
   describe('readerScrollGeometryTest', () => {
+    it('keepsReadingLinesWithinNarrowAndWideWindows', 0, () => {
+      expect(readerHorizontalPaddingVp(320)).assertEqual(16);
+      expect(readerHorizontalPaddingVp(360)).assertEqual(20);
+      expect(readerHorizontalPaddingVp(760)).assertEqual(20);
+      const padding = readerHorizontalPaddingVp(1200);
+      expect(1200 - padding * 2).assertEqual(720);
+      expect(readerHorizontalPaddingVp(0)).assertEqual(20);
+      expect(readerHorizontalPaddingVp(Number.NaN)).assertEqual(20);
+    });
+
+    it('leavesRoomForMeasuredActionBarsAndImmersiveReading', 0, () => {
+      expect(readerBottomInsetVp(0, false)).assertEqual(100);
+      expect(readerBottomInsetVp(64, false)).assertEqual(80);
+      expect(readerBottomInsetVp(120, false)).assertEqual(136);
+      expect(readerBottomInsetVp(120, true)).assertEqual(24);
+      expect(readerBottomInsetVp(Number.NaN, false)).assertEqual(100);
+    });
+
+    it('compactsActionsForNarrowWindowsAndSystemLargeFonts', 0, () => {
+      expect(readerCompactActions(320, 1)).assertTrue();
+      expect(readerCompactActions(359, 1)).assertFalse();
+      expect(readerCompactActions(360, 1)).assertFalse();
+      expect(readerCompactActions(720, 1.5)).assertTrue();
+      expect(readerCompactActions(0, 1)).assertFalse();
+    });
+
+    it('keepsMultilineCaptionsReadableAtMinimumLineHeight', 0, () => {
+      expect(readerCaptionLineHeightFp(16, 30)).assertEqual(20);
+      // 200% 字号、最小行高：图注 26fp，至少留 36fp 行高。
+      expect(readerCaptionLineHeightFp(32, 37.5)).assertEqual(36);
+    });
+
     it('subtractsBothInsetsFromAvailableHeight', 0, () => {
       expect(scrollbarTrackHeightVp(700, 0, 112)).assertEqual(588);
       expect(scrollbarTrackHeightVp(700, 4, 96)).assertEqual(600);

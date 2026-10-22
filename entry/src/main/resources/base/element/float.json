@@ -25,10 +25,6 @@
       "value": "12vp"
     },
     {
-      "name": "reader_page_padding",
-      "value": "20vp"
-    },
-    {
       "name": "reader_title_font_size",
       "value": "24fp"
     },

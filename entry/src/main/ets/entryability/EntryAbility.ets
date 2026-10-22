@@ -112,6 +112,9 @@ export default class EntryAbility extends UIAbility {
    * 回调携带的新配置，而不是再查一次当前配置。
    */
   onConfigurationUpdate(newConfig: Configuration): void {
+    if (newConfig.fontSizeScale !== undefined) {
+      AppStorage.setOrCreate('systemFontSizeScale', newConfig.fontSizeScale);
+    }
     // resourceManager.ColorMode 与 ConfigurationConstant.ColorMode 取值不同，统一归一为 boolean。
     const isDark = newConfig.colorMode !== undefined
       ? newConfig.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK
@@ -145,6 +148,7 @@ export default class EntryAbility extends UIAbility {
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
+    AppStorage.setOrCreate('systemFontSizeScale', this.context.config.fontSizeScale ?? 1);
     const mainWindow = windowStage.getMainWindowSync();
     this.configureImmersiveWindow(mainWindow);
     mainWindow.on('windowSizeChange', (): void => this.configureImmersiveWindow(mainWindow));
@@ -152,6 +156,7 @@ export default class EntryAbility extends UIAbility {
       // 对齐上游 MainActivity.onWindowFocusChanged：窗口获得焦点（含冷启动与回前台）时
       // 识别剪切板；剪切板读取要求焦点就绪，onForeground 时系统会拒绝访问，不能挂在那里。
       if (event === window.WindowEventType.WINDOW_ACTIVE) {
+        AppStorage.setOrCreate('systemFontSizeScale', this.context.config.fontSizeScale ?? 1);
         updateStatusBarAppearance();
         this.readClipboardForNavigation();
       }

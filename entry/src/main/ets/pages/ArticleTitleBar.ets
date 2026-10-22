@@ -92,6 +92,7 @@ export struct ArticleTitleBar {
           Text('文章')
             .id('article_top_label')
             .fontSize($r('app.float.heading_font_size'))
+            .maxFontScale(1.3)
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.primary_text'))
         }
@@ -104,6 +105,7 @@ export struct ArticleTitleBar {
           Text(this.state()?.title ?? '')
             .id('article_top_title')
             .fontSize($r('app.float.body_font_size'))
+            .maxFontScale(1.3)
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.primary_text'))
             .maxLines(1)
@@ -125,6 +127,7 @@ export struct ArticleTitleBar {
               } else if ((this.state()?.authorName ?? '').length > 0) {
                 Text((this.state()?.authorName ?? '').substring(0, 1))
                   .fontSize($r('app.float.caption_font_size'))
+                  .maxFontScale(1.3)
                   .fontColor($r('app.color.secondary_text'))
               }
             }
@@ -136,6 +139,7 @@ export struct ArticleTitleBar {
               Text(this.state()?.authorName ?? '')
                 .id('article_top_author')
                 .fontSize($r('app.float.caption_font_size'))
+                .maxFontScale(1.3)
                 .fontColor($r('app.color.secondary_text'))
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })

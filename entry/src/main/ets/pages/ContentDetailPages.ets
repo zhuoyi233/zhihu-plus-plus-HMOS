@@ -96,6 +96,7 @@ import { GlassCapsule } from './components/MaterialCanvas';
 import { getSpeechPlaybackService, SpeechPlaybackStatus } from '../platform/SpeechPlaybackService';
 import { accumulateAnswerSwitchDrag } from './AnswerSwitchGesture';
 import { readerBlockSpacing, readerBodyFontSize, readerBodyLineHeight } from './ReaderTypography';
+import { readerBottomInsetVp, readerCompactActions, readerHorizontalPaddingVp } from './ReaderViewportLayout';
 import { SegmentPill } from './components/SegmentPill';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 
@@ -150,7 +151,8 @@ struct ContentDetailPage {
   private savedAnswerFabPosition?: FabPosition = undefined;
   private answerFabPreferences?: AppPreferencesStore = undefined;
   /** 底部操作栏实测高度（vp）：悬浮按钮下拖下限 = 默认底距 - 栏高 - 间隔。 */
-  private bottomActionBarHeightVp: number = 0;
+  @State private bottomActionBarHeightVp: number = 0;
+  @StorageProp('systemFontSizeScale') private systemFontSizeScale: number = 1;
   @StorageProp('loginFeedReloadTick') @Watch('onLoginChanged') private loginTick: number = 0;
   /** 全屏图片查看器：正文/评论图点击后经 AppStorage 广播，在页面根 Stack 叠层渲染
    *（正文列表惰性树与模态覆盖层树内均无法可靠驱动状态更新，见 NativeContentDocument 注释）。 */
@@ -991,6 +993,7 @@ struct ContentDetailPage {
           disableEdgeSpring: this.kind === ContentDetailKind.ANSWER,
           readingLayout: true,
           topInsetVp: this.immersiveReading ? 0 : FLOATING_TITLE_BAR_OFFSET,
+          bottomInsetVp: readerBottomInsetVp(this.bottomActionBarHeightVp, this.immersiveReading),
           onVideoOpen: (videoId: string): void => this.openVideo(videoId),
           onLinkClick: (url: string): void => this.openContentLink(url),
           // 文段上双击由正文 Text 的 onTouch 自行识别（见 DoubleTapDetector）；
@@ -1159,8 +1162,8 @@ struct ContentDetailPage {
         .width('100%')
         // 与 NativeContentDocument 的阅读布局统一：独立正文边距、顶部 spacingMedium。
         .padding({
-          left: $r('app.float.reader_page_padding'),
-          right: $r('app.float.reader_page_padding'),
+          left: readerHorizontalPaddingVp(this.answerViewportWidthVp),
+          right: readerHorizontalPaddingVp(this.answerViewportWidthVp),
           top: $r('app.float.spacing_medium')
         })
         .clip(true)
@@ -1203,18 +1206,20 @@ struct ContentDetailPage {
           Row({ space: 0 }) {
             Row({ space: 4 }) {
               SymbolGlyph($r('sys.symbol.arrowtriangle_left'))
-                .fontSize(20)
+                .fontSize('20vp')
                 .fontColor([this.resolvedThemeColor])
                 .rotate({ x: 0, y: 0, z: 1, angle: 90 })
-              Text(`${this.answerPreviewVoteupCount(previous)}`)
-                .fontSize($r('app.float.secondary_font_size'))
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.resolvedThemeColor)
+              if (!this.compactDetailActions()) {
+                Text(`${this.answerPreviewVoteupCount(previous)}`)
+                  .fontSize($r('app.float.secondary_font_size'))
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(this.resolvedThemeColor)
+              }
             }
             .padding({ left: 8, right: 8, top: 8, bottom: 8 })
 
             SymbolGlyph($r('sys.symbol.arrowtriangle_left'))
-              .fontSize(20)
+              .fontSize('20vp')
               .fontColor([this.resolvedThemeColor])
               .rotate({ x: 0, y: 0, z: 1, angle: -90 })
               .padding({ left: 8, right: 8, top: 8, bottom: 8 })
@@ -1226,22 +1231,24 @@ struct ContentDetailPage {
         GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
           Row({ space: 0 }) {
             SymbolGlyph($r('sys.symbol.bookmark'))
-              .fontSize(20)
+              .fontSize('20vp')
               .fontColor([$r('app.color.secondary_text')])
               .width(36)
               .height(36)
             Row({ space: 4 }) {
               SymbolGlyph($r('sys.symbol.message'))
-                .fontSize(20)
+                .fontSize('20vp')
                 .fontColor([$r('app.color.secondary_text')])
-              Text(`${this.answerPreviewCommentCount(previous)}`)
-                .fontSize($r('app.float.secondary_font_size'))
-                .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.secondary_text'))
+              if (!this.compactDetailActions()) {
+                Text(`${this.answerPreviewCommentCount(previous)}`)
+                  .fontSize($r('app.float.secondary_font_size'))
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor($r('app.color.secondary_text'))
+              }
             }
             .padding({ left: 6, right: 6, top: 8, bottom: 8 })
             SymbolGlyph($r('sys.symbol.ellipsis_circle'))
-              .fontSize(20)
+              .fontSize('20vp')
               .fontColor([$r('app.color.secondary_text')])
               .width(36)
               .height(36)
@@ -1673,7 +1680,7 @@ struct ContentDetailPage {
           }
 
           if (content.kind === ContentDetailKind.QUESTION) {
-            Row({ space: $r('app.float.spacing_medium') }) {
+            Flex({ wrap: FlexWrap.Wrap }) {
               this.questionStatItem($r('sys.symbol.eye'), `${content.value.visitCount ?? 0} 浏览`)
               this.questionStatItem($r('sys.symbol.heart'), `${this.followController === undefined ? content.value.followerCount : this.followerCount} 关注`)
               this.questionStatItem($r('sys.symbol.message'), `${content.value.commentCount} 评论`)
@@ -1968,6 +1975,7 @@ struct ContentDetailPage {
         html: contentHtml(content), emptyMessage: contentEmptyMessage(content), collapsible: true,
         linkCardMetaRepository: this.linkCardMetaRepository,
         topInsetVp: this.immersiveReading ? 0 : FLOATING_TITLE_BAR_OFFSET,
+        bottomInsetVp: readerBottomInsetVp(this.bottomActionBarHeightVp, this.immersiveReading),
         onVideoOpen: (videoId: string): void => this.openVideo(videoId),
         onLinkClick: (url: string): void => this.openContentLink(url),
         documentHeader: (): void => { this.contentHeader(content) },
@@ -2278,6 +2286,10 @@ struct ContentDetailPage {
   }
 
   /** 赞同/反对胶囊：智感握姿换位与默认布局共用同一份投票动作。 */
+  private compactDetailActions(): boolean {
+    return readerCompactActions(this.answerViewportWidthVp, this.systemFontSizeScale);
+  }
+
   @Builder
   private answerVoteCapsule() {
     Row({ space: 0 }) {
@@ -2297,14 +2309,16 @@ struct ContentDetailPage {
         .backgroundColor(this.resolvedThemeColor)
         .fontColor(onThemeColor(this.resolvedThemeColor))
         .id('answer_edit_existing')
-        .height(36)
+        .constraintSize({ minHeight: 36 })
         .fontSize($r('app.float.secondary_font_size'))
+        .maxFontScale(1.3)
+        .padding({ left: 8, right: 8 })
         .onClick((): void => this.openExistingAnswerEditor())
     }
 
     Button({ type: ButtonType.Normal, stateEffect: false }) {
       SymbolGlyph(this.contentFavorited ? $r('sys.symbol.bookmark_fill') : $r('sys.symbol.bookmark'))
-        .fontSize(20)
+        .fontSize('20vp')
         .fontColor([this.contentFavorited ? this.resolvedThemeColor : $r('app.color.secondary_text')])
     }
     .id(`content_${this.kind}_detail_favorite_bar`)
@@ -2323,17 +2337,20 @@ struct ContentDetailPage {
     Button({ type: ButtonType.Normal, stateEffect: false }) {
       Row({ space: 4 }) {
         SymbolGlyph($r('sys.symbol.message'))
-          .fontSize(20)
+          .fontSize('20vp')
           .fontColor([$r('app.color.secondary_text')])
-        Text(`${this.content?.value.commentCount ?? 0}`)
-          .fontSize($r('app.float.secondary_font_size'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.secondary_text'))
+        if (!this.compactDetailActions()) {
+          Text(`${this.content?.value.commentCount ?? 0}`)
+            .fontSize($r('app.float.secondary_font_size'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.secondary_text'))
+        }
       }
       .padding({ left: 6, right: 6, top: 8, bottom: 8 })
     }
     .id(`content_${this.kind}_detail_comment_bar`)
-    .height(36)
+    .constraintSize({ minHeight: 36 })
+    .accessibilityText(`评论 ${this.content?.value.commentCount ?? 0} 条`)
     .backgroundColor(Color.Transparent)
     .onClick((): void => {
       if (this.commentRepository !== undefined && this.session !== undefined) {
@@ -2345,7 +2362,7 @@ struct ContentDetailPage {
 
     Button({ type: ButtonType.Normal, stateEffect: false }) {
       SymbolGlyph($r('sys.symbol.ellipsis_circle'))
-        .fontSize(20)
+        .fontSize('20vp')
         .fontColor([$r('app.color.secondary_text')])
     }
     .id(`content_${this.kind}_detail_more`)
@@ -2363,19 +2380,21 @@ struct ContentDetailPage {
     Button({ type: ButtonType.Normal, stateEffect: false }) {
       Row({ space: 4 }) {
         SymbolGlyph($r('sys.symbol.message'))
-          .fontSize(20)
+          .fontSize('20vp')
           .fontColor([$r('app.color.secondary_text')])
-        Text(`${this.content?.value.commentCount ?? 0}`)
-          .fontSize($r('app.float.secondary_font_size'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.secondary_text'))
+        if (!this.compactDetailActions()) {
+          Text(`${this.content?.value.commentCount ?? 0}`)
+            .fontSize($r('app.float.secondary_font_size'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.secondary_text'))
+        }
       }
       .padding({ left: 6, right: 6, top: 8, bottom: 8 })
     }
     .id('question_detail_comment_bar')
-    .height(36)
+    .constraintSize({ minHeight: 36 })
     .backgroundColor(Color.Transparent)
-    .accessibilityText('问题评论')
+    .accessibilityText(`问题评论 ${this.content?.value.commentCount ?? 0} 条`)
     .onClick((): void => {
       if (this.commentRepository !== undefined && this.session !== undefined) {
         this.openComments();
@@ -2386,7 +2405,7 @@ struct ContentDetailPage {
 
     Button({ type: ButtonType.Normal, stateEffect: false }) {
       SymbolGlyph($r('sys.symbol.ellipsis_circle'))
-        .fontSize(20)
+        .fontSize('20vp')
         .fontColor([$r('app.color.secondary_text')])
     }
     .id('question_detail_more')
@@ -2411,6 +2430,7 @@ struct ContentDetailPage {
         .fontColor($r('app.color.secondary_text'))
     }
     .alignItems(VerticalAlign.Center)
+    .margin({ right: $r('app.float.spacing_medium'), bottom: 4 })
   }
 
   /**
@@ -3176,17 +3196,20 @@ struct ContentDetailPage {
         SymbolGlyph(this.voteState === ContentVoteState.UP
             ? $r('sys.symbol.arrowtriangle_left_fill')
             : $r('sys.symbol.arrowtriangle_left'))
-          .fontSize(20)
+          .fontSize('20vp')
           .fontColor([this.resolvedThemeColor])
           .rotate({ x: 0, y: 0, z: 1, angle: 90 })
-        Text(`${this.voteupCount}`)
-          .fontSize($r('app.float.secondary_font_size'))
-          .fontWeight(this.voteState === ContentVoteState.UP ? FontWeight.Bold : FontWeight.Medium)
-          .fontColor(this.resolvedThemeColor)
+        if (!this.compactDetailActions()) {
+          Text(`${this.voteupCount}`)
+            .fontSize($r('app.float.secondary_font_size'))
+            .fontWeight(this.voteState === ContentVoteState.UP ? FontWeight.Bold : FontWeight.Medium)
+            .fontColor(this.resolvedThemeColor)
+        }
       }
       .padding({ left: 8, right: 8, top: 8, bottom: 8 })
     }
     .id(`${this.kind}_vote_up`)
+    .accessibilityText(`赞同 ${this.voteupCount}，${this.voteState === ContentVoteState.UP ? '已赞同' : '未赞同'}`)
     .backgroundColor(Color.Transparent)
     .lightUpEffect(1)
     .enabled(!this.interactionPending)
@@ -3204,13 +3227,14 @@ struct ContentDetailPage {
         SymbolGlyph(this.voteState === ContentVoteState.DOWN
             ? $r('sys.symbol.arrowtriangle_left_fill')
             : $r('sys.symbol.arrowtriangle_left'))
-          .fontSize(20)
+          .fontSize('20vp')
           .fontColor([this.resolvedThemeColor])
           .rotate({ x: 0, y: 0, z: 1, angle: -90 })
       }
       .padding({ left: 8, right: 8, top: 8, bottom: 8 })
     }
     .id(`${this.kind}_vote_down`)
+    .accessibilityText(this.voteState === ContentVoteState.DOWN ? '已反对' : '反对')
     .backgroundColor(Color.Transparent)
     .lightUpEffect(1)
     .enabled(!this.interactionPending)
@@ -3225,9 +3249,10 @@ struct ContentDetailPage {
     Button({ type: ButtonType.Normal, stateEffect: false }) {
       Row({ space: 4 }) {
         SymbolGlyph(this.following ? $r('sys.symbol.checkmark') : $r('sys.symbol.plus'))
-          .fontSize(20)
+          .fontSize('20vp')
           .fontColor([this.following ? this.resolvedThemeColor : $r('app.color.secondary_text')])
-        Text(this.following ? `已关注 ${this.followerCount}` : `关注问题 ${this.followerCount}`)
+        Text(this.compactDetailActions() ? (this.following ? '已关注' : '关注')
+          : (this.following ? `已关注 ${this.followerCount}` : `关注问题 ${this.followerCount}`))
           .fontSize($r('app.float.secondary_font_size'))
           .fontWeight(FontWeight.Medium)
           .fontColor(this.following ? this.resolvedThemeColor : $r('app.color.secondary_text'))
@@ -3235,7 +3260,8 @@ struct ContentDetailPage {
       .padding({ left: 6, right: 6, top: 8, bottom: 8 })
     }
       .id('question_follow')
-      .height(36)
+      .constraintSize({ minHeight: 36 })
+      .accessibilityText(`${this.following ? '已关注' : '关注问题'}，${this.followerCount} 人关注`)
       .backgroundColor(Color.Transparent)
       .enabled(!this.interactionPending)
       .onClick((): void => {

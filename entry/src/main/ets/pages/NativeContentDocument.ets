@@ -61,6 +61,7 @@ import {
 } from './ReaderTypography';
 import { linkCardMetaLine } from './LinkCardMetaText';
 import { readerBlockLeadingSpace } from './ReaderBlockLayout';
+import { readerCaptionLineHeightFp, readerHorizontalPaddingVp } from './ReaderViewportLayout';
 
 /**
  * 块高缺失时的估算兜底（vp）：未渲染块按实测平均块高估，无实测值时用该值。
@@ -547,14 +548,19 @@ struct ContentInlineFormula {
   private displaySize(id: string): FormulaDisplaySize {
     const exSize = this.formulaExSizes.get(id);
     return formulaDisplaySize(exSize?.width ?? 0, exSize?.height ?? 0,
-      readerBodyFontSize(this.fontSizePercent, this.typographyPreset), this.formulaAvailableWidth);
+      this.formulaFontSizeVp(), this.formulaAvailableWidth);
+  }
+
+  private formulaFontSizeVp(): number {
+    const context = this.getUIContext();
+    return context.px2vp(context.fp2px(readerBodyFontSize(this.fontSizePercent, this.typographyPreset)));
   }
 
   private async loadFormula(run: ReaderInlineRun, generation: number): Promise<void> {
     let pixelMap: image.PixelMap | undefined = undefined;
     try {
       const result = await loadFormulaPixelMap(run.sourceUrl, await this.formulaCookieHeader(),
-        this.formulaColor, formulaDecodeDensity(readerBodyFontSize(this.fontSizePercent, this.typographyPreset)));
+        this.formulaColor, formulaDecodeDensity(this.formulaFontSizeVp()));
       pixelMap = result.pixelMap;
       if (!this.active || this.loadGeneration !== generation) {
         await pixelMap.release();
@@ -672,14 +678,19 @@ struct ContentBlockFormula {
 
   private blockDisplaySize(): FormulaDisplaySize {
     return formulaDisplaySize(this.formulaExSize.width, this.formulaExSize.height,
-      readerBodyFontSize(this.fontSizePercent, this.typographyPreset), this.formulaAvailableWidth);
+      this.formulaFontSizeVp(), this.formulaAvailableWidth);
+  }
+
+  private formulaFontSizeVp(): number {
+    const context = this.getUIContext();
+    return context.px2vp(context.fp2px(readerBodyFontSize(this.fontSizePercent, this.typographyPreset)));
   }
 
   private async loadFormula(generation: number): Promise<void> {
     let pixelMap: image.PixelMap | undefined = undefined;
     try {
       const result = await loadFormulaPixelMap(this.item.sourceUrl, await this.formulaCookieHeader(),
-        this.formulaColor, formulaDecodeDensity(readerBodyFontSize(this.fontSizePercent, this.typographyPreset)));
+        this.formulaColor, formulaDecodeDensity(this.formulaFontSizeVp()));
       pixelMap = result.pixelMap;
       if (!this.active || this.loadGeneration !== generation) {
         await pixelMap.release();
@@ -778,7 +789,9 @@ export struct NativeContentDocument {
    * 滚动时正文才会从玻璃顶栏下穿过（顶栏占位式布局下内容到不了顶栏后面，无透光）。
    * 0 表示不额外让位（沉浸阅读隐藏顶栏 / 非详情页场景）。
    */
-  topInsetVp: number = 0;
+  @Prop topInsetVp: number = 0;
+  /** 动态文末避让，随操作栏实测高度及沉浸状态更新。 */
+  @Prop bottomInsetVp: number = 100;
   /** 回答/文章阅读布局：独立正文边距，信息头到正文至少留 24vp；其他宿主沿用原布局。 */
   readingLayout: boolean = false;
   /** 问题页正文折叠预览：正文超阈值（纯文本≥100 字或含图）时收起为 180vp 视口。 */
@@ -813,6 +826,7 @@ export struct NativeContentDocument {
   @StorageProp('contentLineHeight') @Watch('onTypographyChanged') private lineHeightPercent: number = 160;
   @StorageProp('contentBlockSpacing') @Watch('onTypographyChanged') private blockSpacingPercent: number = 100;
   @StorageProp('contentTypographyPreset') @Watch('onTypographyChanged') private typographyPreset: string = 'classic';
+  @StorageProp('systemFontSizeScale') @Watch('onTypographyChanged') private systemFontSizeScale: number = 1;
   @StorageProp('showPageTurnFab') private showPageTurnFab: boolean = false;
   @StorageProp('volumeKeyPageTurn') private volumeKeyPageTurn: boolean = false;
   @StorageProp('pageTurnPercent') private pageTurnPercent: number = 90;
@@ -840,6 +854,7 @@ export struct NativeContentDocument {
   @State private pageTurnGuideVisible: boolean = false;
   /** 正文视口高度（vp）：List 的 onAreaChange 回填，供阅读进度条换算拇指高度。 */
   @State private viewportHeightVp: number = 0;
+  @State private viewportWidthVp: number = 0;
   /** 正文内容总高（vp）：本页 SDK 无最大滚动距离 API，按实测块高估算、触底时校准。 */
   @State private contentHeightVp: number = 0;
   /** 当前滚动偏移（vp）：onDidScroll 回填，驱动阅读进度条拇指位置。 */
@@ -1088,12 +1103,12 @@ export struct NativeContentDocument {
         .height('100%')
         .scrollBar(BarState.Off)
         .padding({
-          left: this.readingLayout ? $r('app.float.reader_page_padding') : $r('app.float.page_padding'),
-          right: this.readingLayout ? $r('app.float.reader_page_padding') : $r('app.float.page_padding'),
+          left: this.readingLayout ? readerHorizontalPaddingVp(this.viewportWidthVp) : $r('app.float.page_padding'),
+          right: this.readingLayout ? readerHorizontalPaddingVp(this.viewportWidthVp) : $r('app.float.page_padding'),
           top: $r('app.float.spacing_medium')
         })
         // 末尾避让随正文滚动，避免底部 padding 压缩视口、在悬浮操作栏下方形成固定留白。
-        .contentEndOffset(100)
+        .contentEndOffset(this.bottomInsetVp)
         // 起始内缩随正文滚动（同 contentEndOffset 思路）：视口可延伸到悬浮顶栏之下，
         // 未滚动时正文仍从顶栏下方开始，滚动后正文从玻璃顶栏背后穿过。
         .contentStartOffset(this.topInsetVp)
@@ -1140,8 +1155,7 @@ export struct NativeContentDocument {
         })
 
       // 右缘可拖动阅读进度条：问题/回答/文章三页共用（上游 ArticleScreen 接入方式一致）。
-      // 上下留白与几何换算在组件内按上游 `ArticleScreen`（statusBars + 64 / systemBars + 96）
-      // 与 `VerticalReadingProgressBar`（拇指高度与行程都按"轨道高"）对齐，宿主无需传参。
+      // 上下留白由悬浮顶栏与实测底栏决定；拇指高度与行程均按轨道高度换算。
       // 直接作为 Stack 的右对齐子节点、宽仅 12vp：Stack 内重叠区域的触摸测试默认只命中
       // 最上层节点，进度条可见时右缘这 12vp 归它（拖动定位），其余区域照常命中正文列表；
       // 隐藏时进度条自身把 `hitTestBehavior` 切到 `HitTestMode.None`，右缘手势完整交回正文。
@@ -1152,6 +1166,8 @@ export struct NativeContentDocument {
         viewportHeightVp: this.viewportHeightVp,
         contentHeightVp: this.contentHeightVp,
         scrollYVp: this.scrollYVp,
+        topInsetVp: this.topInsetVp,
+        bottomInsetVp: Math.max(96, this.bottomInsetVp),
         onSeekStateChange: (dragging: boolean): void => {
           if (dragging) {
             // 拖动期间正文由 scrollTo 驱动：屏蔽贴边过滑，否则贴底向上拖滚动条
@@ -1199,6 +1215,14 @@ export struct NativeContentDocument {
     }
     .width('100%')
     .height('100%')
+    .onAreaChange((_oldArea: Area, area: Area): void => {
+      const width = Number(area.width);
+      if (width > 0 && Math.abs(width - this.viewportWidthVp) > 0.5) {
+        this.viewportWidthVp = width;
+        this.exactContentHeightVp = 0;
+        this.refreshContentHeightEstimate();
+      }
+    })
     .focusable(this.volumeKeyPageTurn)
     .defaultFocus(this.volumeKeyPageTurn)
     .onKeyPreIme((event: KeyEvent): boolean => {
@@ -1513,7 +1537,7 @@ export struct NativeContentDocument {
         item: item,
         captionSpacing: this.blockSpacing() * 0.5,
         captionFontSize: this.bodyFontSize() * 0.8125,
-        captionLineHeight: this.bodyLineHeight() * 2 / 3,
+        captionLineHeight: readerCaptionLineHeightFp(this.bodyFontSize(), this.bodyLineHeight()),
         secondaryTextColor: $r('app.color.secondary_text'),
         onPreview: (url: string): void => {
           // 全屏查看器由详情页根 Stack 叠层渲染（AppStorage 广播）：正文组件处于列表

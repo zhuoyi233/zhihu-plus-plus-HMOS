@@ -76,8 +76,8 @@ export struct GlassCapsule {
   @BuilderParam content: () => void = this.emptyContent;
   @Prop useMaterial: boolean = true;
   @State private canvasWidth: number = 240;
-  // 酷安式加高胶囊：36vp 上游标准 → 48vp 大胶囊（圆角同步 18 → 24），内容在玻璃内垂直居中
-  private readonly canvasHeight: number = 48;
+  // 默认至少 48vp；大字体内容增高时同步增加玻璃画布高度与圆角。
+  @State private canvasHeight: number = 48;
 
   @Builder
   private emptyContent(): void {
@@ -101,10 +101,14 @@ export struct GlassCapsule {
           if (padded > 1 && Math.abs(padded - this.canvasWidth) > 1) {
             this.canvasWidth = padded;
           }
+          const height = Math.max(48, Number(newValue.height) + 12);
+          if (Math.abs(height - this.canvasHeight) > 1) {
+            this.canvasHeight = height;
+          }
         })
       }
       .width(this.canvasWidth)
-      .borderRadius(24)
+      .borderRadius(this.canvasHeight / 2)
       .clip(true)
     } else {
       // 降级：组件模糊（不支持的设备上沉浸材质不可用）
