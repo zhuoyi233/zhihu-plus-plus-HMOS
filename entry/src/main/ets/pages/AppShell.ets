@@ -2745,6 +2745,7 @@ export struct AppShell {
     AppStorage.setOrCreate('contentFontSize', value.fontSize);
     AppStorage.setOrCreate('contentLineHeight', value.lineHeight);
     AppStorage.setOrCreate('contentBlockSpacing', value.blockSpacing);
+    AppStorage.setOrCreate('contentTypographyPreset', value.preset ?? 'classic');
   }
 
   private async restoreAppearancePreferences(): Promise<void> {

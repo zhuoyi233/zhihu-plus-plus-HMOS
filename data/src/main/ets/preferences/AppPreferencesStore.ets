@@ -65,6 +65,7 @@ const WHATS_NEW_SHOWN_VERSION_KEY = 'whatsNewShownVersion';
 const CONTENT_FONT_SIZE_KEY = 'contentFontSize';
 const CONTENT_LINE_HEIGHT_KEY = 'contentLineHeight';
 const CONTENT_BLOCK_SPACING_KEY = 'contentBlockSpacing';
+const CONTENT_TYPOGRAPHY_PRESET_KEY = 'contentTypographyPreset';
 const FAB_OPACITY_KEY = 'fabOpacity';
 const SHOW_FEED_THUMBNAIL_KEY = 'showFeedThumbnail';
 const SHOW_REFRESH_FAB_KEY = 'showRefreshFab';
@@ -367,7 +368,17 @@ export function allAnswerDoubleTapActions(): AnswerDoubleTapAction[] {
   ];
 }
 
-/** 正文排版偏好（三个 Int 百分比，语义与键名对齐上游 AppearanceSettingsScreen）。 */
+export enum ReaderTypographyPreset {
+  CLASSIC = 'classic',
+  COMFORTABLE = 'comfortable'
+}
+
+export function decodeReaderTypographyPreset(value: preferences.ValueType): ReaderTypographyPreset {
+  return value === ReaderTypographyPreset.COMFORTABLE
+    ? ReaderTypographyPreset.COMFORTABLE : ReaderTypographyPreset.CLASSIC;
+}
+
+/** 百分比保留上游语义；排版方案单独保存，旧数据缺省时沿用原有物理尺寸。 */
 export interface ReaderTypography {
   /** 字号百分比，档位见 contentFontSizeLevels()，默认 100。 */
   fontSize: number;
@@ -375,6 +386,7 @@ export interface ReaderTypography {
   lineHeight: number;
   /** 段间距百分比，0..300 step 10，默认 100。 */
   blockSpacing: number;
+  preset?: ReaderTypographyPreset;
 }
 
 /**
@@ -406,7 +418,8 @@ export function defaultReaderTypography(): ReaderTypography {
   return {
     fontSize: DEFAULT_CONTENT_FONT_SIZE,
     lineHeight: DEFAULT_CONTENT_LINE_HEIGHT,
-    blockSpacing: DEFAULT_CONTENT_BLOCK_SPACING
+    blockSpacing: DEFAULT_CONTENT_BLOCK_SPACING,
+    preset: ReaderTypographyPreset.CLASSIC
   };
 }
 
@@ -455,12 +468,13 @@ export function decodeContentBlockSpacing(value: preferences.ValueType): number 
   return snapToStep(value, CONTENT_BLOCK_SPACING_MIN, CONTENT_BLOCK_SPACING_MAX, CONTENT_TYPOGRAPHY_STEP);
 }
 
-/** 三值分别按各自语义吸附/回退；落盘与 AppStorage 广播前统一走这里。 */
+/** 三个比例分别吸附/回退，方案缺省为原有排版；落盘与广播前统一归一化。 */
 export function normalizeReaderTypography(value: ReaderTypography): ReaderTypography {
   return {
     fontSize: decodeContentFontSize(value.fontSize),
     lineHeight: decodeContentLineHeight(value.lineHeight),
-    blockSpacing: decodeContentBlockSpacing(value.blockSpacing)
+    blockSpacing: decodeContentBlockSpacing(value.blockSpacing),
+    preset: decodeReaderTypographyPreset(value.preset ?? ReaderTypographyPreset.CLASSIC)
   };
 }
 
@@ -1040,7 +1054,7 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
     }
   }
 
-  /** 一次读三个排版偏好，减少 getPreferences 往返；损坏/缺失值按各自默认值回退。 */
+  /** 一次读取排版比例和方案；旧数据无方案键时保留原有排版。 */
   async loadReaderTypography(): Promise<ReaderTypography> {
     await this.saveQueue;
     try {
@@ -1048,10 +1062,12 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
       const fontSize = await store.get(CONTENT_FONT_SIZE_KEY, DEFAULT_CONTENT_FONT_SIZE);
       const lineHeight = await store.get(CONTENT_LINE_HEIGHT_KEY, DEFAULT_CONTENT_LINE_HEIGHT);
       const blockSpacing = await store.get(CONTENT_BLOCK_SPACING_KEY, DEFAULT_CONTENT_BLOCK_SPACING);
+      const preset = await store.get(CONTENT_TYPOGRAPHY_PRESET_KEY, ReaderTypographyPreset.CLASSIC);
       return normalizeReaderTypography({
         fontSize: decodeContentFontSize(fontSize),
         lineHeight: decodeContentLineHeight(lineHeight),
-        blockSpacing: decodeContentBlockSpacing(blockSpacing)
+        blockSpacing: decodeContentBlockSpacing(blockSpacing),
+        preset: decodeReaderTypographyPreset(preset)
       });
     } catch (error) {
       if (error instanceof Error) {
@@ -1077,6 +1093,7 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
       await store.put(CONTENT_FONT_SIZE_KEY, value.fontSize);
       await store.put(CONTENT_LINE_HEIGHT_KEY, value.lineHeight);
       await store.put(CONTENT_BLOCK_SPACING_KEY, value.blockSpacing);
+      await store.put(CONTENT_TYPOGRAPHY_PRESET_KEY, value.preset ?? ReaderTypographyPreset.CLASSIC);
       await store.flush();
     } catch (error) {
       if (error instanceof Error) {

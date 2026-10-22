@@ -272,6 +272,16 @@ export default function readerDocumentTest(): void {
       expect(blocks[0].sourceUrl).assertEqual('https://pic1.zhimg.com/v2-abc123def');
     });
 
+    it('prefersVisibleFigureCaptionOverImageAlt', 0, () => {
+      const blocks = parseZhihuHtml('<figure><img src="https://picx.zhimg.com/test.jpg" alt="图片加载替代文字">' +
+        '<figcaption><p>实际图注 <b>重点</b></p></figcaption></figure>');
+      expect(blocks.length).assertEqual(1);
+      expect(blocks[0].text).assertEqual('实际图注 重点');
+      const fallback = parseZhihuHtml('<figure><img src="https://picx.zhimg.com/test.jpg" alt="替代文字">' +
+        '<figcaption> </figcaption></figure>');
+      expect(fallback[0].text).assertEqual('替代文字');
+    });
+
     it('parsesEmbeddedZhihuVideoCard', 0, () => {
       const blocks = parseZhihuHtml('<p>视频如下</p>' +
         '<a class="video-box content-box" data-lens-id="1944534197600511075" ' +

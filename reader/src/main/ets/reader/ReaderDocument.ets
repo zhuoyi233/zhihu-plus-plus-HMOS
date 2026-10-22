@@ -743,10 +743,13 @@ export function parseZhihuHtml(html: string): Array<ReaderBlock> {
         const sourceUrl = preferredImageSource(imageTags[0]);
         if (sourceUrl.length > 0) {
           const alt = decodeHtml(attributeValue(imageTags[0], 'alt')).trim();
+          const captionMatch = visibleContent.match(/<figcaption\b[^>]*>([\s\S]*?)<\/figcaption>/i);
+          const caption = plainText(captionMatch?.[1] ?? '').trim();
           blocks.push({
             id: blockId,
             kind: ReaderBlockKind.IMAGE,
-            text: alt.length > 0 ? alt : plainText(visibleContent.replace(IMAGE_PATTERN, '')),
+            text: caption.length > 0 ? caption :
+              (alt.length > 0 ? alt : plainText(visibleContent.replace(IMAGE_PATTERN, ''))),
             sourceUrl: sourceUrl,
             inlineRuns: []
           });

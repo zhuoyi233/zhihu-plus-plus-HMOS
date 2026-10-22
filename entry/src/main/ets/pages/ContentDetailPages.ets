@@ -123,6 +123,7 @@ struct ContentDetailPage {
   @StorageProp('contentFontSize') private previewFontSizePercent: number = 100;
   @StorageProp('contentLineHeight') private previewLineHeightPercent: number = 160;
   @StorageProp('contentBlockSpacing') private previewBlockSpacingPercent: number = 100;
+  @StorageProp('contentTypographyPreset') private previewTypographyPreset: string = 'classic';
   @StorageProp('resolvedThemeColor') @Watch('onResolvedThemeColorChanged') private resolvedThemeColor: string =
     DEFAULT_THEME_COLOR;
   /** 上一次 pan 手势 offsetY（换算单帧 delta）。 */
@@ -1144,13 +1145,15 @@ struct ContentDetailPage {
             .width('100%')
 
           Text(this.answerPreviewExcerpt(previous))
-            .fontSize(readerBodyFontSize(this.previewFontSizePercent))
+            .fontSize(readerBodyFontSize(this.previewFontSizePercent, this.previewTypographyPreset))
             .fontColor($r('app.color.primary_text'))
             // 与 NativeContentDocument 正文同一套排版映射：行高随阅读偏好，不再写死 28。
-            .lineHeight(readerBodyLineHeight(this.previewFontSizePercent, this.previewLineHeightPercent))
+            .lineHeight(readerBodyLineHeight(this.previewFontSizePercent, this.previewLineHeightPercent,
+              this.previewTypographyPreset))
             .width('100%')
             // 预览没有真实 List，补足到正式页的信息头→正文 24vp 间距。
-            .margin({ top: Math.max(24, readerBlockSpacing(this.previewBlockSpacingPercent)) - 10 })
+            .margin({ top: Math.max(24, readerBlockSpacing(this.previewBlockSpacingPercent,
+              this.previewTypographyPreset)) - 10 })
         }
         .layoutWeight(1)
         .width('100%')

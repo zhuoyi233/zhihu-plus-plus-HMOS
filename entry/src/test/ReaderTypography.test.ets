@@ -9,7 +9,9 @@ import {
   decodeContentBlockSpacing,
   decodeContentFontSize,
   decodeContentLineHeight,
-  normalizeReaderTypography
+  decodeReaderTypographyPreset,
+  normalizeReaderTypography,
+  ReaderTypographyPreset
 } from 'data';
 import {
   readerBlockSpacing,
@@ -17,6 +19,8 @@ import {
   readerBodyLineHeight,
   readerHeadingFontSize
 } from '../main/ets/pages/ReaderTypography';
+import { ReaderBlock, ReaderBlockKind } from 'reader';
+import { readerBlockLeadingSpace } from '../main/ets/pages/ReaderBlockLayout';
 
 export default function readerTypographyTest(): void {
   describe('readerTypographyTest', () => {
@@ -99,6 +103,63 @@ export default function readerTypographyTest(): void {
       expect(readerBodyLineHeight(100, 160)).assertEqual(30);
       expect(readerBlockSpacing(100)).assertEqual(12);
       expect(readerHeadingFontSize(100)).assertEqual(20);
+    });
+
+    it('preservesLegacyValuesUnlessComfortablePresetIsExplicit', 0, () => {
+      const legacy = normalizeReaderTypography({ fontSize: 140, lineHeight: 190, blockSpacing: 70 });
+      expect(legacy.preset).assertEqual(ReaderTypographyPreset.CLASSIC);
+      expect(legacy.fontSize).assertEqual(140);
+      expect(legacy.lineHeight).assertEqual(190);
+      expect(legacy.blockSpacing).assertEqual(70);
+      expect(decodeReaderTypographyPreset('future')).assertEqual(ReaderTypographyPreset.CLASSIC);
+      expect(decodeReaderTypographyPreset(true)).assertEqual(ReaderTypographyPreset.CLASSIC);
+      expect(decodeReaderTypographyPreset('comfortable')).assertEqual(ReaderTypographyPreset.COMFORTABLE);
+      const comfortable = normalizeReaderTypography({ fontSize: 140, lineHeight: 190, blockSpacing: 70,
+        preset: ReaderTypographyPreset.COMFORTABLE });
+      expect(comfortable.preset).assertEqual(ReaderTypographyPreset.COMFORTABLE);
+      expect(comfortable.fontSize).assertEqual(140);
+      expect(comfortable.lineHeight).assertEqual(190);
+      expect(comfortable.blockSpacing).assertEqual(70);
+    });
+
+    it('mapsComfortablePresetWithoutRoundingSliderValues', 0, () => {
+      expect(readerBodyFontSize(100, 'comfortable')).assertEqual(17);
+      expect(readerBodyLineHeight(100, 160, 'comfortable')).assertEqual(29);
+      expect(readerBlockSpacing(100, 'comfortable')).assertEqual(14);
+      expect(readerBodyFontSize(200, 'comfortable')).assertEqual(34);
+      expect(readerBodyLineHeight(200, 160, 'comfortable')).assertEqual(58);
+      expect(readerBlockSpacing(0, 'comfortable')).assertEqual(0);
+      expect(readerBlockSpacing(300, 'comfortable')).assertEqual(42);
+      expect(readerBodyFontSize(100, 'future')).assertEqual(16);
+    });
+
+    it('addsHeadingSpaceOnceAndKeepsFirstHeadingFlush', 0, () => {
+      const paragraph: ReaderBlock = { id: 'p', kind: ReaderBlockKind.PARAGRAPH, text: '正文',
+        sourceUrl: '', inlineRuns: [] };
+      const heading: ReaderBlock = { id: 'h', kind: ReaderBlockKind.HEADING, text: '标题',
+        sourceUrl: '', inlineRuns: [] };
+      expect(readerBlockLeadingSpace(heading, undefined, 12)).assertEqual(0);
+      expect(12 + readerBlockLeadingSpace(heading, paragraph, 12)).assertEqual(24);
+      expect(12 + readerBlockLeadingSpace(paragraph, heading, 12)).assertEqual(12);
+      expect(readerBlockLeadingSpace(heading, heading, 12)).assertEqual(0);
+      expect(readerBlockLeadingSpace(heading, paragraph, 0)).assertEqual(0);
+      expect(36 + readerBlockLeadingSpace(heading, paragraph, 36)).assertEqual(72);
+      heading.text = '推荐阅读';
+      expect(12 + readerBlockLeadingSpace(heading, paragraph, 12)).assertEqual(42);
+    });
+
+    it('separatesImagesAndQuotesWithoutChangingNestedQuoteDepth', 0, () => {
+      const image: ReaderBlock = { id: 'i', kind: ReaderBlockKind.IMAGE, text: '图注',
+        sourceUrl: 'https://picx.zhimg.com/test.jpg', inlineRuns: [] };
+      const paragraph: ReaderBlock = { id: 'p', kind: ReaderBlockKind.PARAGRAPH, text: '正文',
+        sourceUrl: '', inlineRuns: [] };
+      const quote: ReaderBlock = { id: 'q', kind: ReaderBlockKind.PARAGRAPH, text: '引用',
+        sourceUrl: '', inlineRuns: [], quoteDepth: 2 };
+      expect(12 + readerBlockLeadingSpace(paragraph, image, 12)).assertEqual(18);
+      expect(12 + readerBlockLeadingSpace(quote, paragraph, 12)).assertEqual(18);
+      expect(readerBlockLeadingSpace(quote, quote, 12)).assertEqual(0);
+      expect(readerBlockLeadingSpace(paragraph, image, 0)).assertEqual(0);
+      expect(quote.quoteDepth).assertEqual(2);
     });
 
     it('scalesTypographyByPercent', 0, () => {

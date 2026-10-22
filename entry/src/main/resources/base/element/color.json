@@ -17,6 +17,10 @@
       "value": "#666666"
     },
     {
+      "name": "reader_quote_border",
+      "value": "#D3D6DC"
+    },
+    {
       "name": "surface_background",
       "value": "#F5F6F8"
     },

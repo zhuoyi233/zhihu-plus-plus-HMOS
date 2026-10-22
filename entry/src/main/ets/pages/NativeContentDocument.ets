@@ -60,6 +60,7 @@ import {
   readerHeadingFontSize
 } from './ReaderTypography';
 import { linkCardMetaLine } from './LinkCardMetaText';
+import { readerBlockLeadingSpace } from './ReaderBlockLayout';
 
 /**
  * 块高缺失时的估算兜底（vp）：未渲染块按实测平均块高估，无实测值时用该值。
@@ -68,8 +69,8 @@ import { linkCardMetaLine } from './LinkCardMetaText';
 const DEFAULT_BLOCK_HEIGHT_VP = 48;
 
 /** 暂无实测块时，未测块按"默认块高 + 一个块间距"计入估算。 */
-function defaultEstimatedBlockHeightVp(blockSpacingPercent: number): number {
-  return DEFAULT_BLOCK_HEIGHT_VP + readerBlockSpacing(blockSpacingPercent);
+function defaultEstimatedBlockHeightVp(blockSpacingPercent: number, preset: string): number {
+  return DEFAULT_BLOCK_HEIGHT_VP + readerBlockSpacing(blockSpacingPercent, preset);
 }
 
 /** 对齐上游 telephoto 默认 ZoomSpec(maxZoomFactor = 2f)。 */
@@ -436,6 +437,7 @@ struct ContentInlineFormula {
   /** 排版偏好与宿主同源（AppStorage 广播），行内公式所在段落随字号/行高联动。 */
   @StorageProp('contentFontSize') private fontSizePercent: number = 100;
   @StorageProp('contentLineHeight') private lineHeightPercent: number = 160;
+  @StorageProp('contentTypographyPreset') private typographyPreset: string = 'classic';
   @StorageProp('formulaForegroundColor') private formulaColor: string = '#111111';
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   /** 正文内联链接点击回调（行内公式所在段落同样生效）。 */
@@ -483,10 +485,10 @@ struct ContentInlineFormula {
           this.pixelMaps.get(run.id) === undefined) {
           if (run.kind === ReaderInlineKind.TEXT) {
             Span(run.text)
-              .fontSize(readerBodyFontSize(this.fontSizePercent) *
+              .fontSize(readerBodyFontSize(this.fontSizePercent, this.typographyPreset) *
                 (run.referenceNumero !== undefined ? 0.75 : 1))
               .baselineOffset(run.referenceNumero !== undefined ?
-                LengthMetrics.vp(readerBodyFontSize(this.fontSizePercent) * 0.35) : LengthMetrics.vp(0))
+                LengthMetrics.vp(readerBodyFontSize(this.fontSizePercent, this.typographyPreset) * 0.35) : LengthMetrics.vp(0))
               .fontColor((run.linkUrl ?? '').length > 0 || run.referenceNumero !== undefined
                 ? this.resolvedThemeColor : $r('app.color.primary_text'))
               .fontWeight(run.bold === true ? FontWeight.Bold : FontWeight.Normal)
@@ -528,8 +530,8 @@ struct ContentInlineFormula {
         }
       }, (run: ReaderInlineRun): string => run.id)
     }
-    .fontSize(readerBodyFontSize(this.fontSizePercent))
-    .lineHeight(readerBodyLineHeight(this.fontSizePercent, this.lineHeightPercent))
+    .fontSize(readerBodyFontSize(this.fontSizePercent, this.typographyPreset))
+    .lineHeight(readerBodyLineHeight(this.fontSizePercent, this.lineHeightPercent, this.typographyPreset))
     .fontColor($r('app.color.primary_text'))
     // 鸿蒙原生长按选字：启用系统文本选择菜单（复制 / 全选 / 翻译 / 分享等"更多操作"）。
     .copyOption(CopyOptions.LocalDevice)
@@ -545,14 +547,14 @@ struct ContentInlineFormula {
   private displaySize(id: string): FormulaDisplaySize {
     const exSize = this.formulaExSizes.get(id);
     return formulaDisplaySize(exSize?.width ?? 0, exSize?.height ?? 0,
-      readerBodyFontSize(this.fontSizePercent), this.formulaAvailableWidth);
+      readerBodyFontSize(this.fontSizePercent, this.typographyPreset), this.formulaAvailableWidth);
   }
 
   private async loadFormula(run: ReaderInlineRun, generation: number): Promise<void> {
     let pixelMap: image.PixelMap | undefined = undefined;
     try {
       const result = await loadFormulaPixelMap(run.sourceUrl, await this.formulaCookieHeader(),
-        this.formulaColor, formulaDecodeDensity(readerBodyFontSize(this.fontSizePercent)));
+        this.formulaColor, formulaDecodeDensity(readerBodyFontSize(this.fontSizePercent, this.typographyPreset)));
       pixelMap = result.pixelMap;
       if (!this.active || this.loadGeneration !== generation) {
         await pixelMap.release();
@@ -612,6 +614,7 @@ struct ContentBlockFormula {
   @State private formulaExSize: FormulaDisplaySize = { width: 0, height: 0 };
   @State private formulaAvailableWidth: number = 320;
   @StorageProp('contentFontSize') private fontSizePercent: number = 100;
+  @StorageProp('contentTypographyPreset') private typographyPreset: string = 'classic';
   @StorageProp('formulaForegroundColor') private formulaColor: string = '#111111';
   /** 加载失败兜底 Text 的选区状态回调（转发宿主，语义同 NativeContentDocument.onBodySelectionActive）。 */
   onBodySelectionActive?: (active: boolean) => void;
@@ -669,14 +672,14 @@ struct ContentBlockFormula {
 
   private blockDisplaySize(): FormulaDisplaySize {
     return formulaDisplaySize(this.formulaExSize.width, this.formulaExSize.height,
-      readerBodyFontSize(this.fontSizePercent), this.formulaAvailableWidth);
+      readerBodyFontSize(this.fontSizePercent, this.typographyPreset), this.formulaAvailableWidth);
   }
 
   private async loadFormula(generation: number): Promise<void> {
     let pixelMap: image.PixelMap | undefined = undefined;
     try {
       const result = await loadFormulaPixelMap(this.item.sourceUrl, await this.formulaCookieHeader(),
-        this.formulaColor, formulaDecodeDensity(readerBodyFontSize(this.fontSizePercent)));
+        this.formulaColor, formulaDecodeDensity(readerBodyFontSize(this.fontSizePercent, this.typographyPreset)));
       pixelMap = result.pixelMap;
       if (!this.active || this.loadGeneration !== generation) {
         await pixelMap.release();
@@ -786,6 +789,9 @@ export struct NativeContentDocument {
    * 首帧测量偏小若被存死，内容长高后视口将永久被压小（正文整块消失）。 */
   @State private naturalHeightVp: number = 0;
   private blocks: ReaderBlock[] = [];
+  private previousBlocks: Map<string, ReaderBlock> = new Map();
+  /** 惰性列表的块身份随排版/主题变化，重建捕获过旧字号的 Span 与公式组件。 */
+  @State private renderRevision: number = 0;
   @State private empty: boolean = true;
   @State private failedCardCoverIds: Array<string> = [];
   /** 推荐阅读卡片站内元数据（卡片 url → meta）：aboutToAppear 异步回填，重赋值触发重渲染。 */
@@ -806,6 +812,7 @@ export struct NativeContentDocument {
   @StorageProp('contentFontSize') @Watch('onTypographyChanged') private fontSizePercent: number = 100;
   @StorageProp('contentLineHeight') @Watch('onTypographyChanged') private lineHeightPercent: number = 160;
   @StorageProp('contentBlockSpacing') @Watch('onTypographyChanged') private blockSpacingPercent: number = 100;
+  @StorageProp('contentTypographyPreset') @Watch('onTypographyChanged') private typographyPreset: string = 'classic';
   @StorageProp('showPageTurnFab') private showPageTurnFab: boolean = false;
   @StorageProp('volumeKeyPageTurn') private volumeKeyPageTurn: boolean = false;
   @StorageProp('pageTurnPercent') private pageTurnPercent: number = 90;
@@ -821,7 +828,7 @@ export struct NativeContentDocument {
    * 新实例走 aboutToAppear 首载路径（实测可靠），且创建时直读 AppStorage 当前
    * formulaForegroundColor，天然免疫"颜色与 tick 两个 @StorageProp 广播时序竞态"。
    */
-  @StorageProp('appearanceThemeTick') private formulaRecreateTick: number = 0;
+  @StorageProp('appearanceThemeTick') @Watch('onAppearanceChanged') private formulaRecreateTick: number = 0;
   /**
    * 字号变化 tick：onTypographyChanged 检测到字号档位变化时递增。公式栅格按载入时
    * 字号密度解码（见 formulaDecodeDensity），字号调整后需整体销毁重建公式组件才能
@@ -864,7 +871,7 @@ export struct NativeContentDocument {
         Column({ space: this.blockSpacing() }) {
           ForEach(this.blocks, (item: ReaderBlock) => {
             this.readerBlock(item)
-          }, (item: ReaderBlock): string => item.id)
+          }, (item: ReaderBlock): string => `${item.id}:${this.renderRevision}`)
         }
         .width('100%')
         // 按钮保留区（上游 QUESTION_DETAIL_TOGGLE_ZONE 思路）：计入测量高，
@@ -952,6 +959,10 @@ export struct NativeContentDocument {
     const blocks = parseZhihuHtml(this.html);
     this.empty = blocks.length === 0;
     this.blocks = blocks;
+    this.previousBlocks.clear();
+    for (let index = 1; index < blocks.length; index++) {
+      this.previousBlocks.set(blocks[index].id, blocks[index - 1]);
+    }
     this.dataSource.replace(blocks);
     this.loadLinkCardMetas(blocks);
     const plainLength = this.html.replace(/<[^>]*>/g, '').trim().length;
@@ -1046,7 +1057,7 @@ export struct NativeContentDocument {
               .onAreaChange((_oldArea: Area, newArea: Area): void => {
                 this.reportBlockHeight(item.id, newArea);
               })
-            }, (item: ReaderBlock): string => item.id)
+            }, (item: ReaderBlock): string => `${item.id}:${this.renderRevision}`)
           }
           ListItem() { this.documentBodyFooter() }
             .onAreaChange((_oldArea: Area, newArea: Area): void => {
@@ -1203,7 +1214,7 @@ export struct NativeContentDocument {
 
   /** 正文字号（fp，`Text.fontSize` 传 number 即 fp）：16 × 字号%，默认 16 == 改造前 16fp。 */
   private bodyFontSize(): number {
-    return readerBodyFontSize(this.fontSizePercent);
+    return readerBodyFontSize(this.fontSizePercent, this.typographyPreset);
   }
 
   private turnPage(direction: number): void {
@@ -1226,12 +1237,12 @@ export struct NativeContentDocument {
 
   /** 正文行高（fp）：行高 160% ↔ 改造前的 30，见 ReaderTypography 的归一说明。 */
   private bodyLineHeight(): number {
-    return readerBodyLineHeight(this.fontSizePercent, this.lineHeightPercent);
+    return readerBodyLineHeight(this.fontSizePercent, this.lineHeightPercent, this.typographyPreset);
   }
 
   /** 段间距/块间距（vp，`List({ space })` 传 number 即 vp）：12 × 段间距%，默认 12 == 改造前。 */
   private blockSpacing(): number {
-    return readerBlockSpacing(this.blockSpacingPercent);
+    return readerBlockSpacing(this.blockSpacingPercent, this.typographyPreset);
   }
 
   /** 标题字号（fp）：20 × 字号%，默认 20 == 改造前 heading_font_size。 */
@@ -1252,7 +1263,17 @@ export struct NativeContentDocument {
     this.measuredBlockHeightSumVp = 0;
     this.measuredBlockCount = 0;
     this.exactContentHeightVp = 0;
+    this.rebuildRenderedBlocks();
     this.refreshContentHeightEstimate();
+  }
+
+  private onAppearanceChanged(): void {
+    this.rebuildRenderedBlocks();
+  }
+
+  private rebuildRenderedBlocks(): void {
+    this.renderRevision += 1;
+    this.dataSource.replace(this.blocks);
   }
 
   /** 正文块渲染后回报实测高度（vp），用于估算未渲染块的高度。 */
@@ -1316,7 +1337,7 @@ export struct NativeContentDocument {
     const total = this.blocks.length;
     const average = this.measuredBlockCount > 0
       ? this.measuredBlockHeightSumVp / this.measuredBlockCount
-      : defaultEstimatedBlockHeightVp(this.blockSpacingPercent);
+      : defaultEstimatedBlockHeightVp(this.blockSpacingPercent, this.typographyPreset);
     const estimated = this.measuredBlockHeightSumVp
       + Math.max(0, total - this.measuredBlockCount) * average
       + this.chromeHeightVp();
@@ -1359,14 +1380,14 @@ export struct NativeContentDocument {
     .width('100%')
     .alignItems(HorizontalAlign.Start)
     .padding({
-      left: (item.quoteDepth ?? 0) > 0 ? 12 : 0,
-      // 知乎网页 h2 的实际段前间距为 42px；扣除列表已有间距，避免重复叠加。
-      top: item.kind === ReaderBlockKind.HEADING && item.text.trim() === '推荐阅读' ?
-        Math.max(0, 42 - this.blockSpacing()) : 0
+      left: (item.quoteDepth ?? 0) > 0 ? 12 : 0
     })
-    .margin({ left: Math.min(Math.max((item.quoteDepth ?? 0) - 1, 0), 4) * 8 })
-    .borderWidth({ left: (item.quoteDepth ?? 0) > 0 ? 3 : 0 })
-    .borderColor($r('app.color.secondary_text'))
+    .margin({
+      left: Math.min(Math.max((item.quoteDepth ?? 0) - 1, 0), 4) * 8,
+      top: readerBlockLeadingSpace(item, this.previousBlocks.get(item.id), this.blockSpacing())
+    })
+    .borderWidth({ left: (item.quoteDepth ?? 0) > 0 ? 2 : 0 })
+    .borderColor($r('app.color.reader_quote_border'))
   }
 
   @Builder
@@ -1490,6 +1511,9 @@ export struct NativeContentDocument {
     } else if (item.kind === ReaderBlockKind.IMAGE) {
       ReaderImageBlock({
         item: item,
+        captionSpacing: this.blockSpacing() * 0.5,
+        captionFontSize: this.bodyFontSize() * 0.8125,
+        captionLineHeight: this.bodyLineHeight() * 2 / 3,
         secondaryTextColor: $r('app.color.secondary_text'),
         onPreview: (url: string): void => {
           // 全屏查看器由详情页根 Stack 叠层渲染（AppStorage 广播）：正文组件处于列表

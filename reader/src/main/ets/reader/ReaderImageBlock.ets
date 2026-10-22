@@ -35,6 +35,9 @@ export struct ReaderImageBlock {
   item: ReaderBlock = { id: '', kind: ReaderBlockKind.IMAGE, text: '', sourceUrl: '', inlineRuns: [] };
   onPreview: (url: string) => void = () => {};
   secondaryTextColor: ResourceColor = Color.Gray;
+  @Prop captionSpacing: number = 8;
+  @Prop captionFontSize: number = 14;
+  @Prop captionLineHeight: number = 20;
   @State private failed: boolean = false;
   @State private retryRevision: number = 0;
   @State private imageAspectRatio: number = IMAGE_PLACEHOLDER_ASPECT_RATIO;
@@ -78,7 +81,7 @@ export struct ReaderImageBlock {
   }
 
   build() {
-    Column({ space: 8 }) {
+    Column({ space: this.captionSpacing }) {
       Image(this.imageSource())
         .id(`reader_image_${this.item.id}`)
         // 加载后按"原大小 + 占比钳制"定宽（30%~80%/100% 屏占比，见 ReaderImageSizing），
@@ -105,7 +108,9 @@ export struct ReaderImageBlock {
 
       if (this.item.text.length > 0) {
         Text(this.item.text)
-          .fontSize(14)
+          .id(`reader_image_caption_${this.item.id}`)
+          .fontSize(this.captionFontSize)
+          .lineHeight(this.captionLineHeight)
           .fontColor(this.secondaryTextColor)
           .textAlign(TextAlign.Center)
           .width('100%')

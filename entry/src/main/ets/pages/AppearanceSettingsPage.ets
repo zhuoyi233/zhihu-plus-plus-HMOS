@@ -22,6 +22,7 @@ import {
   normalizeThemeColor,
   onThemeColor,
   ReaderTypography,
+  ReaderTypographyPreset,
   ShareActionMode
 } from 'data';
 import {
@@ -69,6 +70,7 @@ export struct AppearanceSettingsPage {
   @StorageProp('contentFontSize') private contentFontSize: number = 100;
   @StorageProp('contentLineHeight') private contentLineHeight: number = 160;
   @StorageProp('contentBlockSpacing') private contentBlockSpacing: number = 100;
+  @StorageProp('contentTypographyPreset') private contentTypographyPreset: string = ReaderTypographyPreset.CLASSIC;
   @StorageProp('fabOpacity') private fabOpacity: number = 100;
   @StorageProp('showFeedThumbnail') private showFeedThumbnail: boolean = true;
   @StorageProp('showRefreshFab') private showRefreshFab: boolean = true;
@@ -147,6 +149,8 @@ export struct AppearanceSettingsPage {
 
         this.sectionTitle('阅读')
         Column() {
+          this.typographyPresetSetting()
+          Divider().color($r('app.color.divider_color'))
           this.fontSizeSetting()
           Divider().color($r('app.color.divider_color'))
           this.sliderSetting({
@@ -504,6 +508,35 @@ export struct AppearanceSettingsPage {
       return;
     }
     this.onImmersiveMaterialChange(modes[index]);
+  }
+
+  @Builder
+  private typographyPresetSetting() {
+    Column({ space: $r('app.float.spacing_small') }) {
+      Text('正文排版')
+        .fontSize($r('app.float.body_font_size'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.primary_text'))
+      Text('舒适排版的文字略大、行距更紧凑；字号、行高和段间距仍可单独调整')
+        .fontSize($r('app.float.secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
+      Select([{ value: '原有排版' }, { value: '舒适排版' }])
+        .id('appearance_typography_preset')
+        .selected(this.contentTypographyPreset === ReaderTypographyPreset.COMFORTABLE ? 1 : 0)
+        .value(this.contentTypographyPreset === ReaderTypographyPreset.COMFORTABLE ? '舒适排版' : '原有排版')
+        .fontColor($r('app.color.primary_text'))
+        .selectedOptionFontColor(this.resolvedThemeColor)
+        .onSelect((index: number): void => {
+          if (index === 0 || index === 1) {
+            this.updateTypography(this.contentFontSize, this.contentLineHeight, this.contentBlockSpacing,
+              index === 1 ? ReaderTypographyPreset.COMFORTABLE : ReaderTypographyPreset.CLASSIC);
+          }
+        })
+    }
+    .alignItems(HorizontalAlign.Start)
+    .width('100%')
+    .padding($r('app.float.card_padding'))
   }
 
   @Builder
@@ -1077,15 +1110,19 @@ export struct AppearanceSettingsPage {
     });
   }
 
-  private updateTypography(fontSize: number, lineHeight: number, blockSpacing: number): void {
+  private updateTypography(fontSize: number, lineHeight: number, blockSpacing: number,
+    preset?: ReaderTypographyPreset): void {
     const value: ReaderTypography = normalizeReaderTypography({
       fontSize: fontSize,
       lineHeight: lineHeight,
-      blockSpacing: blockSpacing
+      blockSpacing: blockSpacing,
+      preset: preset ?? (this.contentTypographyPreset === ReaderTypographyPreset.COMFORTABLE
+        ? ReaderTypographyPreset.COMFORTABLE : ReaderTypographyPreset.CLASSIC)
     });
     AppStorage.setOrCreate('contentFontSize', value.fontSize);
     AppStorage.setOrCreate('contentLineHeight', value.lineHeight);
     AppStorage.setOrCreate('contentBlockSpacing', value.blockSpacing);
+    AppStorage.setOrCreate('contentTypographyPreset', value.preset ?? ReaderTypographyPreset.CLASSIC);
     void this.store?.saveReaderTypography(value).catch((_error: Object): void => {
       this.statusMessage = '阅读设置保存失败，本次调整仍已生效';
     });
