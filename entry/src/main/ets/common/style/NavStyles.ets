@@ -139,3 +139,46 @@ export function getPersistentImmersiveTitleBarStyle(materialMode: ImmersiveMater
     }
   };
 }
+
+/**
+ * 聊天类页面（私信会话）的标题栏：消息列表首帧就定位到末尾，内容必然落在标题栏下方，
+ * 若沿用半透明沉浸底，消息正文会透出与标题互相压字。这里固定用不透明页面底色，
+ * 列表仍保留 contentStartOffset，滚动时消息滑入不透明顶栏之后。
+ */
+export function getChatTitleBarStyle(): TitleBarStyleOptions {
+  if (HarmonyOSCapabilities.supportsImmersiveTitleBarStyle()) {
+    return {
+      scrollEffectOpts: {
+        enableScrollEffect: false,
+        scrollEffectType: ScrollEffectType.IMMERSIVE_GRADIENT_BLUR
+      },
+      originalStyle: {
+        backgroundStyle: { backgroundColor: $r('app.color.page_background') },
+        contentStyle: {
+          titleStyle: {
+            mainTitleColor: $r('app.color.primary_text'),
+            subTitleColor: $r('app.color.secondary_text')
+          },
+          backIconStyle: { iconColor: $r('app.color.primary_text') },
+          subIconStyle: { iconColor: $r('app.color.primary_text') },
+          menuStyle: { iconColor: $r('app.color.primary_text') }
+        }
+      }
+    };
+  }
+  // API 23 的 HDS 不渲染静止态 originalStyle 底色，需保留滚动效果机制并在两态都给同一不透明色。
+  return {
+    scrollEffectOpts: {
+      enableScrollEffect: true,
+      scrollEffectType: ScrollEffectType.COMMON_BLUR,
+      blurEffectiveStartOffset: LengthMetrics.vp(0),
+      blurEffectiveEndOffset: LengthMetrics.vp(10)
+    },
+    originalStyle: {
+      backgroundStyle: { backgroundColor: $r('app.color.page_background') }
+    },
+    scrollEffectStyle: {
+      backgroundStyle: { backgroundColor: $r('app.color.page_background') }
+    }
+  };
+}

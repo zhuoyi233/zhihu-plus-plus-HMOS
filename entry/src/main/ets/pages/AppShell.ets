@@ -69,7 +69,7 @@ import {
   topLevelTabForDestination
 } from './TopLevelTabs';
 import { DividerShowType, hdsMaterial, HdsNavDestination, HdsNavigation, HdsNavigationAttribute, HdsNavigationTitleMode, HdsTabsController } from '@kit.UIDesignKit';
-import { getImmersiveTitleBarStyle, getPersistentImmersiveTitleBarStyle } from '../common/style/NavStyles';
+import { getChatTitleBarStyle, getImmersiveTitleBarStyle, getPersistentImmersiveTitleBarStyle } from '../common/style/NavStyles';
 import {
   decodeImmersiveMaterialSupport,
   ImmersiveMaterialSupportState
@@ -900,8 +900,9 @@ export struct AppShell {
           (destination: AppDestination): void => this.navigate(destination)
         );
       }
-      // 私信为聊天页：首帧无内容滚过标题栏，须用常驻沉浸样式，否则进入时顶栏透明
-      .titleBar({ style: getPersistentImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
+      // 私信为聊天页：首帧列表就定位到末尾，消息会落在标题栏下方；
+      // 用不透明页面底色的顶栏，避免消息正文与标题叠字（见 NavStyles.getChatTitleBarStyle）。
+      .titleBar({ style: getChatTitleBarStyle(), avoidLayoutSafeArea: true,
         content: { title: { mainTitle:
           ((destination as PrivateMessageDestination).peerName ?? '').length > 0
             ? ((destination as PrivateMessageDestination).peerName as string) : '私信' },
