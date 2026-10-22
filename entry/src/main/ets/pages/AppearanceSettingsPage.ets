@@ -378,12 +378,33 @@ export struct AppearanceSettingsPage {
         .fontSize($r('app.float.secondary_font_size'))
         .fontColor($r('app.color.secondary_text'))
         .width('100%')
-      Row({ space: $r('app.float.spacing_small') }) {
-        this.themeModeButton('跟随系统', AppThemeMode.SYSTEM, 'appearance_theme_system')
-        this.themeModeButton('浅色', AppThemeMode.LIGHT, 'appearance_theme_light')
-        this.themeModeButton('深色', AppThemeMode.DARK, 'appearance_theme_dark')
+      if (this.themeModeOptionsStacked()) {
+        // 系统字号放大后“跟随系统”必然折行，横向三等分会高低不齐，改为纵向整行排列。
+        Column({ space: $r('app.float.spacing_xsmall') }) {
+          this.themeModeButton('跟随系统', AppThemeMode.SYSTEM, 'appearance_theme_system')
+          this.themeModeButton('浅色', AppThemeMode.LIGHT, 'appearance_theme_light')
+          this.themeModeButton('深色', AppThemeMode.DARK, 'appearance_theme_dark')
+        }
+        .width('100%')
+      } else {
+        Row({ space: $r('app.float.spacing_small') }) {
+          Column() {
+            this.themeModeButton('跟随系统', AppThemeMode.SYSTEM, 'appearance_theme_system')
+          }
+          .layoutWeight(1)
+
+          Column() {
+            this.themeModeButton('浅色', AppThemeMode.LIGHT, 'appearance_theme_light')
+          }
+          .layoutWeight(1)
+
+          Column() {
+            this.themeModeButton('深色', AppThemeMode.DARK, 'appearance_theme_dark')
+          }
+          .layoutWeight(1)
+        }
+        .width('100%')
       }
-      .width('100%')
     }
     .alignItems(HorizontalAlign.Start)
     .width('100%')
@@ -394,11 +415,17 @@ export struct AppearanceSettingsPage {
   private themeModeButton(label: string, mode: AppThemeMode, testId: string) {
     Button(label, { type: ButtonType.ROUNDED_RECTANGLE, stateEffect: true })
       .id(testId)
-      .layoutWeight(1)
+      .width('100%')
       .fontSize($r('app.float.secondary_font_size'))
       .fontColor(this.themeMode === mode ? onThemeColor(this.resolvedThemeColor) : $r('app.color.primary_text'))
       .backgroundColor(this.themeMode === mode ? this.resolvedThemeColor : $r('app.color.control_background'))
       .onClick((): void => this.onThemeModeChange(mode))
+  }
+
+  /** 系统字号放大到需要折行时，主题模式选项改为纵向排列（对齐详情页操作栏的字号判定阈值）。 */
+  private themeModeOptionsStacked(): boolean {
+    const fontScale = getAbilityContext()?.config.fontSizeScale ?? 1;
+    return fontScale > 1.2;
   }
 
   /** 主题颜色入口行：当前色圆点 + 名称 + hex，点击进入主题颜色配置页。 */
