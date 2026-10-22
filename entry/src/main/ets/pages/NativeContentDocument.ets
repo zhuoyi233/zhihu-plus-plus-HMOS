@@ -776,6 +776,8 @@ export struct NativeContentDocument {
    * 0 表示不额外让位（沉浸阅读隐藏顶栏 / 非详情页场景）。
    */
   topInsetVp: number = 0;
+  /** 回答/文章阅读布局：独立正文边距，信息头到正文至少留 24vp；其他宿主沿用原布局。 */
+  readingLayout: boolean = false;
   /** 问题页正文折叠预览：正文超阈值（纯文本≥100 字或含图）时收起为 180vp 视口。 */
   collapsible: boolean = false;
   @State private detailExpanded: boolean = false;
@@ -1020,6 +1022,8 @@ export struct NativeContentDocument {
     Stack({ alignContent: Alignment.TopEnd }) {
       List({ space: this.blockSpacing(), scroller: this.scroller }) {
           ListItem() { this.documentHeader() }
+            // List.space 已含段间距，仅补足信息头与正文之间的留白；大段间距偏好不被压缩。
+            .padding({ bottom: this.readingLayout ? Math.max(0, 24 - this.blockSpacing()) : 0 })
             .onAreaChange((_oldArea: Area, newArea: Area): void => {
               this.reportChromeHeight('header', newArea);
             })
@@ -1073,8 +1077,8 @@ export struct NativeContentDocument {
         .height('100%')
         .scrollBar(BarState.Off)
         .padding({
-          left: $r('app.float.page_padding'),
-          right: $r('app.float.page_padding'),
+          left: this.readingLayout ? $r('app.float.reader_page_padding') : $r('app.float.page_padding'),
+          right: this.readingLayout ? $r('app.float.reader_page_padding') : $r('app.float.page_padding'),
           top: $r('app.float.spacing_medium')
         })
         // 末尾避让随正文滚动，避免底部 padding 压缩视口、在悬浮操作栏下方形成固定留白。

@@ -95,7 +95,7 @@ import { hdsMaterial } from '@kit.UIDesignKit';
 import { GlassCapsule } from './components/MaterialCanvas';
 import { getSpeechPlaybackService, SpeechPlaybackStatus } from '../platform/SpeechPlaybackService';
 import { accumulateAnswerSwitchDrag } from './AnswerSwitchGesture';
-import { readerBodyFontSize, readerBodyLineHeight } from './ReaderTypography';
+import { readerBlockSpacing, readerBodyFontSize, readerBodyLineHeight } from './ReaderTypography';
 import { SegmentPill } from './components/SegmentPill';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 
@@ -122,6 +122,7 @@ struct ContentDetailPage {
   /** 阅读排版偏好（AppStorage 广播键，与 NativeContentDocument 同源）：横向预览页摘要排版对齐正文。 */
   @StorageProp('contentFontSize') private previewFontSizePercent: number = 100;
   @StorageProp('contentLineHeight') private previewLineHeightPercent: number = 160;
+  @StorageProp('contentBlockSpacing') private previewBlockSpacingPercent: number = 100;
   @StorageProp('resolvedThemeColor') @Watch('onResolvedThemeColorChanged') private resolvedThemeColor: string =
     DEFAULT_THEME_COLOR;
   /** 上一次 pan 手势 offsetY（换算单帧 delta）。 */
@@ -987,6 +988,7 @@ struct ContentDetailPage {
           emptyMessage: contentEmptyMessage(content),
           linkCardMetaRepository: this.linkCardMetaRepository,
           disableEdgeSpring: this.kind === ContentDetailKind.ANSWER,
+          readingLayout: true,
           topInsetVp: this.immersiveReading ? 0 : FLOATING_TITLE_BAR_OFFSET,
           onVideoOpen: (videoId: string): void => this.openVideo(videoId),
           onLinkClick: (url: string): void => this.openContentLink(url),
@@ -1086,10 +1088,13 @@ struct ContentDetailPage {
         Column({ space: $r('app.float.spacing_small') }) {
           Text(this.currentAnswerQuestionTitle())
             .id(previous ? 'answer_prev_horizontal_question' : 'answer_next_horizontal_question')
-            .fontSize($r('app.float.heading_font_size'))
+            .fontSize($r('app.float.reader_title_font_size'))
+            .lineHeight($r('app.float.reader_title_line_height'))
             .fontWeight(FontWeight.Bold)
             .fontColor($r('app.color.primary_text'))
             .width('100%')
+            // 与正式页一致：外层 10vp 间距 + 8vp，标题到作者共 18vp。
+            .margin({ bottom: 8 })
 
           Row({ space: $r('app.float.spacing_small') }) {
             Stack({ alignContent: Alignment.Center }) {
@@ -1134,7 +1139,7 @@ struct ContentDetailPage {
           .width('100%')
 
           Text(`${this.answerPreviewVoteupCount(previous)} 赞同 · ${this.answerPreviewCommentCount(previous)} 条评论`)
-            .fontSize($r('app.float.secondary_font_size'))
+            .fontSize($r('app.float.caption_font_size'))
             .fontColor($r('app.color.secondary_text'))
             .width('100%')
 
@@ -1144,13 +1149,15 @@ struct ContentDetailPage {
             // 与 NativeContentDocument 正文同一套排版映射：行高随阅读偏好，不再写死 28。
             .lineHeight(readerBodyLineHeight(this.previewFontSizePercent, this.previewLineHeightPercent))
             .width('100%')
+            // 预览没有真实 List，补足到正式页的信息头→正文 24vp 间距。
+            .margin({ top: Math.max(24, readerBlockSpacing(this.previewBlockSpacingPercent)) - 10 })
         }
         .layoutWeight(1)
         .width('100%')
-        // 与 NativeContentDocument 的 List 统一：左右 pagePadding、顶部 spacingMedium。
+        // 与 NativeContentDocument 的阅读布局统一：独立正文边距、顶部 spacingMedium。
         .padding({
-          left: $r('app.float.page_padding'),
-          right: $r('app.float.page_padding'),
+          left: $r('app.float.reader_page_padding'),
+          right: $r('app.float.reader_page_padding'),
           top: $r('app.float.spacing_medium')
         })
         .clip(true)
@@ -1612,11 +1619,17 @@ struct ContentDetailPage {
         if (contentContextTitle(content).length > 0) {
           Text(contentContextTitle(content))
             .id(`${content.kind}_detail_context_title`)
-            .fontSize($r('app.float.heading_font_size'))
+            .fontSize(content.kind === ContentDetailKind.QUESTION
+              ? $r('app.float.heading_font_size') : $r('app.float.reader_title_font_size'))
+            .lineHeight(content.kind === ContentDetailKind.QUESTION
+              ? 28 : $r('app.float.reader_title_line_height'))
             .fontWeight(FontWeight.Bold)
             .fontColor($r('app.color.primary_text'))
             .copyOption(CopyOptions.LocalDevice)
             .width('100%')
+            // 标题到作者为 18vp（外层 space 10 + margin 8），作者内部仍保持紧凑。
+            .margin({ bottom: content.kind !== ContentDetailKind.QUESTION &&
+              contentAuthorName(content).length > 0 ? 8 : 0 })
             .onAreaChange((_oldArea: Area, newArea: Area): void => {
               const height = Number(newArea.height);
               if (height > 0 && Math.abs(height - this.contentTitleHeightVp) > 1) {
@@ -1636,39 +1649,44 @@ struct ContentDetailPage {
           this.contentHeaderAuthorRow(content)
         }
 
-        // 回答/文章页发布/编辑时间（对齐上游 DateTexts：编辑时间与发布不同才显示）。
-        if ((this.pinAnswerDate || content.kind === ContentDetailKind.QUESTION) &&
-          contentCreatedAtText(content).length > 0) {
-          Text(contentCreatedAtText(content))
-            .id(`content_header_${content.kind}_created_at`)
-            .fontSize($r('app.float.caption_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .width('100%')
-        }
-        if ((this.pinAnswerDate || content.kind === ContentDetailKind.QUESTION) &&
-          contentUpdatedAtText(content).length > 0) {
-          Text(contentUpdatedAtText(content))
-            .id(`content_header_${content.kind}_updated_at`)
-            .fontSize($r('app.float.caption_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .width('100%')
-        }
-
-        if (content.kind === ContentDetailKind.QUESTION) {
-          Row({ space: $r('app.float.spacing_medium') }) {
-            this.questionStatItem($r('sys.symbol.eye'), `${content.value.visitCount ?? 0} 浏览`)
-            this.questionStatItem($r('sys.symbol.heart'), `${this.followController === undefined ? content.value.followerCount : this.followerCount} 关注`)
-            this.questionStatItem($r('sys.symbol.message'), `${content.value.commentCount} 评论`)
+        // 时间与统计归为次要信息组，避免每个字段都占用一段组间留白。
+        Column({ space: $r('app.float.spacing_xsmall') }) {
+          // 编辑时间与发布不同才显示；继续尊重置顶日期设置。
+          if ((this.pinAnswerDate || content.kind === ContentDetailKind.QUESTION) &&
+            contentCreatedAtText(content).length > 0) {
+            Text(contentCreatedAtText(content))
+              .id(`content_header_${content.kind}_created_at`)
+              .fontSize($r('app.float.caption_font_size'))
+              .fontColor($r('app.color.secondary_text'))
+              .width('100%')
           }
-          .id('question_detail_statistics')
-          .width('100%')
-        } else {
-          Text(this.displayedContentStatistics(content))
-            .id(`${content.kind}_detail_statistics`)
-            .fontSize($r('app.float.secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
+          if ((this.pinAnswerDate || content.kind === ContentDetailKind.QUESTION) &&
+            contentUpdatedAtText(content).length > 0) {
+            Text(contentUpdatedAtText(content))
+              .id(`content_header_${content.kind}_updated_at`)
+              .fontSize($r('app.float.caption_font_size'))
+              .fontColor($r('app.color.secondary_text'))
+              .width('100%')
+          }
+
+          if (content.kind === ContentDetailKind.QUESTION) {
+            Row({ space: $r('app.float.spacing_medium') }) {
+              this.questionStatItem($r('sys.symbol.eye'), `${content.value.visitCount ?? 0} 浏览`)
+              this.questionStatItem($r('sys.symbol.heart'), `${this.followController === undefined ? content.value.followerCount : this.followerCount} 关注`)
+              this.questionStatItem($r('sys.symbol.message'), `${content.value.commentCount} 评论`)
+            }
+            .id('question_detail_statistics')
             .width('100%')
+          } else {
+            Text(this.displayedContentStatistics(content))
+              .id(`${content.kind}_detail_statistics`)
+              .fontSize($r('app.float.caption_font_size'))
+              .fontColor($r('app.color.secondary_text'))
+              .width('100%')
+          }
         }
+        .width('100%')
+        .alignItems(HorizontalAlign.Start)
 
         // 文章话题胶囊流（对齐上游 ArticleScreen topics FlowRow：仅文章页在信息头展示，
         // 问题页话题在回答列表尾部 questionBodyFooter 中展示）。
@@ -1708,9 +1726,11 @@ struct ContentDetailPage {
           ? 0 : $r('app.float.page_padding'),
         top: content.kind === ContentDetailKind.ANSWER || content.kind === ContentDetailKind.ARTICLE
           ? 0 : $r('app.float.spacing_medium'),
-        bottom: $r('app.float.spacing_medium')
+        // 回答/文章由正文列表补足到 24vp，避免信息头 padding 与 List.space 重复叠加。
+        bottom: content.kind === ContentDetailKind.QUESTION ? $r('app.float.spacing_medium') : 0
       })
-      .backgroundColor($r('app.color.surface_background'))
+      .backgroundColor(content.kind === ContentDetailKind.QUESTION
+        ? $r('app.color.surface_background') : Color.Transparent)
     }
   }
 
@@ -1827,6 +1847,7 @@ struct ContentDetailPage {
               .fontColor($r('app.color.primary_text'))
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .flexShrink(1)
             // 作者认证徽章（对齐上游 AuthorBadge：名称旁 18vp 图标）。
             if (contentAuthorBadge(content) !== undefined) {
               Image(contentAuthorBadge(content)?.iconUrl ?? '')
@@ -1835,9 +1856,11 @@ struct ContentDetailPage {
                 .height(18)
                 .objectFit(ImageFit.Contain)
                 .draggable(false)
+                .flexShrink(0)
             }
           }
           .alignItems(VerticalAlign.Center)
+          .width('100%')
           if (contentAuthorHeadline(content).length > 0) {
             Text(contentAuthorHeadline(content))
               .fontSize($r('app.float.caption_font_size'))
