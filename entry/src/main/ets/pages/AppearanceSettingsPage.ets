@@ -33,6 +33,7 @@ import {
   immersiveMaterialModeIndex,
   immersiveMaterialModeLabel
 } from '../common/style/ImmersiveMaterialStyles';
+import { display } from '@kit.ArkUI';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 
 /**
@@ -422,10 +423,19 @@ export struct AppearanceSettingsPage {
       .onClick((): void => this.onThemeModeChange(mode))
   }
 
-  /** 系统字号放大到需要折行时，主题模式选项改为纵向排列（对齐详情页操作栏的字号判定阈值）。 */
+  /**
+   * 主题模式按钮何时改为纵向排列：只有横向三等分放不下「跟随系统」时才需要。
+   * 该判断必须同时看字号与窗口宽度——平板横屏（1138vp）配大字号完全放得下，
+   * 只按 fontScale 一刀切会把平板也改成三行铺满整宽。
+   */
   private themeModeOptionsStacked(): boolean {
     const fontScale = getAbilityContext()?.config.fontSizeScale ?? 1;
-    return fontScale > 1.2;
+    const screen = display.getDefaultDisplaySync();
+    const windowWidthVp = screen.densityPixels > 0 ? screen.width / screen.densityPixels : 360;
+    // 卡片内容宽 = 窗口宽 - 页面左右 12vp*2 - 卡片左右 18vp*2 - 按钮间距 10vp*2
+    const buttonWidthVp = Math.max(0, (windowWidthVp - 80) / 3);
+    // 「跟随系统」四字 + 按钮左右内边距，标准字号下约 88vp
+    return fontScale * 88 > buttonWidthVp;
   }
 
   /** 主题颜色入口行：当前色圆点 + 名称 + hex，点击进入主题颜色配置页。 */
