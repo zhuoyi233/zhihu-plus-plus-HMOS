@@ -1,7 +1,12 @@
 import { image } from '@kit.ImageKit';
 import { http } from '@kit.NetworkKit';
 import { util } from '@kit.ArkTS';
+import { drawing, text } from '@kit.ArkGraphics2D';
+import { parseAbsoluteUrl } from 'core';
 import {
+  boxedFormulaText,
+  boxedFormulaTextLayout,
+  FORMULA_EM_PER_EX,
   FORMULA_FALLBACK_PIXELS_PER_EX,
   FormulaDisplaySize,
   formulaDecodePixelsPerEx,
@@ -10,6 +15,7 @@ import {
   normalizeFormulaSvgText
 } from './FormulaRendering';
 import { isTrustedFormulaUrl } from './FormulaSourcePolicy';
+import { formulaSvgTextRuns, FormulaSvgTextRun } from './FormulaSvgText';
 
 const MAX_SVG_BYTES = 1024 * 1024;
 const MAX_CACHE_ENTRIES = 64;
@@ -25,7 +31,7 @@ const FORMULA_USER_AGENT =
 /** 公式解码结果：除 PixelMap 外带回 ex 固有尺寸与实际采样密度，供显示尺寸换算。 */
 export interface FormulaPixelMapResult {
   pixelMap: image.PixelMap;
-  /** 公式 SVG 固有尺寸（ex 单位，来自根节点 width/height 声明）。 */
+  /** SVG 固有尺寸；纯文字方框按原生排版结果换算成 ex，复用统一的显示尺寸换算。 */
   exSize: FormulaDisplaySize;
   /** 实际解码采样密度（px/ex）：与 formulaDecodePixelsPerEx 的钳制结果一致。 */
   pixelsPerEx: number;
@@ -151,6 +157,84 @@ export function clearFormulaByteCache(): void {
   cachedByteCount = 0;
 }
 
+/** ImageKit 的 SVG 解码不绘制 text，使用带系统字体回退的原生段落补绘中文。 */
+function paintFormulaText(pixelMap: image.PixelMap, runs: Array<FormulaSvgTextRun>, foregroundColor: string): void {
+  if (runs.length === 0) {
+    return;
+  }
+  const color = /^#[0-9a-f]{6}$/i.test(foregroundColor) ? foregroundColor : '#111111';
+  const canvas = new drawing.Canvas(pixelMap);
+  const fonts = text.FontCollection.getGlobalInstance();
+  for (const run of runs) {
+    const style: text.TextStyle = {
+      color: { alpha: 255, red: parseInt(color.slice(1, 3), 16),
+        green: parseInt(color.slice(3, 5), 16), blue: parseInt(color.slice(5, 7), 16) },
+      fontSize: run.fontSize,
+      fontFamilies: ['sans-serif']
+    };
+    const builder = new text.ParagraphBuilder({ textStyle: style }, fonts);
+    builder.addText(run.text);
+    const paragraph = builder.build();
+    paragraph.layoutSync(Math.max(1, run.fontSize * (run.text.length + 1) * 2));
+    const values = run.matrix;
+    const matrix = new drawing.Matrix();
+    matrix.setMatrix([values[0], values[2], values[4], values[1], values[3], values[5], 0, 0, 1]);
+    canvas.save();
+    canvas.concatMatrix(matrix);
+    // SVG text 的 y 是基线，Paragraph.paint 的 y 是段落顶边。
+    paragraph.paint(canvas, 0, -paragraph.getAlphabeticBaseline());
+    canvas.restore();
+  }
+}
+
+/** 纯文字方框独立排版；不把整张 MathJax 图片缩小来塞入阅读宽度。 */
+async function renderBoxedText(value: string, foregroundColor: string,
+  targetPixelsPerEx: number, availableWidthPx: number): Promise<FormulaPixelMapResult> {
+  const pixelsPerEx = Number.isFinite(targetPixelsPerEx) && targetPixelsPerEx > 0
+    ? targetPixelsPerEx : FORMULA_FALLBACK_PIXELS_PER_EX;
+  const fontSize = pixelsPerEx / FORMULA_EM_PER_EX;
+  const maxWidth = Math.min(4096, Number.isFinite(availableWidthPx) && availableWidthPx > 0 ? availableWidthPx : 4096);
+  const color = /^#[0-9a-f]{6}$/i.test(foregroundColor) ? foregroundColor : '#111111';
+  const red = parseInt(color.slice(1, 3), 16);
+  const green = parseInt(color.slice(3, 5), 16);
+  const blue = parseInt(color.slice(5, 7), 16);
+  const style: text.TextStyle = { fontSize: fontSize, fontFamilies: ['sans-serif'],
+    color: { alpha: 255, red: red, green: green, blue: blue }, heightScale: 1.4, halfLeading: true };
+  const builder = new text.ParagraphBuilder({ textStyle: style, align: text.TextAlign.CENTER },
+    text.FontCollection.getGlobalInstance());
+  builder.addText(value);
+  const paragraph = builder.build();
+  const emptyLayout = boxedFormulaTextLayout(fontSize, maxWidth, maxWidth, 0);
+  paragraph.layoutSync(emptyLayout.textWidth);
+  const measured = boxedFormulaTextLayout(fontSize, maxWidth, paragraph.getLongestLine(), paragraph.getHeight());
+  paragraph.layoutSync(measured.textWidth);
+  const layout = boxedFormulaTextLayout(fontSize, measured.width, paragraph.getLongestLine(), paragraph.getHeight());
+  if (layout.height > 4096 || layout.textWidth < fontSize) {
+    throw new Error('纯文字公式超出排版范围');
+  }
+  const pixelMap = await image.createPixelMap(new ArrayBuffer(layout.width * layout.height * 4), {
+    size: { width: layout.width, height: layout.height }, editable: true,
+    pixelFormat: image.PixelMapFormat.RGBA_8888, alphaType: image.AlphaType.PREMUL
+  });
+  try {
+    const canvas = new drawing.Canvas(pixelMap);
+    const pen = new drawing.Pen();
+    pen.setAntiAlias(true);
+    pen.setColor(255, red, green, blue);
+    pen.setStrokeWidth(layout.borderWidth);
+    canvas.attachPen(pen);
+    const edge = layout.borderWidth / 2;
+    canvas.drawRect({ left: edge, top: edge, right: layout.width - edge, bottom: layout.height - edge });
+    canvas.detachPen();
+    paragraph.paint(canvas, layout.textX, layout.textY);
+    return { pixelMap: pixelMap, exSize: { width: layout.width / pixelsPerEx, height: layout.height / pixelsPerEx },
+      pixelsPerEx: pixelsPerEx };
+  } catch (_error) {
+    await pixelMap.release();
+    throw new Error('纯文字公式绘制失败');
+  }
+}
+
 /**
  * 下载并解码公式 SVG 为 PixelMap。
  *
@@ -159,10 +243,19 @@ export function clearFormulaByteCache(): void {
  * 的模糊问题：固定 15px/ex 采样在显示端被放大 2 倍左右）。函数内部会按公式
  * 固有尺寸钳制，保证栅格单边不超 ImageKit 限制——超长公式降采样密度而不是
  * 整条识别失败。缺省时用 15px/ex 兜底。
+ * @param availableWidthPx 阅读区域实测物理宽度；纯文字方框在此宽度内换行，不缩小字号。
  */
 export async function loadFormulaPixelMap(url: string, cookieHeader?: string,
-  foregroundColor: string = '#111111', targetPixelsPerEx: number = FORMULA_FALLBACK_PIXELS_PER_EX):
+  foregroundColor: string = '#111111', targetPixelsPerEx: number = FORMULA_FALLBACK_PIXELS_PER_EX,
+  availableWidthPx: number = 4096):
   Promise<FormulaPixelMapResult> {
+  if (!isTrustedFormulaUrl(url)) {
+    throw new Error('公式地址不在允许列表中');
+  }
+  const boxedText = boxedFormulaText(parseAbsoluteUrl(url)?.params.get('tex') ?? '');
+  if (boxedText !== undefined) {
+    return renderBoxedText(boxedText, foregroundColor, targetPixelsPerEx, availableWidthPx);
+  }
   const bytes = await cachedSvg(url, cookieHeader);
   const svg = util.TextDecoder.create('utf-8').decodeToString(new Uint8Array(bytes));
   if (isMathJaxErrorSvg(svg)) {
@@ -183,9 +276,14 @@ export async function loadFormulaPixelMap(url: string, cookieHeader?: string,
     if (info.size.width <= 0 || info.size.height <= 0 || info.size.width > 4096 || info.size.height > 4096) {
       throw new Error('公式 SVG 尺寸不合法');
     }
-    const pixelMap = await source.createPixelMap({
-      editable: false
-    });
+    const textRuns = formulaSvgTextRuns(svg, info.size.width, info.size.height);
+    const pixelMap = await source.createPixelMap({ editable: textRuns.length > 0 });
+    try {
+      paintFormulaText(pixelMap, textRuns, foregroundColor);
+    } catch (_error) {
+      await pixelMap.release();
+      throw new Error('公式 SVG 文本绘制失败');
+    }
     const result: FormulaPixelMapResult = {
       pixelMap: pixelMap,
       exSize: exSize ?? { width: info.size.width / pixelsPerEx, height: info.size.height / pixelsPerEx },

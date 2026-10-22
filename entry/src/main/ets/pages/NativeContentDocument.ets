@@ -28,6 +28,7 @@ import {
   toCookieHeader
 } from 'data';
 import {
+  boxedFormulaText,
   FORMULA_EM_PER_EX,
   formulaDisplaySize,
   FormulaDisplaySize,
@@ -451,12 +452,23 @@ struct ContentInlineFormula {
   private pixelMaps: Map<string, image.PixelMap> = new Map();
   /** 公式 SVG 固有尺寸（ex 单位，run.id → exSize）：显示尺寸按 ex × 字号换算。 */
   private formulaExSizes: Map<string, FormulaDisplaySize> = new Map();
-  @State private formulaAvailableWidth: number = 320;
+  @State @Watch('onFormulaWidthChanged') private formulaAvailableWidth: number = 320;
   private active: boolean = false;
   private loadGeneration: number = 0;
 
   aboutToAppear(): void {
     this.active = true;
+    this.loadFormulas();
+  }
+
+  private onFormulaWidthChanged(): void {
+    if (this.active && this.item.inlineRuns.some((run: ReaderInlineRun): boolean =>
+      run.kind === ReaderInlineKind.FORMULA && boxedFormulaText(run.text) !== undefined)) {
+      this.loadFormulas();
+    }
+  }
+
+  private loadFormulas(): void {
     const generation = ++this.loadGeneration;
     this.item.inlineRuns.forEach((run: ReaderInlineRun): void => {
       if (run.kind === ReaderInlineKind.FORMULA) {
@@ -560,7 +572,8 @@ struct ContentInlineFormula {
     let pixelMap: image.PixelMap | undefined = undefined;
     try {
       const result = await loadFormulaPixelMap(run.sourceUrl, await this.formulaCookieHeader(),
-        this.formulaColor, formulaDecodeDensity(this.formulaFontSizeVp()));
+        this.formulaColor, formulaDecodeDensity(this.formulaFontSizeVp()),
+        this.getUIContext().vp2px(this.formulaAvailableWidth));
       pixelMap = result.pixelMap;
       if (!this.active || this.loadGeneration !== generation) {
         await pixelMap.release();
@@ -574,7 +587,7 @@ struct ContentInlineFormula {
       this.pixelMaps.set(run.id, pixelMap);
       this.formulaExSizes.set(run.id, result.exSize);
       pixelMap = undefined;
-      this.loadedRunIds = this.loadedRunIds.concat(run.id);
+      this.loadedRunIds = this.loadedRunIds.filter((id: string): boolean => id !== run.id).concat(run.id);
     } catch (_error) {
       await pixelMap?.release();
       if (this.active && this.loadGeneration === generation) {
@@ -618,7 +631,7 @@ struct ContentBlockFormula {
   @State private pixelMap: image.PixelMap | undefined = undefined;
   /** 公式 SVG 固有尺寸（ex 单位）：显示尺寸按 ex × 字号换算。 */
   @State private formulaExSize: FormulaDisplaySize = { width: 0, height: 0 };
-  @State private formulaAvailableWidth: number = 320;
+  @State @Watch('onFormulaWidthChanged') private formulaAvailableWidth: number = 320;
   @StorageProp('contentFontSize') private fontSizePercent: number = 100;
   @StorageProp('contentTypographyPreset') private typographyPreset: string = 'classic';
   @StorageProp('formulaForegroundColor') private formulaColor: string = '#111111';
@@ -630,6 +643,12 @@ struct ContentBlockFormula {
   aboutToAppear(): void {
     this.active = true;
     this.loadFormula(++this.loadGeneration);
+  }
+
+  private onFormulaWidthChanged(): void {
+    if (this.active && boxedFormulaText(this.item.text) !== undefined) {
+      this.loadFormula(++this.loadGeneration);
+    }
   }
 
   aboutToDisappear(): void {
@@ -690,7 +709,8 @@ struct ContentBlockFormula {
     let pixelMap: image.PixelMap | undefined = undefined;
     try {
       const result = await loadFormulaPixelMap(this.item.sourceUrl, await this.formulaCookieHeader(),
-        this.formulaColor, formulaDecodeDensity(this.formulaFontSizeVp()));
+        this.formulaColor, formulaDecodeDensity(this.formulaFontSizeVp()),
+        this.getUIContext().vp2px(this.formulaAvailableWidth));
       pixelMap = result.pixelMap;
       if (!this.active || this.loadGeneration !== generation) {
         await pixelMap.release();

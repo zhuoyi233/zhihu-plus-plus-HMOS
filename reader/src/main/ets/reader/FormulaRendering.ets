@@ -21,6 +21,36 @@ export interface FormulaDisplaySize {
   height: number;
 }
 
+/** 只把纯文字 boxed/text 转为阅读文字；含数学命令、嵌套花括号的公式仍走 SVG。 */
+export function boxedFormulaText(tex: string): string | undefined {
+  const match = /^\s*\\boxed\s*\{\s*\\text\s*\{([^{}\\$]*)\}\s*\}\s*$/.exec(tex);
+  const value = match?.[1].replace(/~/g, '\u00A0').trim();
+  return value !== undefined && value.length > 0 ? value : undefined;
+}
+
+export interface BoxedFormulaTextLayout {
+  fontSizePx: number;
+  width: number;
+  height: number;
+  textWidth: number;
+  textX: number;
+  textY: number;
+  borderWidth: number;
+}
+
+/** 文字只换行、不按方框宽度缩小字号；段落与边框之间保持对称留白。 */
+export function boxedFormulaTextLayout(fontSizePx: number, availableWidthPx: number,
+  measuredWidthPx: number, measuredHeightPx: number): BoxedFormulaTextLayout {
+  const border = Math.max(1, fontSizePx / 16);
+  const insetX = fontSizePx * 0.625 + border;
+  const insetY = fontSizePx * 0.375 + border;
+  const width = Math.max(1, Math.min(Math.floor(availableWidthPx), Math.ceil(measuredWidthPx + insetX * 2)));
+  const height = Math.ceil(measuredHeightPx + insetY * 2);
+  const textWidth = Math.max(1, width - insetX * 2);
+  return { fontSizePx: fontSizePx, width: width, height: height, textWidth: textWidth,
+    textX: (width - textWidth) / 2, textY: (height - measuredHeightPx) / 2, borderWidth: border };
+}
+
 /**
  * 按公式 SVG 的 ex 固有尺寸与正文字号计算显示尺寸（vp）：
  * 高度 = ex 高 × 字号 × 0.5em/ex；宽度超过容器时等比缩小。
