@@ -82,6 +82,7 @@ import releaseNotesTest from './ReleaseNotes.test';
 import emojiRulesTest from './EmojiRules.test';
 import readerTypographyTest from './ReaderTypography.test';
 import readerScrollGeometryTest from './ReaderScrollGeometry.test';
+import readerPositionTest from './ReaderPosition.test';
 import appearancePreferencesTest from './AppearancePreferences.test';
 import recommendationFilterPolicyTest from './RecommendationFilterPolicy.test';
 import identitySpeechSettingsTest from './IdentitySpeechSettings.test';
@@ -180,6 +181,7 @@ export default function testsuite(): void {
   emojiRulesTest();
   readerTypographyTest();
   readerScrollGeometryTest();
+  readerPositionTest();
   appearancePreferencesTest();
   recommendationFilterPolicyTest();
   identitySpeechSettingsTest();

@@ -222,6 +222,11 @@ export default class EntryAbility extends UIAbility {
     });
   }
 
+  onBackground(): void {
+    const tick = AppStorage.get<number>('readerPositionFlushTick') ?? 0;
+    AppStorage.setOrCreate('readerPositionFlushTick', tick + 1);
+  }
+
   private routeIncomingLink(want: Want): boolean {
     if (want.uri === undefined || want.uri.length === 0) {
       return false;

@@ -33,6 +33,7 @@ import {
   AppUpdateRelease,
   LoginSessionGateway,
   ReaderTypography,
+  readerPositionKey,
   SessionState,
   SessionStatus,
   shouldAutoCheckForUpdate,
@@ -687,6 +688,8 @@ export struct AppShell {
           }
         );
       }
+      .onShown((): void => this.setReaderRouteVisible('answer', destination.id, true))
+      .onHidden((): void => this.setReaderRouteVisible('answer', destination.id, false))
       .titleBar({ style: getPersistentImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.answerTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
       // 沉浸式/图片查看器中隐藏顶栏（对齐上游 topBar={}）；返回键优先关查看器、再退沉浸式。
@@ -717,6 +720,8 @@ export struct AppShell {
           }
         );
       }
+      .onShown((): void => this.setReaderRouteVisible('article', destination.id, true))
+      .onHidden((): void => this.setReaderRouteVisible('article', destination.id, false))
       .titleBar({ style: getPersistentImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.articleTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
       // 与回答页一致：沉浸式/图片查看器中隐藏顶栏，返回键优先关查看器。
@@ -2525,6 +2530,15 @@ export struct AppShell {
     // ForEach 重建页签后 Tabs 选中索引可能被重置/钳制（索引值未变时 @Watch 不触发），
     // 这里无条件用控制器再同步一次。
     this.tabsController.changeIndex(this.topLevelTabIndex);
+  }
+
+  private setReaderRouteVisible(kind: string, id: string, visible: boolean): void {
+    const key = readerPositionKey(kind, id);
+    if (visible) {
+      AppStorage.setOrCreate('readerActiveRouteKey', key);
+    } else if (AppStorage.get<string>('readerActiveRouteKey') === key) {
+      AppStorage.setOrCreate('readerActiveRouteKey', '');
+    }
   }
 
   private navigate(destination: AppDestination): void {

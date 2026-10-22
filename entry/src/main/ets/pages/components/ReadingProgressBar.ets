@@ -156,7 +156,11 @@ export struct ReadingProgressBar {
             ? clampUnit(this.dragAnchorProgress + event.offsetY / travel)
             : this.dragAnchorProgress;
           this.dragProgress = next;
-          this.scroller.scrollTo({ xOffset: 0, yOffset: next * this.maxScrollVp(), animation: false });
+          if (next <= 0) {
+            this.scroller.scrollEdge(Edge.Top);
+          } else {
+            this.scroller.scrollTo({ xOffset: 0, yOffset: next * this.maxScrollVp(), animation: false });
+          }
         })
         .onActionEnd((): void => {
           this.dragging = false;

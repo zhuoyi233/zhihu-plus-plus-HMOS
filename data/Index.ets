@@ -90,6 +90,8 @@ export * from './src/main/ets/session/SessionKeyStore';
 export * from './src/main/ets/session/SessionRepository';
 export * from './src/main/ets/session/IdentityManagement';
 export * from './src/main/ets/preferences/AppPreferencesStore';
+export * from './src/main/ets/preferences/ReaderPosition';
+export * from './src/main/ets/preferences/ReaderPositionStore';
 export * from './src/main/ets/preferences/ImmersiveMaterialPreferences';
 export * from './src/main/ets/preferences/RecommendationFilterPreferences';
 export * from './src/main/ets/preferences/SpeechPreferences';

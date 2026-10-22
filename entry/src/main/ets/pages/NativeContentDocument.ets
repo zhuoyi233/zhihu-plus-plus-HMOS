@@ -18,6 +18,9 @@ import {
 } from '../platform/ShareContracts';
 import {
   DEFAULT_THEME_COLOR,
+  createReaderPositionStore,
+  ReaderPosition,
+  ReaderPositionRepository,
   effectiveSegmentMeta,
   getAppSessionOwner,
   getGuestDeviceCookieManager,
@@ -63,6 +66,12 @@ import {
 import { linkCardMetaLine } from './LinkCardMetaText';
 import { readerBlockLeadingSpace } from './ReaderBlockLayout';
 import { readerCaptionLineHeightFp, readerHorizontalPaddingVp } from './ReaderViewportLayout';
+import {
+  readerBlockSignature,
+  readerPositionBlockIndex,
+  readerPositionFraction,
+  readerPositionTargetY
+} from './ReaderPositionAnchor';
 
 /**
  * 块高缺失时的估算兜底（vp）：未渲染块按实测平均块高估，无实测值时用该值。
@@ -754,6 +763,12 @@ struct ContentBlockFormula {
 @Component
 export struct NativeContentDocument {
   html: string = '';
+  /** 仅真实回答/文章传入；问题列表和相邻回答预览不读写进度。 */
+  positionKey: string = '';
+  /** 导航目的地身份保持不变；在同一路由内切换回答时，保存键仍使用实际回答 ID。 */
+  positionOwnerKey: string = '';
+  @StorageProp('readerActiveRouteKey') @Watch('onPositionActiveChanged') private positionVisibleOwner: string = '';
+  @StorageProp('readerPositionFlushTick') @Watch('onPositionBackground') private positionFlushTick: number = 0;
   emptyMessage: string = '正文为空';
   /** 服务端返回的他人划线（segment_infos），按段落 pid 对齐渲染蓝色高亮。 */
   @Prop segmentInfos: SegmentInfoParagraph[] = [];
@@ -838,6 +853,20 @@ export struct NativeContentDocument {
   private lastYOffset: number = 0;
   private readonly dataSource: ReaderBlockDataSource = new ReaderBlockDataSource();
   private readonly scroller: Scroller = new Scroller();
+  private positionStore?: ReaderPositionRepository = undefined;
+  private pendingPosition?: ReaderPosition = undefined;
+  private positionSnapshot?: ReaderPosition = undefined;
+  private positionMounted: boolean = false;
+  private positionWasActive: boolean = false;
+  private positionWritable: boolean = false;
+  private positionFirstIndex: number = 0;
+  private positionLastIndex: number = 0;
+  private positionTargetIndex: number = 0;
+  private positionNeedsJump: boolean = false;
+  private positionRestoreStarted: number = 0;
+  private positionLayoutChanged: number = 0;
+  private positionRestoreTimer: number = -1;
+  private positionSaveTimer: number = -1;
   /**
    * 正文排版偏好（AppStorage 广播，键名与持久化键同名，对齐上游 contentFontSize 等）：
    * 设置页滑块实时写入，详情页开着即联动。
@@ -1002,6 +1031,179 @@ export struct NativeContentDocument {
     this.loadLinkCardMetas(blocks);
     const plainLength = this.html.replace(/<[^>]*>/g, '').trim().length;
     this.collapsibleActive = this.collapsible && (plainLength >= 100 || this.html.includes('<img'));
+    this.prepareReaderPosition();
+  }
+
+  private prepareReaderPosition(): void {
+    this.positionMounted = true;
+    this.positionWasActive = this.positionIsActive();
+    this.positionRestoreStarted = 0;
+    this.pendingPosition = undefined;
+    this.positionWritable = false;
+    const context = getAbilityContext();
+    if (!this.readingLayout || this.positionKey.length === 0 || context === undefined || this.empty) { return; }
+    try {
+      this.positionStore = createReaderPositionStore(context);
+      const saved = this.positionStore.load(this.positionKey);
+      const index = saved === undefined ? -1 : readerPositionBlockIndex(saved, this.blocks);
+      if (saved !== undefined && (saved.blockIndex === -1 || index >= 0)) {
+        this.pendingPosition = saved;
+        this.positionTargetIndex = index + 1;
+        this.positionNeedsJump = true;
+        this.positionLayoutChanged = Date.now();
+      }
+      this.positionWritable = this.pendingPosition === undefined;
+    } catch (_error) {
+      // 进度损坏或本地存储不可用时仍能从顶部阅读。
+      this.positionWritable = true;
+    }
+  }
+
+  private positionIsActive(): boolean {
+    return this.positionOwnerKey.length > 0 && this.positionVisibleOwner === this.positionOwnerKey;
+  }
+
+  private schedulePositionRestore(layoutChanged: boolean = false): void {
+    if (layoutChanged) { this.positionLayoutChanged = Date.now(); }
+    if (!this.positionMounted || !this.positionIsActive() || this.pendingPosition === undefined || this.viewportHeightVp <= 0 ||
+      this.viewportWidthVp <= 0 || this.positionRestoreTimer >= 0) { return; }
+    this.positionRestoreTimer = setTimeout((): void => {
+      this.positionRestoreTimer = -1;
+      this.adjustReaderPosition();
+    }, 80);
+  }
+
+  private adjustReaderPosition(): void {
+    const saved = this.pendingPosition;
+    if (!this.positionMounted || !this.positionIsActive() || saved === undefined) { return; }
+    const now = Date.now();
+    if (this.positionRestoreStarted === 0) { this.positionRestoreStarted = now; }
+    const expired = now - this.positionRestoreStarted >= 8000;
+    try {
+      if (this.positionNeedsJump) {
+        this.positionNeedsJump = false;
+        if (saved.blockIndex === -1 && saved.fraction === 0) {
+          this.scroller.scrollEdge(Edge.Top);
+        } else if (saved.atEnd) {
+          this.scroller.scrollEdge(Edge.Bottom);
+        } else {
+          this.scroller.scrollToIndex(this.positionTargetIndex, false, ScrollAlign.START);
+        }
+        this.schedulePositionRestore();
+        return;
+      }
+      const rect = this.scroller.getItemRect(this.positionTargetIndex);
+      if (!saved.atEnd && !(rect.height > 0)) {
+        if (!expired) {
+          this.positionNeedsJump = true;
+          this.schedulePositionRestore();
+        } else { this.finishPositionRestore(false); }
+        return;
+      }
+      const delta = saved.atEnd || (saved.blockIndex === -1 && saved.fraction === 0) ? 0 :
+        rect.y - readerPositionTargetY(saved.fraction, rect.height, this.topInsetVp);
+      if (saved.atEnd) {
+        if (!this.scroller.isAtEnd()) { this.scroller.scrollEdge(Edge.Bottom); }
+      } else if (Math.abs(delta) > 0.5) {
+        this.scroller.scrollBy(0, delta);
+      }
+      // 等待惰性块、图片及公式排版稳定；上方块变高时以同一段落再次校正。
+      if (expired || (Math.abs(delta) <= 0.5 && now - this.positionLayoutChanged >= 1500 &&
+        now - this.positionRestoreStarted >= 2000)) {
+        this.finishPositionRestore(true);
+      } else { this.schedulePositionRestore(); }
+    } catch (_error) {
+      if (expired) { this.finishPositionRestore(false); } else { this.schedulePositionRestore(); }
+    }
+  }
+
+  private finishPositionRestore(success: boolean): void {
+    this.pendingPosition = undefined;
+    this.positionWritable = success;
+    if (success) { this.persistReaderPosition(); }
+  }
+
+  private cancelPositionRestore(): void {
+    if (this.positionStore !== undefined) { this.positionWritable = true; }
+    if (this.pendingPosition === undefined) { return; }
+    if (this.positionRestoreTimer >= 0) { clearTimeout(this.positionRestoreTimer); }
+    this.positionRestoreTimer = -1;
+    this.pendingPosition = undefined;
+    this.positionWritable = true;
+  }
+
+  private onPositionActiveChanged(): void {
+    const active = this.positionIsActive();
+    const wasActive = this.positionWasActive;
+    this.positionWasActive = active;
+    if (!active && wasActive) {
+      this.persistReaderPosition(true);
+      if (this.positionSaveTimer >= 0) { clearTimeout(this.positionSaveTimer); }
+      if (this.positionRestoreTimer >= 0) { clearTimeout(this.positionRestoreTimer); }
+      this.positionSaveTimer = -1;
+      this.positionRestoreTimer = -1;
+    } else if (active && !wasActive) {
+      this.positionRestoreStarted = 0;
+      this.schedulePositionRestore(true);
+    }
+  }
+
+  private onPositionBackground(): void {
+    if (this.positionIsActive()) { this.persistReaderPosition(true); }
+  }
+
+  private captureReaderPosition(): ReaderPosition | undefined {
+    if (this.blocks.length === 0) { return undefined; }
+    if (this.scrollYVp <= 1) {
+      const top: ReaderPosition = {
+        version: 1, blockId: '', signature: '00000000', blockIndex: -1, fraction: 0, atEnd: false
+      };
+      return top;
+    }
+    const last = this.blocks.length - 1;
+    if (this.atBottomEdge || this.positionFirstIndex > this.blocks.length) {
+      const end: ReaderPosition = { version: 1, blockId: this.blocks[last].id,
+        signature: readerBlockSignature(this.blocks[last]), blockIndex: last, fraction: 1, atEnd: true };
+      return end;
+    }
+    for (let index = this.positionFirstIndex; index <= Math.min(this.positionLastIndex, this.blocks.length); index++) {
+      const rect = this.scroller.getItemRect(index);
+      if (rect.height <= 0 || rect.y + rect.height <= this.topInsetVp) { continue; }
+      const block = index > 0 ? this.blocks[index - 1] : undefined;
+      const position: ReaderPosition = {
+        version: 1, blockId: block?.id ?? '', signature: block === undefined ? '00000000' : readerBlockSignature(block),
+        blockIndex: index - 1, fraction: readerPositionFraction(rect.y, rect.height, this.topInsetVp), atEnd: false
+      };
+      return position;
+    }
+    return undefined;
+  }
+
+  private schedulePositionSave(): void {
+    if (!this.positionMounted || !this.positionIsActive() || !this.positionWritable || this.positionStore === undefined ||
+      this.positionSaveTimer >= 0) { return; }
+    // 持续滚动也定期落盘，不能只依赖退出回调（强制停止不会触发它）。
+    this.positionSaveTimer = setTimeout((): void => {
+      this.positionSaveTimer = -1;
+      this.persistReaderPosition();
+    }, 500);
+  }
+
+  private persistReaderPosition(synchronous: boolean = false): void {
+    if (!this.positionMounted || (!this.positionIsActive() && !synchronous) ||
+      !this.positionWritable || this.positionStore === undefined) { return; }
+    if (this.positionSaveTimer >= 0) { clearTimeout(this.positionSaveTimer); }
+    this.positionSaveTimer = -1;
+    try {
+      this.positionSnapshot = this.captureReaderPosition() ?? this.positionSnapshot;
+    } catch (_error) {
+      // List 已卸载时，使用最后一次有效快照；不以初始零偏移覆盖旧记录。
+    }
+    if (this.positionSnapshot !== undefined) {
+      try {
+        this.positionStore.save(this.positionKey, this.positionSnapshot, synchronous);
+      } catch (_error) { console.error('Reading position save failed'); }
+    }
   }
 
   /**
@@ -1052,6 +1254,13 @@ export struct NativeContentDocument {
   }
 
   aboutToDisappear(): void {
+    if (this.positionWasActive) { this.persistReaderPosition(true); }
+    this.positionMounted = false;
+    this.positionWasActive = false;
+    if (this.positionRestoreTimer >= 0) { clearTimeout(this.positionRestoreTimer); }
+    if (this.positionSaveTimer >= 0) { clearTimeout(this.positionSaveTimer); }
+    this.positionRestoreTimer = -1;
+    this.positionSaveTimer = -1;
     this.linkCardMetaGeneration += 1;
     clearFormulaByteCache();
     if (this.bodySelectionRestoreTimerId >= 0) {
@@ -1140,7 +1349,14 @@ export struct NativeContentDocument {
             this.viewportHeightVp = height;
             this.refreshContentHeightEstimate();
           }
+          this.schedulePositionRestore();
         })
+        .onScrollIndex((start: number, end: number): void => {
+          this.positionFirstIndex = start;
+          this.positionLastIndex = end;
+          this.schedulePositionSave();
+        })
+        .onScrollStop((): void => this.persistReaderPosition())
         // 触底回调：问题详情页据此加载回答信息流下一页。
         .onReachEnd((): void => {
           this.updateBottomEdge(true);
@@ -1168,6 +1384,7 @@ export struct NativeContentDocument {
           this.lastYOffset = yOffset;
           this.scrollYVp = yOffset;
           this.refreshContentHeightEstimate();
+          this.schedulePositionSave();
           const callback = this.onScrollOffset;
           if (callback !== undefined) {
             callback(yOffset);
@@ -1235,6 +1452,9 @@ export struct NativeContentDocument {
     }
     .width('100%')
     .height('100%')
+    .onTouch((event: TouchEvent): void => {
+      if (event.type === TouchType.Down) { this.cancelPositionRestore(); }
+    })
     .onAreaChange((_oldArea: Area, area: Area): void => {
       const width = Number(area.width);
       if (width > 0 && Math.abs(width - this.viewportWidthVp) > 0.5) {
@@ -1242,6 +1462,7 @@ export struct NativeContentDocument {
         this.exactContentHeightVp = 0;
         this.refreshContentHeightEstimate();
       }
+      this.schedulePositionRestore();
     })
     .focusable(this.volumeKeyPageTurn)
     .defaultFocus(this.volumeKeyPageTurn)
@@ -1262,6 +1483,7 @@ export struct NativeContentDocument {
   }
 
   private turnPage(direction: number): void {
+    this.cancelPositionRestore();
     const maxOffset = Math.max(0, this.contentHeightVp - this.viewportHeightVp);
     if (direction < 0 && this.scrollYVp <= 2) {
       const callback = this.onPageTurnPastStart;
@@ -1316,8 +1538,27 @@ export struct NativeContentDocument {
   }
 
   private rebuildRenderedBlocks(): void {
+    // 设置页覆盖着详情时，字号仍会广播到缓存的正文；保留隐藏前的锚点，禁止布局变化覆盖进度。
+    if (this.positionMounted && this.positionStore !== undefined && this.pendingPosition === undefined &&
+      this.positionWritable) {
+      if (this.positionIsActive()) {
+        try { this.positionSnapshot = this.captureReaderPosition() ?? this.positionSnapshot; } catch (_error) {}
+      }
+      const snapshot = this.positionSnapshot;
+      if (snapshot !== undefined) {
+        const index = readerPositionBlockIndex(snapshot, this.blocks);
+        if (snapshot.blockIndex === -1 || index >= 0) {
+          this.pendingPosition = snapshot;
+          this.positionTargetIndex = index + 1;
+          this.positionNeedsJump = true;
+          this.positionRestoreStarted = 0;
+          this.positionWritable = false;
+        }
+      }
+    }
     this.renderRevision += 1;
     this.dataSource.replace(this.blocks);
+    this.schedulePositionRestore(true);
   }
 
   /** 正文块渲染后回报实测高度（vp），用于估算未渲染块的高度。 */
@@ -1342,6 +1583,7 @@ export struct NativeContentDocument {
       this.measuredBlockHeightSumVp += height - previous;
     }
     this.refreshContentHeightEstimate();
+    this.schedulePositionRestore(true);
   }
 
   /** 正文块之外的固定槽位（页头/正文页脚/页脚）实测高度（vp）。 */
@@ -1356,6 +1598,7 @@ export struct NativeContentDocument {
     }
     this.chromeHeights.set(key, height);
     this.refreshContentHeightEstimate();
+    this.schedulePositionRestore(true);
   }
 
   private chromeHeightVp(): number {
