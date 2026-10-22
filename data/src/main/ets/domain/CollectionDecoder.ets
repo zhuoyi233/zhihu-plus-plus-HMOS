@@ -20,6 +20,7 @@ import {
   CollectionSummary
 } from './CollectionModels';
 import { PageCursor } from './DomainModels';
+import { htmlExcerptToText } from './HtmlExcerpt';
 import { DomainDecodeError, DomainDecodeFailureKind } from './ZhihuDomainDecoder';
 
 function invalid(message: string): DomainDecodeError {
@@ -68,6 +69,27 @@ function requiredText(value: JsonValue | undefined, field: string): string {
     throw invalid(`${field} 不能为空`);
   }
   return result;
+}
+
+/**
+ * 去掉 HTML 后行内标签会留下空格（`很炫酷的东西</b>，` → `很炫酷的东西 ，`），
+ * 中文之间与中文标点两侧的空格属噪声，这里统一收紧，避免摘要出现莫名空格。
+ */
+function tidyCjkSpacing(source: string): string {
+  return source
+    .replace(/([\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])/g, '$1')
+    .replace(/([\u4e00-\u9fff])\s+(?=[，。、；：！？）》」』”’])/g, '$1')
+    .replace(/([，。、；：！？])\s+(?=[\u4e00-\u9fff（《「『“‘])/g, '$1')
+    .replace(/([（《「『“‘])\s+(?=[\u4e00-\u9fff])/g, '$1')
+    .trim();
+}
+
+/**
+ * 收藏内容摘要：服务端 answer/article 的 excerpt 与 pin 的 content 可能是 HTML
+ * （实测出现 `<p data-pid=...>` 片段直接上屏），这里统一转成纯文本再展示。
+ */
+function excerptText(value: JsonValue | undefined, field: string): string {
+  return tidyCjkSpacing(htmlExcerptToText(text(value, field)));
 }
 
 function number(value: JsonValue | undefined, field: string): number {
@@ -202,7 +224,7 @@ function contentItem(value: JsonValue): CollectionContentItem | undefined {
       kind: CollectionContentKind.ANSWER,
       id: id(content.get('id'), 'collection.content.id'),
       title: requiredText(question.get('title') ?? question.get('name'), 'collection.content.question.title'),
-      excerpt: text(content.get('excerpt') ?? content.get('content'), 'collection.content.excerpt'),
+      excerpt: excerptText(content.get('excerpt') ?? content.get('content'), 'collection.content.excerpt'),
       details: `回答 · ${number(content.get('voteup_count'), 'collection.content.voteup_count')} 赞同 · ` +
         `${number(content.get('comment_count'), 'collection.content.comment_count')} 评论`,
       voteupCount: number(content.get('voteup_count'), 'collection.content.voteup_count'),
@@ -216,7 +238,7 @@ function contentItem(value: JsonValue): CollectionContentItem | undefined {
       kind: CollectionContentKind.ARTICLE,
       id: id(content.get('id'), 'collection.content.id'),
       title: requiredText(content.get('title'), 'collection.content.title'),
-      excerpt: text(content.get('excerpt') ?? content.get('content'), 'collection.content.excerpt'),
+      excerpt: excerptText(content.get('excerpt') ?? content.get('content'), 'collection.content.excerpt'),
       details: `文章 · ${number(content.get('voteup_count'), 'collection.content.voteup_count')} 赞同 · ` +
         `${number(content.get('comment_count'), 'collection.content.comment_count')} 评论`,
       voteupCount: number(content.get('voteup_count'), 'collection.content.voteup_count'),
@@ -230,7 +252,7 @@ function contentItem(value: JsonValue): CollectionContentItem | undefined {
       kind: CollectionContentKind.QUESTION,
       id: id(content.get('id'), 'collection.content.id'),
       title: requiredText(content.get('title') ?? content.get('name'), 'collection.content.title'),
-      excerpt: text(content.get('detail') ?? content.get('excerpt'), 'collection.content.excerpt'),
+      excerpt: excerptText(content.get('detail') ?? content.get('excerpt'), 'collection.content.excerpt'),
       details: `问题 · ${number(content.get('answer_count'), 'collection.content.answer_count')} 回答 · ` +
         `${number(content.get('comment_count'), 'collection.content.comment_count')} 评论`,
       voteupCount: number(content.get('answer_count'), 'collection.content.answer_count'),
@@ -244,7 +266,7 @@ function contentItem(value: JsonValue): CollectionContentItem | undefined {
       kind: CollectionContentKind.PIN,
       id: id(content.get('id'), 'collection.content.id'),
       title: '想法',
-      excerpt: text(content.get('content') ?? content.get('excerpt'), 'collection.content.excerpt'),
+      excerpt: excerptText(content.get('content') ?? content.get('excerpt'), 'collection.content.excerpt'),
       details: `想法 · ${number(content.get('like_count'), 'collection.content.like_count')} 赞 · ` +
         `${number(content.get('comment_count'), 'collection.content.comment_count')} 评论`,
       voteupCount: number(content.get('like_count'), 'collection.content.like_count'),

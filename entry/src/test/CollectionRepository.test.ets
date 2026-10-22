@@ -201,6 +201,15 @@ export default function collectionRepositoryTest(): void {
       expect(pin?.title).assertEqual('想法');
     });
 
+    it('flattensHtmlExcerptsInCollectionItems', 0, () => {
+      const page = decodeCollectionItemsPage(COLLECTION_HTML_EXCERPT_ITEMS_JSON);
+      expect(page.items.length).assertEqual(2);
+      const article = page.items.find((item): boolean => item.kind === CollectionContentKind.ARTICLE);
+      expect(article?.excerpt).assertEqual('最近又注意到一类素数与 Γ 函数，很炫酷，原理很简单');
+      const pin = page.items.find((item): boolean => item.kind === CollectionContentKind.PIN);
+      expect(pin?.excerpt).assertEqual('想法正文 & 与 <b>实体');
+    });
+
     it('decodesContentCollectionsWithFavoritedFlags', 0, () => {
       const collections = decodeContentCollections(CONTENT_COLLECTIONS_JSON);
       expect(collections.length).assertEqual(2);
@@ -317,8 +326,20 @@ const COLLECTION_ITEMS_JSON =
   '"type":"zvideo","id":"50000000000000005","title":"视频","author":{"name":"赵六"}}}' +
   '],"paging":{"is_end":true,"next":null,"previous":""}}';
 
-const CONTENT_COLLECTIONS_JSON =
+const COLLECTION_HTML_EXCERPT_ITEMS_JSON =
   '{"data":[' +
+  '{"created":"2026-01-02T00:00:00.000Z","content":{' +
+  '"type":"article","id":"30000000000000003","title":"完整文章标题",' +
+  '"excerpt":"<p data-pid=\\"NXHeaxMW\\">最近又注意到一类<b>素数</b>&nbsp;与 Γ 函数，' +
+  '<b>很炫酷</b>，原理很简单</p>",' +
+  '"voteup_count":10,"comment_count":2,"author":{"name":"李四"},"created":1600000000}},' +
+  '{"created":"2026-01-03T00:00:00.000Z","content":{' +
+  '"type":"pin","id":"40000000000000004",' +
+  '"content":"<p>想法正文 &amp; 与 &lt;b&gt;实体</p>","like_count":8,"comment_count":1,' +
+  '"author":{"name":"王五"},"created":1500000000}}' +
+  '],"paging":{"is_end":true,"next":null,"previous":""}}';
+
+const CONTENT_COLLECTIONS_JSON =  '{"data":[' +
   '{"id":"100","title":"我的收藏","description":"","is_public":true,' +
   '"answer_count":12,"follower_count":3,"item_count":12,"like_count":5,"comment_count":1,' +
   '"is_favorited":true,"updated_time":1700000000,"creator":{"name":"张三"}},' +
