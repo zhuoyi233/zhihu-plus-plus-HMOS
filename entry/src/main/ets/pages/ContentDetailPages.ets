@@ -211,6 +211,7 @@ struct ContentDetailPage {
   @State private interactionErrorMessage: string = '';
   @State private interactionRequiresLogin: boolean = false;
   @State private favoriteDialogShown: boolean = false;
+  @State private favoriteFormShown: boolean = false;
   @State private favoriteDraftDirty: boolean = false;
   /** 详情收藏态：任一收藏夹含此内容即已收藏（对齐上游 ArticleViewModel.isFavorited），驱动右下角书签图标 */
   @State private contentFavorited: boolean = false;
@@ -878,6 +879,7 @@ struct ContentDetailPage {
       onDismiss: (): void => {
         this.favoriteDialogShown = false;
       },
+      onFormModeChanged: (editing: boolean): void => { this.favoriteFormShown = editing; },
       onDraftDirtyChanged: (dirty: boolean): void => {
         this.favoriteDraftDirty = dirty;
       },
@@ -2320,10 +2322,11 @@ struct ContentDetailPage {
     .accessibilityText(this.contentFavorited ? '已收藏' : '未收藏')
     .bindSheet(this.favoriteDialogShown && this.phase === ContentDetailPhase.READY &&
       this.collectionRepository !== undefined && this.session !== undefined, this.favoriteDialog(), {
+      keyboardAvoidMode: SheetKeyboardAvoidMode.RESIZE_ONLY,
       preferType: isWideOverlayContainer(this.answerViewportWidthVp) ? SheetType.CENTER : SheetType.BOTTOM,
       width: isWideOverlayContainer(this.answerViewportWidthVp)
         ? adaptiveOverlayWidth(this.answerViewportWidthVp, ADAPTIVE_OVERLAY_TASK_MAX_WIDTH_VP) : '100%',
-      height: SheetSize.FIT_CONTENT,
+      height: this.favoriteFormShown ? '80%' : SheetSize.FIT_CONTENT,
       dragBar: !isWideOverlayContainer(this.answerViewportWidthVp),
       showClose: false,
       maskColor: '#99000000',
@@ -2343,6 +2346,7 @@ struct ContentDetailPage {
           this.favoriteDialogShown = false;
         }
         this.favoriteDraftDirty = false;
+        this.favoriteFormShown = false;
       }
     })
     .onClick((): void => {

@@ -23,6 +23,7 @@ export struct CollectionDialogComponent {
   };
   onDismiss: () => void = (): void => {
   };
+  onFormModeChanged: (editing: boolean) => void = (_editing: boolean): void => {};
   onDraftDirtyChanged: (dirty: boolean) => void = (_dirty: boolean): void => {
   };
   // 收藏态（任一收藏夹含此内容）变化时通知宿主页面，供详情页收藏栏图标同步
@@ -33,7 +34,7 @@ export struct CollectionDialogComponent {
   @State private busyCollectionId?: string = undefined;
   @State private requiresLogin: boolean = false;
   @State private message: string = '';
-  @State private showCreate: boolean = false;
+  @State @Watch('createModeChanged') private showCreate: boolean = false;
   @State private createTitle: string = '';
   @State private createDescription: string = '';
   @State private createIsPublic: boolean = false;
@@ -41,6 +42,10 @@ export struct CollectionDialogComponent {
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: CollectionFavoriteController;
   private lastReportedFavorite?: boolean;
+
+  private createModeChanged(): void {
+    this.onFormModeChanged(this.showCreate);
+  }
 
   aboutToAppear(): void {
     const repository = this.repository;
@@ -192,6 +197,7 @@ export struct CollectionDialogComponent {
       }
     }
     .id('favorite_dialog')
+    .height(this.showCreate ? '100%' : undefined)
     .alignItems(HorizontalAlign.Start)
     .width('100%')
     .padding($r('app.float.page_padding'))
@@ -233,38 +239,48 @@ export struct CollectionDialogComponent {
   @Builder
   private createForm() {
     Column({ space: $r('app.float.spacing_medium') }) {
-      TextInput({ text: this.createTitle, placeholder: '收藏夹名称' })
-        .id('favorite_dialog_create_title')
+      Scroll() {
+        Column({ space: $r('app.float.spacing_medium') }) {
+          TextInput({ text: this.createTitle, placeholder: '收藏夹名称' })
+            .id('favorite_dialog_create_title')
+            .width('100%')
+            .maxLength(50)
+            .onChange((value: string): void => {
+              this.createTitle = value;
+              this.onDraftDirtyChanged(this.hasCreateDraft());
+            })
+          TextInput({ text: this.createDescription, placeholder: '描述（可选）' })
+            .id('favorite_dialog_create_description')
+            .width('100%')
+            .maxLength(200)
+            .onChange((value: string): void => {
+              this.createDescription = value;
+              this.onDraftDirtyChanged(this.hasCreateDraft());
+            })
+          Row({ space: $r('app.float.spacing_small') }) {
+            Text('公开收藏夹')
+              .fontSize($r('app.float.body_font_size'))
+              .fontColor($r('app.color.primary_text'))
+              .layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.createIsPublic })
+              .id('favorite_dialog_create_public')
+              .selectedColor(this.resolvedThemeColor)
+              .onChange((value: boolean): void => {
+                this.createIsPublic = value;
+                this.onDraftDirtyChanged(this.hasCreateDraft());
+              })
+          }
+          .width('100%')
+        }
         .width('100%')
-        .maxLength(50)
-        .onChange((value: string): void => {
-          this.createTitle = value;
-          this.onDraftDirtyChanged(this.hasCreateDraft());
-        })
-      TextInput({ text: this.createDescription, placeholder: '描述（可选）' })
-        .id('favorite_dialog_create_description')
-        .width('100%')
-        .maxLength(200)
-        .onChange((value: string): void => {
-          this.createDescription = value;
-          this.onDraftDirtyChanged(this.hasCreateDraft());
-        })
-      Row({ space: $r('app.float.spacing_small') }) {
-        Text('公开收藏夹')
-          .fontSize($r('app.float.body_font_size'))
-          .fontColor($r('app.color.primary_text'))
-          .layoutWeight(1)
-        Toggle({ type: ToggleType.Switch, isOn: this.createIsPublic })
-          .id('favorite_dialog_create_public')
-          .selectedColor(this.resolvedThemeColor)
-          .onChange((value: boolean): void => {
-            this.createIsPublic = value;
-            this.onDraftDirtyChanged(this.hasCreateDraft());
-          })
       }
+      .id('favorite_dialog_form_scroll')
+      .align(Alignment.Top)
       .width('100%')
+      .layoutWeight(1)
       Row({ space: $r('app.float.spacing_small') }) {
         Button('取消')
+          .id('favorite_dialog_create_cancel')
           .backgroundColor($r('app.color.control_background'))
           .fontColor($r('app.color.primary_text'))
           .layoutWeight(1)
@@ -300,6 +316,7 @@ export struct CollectionDialogComponent {
       .width('100%')
     }
     .width('100%')
+    .layoutWeight(1)
     .padding($r('app.float.spacing_medium'))
     .borderRadius($r('app.float.card_radius'))
     .backgroundColor($r('app.color.page_background'))

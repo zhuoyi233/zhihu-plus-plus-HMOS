@@ -1,3 +1,4 @@
+import { CenteredOverlayDialog } from './CenteredOverlayDialog';
 import { pasteboard, BusinessError } from '@kit.BasicServicesKit';
 import {
   BlockedKeywordRule,
@@ -40,7 +41,7 @@ export struct BlockingRulesPage {
   @State private regex: boolean = false;
   @State private identifierInput: string = '';
   @State private nameInput: string = '';
-  @State private confirmClear: boolean = false;
+  @State @Watch('clearDialogChanged') private confirmClear: boolean = false;
   @State private actionsSheetShown: boolean = false;
   @State private addRuleSheetShown: boolean = false;
   @State private backupSheetShown: boolean = false;
@@ -49,8 +50,26 @@ export struct BlockingRulesPage {
   @State private exportedText: string = '';
   @State private backupStatus: string = '';
   @State private overlayWidthVp: number = 0;
+  @StorageProp('statusBarHeight') private statusBarHeightVp: number = 0;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: BlockingRulesController;
+
+  private clearDialog: CustomDialogController = new CustomDialogController({
+    builder: CenteredOverlayDialog({ content: (): void => { this.clearConfirmation(); } }),
+    alignment: DialogAlignment.Center,
+    autoCancel: true,
+    maskColor: '#99000000',
+    backgroundColor: $r('app.color.surface_background'),
+    cancel: (): void => { this.confirmClear = false; }
+  });
+
+  private clearDialogChanged(): void {
+    if (this.confirmClear) {
+      this.clearDialog.open();
+    } else {
+      this.clearDialog.close();
+    }
+  }
 
   aboutToAppear(): void {
     const rules = this.rules;
@@ -140,6 +159,14 @@ export struct BlockingRulesPage {
           this.addRuleSheetShown = true;
         })
 
+      Column() {
+        this.pageHeader()
+      }
+      .width('100%')
+      .padding({ left: 12, right: 12, top: 8 })
+      .position({ x: 0, y: Math.max(this.statusBarHeightVp, 0) })
+      .zIndex(2)
+
       Column()
         .bindSheet(this.addRuleSheetShown, this.addRuleSheet(), {
           preferType: SheetType.CENTER,
@@ -165,20 +192,6 @@ export struct BlockingRulesPage {
           onDisappear: (): void => {
             if (this.backupSheetShown) {
               this.backupSheetShown = false;
-            }
-          }
-        })
-      Column()
-        .bindSheet(this.confirmClear, this.clearConfirmation(), {
-          preferType: SheetType.CENTER,
-          height: SheetSize.FIT_CONTENT,
-          dragBar: false,
-          showClose: false,
-          maskColor: '#66000000',
-          backgroundColor: $r('app.color.surface_background'),
-          onDisappear: (): void => {
-            if (this.confirmClear) {
-              this.confirmClear = false;
             }
           }
         })

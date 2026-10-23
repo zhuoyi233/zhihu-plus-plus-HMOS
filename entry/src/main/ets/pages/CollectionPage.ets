@@ -1,3 +1,4 @@
+import { CenteredOverlayDialog } from './CenteredOverlayDialog';
 import { AppDestination, AppDestinationName } from 'core';
 import {
   onThemeColor,
@@ -34,10 +35,27 @@ export struct CollectionPage {
   @State private actionTarget?: CollectionSummary = undefined;
   @State private showActionSheet: boolean = false;
   @State private pendingDelete?: CollectionSummary = undefined;
-  @State private showDeleteSheet: boolean = false;
+  @State @Watch('deleteDialogChanged') private showDeleteSheet: boolean = false;
   @StorageProp('bottomRectHeight') private bottomRectHeightVp: number = 0;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: CollectionController;
+
+  private deleteDialog: CustomDialogController = new CustomDialogController({
+    builder: CenteredOverlayDialog({ content: (): void => { this.deleteConfirmation(); } }),
+    alignment: DialogAlignment.Center,
+    autoCancel: true,
+    maskColor: '#99000000',
+    backgroundColor: $r('app.color.surface_background'),
+    cancel: (): void => { this.showDeleteSheet = false; }
+  });
+
+  private deleteDialogChanged(): void {
+    if (this.showDeleteSheet) {
+      this.deleteDialog.open();
+    } else {
+      this.deleteDialog.close();
+    }
+  }
 
   aboutToAppear(): void {
     // P3-7：返回栈重显（页面实例与状态保留）时 aboutToAppear 可能再次触发；
@@ -205,20 +223,6 @@ export struct CollectionPage {
               this.showActionSheet = false;
             }
             this.actionTarget = undefined;
-          }
-        })
-      Column()
-        .bindSheet(this.showDeleteSheet, this.deleteConfirmation(), {
-          height: SheetSize.FIT_CONTENT,
-          dragBar: true,
-          showClose: false,
-          maskColor: '#66000000',
-          backgroundColor: $r('app.color.surface_background'),
-          onDisappear: (): void => {
-            if (this.showDeleteSheet) {
-              this.showDeleteSheet = false;
-            }
-            this.pendingDelete = undefined;
           }
         })
     }

@@ -1,3 +1,4 @@
+import { CenteredOverlayDialog } from './CenteredOverlayDialog';
 import {
   onThemeColor,
   DEFAULT_THEME_COLOR,
@@ -38,7 +39,7 @@ export struct ReadHistoryPage {
     canLoadMore: false
   };
   @State @Watch('syncRefreshIndicator') private refreshing: boolean = false;
-  @State private confirmClear: boolean = false;
+  @State @Watch('clearDialogChanged') private confirmClear: boolean = false;
   // 标题栏溢出菜单在 stackBuilder 子树内，动作经 AppStorage tick 广播到本页（同 loginFeedReloadTick 模式）。
   // @StorageProp 键用字面量（装饰器要求编译期常量），值与 HistoryTitleBar.ets 导出常量一一对应。
   @StorageProp('readHistoryOpenLocalTick') @Watch('onOpenLocalTick') private openLocalTick: number = 0;
@@ -47,6 +48,23 @@ export struct ReadHistoryPage {
   private controller?: ReadHistoryController;
   // 下拉刷新自定义加载圆圈（refreshingContent 需 ComponentContent，随页面销毁释放）
   private indicator?: FeedPullDownIndicatorHost = undefined;
+
+  private clearDialog: CustomDialogController = new CustomDialogController({
+    builder: CenteredOverlayDialog({ content: (): void => { this.clearConfirmation(); } }),
+    alignment: DialogAlignment.Center,
+    autoCancel: true,
+    maskColor: '#99000000',
+    backgroundColor: $r('app.color.surface_background'),
+    cancel: (): void => { this.confirmClear = false; }
+  });
+
+  private clearDialogChanged(): void {
+    if (this.confirmClear) {
+      this.clearDialog.open();
+    } else {
+      this.clearDialog.close();
+    }
+  }
 
   aboutToAppear(): void {
     // 返回栈重显（页面实例与状态保留）时 aboutToAppear 可能再次触发；
@@ -205,20 +223,6 @@ export struct ReadHistoryPage {
         top: FLOATING_TITLE_BAR_OFFSET, bottom: $r('app.float.page_padding') })
       .backgroundColor($r('app.color.page_background'))
 
-      Column()
-        .bindSheet(this.confirmClear, this.clearConfirmation(), {
-          preferType: SheetType.CENTER,
-          height: SheetSize.FIT_CONTENT,
-          dragBar: false,
-          showClose: false,
-          maskColor: '#66000000',
-          backgroundColor: $r('app.color.surface_background'),
-          onDisappear: (): void => {
-            if (this.confirmClear) {
-              this.confirmClear = false;
-            }
-          }
-        })
     }
     .id('read_history_page')
     .width('100%')

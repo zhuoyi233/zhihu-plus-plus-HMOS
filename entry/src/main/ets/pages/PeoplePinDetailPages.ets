@@ -1,3 +1,6 @@
+import { hdsMaterial } from '@kit.UIDesignKit';
+import { materialCanvas } from './components/MaterialCanvas';
+import { CenteredOverlayDialog } from './CenteredOverlayDialog';
 import { AppDestination, AppDestinationName } from 'core';
 import {
   AnswerDoubleTapAction,
@@ -128,8 +131,9 @@ export struct PeopleDetailPage {
   @State private contentErrorMessage: string = '';
   @State private pendingUserBlock?: BlockingUserCandidate = undefined;
   @State private profileActionsSheetShown: boolean = false;
-  @State private userBlockSheetShown: boolean = false;
+  @State @Watch('userBlockDialogControllerChanged') private userBlockSheetShown: boolean = false;
   @State private overlayWidthVp: number = 0;
+  @StorageProp('statusBarHeight') private statusBarHeightVp: number = 0;
   @State private blockingMessage: string = '';
   @State private blockingBusy: boolean = false;
   @State private following: boolean = false;
@@ -142,12 +146,29 @@ export struct PeopleDetailPage {
   private contentController?: PeopleContentController;
   private readonly contentScroller: Scroller = new Scroller();
   private titleAnchorVp: number = 0;
-  private titleScrolled: boolean = false;
+  @State private titleScrolled: boolean = false;
   private headerHeightVp: number = 0;
   private listViewportVp: number = 0;
   @State private tabsPinned: boolean = false;
   private blockingAction?: BlockingActionController;
   private followController?: FollowController;
+
+  private userBlockDialogController: CustomDialogController = new CustomDialogController({
+    builder: CenteredOverlayDialog({ content: (): void => { this.userBlockDialog(); } }),
+    alignment: DialogAlignment.Center,
+    autoCancel: true,
+    maskColor: '#99000000',
+    backgroundColor: $r('app.color.surface_background'),
+    cancel: (): void => { this.userBlockSheetShown = false; }
+  });
+
+  private userBlockDialogControllerChanged(): void {
+    if (this.userBlockSheetShown) {
+      this.userBlockDialogController.open();
+    } else {
+      this.userBlockDialogController.close();
+    }
+  }
 
   aboutToAppear(): void {
     // P3-7：返回栈重显（页面实例与状态保留）时 aboutToAppear 可能再次触发；
@@ -220,6 +241,11 @@ export struct PeopleDetailPage {
       } else if (this.profile !== undefined) {
         Stack({ alignContent: Alignment.Top }) {
           this.loadedProfile(this.profile)
+          Column() {
+            this.pageHeader()
+          }
+          .width('100%')
+          .zIndex(2)
           if (this.tabsPinned) {
             // 吸顶后的选项卡条：贴在覆盖式顶栏下沿，列表卡片从其下方透明穿过
             Column() {
@@ -235,21 +261,6 @@ export struct PeopleDetailPage {
         .width('100%')
         .layoutWeight(1)
       }
-      Column()
-        .bindSheet(this.userBlockSheetShown, this.userBlockDialog(), {
-          preferType: SheetType.CENTER,
-          height: SheetSize.FIT_CONTENT,
-          dragBar: false,
-          showClose: false,
-          maskColor: '#66000000',
-          backgroundColor: $r('app.color.surface_background'),
-          onDisappear: (): void => {
-            if (this.userBlockSheetShown) {
-              this.userBlockSheetShown = false;
-            }
-            this.pendingUserBlock = undefined;
-          }
-        })
     }
     .id('people_detail_page')
     .width('100%')
@@ -263,64 +274,92 @@ export struct PeopleDetailPage {
     .backgroundColor($r('app.color.page_background'))
   }
 
+  private supportsHeaderMaterial(): boolean {
+    try {
+      return hdsMaterial.getSystemMaterialTypes().includes(hdsMaterial.MaterialType.IMMERSIVE);
+    } catch (_error) {
+      return false;
+    }
+  }
+
   @Builder
   private pageHeader() {
     Row({ space: $r('app.float.spacing_small') }) {
-      Button({ type: ButtonType.Normal, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(20)
-          .fontColor([$r('app.color.primary_text')])
+      Stack({ alignContent: Alignment.Center }) {
+        if (this.supportsHeaderMaterial()) {
+          materialCanvas(52, 52)
+        }
+        Button({ type: ButtonType.Circle, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.chevron_left'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+          .id('people_detail_back')
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(this.supportsHeaderMaterial()
+            ? Color.Transparent : $r('app.color.surface_background'))
+          .accessibilityText('返回')
+          .onClick((): void => this.onBack())
       }
-        .id('people_detail_back')
-        .width(40)
-        .height(40)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .accessibilityText('返回')
-        .onClick((): void => this.onBack())
-      Text(this.profile?.name ?? '用户主页')
+      .width(44)
+      .height(44)
+      .borderRadius(22)
+      .clip(true)
+      Text(this.titleScrolled ? (this.profile?.name ?? '用户主页') : '用户主页')
         .id('people_detail_page_title')
         .fontSize($r('app.float.heading_font_size'))
         .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.primary_text'))
         .layoutWeight(1)
         .maxLines(1)
-      Button({ type: ButtonType.Normal, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.ellipsis_circle'))
-          .fontSize(20)
-          .fontColor([$r('app.color.primary_text')])
-      }
-        .id('people_detail_actions')
-        .width(40)
-        .height(40)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .accessibilityText('用户主页操作')
-        .enabled(this.profile !== undefined)
-        .bindSheet(this.profileActionsSheetShown, this.profileActionsSheet(), {
-          preferType: isWideOverlayContainer(this.overlayWidthVp) ? SheetType.POPUP : SheetType.BOTTOM,
-          width: isWideOverlayContainer(this.overlayWidthVp)
-            ? adaptiveOverlayWidth(this.overlayWidthVp, ADAPTIVE_OVERLAY_MENU_WIDTH_VP) : '100%',
-          height: SheetSize.FIT_CONTENT,
-          dragBar: !isWideOverlayContainer(this.overlayWidthVp),
-          showClose: false,
-          maskColor: '#99000000',
-          backgroundColor: $r('app.color.surface_background'),
-          onDisappear: (): void => {
-            if (this.profileActionsSheetShown) {
-              this.profileActionsSheetShown = false;
+      Stack({ alignContent: Alignment.Center }) {
+        if (this.supportsHeaderMaterial()) {
+          materialCanvas(52, 52)
+        }
+        Button({ type: ButtonType.Circle, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.ellipsis_circle'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+          .id('people_detail_actions')
+          .width(40)
+          .height(40)
+          .padding(0)
+          .backgroundColor(this.supportsHeaderMaterial()
+            ? Color.Transparent : $r('app.color.surface_background'))
+          .accessibilityText('用户主页操作')
+          .enabled(this.profile !== undefined)
+          .bindSheet(this.profileActionsSheetShown, this.profileActionsSheet(), {
+            preferType: isWideOverlayContainer(this.overlayWidthVp) ? SheetType.POPUP : SheetType.BOTTOM,
+            width: isWideOverlayContainer(this.overlayWidthVp)
+              ? adaptiveOverlayWidth(this.overlayWidthVp, ADAPTIVE_OVERLAY_MENU_WIDTH_VP) : '100%',
+            height: SheetSize.FIT_CONTENT,
+            dragBar: !isWideOverlayContainer(this.overlayWidthVp),
+            showClose: false,
+            maskColor: '#99000000',
+            backgroundColor: $r('app.color.surface_background'),
+            onDisappear: (): void => {
+              if (this.profileActionsSheetShown) {
+                this.profileActionsSheetShown = false;
+              }
             }
-          }
-        })
-        .onClick((): void => {
-          this.profileActionsSheetShown = true;
-        })
+          })
+          .onClick((): void => {
+            this.profileActionsSheetShown = true;
+          })
+      }
+      .width(44)
+      .height(44)
+      .borderRadius(22)
+      .clip(true)
     }
     .width('100%')
     .padding({
       left: $r('app.float.page_padding'),
       right: $r('app.float.page_padding'),
-      top: $r('app.float.spacing_medium')
+      top: Math.max(this.statusBarHeightVp, 0) + 8
     })
   }
 

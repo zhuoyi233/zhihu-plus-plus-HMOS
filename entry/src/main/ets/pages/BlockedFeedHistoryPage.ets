@@ -1,3 +1,4 @@
+import { CenteredOverlayDialog } from './CenteredOverlayDialog';
 import {
   onThemeColor,
   BlockedFeedHistoryGateway,
@@ -22,11 +23,29 @@ export struct BlockedFeedHistoryPage {
     busy: false,
     message: '正在读取屏蔽记录'
   };
-  @State private confirmClear: boolean = false;
+  @State @Watch('clearDialogChanged') private confirmClear: boolean = false;
   @State private historyActionsSheetShown: boolean = false;
   @State private overlayWidthVp: number = 0;
+  @StorageProp('statusBarHeight') private statusBarHeightVp: number = 0;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: BlockedFeedHistoryController;
+
+  private clearDialog: CustomDialogController = new CustomDialogController({
+    builder: CenteredOverlayDialog({ content: (): void => { this.clearConfirmation(); } }),
+    alignment: DialogAlignment.Center,
+    autoCancel: true,
+    maskColor: '#99000000',
+    backgroundColor: $r('app.color.surface_background'),
+    cancel: (): void => { this.confirmClear = false; }
+  });
+
+  private clearDialogChanged(): void {
+    if (this.confirmClear) {
+      this.clearDialog.open();
+    } else {
+      this.clearDialog.close();
+    }
+  }
 
   aboutToAppear(): void {
     // P3-7：返回栈重显（页面实例与状态保留）时 aboutToAppear 可能再次触发；
@@ -119,20 +138,14 @@ export struct BlockedFeedHistoryPage {
         top: 94, bottom: $r('app.float.page_padding') })
       .backgroundColor($r('app.color.page_background'))
 
-      Column()
-        .bindSheet(this.confirmClear, this.clearConfirmation(), {
-          preferType: SheetType.CENTER,
-          height: SheetSize.FIT_CONTENT,
-          dragBar: false,
-          showClose: false,
-          maskColor: '#66000000',
-          backgroundColor: $r('app.color.surface_background'),
-          onDisappear: (): void => {
-            if (this.confirmClear) {
-              this.confirmClear = false;
-            }
-          }
-        })
+      Column() {
+        this.pageHeader()
+      }
+      .width('100%')
+      .padding({ left: 12, right: 12, top: 8 })
+      .position({ x: 0, y: Math.max(this.statusBarHeightVp, 0) })
+      .zIndex(2)
+
     }
     .id('blocked_feed_history_page')
     .width('100%')
