@@ -100,6 +100,7 @@ import { readerBlockSpacing, readerBodyFontSize, readerBodyLineHeight } from './
 import { readerBottomInsetVp, readerCompactActions, readerHorizontalPaddingVp } from './ReaderViewportLayout';
 import { SegmentPill } from './components/SegmentPill';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import { adaptiveOverlayWidth, isWideOverlayContainer, ADAPTIVE_OVERLAY_TASK_MAX_WIDTH_VP, ADAPTIVE_OVERLAY_MENU_WIDTH_VP } from '../common/style/AdaptiveOverlayLayout';
 
 @Component
 struct ContentDetailPage {
@@ -210,6 +211,7 @@ struct ContentDetailPage {
   @State private interactionErrorMessage: string = '';
   @State private interactionRequiresLogin: boolean = false;
   @State private favoriteDialogShown: boolean = false;
+  @State private favoriteDraftDirty: boolean = false;
   /** 详情收藏态：任一收藏夹含此内容即已收藏（对齐上游 ArticleViewModel.isFavorited），驱动右下角书签图标 */
   @State private contentFavorited: boolean = false;
   private favoriteStateContentId: string = '';
@@ -801,41 +803,12 @@ struct ContentDetailPage {
         })
       }
 
-      if (this.phase === ContentDetailPhase.READY &&
-        this.collectionRepository !== undefined && this.session !== undefined) {
-        Column()
-          .bindSheet(this.favoriteDialogShown, this.favoriteDialog(), {
-            height: SheetSize.LARGE,
-            dragBar: true,
-            showClose: false,
-            maskColor: '#66000000',
-            backgroundColor: $r('app.color.surface_background'),
-            onDisappear: (): void => {
-              if (this.favoriteDialogShown) {
-                this.favoriteDialogShown = false;
-              }
-            }
-          })
-      }
       if (this.pendingUserBlock !== undefined) {
         this.userBlockDialog()
       }
       if (this.keywordBlockVisible) {
         this.keywordBlockDialog()
       }
-      Column()
-        .bindSheet(this.actionMenuShown, this.actionMenuSheet(), {
-          height: SheetSize.FIT_CONTENT,
-          dragBar: true,
-          showClose: false,
-          maskColor: '#66000000',
-          backgroundColor: $r('app.color.surface_background'),
-          onDisappear: (): void => {
-            if (this.actionMenuShown) {
-              this.actionMenuShown = false;
-            }
-          }
-        })
       Column()
         .bindSheet(this.doubleTapAskSheetShown, this.doubleTapAskSheet(), {
           height: SheetSize.FIT_CONTENT,
@@ -902,6 +875,9 @@ struct ContentDetailPage {
       navigate: this.navigate,
       onDismiss: (): void => {
         this.favoriteDialogShown = false;
+      },
+      onDraftDirtyChanged: (dirty: boolean): void => {
+        this.favoriteDraftDirty = dirty;
       },
       onFavoriteStateChange: (favorited: boolean): void => {
         this.contentFavorited = favorited;
@@ -2340,6 +2316,33 @@ struct ContentDetailPage {
     .height(36)
     .backgroundColor(Color.Transparent)
     .accessibilityText(this.contentFavorited ? '已收藏' : '未收藏')
+    .bindSheet(this.favoriteDialogShown && this.phase === ContentDetailPhase.READY &&
+      this.collectionRepository !== undefined && this.session !== undefined, this.favoriteDialog(), {
+      preferType: isWideOverlayContainer(this.answerViewportWidthVp) ? SheetType.CENTER : SheetType.BOTTOM,
+      width: isWideOverlayContainer(this.answerViewportWidthVp)
+        ? adaptiveOverlayWidth(this.answerViewportWidthVp, ADAPTIVE_OVERLAY_TASK_MAX_WIDTH_VP) : '100%',
+      height: SheetSize.FIT_CONTENT,
+      dragBar: !isWideOverlayContainer(this.answerViewportWidthVp),
+      showClose: false,
+      maskColor: '#99000000',
+      backgroundColor: $r('app.color.surface_background'),
+      onWillDismiss: (action: DismissSheetAction): void => {
+        if (this.favoriteDraftDirty) {
+          this.getUIContext().getPromptAction().showToast({
+            message: '存在未保存内容，请在面板内确认是否放弃',
+            duration: 2000
+          });
+          return;
+        }
+        action.dismiss();
+      },
+      onDisappear: (): void => {
+        if (this.favoriteDialogShown) {
+          this.favoriteDialogShown = false;
+        }
+        this.favoriteDraftDirty = false;
+      }
+    })
     .onClick((): void => {
       if (this.collectionRepository !== undefined && this.session !== undefined) {
         this.favoriteDialogShown = true;
@@ -2383,6 +2386,21 @@ struct ContentDetailPage {
     .width(36)
     .height(36)
     .backgroundColor(Color.Transparent)
+    .bindSheet(this.actionMenuShown, this.actionMenuSheet(), {
+      preferType: isWideOverlayContainer(this.answerViewportWidthVp) ? SheetType.POPUP : SheetType.BOTTOM,
+      width: isWideOverlayContainer(this.answerViewportWidthVp)
+        ? adaptiveOverlayWidth(this.answerViewportWidthVp, ADAPTIVE_OVERLAY_MENU_WIDTH_VP) : '100%',
+      height: SheetSize.FIT_CONTENT,
+      dragBar: !isWideOverlayContainer(this.answerViewportWidthVp),
+      showClose: false,
+      maskColor: '#99000000',
+      backgroundColor: $r('app.color.surface_background'),
+      onDisappear: (): void => {
+        if (this.actionMenuShown) {
+          this.actionMenuShown = false;
+        }
+      }
+    })
     .onClick((): void => {
       this.actionMenuShown = true;
     })
@@ -2427,6 +2445,21 @@ struct ContentDetailPage {
     .height(36)
     .backgroundColor(Color.Transparent)
     .accessibilityText('更多问题操作')
+    .bindSheet(this.actionMenuShown, this.actionMenuSheet(), {
+      preferType: isWideOverlayContainer(this.answerViewportWidthVp) ? SheetType.POPUP : SheetType.BOTTOM,
+      width: isWideOverlayContainer(this.answerViewportWidthVp)
+        ? adaptiveOverlayWidth(this.answerViewportWidthVp, ADAPTIVE_OVERLAY_MENU_WIDTH_VP) : '100%',
+      height: SheetSize.FIT_CONTENT,
+      dragBar: !isWideOverlayContainer(this.answerViewportWidthVp),
+      showClose: false,
+      maskColor: '#99000000',
+      backgroundColor: $r('app.color.surface_background'),
+      onDisappear: (): void => {
+        if (this.actionMenuShown) {
+          this.actionMenuShown = false;
+        }
+      }
+    })
     .onClick((): void => {
       this.actionMenuShown = true;
     })

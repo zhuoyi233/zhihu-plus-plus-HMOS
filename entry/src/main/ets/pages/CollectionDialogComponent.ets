@@ -23,6 +23,8 @@ export struct CollectionDialogComponent {
   };
   onDismiss: () => void = (): void => {
   };
+  onDraftDirtyChanged: (dirty: boolean) => void = (_dirty: boolean): void => {
+  };
   // 收藏态（任一收藏夹含此内容）变化时通知宿主页面，供详情页收藏栏图标同步
   onFavoriteStateChange: (favorited: boolean) => void = (_favorited: boolean): void => {
   };
@@ -35,6 +37,7 @@ export struct CollectionDialogComponent {
   @State private createTitle: string = '';
   @State private createDescription: string = '';
   @State private createIsPublic: boolean = false;
+  @State private confirmDiscard: boolean = false;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: CollectionFavoriteController;
   private lastReportedFavorite?: boolean;
@@ -64,7 +67,8 @@ export struct CollectionDialogComponent {
   build() {
     Column({ space: $r('app.float.spacing_medium') }) {
       Row({ space: $r('app.float.spacing_small') }) {
-        Text('选择收藏夹')
+        Text(this.showCreate ? '新建收藏夹' : '选择收藏夹')
+          .id('favorite_dialog_title')
           .fontSize($r('app.float.heading_font_size'))
           .fontWeight(FontWeight.Bold)
           .fontColor($r('app.color.primary_text'))
@@ -80,7 +84,13 @@ export struct CollectionDialogComponent {
           .padding(0)
           .backgroundColor(Color.Transparent)
           .accessibilityText('关闭收藏夹')
-          .onClick((): void => this.onDismiss())
+          .onClick((): void => {
+            if (this.showCreate && this.hasCreateDraft()) {
+              this.confirmDiscard = true;
+            } else {
+              this.onDismiss();
+            }
+          })
       }
       .width('100%')
 
@@ -116,23 +126,47 @@ export struct CollectionDialogComponent {
         .width('100%')
       } else {
         if (!this.showCreate) {
-          Button('新建收藏夹')
-            .backgroundColor(this.resolvedThemeColor)
-            .fontColor(onThemeColor(this.resolvedThemeColor))
+          Button('新建收藏夹', { type: ButtonType.Normal })
+            .backgroundColor($r('app.color.control_background'))
+            .fontColor($r('app.color.primary_text'))
             .id('favorite_dialog_create')
-            .width('100%')
             .fontSize($r('app.float.body_font_size'))
             .enabled(this.busyCollectionId === undefined)
             .onClick((): void => {
               this.createTitle = '';
               this.createDescription = '';
               this.createIsPublic = false;
+              this.onDraftDirtyChanged(false);
               this.showCreate = true;
             })
         }
 
         if (this.showCreate) {
           this.createForm()
+          if (this.confirmDiscard) {
+            Column({ space: $r('app.float.spacing_small') }) {
+              Text('放弃未保存的收藏夹信息？')
+                .fontSize($r('app.float.secondary_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+              Row({ space: $r('app.float.spacing_small') }) {
+                Button('继续编辑')
+                  .layoutWeight(1)
+                  .onClick((): void => {
+                    this.confirmDiscard = false;
+                  })
+                Button('放弃')
+                  .backgroundColor($r('app.color.control_background'))
+                  .fontColor($r('app.color.primary_text'))
+                  .layoutWeight(1)
+                  .onClick((): void => {
+                    this.confirmDiscard = false;
+                    this.resetCreateDraft();
+                    this.showCreate = false;
+                  })
+              }
+            }
+            .width('100%')
+          }
         }
 
         if (this.message.length > 0) {
@@ -143,22 +177,23 @@ export struct CollectionDialogComponent {
             .width('100%')
         }
 
-        List({ space: 8 }) {
-          ForEach(this.collections, (collection: CollectionSummary) => {
-            ListItem() {
-              this.collectionRow(collection)
-            }
-          }, (collection: CollectionSummary): string => collectionFavoriteRowKey(collection, this.busyCollectionId))
+        if (!this.showCreate) {
+          List({ space: 8 }) {
+            ForEach(this.collections, (collection: CollectionSummary) => {
+              ListItem() {
+                this.collectionRow(collection)
+              }
+            }, (collection: CollectionSummary): string => collectionFavoriteRowKey(collection, this.busyCollectionId))
+          }
+          .id('favorite_dialog_list')
+          .width('100%')
+          .height(Math.min(this.collections.length * 80, 480))
         }
-        .id('favorite_dialog_list')
-        .layoutWeight(1)
-        .width('100%')
       }
     }
     .id('favorite_dialog')
     .alignItems(HorizontalAlign.Start)
     .width('100%')
-    .height('100%')
     .padding($r('app.float.page_padding'))
   }
 
@@ -198,17 +233,13 @@ export struct CollectionDialogComponent {
   @Builder
   private createForm() {
     Column({ space: $r('app.float.spacing_medium') }) {
-      Text('新建收藏夹')
-        .fontSize($r('app.float.body_font_size'))
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.primary_text'))
-        .width('100%')
       TextInput({ text: this.createTitle, placeholder: '收藏夹名称' })
         .id('favorite_dialog_create_title')
         .width('100%')
         .maxLength(50)
         .onChange((value: string): void => {
           this.createTitle = value;
+          this.onDraftDirtyChanged(this.hasCreateDraft());
         })
       TextInput({ text: this.createDescription, placeholder: '描述（可选）' })
         .id('favorite_dialog_create_description')
@@ -216,6 +247,7 @@ export struct CollectionDialogComponent {
         .maxLength(200)
         .onChange((value: string): void => {
           this.createDescription = value;
+          this.onDraftDirtyChanged(this.hasCreateDraft());
         })
       Row({ space: $r('app.float.spacing_small') }) {
         Text('公开收藏夹')
@@ -227,6 +259,7 @@ export struct CollectionDialogComponent {
           .selectedColor(this.resolvedThemeColor)
           .onChange((value: boolean): void => {
             this.createIsPublic = value;
+            this.onDraftDirtyChanged(this.hasCreateDraft());
           })
       }
       .width('100%')
@@ -237,7 +270,11 @@ export struct CollectionDialogComponent {
           .layoutWeight(1)
           .enabled(this.busyCollectionId === undefined)
           .onClick((): void => {
-            this.showCreate = false;
+            if (this.hasCreateDraft()) {
+              this.confirmDiscard = true;
+            } else {
+              this.showCreate = false;
+            }
           })
         Button(this.busyCollectionId === 'creating' ? '创建中…' : '创建并收藏')
           .fontColor(onThemeColor(this.resolvedThemeColor))
@@ -254,6 +291,7 @@ export struct CollectionDialogComponent {
               this.contentId
             ).then((created: boolean): void => {
               if (created) {
+                this.resetCreateDraft();
                 this.showCreate = false;
               }
             });
@@ -285,5 +323,16 @@ export struct CollectionDialogComponent {
         this.onFavoriteStateChange(favorited);
       }
     }
+  }
+
+  private hasCreateDraft(): boolean {
+    return this.createTitle.trim().length > 0 || this.createDescription.trim().length > 0 || this.createIsPublic;
+  }
+
+  private resetCreateDraft(): void {
+    this.createTitle = '';
+    this.createDescription = '';
+    this.createIsPublic = false;
+    this.onDraftDirtyChanged(false);
   }
 }
