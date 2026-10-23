@@ -125,7 +125,7 @@ struct ContentDetailPage {
   @StorageProp('contentFontSize') private previewFontSizePercent: number = 100;
   @StorageProp('contentLineHeight') private previewLineHeightPercent: number = 160;
   @StorageProp('contentBlockSpacing') private previewBlockSpacingPercent: number = 100;
-  @StorageProp('contentTypographyPreset') private previewTypographyPreset: string = 'classic';
+  @StorageProp('contentTypographyPreset') private previewTypographyPreset: string = 'comfortable';
   @StorageProp('resolvedThemeColor') @Watch('onResolvedThemeColorChanged') private resolvedThemeColor: string =
     DEFAULT_THEME_COLOR;
   /** 上一次 pan 手势 offsetY（换算单帧 delta）。 */

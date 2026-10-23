@@ -374,11 +374,11 @@ export enum ReaderTypographyPreset {
 }
 
 export function decodeReaderTypographyPreset(value: preferences.ValueType): ReaderTypographyPreset {
-  return value === ReaderTypographyPreset.COMFORTABLE
-    ? ReaderTypographyPreset.COMFORTABLE : ReaderTypographyPreset.CLASSIC;
+  return value === ReaderTypographyPreset.CLASSIC
+    ? ReaderTypographyPreset.CLASSIC : ReaderTypographyPreset.COMFORTABLE;
 }
 
-/** 百分比保留上游语义；排版方案单独保存，旧数据缺省时沿用原有物理尺寸。 */
+/** 百分比保留上游语义；排版方案单独保存，未选择方案时默认使用舒适排版，保留已保存的方案选择。 */
 export interface ReaderTypography {
   /** 字号百分比，档位见 contentFontSizeLevels()，默认 100。 */
   fontSize: number;
@@ -419,7 +419,7 @@ export function defaultReaderTypography(): ReaderTypography {
     fontSize: DEFAULT_CONTENT_FONT_SIZE,
     lineHeight: DEFAULT_CONTENT_LINE_HEIGHT,
     blockSpacing: DEFAULT_CONTENT_BLOCK_SPACING,
-    preset: ReaderTypographyPreset.CLASSIC
+    preset: ReaderTypographyPreset.COMFORTABLE
   };
 }
 
@@ -468,13 +468,13 @@ export function decodeContentBlockSpacing(value: preferences.ValueType): number 
   return snapToStep(value, CONTENT_BLOCK_SPACING_MIN, CONTENT_BLOCK_SPACING_MAX, CONTENT_TYPOGRAPHY_STEP);
 }
 
-/** 三个比例分别吸附/回退，方案缺省为原有排版；落盘与广播前统一归一化。 */
+/** 三个比例分别吸附/回退，方案缺省为舒适排版；落盘与广播前统一归一化。 */
 export function normalizeReaderTypography(value: ReaderTypography): ReaderTypography {
   return {
     fontSize: decodeContentFontSize(value.fontSize),
     lineHeight: decodeContentLineHeight(value.lineHeight),
     blockSpacing: decodeContentBlockSpacing(value.blockSpacing),
-    preset: decodeReaderTypographyPreset(value.preset ?? ReaderTypographyPreset.CLASSIC)
+    preset: decodeReaderTypographyPreset(value.preset ?? ReaderTypographyPreset.COMFORTABLE)
   };
 }
 
@@ -1054,7 +1054,7 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
     }
   }
 
-  /** 一次读取排版比例和方案；旧数据无方案键时保留原有排版。 */
+  /** 一次读取排版比例和方案；无方案键时默认使用舒适排版。 */
   async loadReaderTypography(): Promise<ReaderTypography> {
     await this.saveQueue;
     try {
@@ -1062,7 +1062,7 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
       const fontSize = await store.get(CONTENT_FONT_SIZE_KEY, DEFAULT_CONTENT_FONT_SIZE);
       const lineHeight = await store.get(CONTENT_LINE_HEIGHT_KEY, DEFAULT_CONTENT_LINE_HEIGHT);
       const blockSpacing = await store.get(CONTENT_BLOCK_SPACING_KEY, DEFAULT_CONTENT_BLOCK_SPACING);
-      const preset = await store.get(CONTENT_TYPOGRAPHY_PRESET_KEY, ReaderTypographyPreset.CLASSIC);
+      const preset = await store.get(CONTENT_TYPOGRAPHY_PRESET_KEY, ReaderTypographyPreset.COMFORTABLE);
       return normalizeReaderTypography({
         fontSize: decodeContentFontSize(fontSize),
         lineHeight: decodeContentLineHeight(lineHeight),
@@ -1093,7 +1093,7 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
       await store.put(CONTENT_FONT_SIZE_KEY, value.fontSize);
       await store.put(CONTENT_LINE_HEIGHT_KEY, value.lineHeight);
       await store.put(CONTENT_BLOCK_SPACING_KEY, value.blockSpacing);
-      await store.put(CONTENT_TYPOGRAPHY_PRESET_KEY, value.preset ?? ReaderTypographyPreset.CLASSIC);
+      await store.put(CONTENT_TYPOGRAPHY_PRESET_KEY, value.preset ?? ReaderTypographyPreset.COMFORTABLE);
       await store.flush();
     } catch (error) {
       if (error instanceof Error) {

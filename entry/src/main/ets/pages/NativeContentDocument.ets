@@ -448,7 +448,7 @@ struct ContentInlineFormula {
   /** 排版偏好与宿主同源（AppStorage 广播），行内公式所在段落随字号/行高联动。 */
   @StorageProp('contentFontSize') private fontSizePercent: number = 100;
   @StorageProp('contentLineHeight') private lineHeightPercent: number = 160;
-  @StorageProp('contentTypographyPreset') private typographyPreset: string = 'classic';
+  @StorageProp('contentTypographyPreset') private typographyPreset: string = 'comfortable';
   @StorageProp('formulaForegroundColor') private formulaColor: string = '#111111';
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   /** 正文内联链接点击回调（行内公式所在段落同样生效）。 */
@@ -642,7 +642,7 @@ struct ContentBlockFormula {
   @State private formulaExSize: FormulaDisplaySize = { width: 0, height: 0 };
   @State @Watch('onFormulaWidthChanged') private formulaAvailableWidth: number = 320;
   @StorageProp('contentFontSize') private fontSizePercent: number = 100;
-  @StorageProp('contentTypographyPreset') private typographyPreset: string = 'classic';
+  @StorageProp('contentTypographyPreset') private typographyPreset: string = 'comfortable';
   @StorageProp('formulaForegroundColor') private formulaColor: string = '#111111';
   /** 加载失败兜底 Text 的选区状态回调（转发宿主，语义同 NativeContentDocument.onBodySelectionActive）。 */
   onBodySelectionActive?: (active: boolean) => void;
@@ -874,7 +874,7 @@ export struct NativeContentDocument {
   @StorageProp('contentFontSize') @Watch('onTypographyChanged') private fontSizePercent: number = 100;
   @StorageProp('contentLineHeight') @Watch('onTypographyChanged') private lineHeightPercent: number = 160;
   @StorageProp('contentBlockSpacing') @Watch('onTypographyChanged') private blockSpacingPercent: number = 100;
-  @StorageProp('contentTypographyPreset') @Watch('onTypographyChanged') private typographyPreset: string = 'classic';
+  @StorageProp('contentTypographyPreset') @Watch('onTypographyChanged') private typographyPreset: string = 'comfortable';
   @StorageProp('systemFontSizeScale') @Watch('onTypographyChanged') private systemFontSizeScale: number = 1;
   @StorageProp('showPageTurnFab') private showPageTurnFab: boolean = false;
   @StorageProp('volumeKeyPageTurn') private volumeKeyPageTurn: boolean = false;

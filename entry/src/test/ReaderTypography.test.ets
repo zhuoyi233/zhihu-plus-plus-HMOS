@@ -10,6 +10,7 @@ import {
   decodeContentFontSize,
   decodeContentLineHeight,
   decodeReaderTypographyPreset,
+  defaultReaderTypography,
   normalizeReaderTypography,
   ReaderTypographyPreset
 } from 'data';
@@ -105,14 +106,18 @@ export default function readerTypographyTest(): void {
       expect(readerHeadingFontSize(100)).assertEqual(20);
     });
 
-    it('preservesLegacyValuesUnlessComfortablePresetIsExplicit', 0, () => {
+    it('defaultsToComfortableAndPreservesExplicitClassic', 0, () => {
       const legacy = normalizeReaderTypography({ fontSize: 140, lineHeight: 190, blockSpacing: 70 });
-      expect(legacy.preset).assertEqual(ReaderTypographyPreset.CLASSIC);
+      expect(legacy.preset).assertEqual(ReaderTypographyPreset.COMFORTABLE);
+      expect(defaultReaderTypography().preset).assertEqual(ReaderTypographyPreset.COMFORTABLE);
+      expect(decodeReaderTypographyPreset('classic')).assertEqual(ReaderTypographyPreset.CLASSIC);
+      expect(normalizeReaderTypography({ fontSize: 140, lineHeight: 190, blockSpacing: 70,
+        preset: ReaderTypographyPreset.CLASSIC }).preset).assertEqual(ReaderTypographyPreset.CLASSIC);
       expect(legacy.fontSize).assertEqual(140);
       expect(legacy.lineHeight).assertEqual(190);
       expect(legacy.blockSpacing).assertEqual(70);
-      expect(decodeReaderTypographyPreset('future')).assertEqual(ReaderTypographyPreset.CLASSIC);
-      expect(decodeReaderTypographyPreset(true)).assertEqual(ReaderTypographyPreset.CLASSIC);
+      expect(decodeReaderTypographyPreset('future')).assertEqual(ReaderTypographyPreset.COMFORTABLE);
+      expect(decodeReaderTypographyPreset(true)).assertEqual(ReaderTypographyPreset.COMFORTABLE);
       expect(decodeReaderTypographyPreset('comfortable')).assertEqual(ReaderTypographyPreset.COMFORTABLE);
       const comfortable = normalizeReaderTypography({ fontSize: 140, lineHeight: 190, blockSpacing: 70,
         preset: ReaderTypographyPreset.COMFORTABLE });
