@@ -849,7 +849,7 @@ pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall
 
 ## 26. 收藏夹及同类浮层的宽窗口优化计划（2026-10-23）
 
-状态：**实施中（P0/P1 局部落地，整体验收未完成）**。本节最初补充 API 23 平板实测截图、问题定位线索和实施/验收计划；2026-10-23 已开始实现，当前结果及限制见 26.7。它是第 24 节宽窗口适配的独立工作项，可以先于页面双栏落地。
+状态：**实施中（P0/P1 局部落地，P2 代码迁移完成、运行验收未完成）**。本节最初补充 API 23 平板实测截图、问题定位线索和实施/验收计划；2026-10-23 已开始实现，当前结果及限制见 26.7。它是第 24 节宽窗口适配的独立工作项，可以先于页面双栏落地。
 
 ### 26.1 本轮实测与截图
 
@@ -936,8 +936,11 @@ pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall
 ### 26.7 实施进度（2026-10-23）
 
 - 新增 `entry/src/main/ets/common/style/AdaptiveOverlayLayout.ets`，集中定义 600vp 宽容器断点、24vp 边距与任务/菜单最大宽度计算；窄容器按底部面板显示，宽容器使用 API 23 支持的 `SheetOptions.preferType` 选择样式。
-- `ContentDetailPages.ets` 将收藏浮层绑定到收藏按钮、将问题/回答更多操作绑定到各自触发按钮，移除对应空 `Column()` 宿主。宽屏收藏选择使用居中类型、宽度上限 480vp；更多操作使用锚点 `POPUP`、目标宽 352vp；背景遮罩颜色加深。其余详情浮层暂未迁移。
+- `ContentDetailPages.ets` 将收藏浮层绑定到收藏按钮、将问题/回答更多操作绑定到各自触发按钮，移除对应空 `Column()` 宿主。宽屏收藏选择使用居中类型、宽度上限 480vp；更多操作使用锚点 `POPUP`、目标宽 352vp；背景遮罩颜色加深。双击提问和段落操作改为居中样式。
 - `CollectionDialogComponent.ets` 不再强制填满整张面板；收藏夹列表按项目数分配高度并在 480vp 封顶，创建态隐藏列表，顶部标题随状态切换，新建入口改为次级中性按钮。面板内关闭/取消遇到输入草稿时，提供明确的“继续编辑/放弃”确认；系统返回或手势试图直接关闭时会拦截并提示，避免静默丢弃。
 - API 23 MatePad Pro 11 模拟器（2560×1600px，窗口约 1138vp）已安装 Debug 包并直达问题页。点击 `question_detail_more` 后，菜单在真实触发控件附近向上展开，约 350vp 宽；截图为 `.tmp/shots/typography-p26-actions-after.png`。本次未验证安全区、背景穿透或菜单旋转/窗口变化行为；收藏浮层未做设备验收。
-- 按顺序执行 `pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall -SkipBuild` 与 `pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall`。首条脚本的 ArkTS 编译通过，但其统计校验报 `test` 行 885、汇总/result 884 与期望 884 不一致；完整 Debug 脚本最终通过，Hypium **884/884**，target API 26、compatible API 23。
-- **未完成**：P0 收藏夹居中、旋转/改宽稳定性与背景拦截；P1 键盘避让、列表滚动位置恢复、加载/错误/草稿关闭全路径验证；P2 其他同类浮层迁移；P3 手机、平板尺寸断点、大字号、深色、短高窗口和截图矩阵。第 26.6 验收清单继续保持未勾选，不据此次编译或单场景截图宣称完成。
+- P2 按用途迁移：`PeoplePinDetailPages.ets` 的用户主页/想法操作改绑真实按钮并在宽容器锚点显示，屏蔽用户确认居中；`BlockingRulesPage.ets`、`BlockedFeedHistoryPage.ets` 的短操作菜单改绑真实按钮，清空确认居中；`ReadHistoryPage.ets` 清空确认、`IdentityManagementPage.ets` 身份确认、`ContentFilterSettingsPage.ets` 设置面板及 `AppShell.ets` 关于/许可证/帮助面板改为居中类型。菜单按各自页面实测宽度切换宽屏锚点 POPUP 与窄屏底部面板；原有请求状态、退出守卫与危险操作确认保留。
+- P2 代码编译与 Hypium 阶段验证通过 **884/884**。完整 Debug 任务成功构建、打包并签名 HAP，但脚本最后因报告记录格式计数不一致返回失败：报告汇总/成功结果均为 884，另统计到 885 行 `test=`（有一行测试名与 `class=` 同行）。因此该次不能记为完整验证脚本通过；P2 新迁移的每类弹层也尚未逐类做模拟器交互验收。API 23 上已确认的问题页锚点菜单位置，截图 `.tmp/shots/typography-p26-actions-after-final.png`。
+- **仍未完成**：P0 收藏面板居中、旋转/改宽稳定性与背景拦截；P1 键盘避让、列表滚动位置恢复、加载/错误/草稿关闭全路径验证；P2 每类代表场景和余下入口设备验收及弹层宽度/高度上限核验；P3 手机、平板尺寸断点、大字号、深色、短高窗口和截图矩阵。第 26.6 验收清单继续保持未勾选，不据编译通过或单场景截图宣称完成。
+- P2 续记：已将动作菜单锚定到内容屏蔽、屏蔽记录、用户主页和想法详情的真实触发控件，并依据页面 `onAreaChange` 宽度选择窄屏底部面板或宽屏 POPUP；身份、清空确认和详情段落/双击操作使用居中类型；过滤设置与关于/许可证/帮助浮层也改为居中。此前仅问题页更多菜单完成 API 23 实机模拟器运行抽查，其余分类尚未逐类实机验收。
+- P2 最终代码的首阶段验证通过，Hypium **887/887**（含 3 项断点/宽度边界测试）。完整 Debug 构建、打包、签名成功，嵌入式 Hypium 汇总亦为 **887/887**；验证脚本因生成报告的逐项记录格式偶发损坏退出（本次 `test` 行 888、`result` 行 887；汇总仍为 887，Failure/Error/Ignore 为 0）。所以报告汇总通过，但完整验证脚本未返回成功。

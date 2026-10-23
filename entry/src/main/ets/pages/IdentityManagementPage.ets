@@ -117,8 +117,9 @@ export struct IdentityManagementPage {
 
       Column()
         .bindSheet(this.confirmationShown, this.confirmationSheet(), {
+          preferType: SheetType.CENTER,
           height: SheetSize.FIT_CONTENT,
-          dragBar: true,
+          dragBar: false,
           showClose: false,
           maskColor: '#66000000',
           backgroundColor: $r('app.color.surface_background'),

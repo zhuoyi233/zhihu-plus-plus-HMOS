@@ -1608,8 +1608,9 @@ export struct AppShell {
       .backgroundColor($r('app.color.page_background'))
       Column()
         .bindSheet(this.aboutVersionSheetShown, this.aboutVersionSheet(), {
+          preferType: SheetType.CENTER,
           height: SheetSize.FIT_CONTENT,
-          dragBar: true,
+          dragBar: false,
           showClose: false,
           maskColor: '#66000000',
           backgroundColor: $r('app.color.surface_background'),
@@ -1621,8 +1622,9 @@ export struct AppShell {
         })
       Column()
         .bindSheet(this.projectLicenseSheetShown, this.projectLicenseSheet(), {
+          preferType: SheetType.CENTER,
           height: SheetSize.FIT_CONTENT,
-          dragBar: true,
+          dragBar: false,
           showClose: false,
           maskColor: '#66000000',
           backgroundColor: $r('app.color.surface_background'),
@@ -1634,8 +1636,9 @@ export struct AppShell {
         })
       Column()
         .bindSheet(this.openSourceLicensesSheetShown, this.openSourceLicensesSheet(), {
+          preferType: SheetType.CENTER,
           height: SheetSize.FIT_CONTENT,
-          dragBar: true,
+          dragBar: false,
           showClose: false,
           maskColor: '#66000000',
           backgroundColor: $r('app.color.surface_background'),
@@ -1647,8 +1650,9 @@ export struct AppShell {
         })
       Column()
         .bindSheet(this.projectHomeHelpShown, this.projectHomeHelpSheet(), {
+          preferType: SheetType.CENTER,
           height: SheetSize.FIT_CONTENT,
-          dragBar: true,
+          dragBar: false,
           showClose: false,
           maskColor: '#66000000',
           backgroundColor: $r('app.color.surface_background'),

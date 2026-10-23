@@ -48,6 +48,7 @@ import {
   BlockingUserCandidate
 } from './BlockingActionState';
 import { GlassCapsule } from './components/MaterialCanvas';
+import { adaptiveOverlayWidth, isWideOverlayContainer, ADAPTIVE_OVERLAY_MENU_WIDTH_VP } from '../common/style/AdaptiveOverlayLayout';
 
 @Component
 struct ReadOnlyDetailStatusPanel {
@@ -128,6 +129,7 @@ export struct PeopleDetailPage {
   @State private pendingUserBlock?: BlockingUserCandidate = undefined;
   @State private profileActionsSheetShown: boolean = false;
   @State private userBlockSheetShown: boolean = false;
+  @State private overlayWidthVp: number = 0;
   @State private blockingMessage: string = '';
   @State private blockingBusy: boolean = false;
   @State private following: boolean = false;
@@ -234,22 +236,10 @@ export struct PeopleDetailPage {
         .layoutWeight(1)
       }
       Column()
-        .bindSheet(this.profileActionsSheetShown, this.profileActionsSheet(), {
-          height: SheetSize.FIT_CONTENT,
-          dragBar: true,
-          showClose: false,
-          maskColor: '#66000000',
-          backgroundColor: $r('app.color.surface_background'),
-          onDisappear: (): void => {
-            if (this.profileActionsSheetShown) {
-              this.profileActionsSheetShown = false;
-            }
-          }
-        })
-      Column()
         .bindSheet(this.userBlockSheetShown, this.userBlockDialog(), {
+          preferType: SheetType.CENTER,
           height: SheetSize.FIT_CONTENT,
-          dragBar: true,
+          dragBar: false,
           showClose: false,
           maskColor: '#66000000',
           backgroundColor: $r('app.color.surface_background'),
@@ -264,6 +254,12 @@ export struct PeopleDetailPage {
     .id('people_detail_page')
     .width('100%')
     .height('100%')
+    .onAreaChange((_oldArea: Area, newArea: Area): void => {
+      const width = Number(newArea.width);
+      if (width > 0) {
+        this.overlayWidthVp = width;
+      }
+    })
     .backgroundColor($r('app.color.page_background'))
   }
 
@@ -301,6 +297,21 @@ export struct PeopleDetailPage {
         .backgroundColor(Color.Transparent)
         .accessibilityText('用户主页操作')
         .enabled(this.profile !== undefined)
+        .bindSheet(this.profileActionsSheetShown, this.profileActionsSheet(), {
+          preferType: isWideOverlayContainer(this.overlayWidthVp) ? SheetType.POPUP : SheetType.BOTTOM,
+          width: isWideOverlayContainer(this.overlayWidthVp)
+            ? adaptiveOverlayWidth(this.overlayWidthVp, ADAPTIVE_OVERLAY_MENU_WIDTH_VP) : '100%',
+          height: SheetSize.FIT_CONTENT,
+          dragBar: !isWideOverlayContainer(this.overlayWidthVp),
+          showClose: false,
+          maskColor: '#99000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.profileActionsSheetShown) {
+              this.profileActionsSheetShown = false;
+            }
+          }
+        })
         .onClick((): void => {
           this.profileActionsSheetShown = true;
         })
@@ -946,6 +957,7 @@ export struct PinDetailPage {
   @State private keywordBlockVisible: boolean = false;
   @State private keywordBlockInput: string = '';
   @State private pinActionsSheetShown: boolean = false;
+  @State private overlayWidthVp: number = 0;
   @State private shareStatus: string = '';
   @State private blockingMessage: string = '';
   @State private blockingBusy: boolean = false;
@@ -1108,19 +1120,6 @@ export struct PinDetailPage {
         if (this.keywordBlockVisible) {
           this.keywordBlockDialog()
         }
-        Column()
-          .bindSheet(this.pinActionsSheetShown, this.pinActionsSheet(), {
-            height: SheetSize.FIT_CONTENT,
-            dragBar: true,
-            showClose: false,
-            maskColor: '#66000000',
-            backgroundColor: $r('app.color.surface_background'),
-            onDisappear: (): void => {
-              if (this.pinActionsSheetShown) {
-                this.pinActionsSheetShown = false;
-              }
-            }
-          })
       }
       .width('100%')
       .height('100%')
@@ -1138,6 +1137,12 @@ export struct PinDetailPage {
     .id('pin_detail_page')
     .width('100%')
     .height('100%')
+    .onAreaChange((_oldArea: Area, newArea: Area): void => {
+      const width = Number(newArea.width);
+      if (width > 0) {
+        this.overlayWidthVp = width;
+      }
+    })
     .backgroundColor($r('app.color.page_background'))
   }
 
@@ -1397,6 +1402,21 @@ export struct PinDetailPage {
     .height(36)
     .backgroundColor(Color.Transparent)
     .accessibilityText('更多想法操作')
+    .bindSheet(this.pinActionsSheetShown, this.pinActionsSheet(), {
+      preferType: isWideOverlayContainer(this.overlayWidthVp) ? SheetType.POPUP : SheetType.BOTTOM,
+      width: isWideOverlayContainer(this.overlayWidthVp)
+        ? adaptiveOverlayWidth(this.overlayWidthVp, ADAPTIVE_OVERLAY_MENU_WIDTH_VP) : '100%',
+      height: SheetSize.FIT_CONTENT,
+      dragBar: !isWideOverlayContainer(this.overlayWidthVp),
+      showClose: false,
+      maskColor: '#99000000',
+      backgroundColor: $r('app.color.surface_background'),
+      onDisappear: (): void => {
+        if (this.pinActionsSheetShown) {
+          this.pinActionsSheetShown = false;
+        }
+      }
+    })
     .onClick((): void => { this.pinActionsSheetShown = true; })
   }
 

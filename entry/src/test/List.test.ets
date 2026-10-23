@@ -1,4 +1,5 @@
 import homeFeedMenuStateTest from './HomeFeedMenuState.test';
+import adaptiveOverlayLayoutTest from './AdaptiveOverlayLayout.test';
 import apiLevelTest from './ApiLevel.test';
 import backgroundWorkPolicyTest from './BackgroundWorkPolicy.test';
 import cookieSessionTest from './CookieSession.test';
@@ -121,6 +122,7 @@ export default function testsuite(): void {
   mobileHomeFeedDecoderTest();
   homeFeedStateTest();
   homeFeedMenuStateTest();
+  adaptiveOverlayLayoutTest();
   sessionRepositoryTest();
   zhihuQrLoginClientTest();
   searchRepositoryTest();

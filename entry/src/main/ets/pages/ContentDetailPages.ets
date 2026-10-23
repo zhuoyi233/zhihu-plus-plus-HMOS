@@ -811,8 +811,9 @@ struct ContentDetailPage {
       }
       Column()
         .bindSheet(this.doubleTapAskSheetShown, this.doubleTapAskSheet(), {
+          preferType: SheetType.CENTER,
           height: SheetSize.FIT_CONTENT,
-          dragBar: true,
+          dragBar: false,
           showClose: false,
           maskColor: '#66000000',
           backgroundColor: $r('app.color.surface_background'),
@@ -824,8 +825,9 @@ struct ContentDetailPage {
         })
       Column()
         .bindSheet(this.segmentSheetShown, this.segmentActionSheet(), {
+          preferType: SheetType.CENTER,
           height: SheetSize.FIT_CONTENT,
-          dragBar: true,
+          dragBar: false,
           showClose: false,
           maskColor: '#66000000',
           backgroundColor: $r('app.color.surface_background'),

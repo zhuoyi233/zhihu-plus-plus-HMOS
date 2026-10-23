@@ -18,6 +18,7 @@ import {
   BlockingRulesPhase,
   BlockingRulesViewState
 } from './BlockingRulesState';
+import { adaptiveOverlayWidth, isWideOverlayContainer, ADAPTIVE_OVERLAY_MENU_WIDTH_VP } from '../common/style/AdaptiveOverlayLayout';
 
 @Component
 export struct BlockingRulesPage {
@@ -47,6 +48,7 @@ export struct BlockingRulesPage {
   @State private backupInput: string = '';
   @State private exportedText: string = '';
   @State private backupStatus: string = '';
+  @State private overlayWidthVp: number = 0;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private controller?: BlockingRulesController;
 
@@ -139,22 +141,10 @@ export struct BlockingRulesPage {
         })
 
       Column()
-        .bindSheet(this.actionsSheetShown, this.actionsSheet(), {
-          height: SheetSize.FIT_CONTENT,
-          dragBar: true,
-          showClose: false,
-          maskColor: '#66000000',
-          backgroundColor: $r('app.color.surface_background'),
-          onDisappear: (): void => {
-            if (this.actionsSheetShown) {
-              this.actionsSheetShown = false;
-            }
-          }
-        })
-      Column()
         .bindSheet(this.addRuleSheetShown, this.addRuleSheet(), {
+          preferType: SheetType.CENTER,
           height: SheetSize.LARGE,
-          dragBar: true,
+          dragBar: false,
           showClose: false,
           maskColor: '#66000000',
           backgroundColor: $r('app.color.surface_background'),
@@ -166,8 +156,9 @@ export struct BlockingRulesPage {
         })
       Column()
         .bindSheet(this.backupSheetShown, this.backupSheet(), {
+          preferType: SheetType.CENTER,
           height: SheetSize.LARGE,
-          dragBar: true,
+          dragBar: false,
           showClose: false,
           maskColor: '#66000000',
           backgroundColor: $r('app.color.surface_background'),
@@ -179,8 +170,9 @@ export struct BlockingRulesPage {
         })
       Column()
         .bindSheet(this.confirmClear, this.clearConfirmation(), {
+          preferType: SheetType.CENTER,
           height: SheetSize.FIT_CONTENT,
-          dragBar: true,
+          dragBar: false,
           showClose: false,
           maskColor: '#66000000',
           backgroundColor: $r('app.color.surface_background'),
@@ -192,8 +184,9 @@ export struct BlockingRulesPage {
         })
       Column()
         .bindSheet(this.exportSheetShown, this.exportDialog(), {
+          preferType: SheetType.CENTER,
           height: SheetSize.LARGE,
-          dragBar: true,
+          dragBar: false,
           showClose: false,
           maskColor: '#66000000',
           backgroundColor: $r('app.color.surface_background'),
@@ -207,6 +200,12 @@ export struct BlockingRulesPage {
     .id('blocking_rules_page')
     .width('100%')
     .height('100%')
+    .onAreaChange((_oldArea: Area, newArea: Area): void => {
+      const width = Number(newArea.width);
+      if (width > 0) {
+        this.overlayWidthVp = width;
+      }
+    })
     .backgroundColor($r('app.color.page_background'))
   }
 
@@ -241,6 +240,21 @@ export struct BlockingRulesPage {
         .padding(0)
         .backgroundColor(Color.Transparent)
         .accessibilityText('内容屏蔽操作')
+        .bindSheet(this.actionsSheetShown, this.actionsSheet(), {
+          preferType: isWideOverlayContainer(this.overlayWidthVp) ? SheetType.POPUP : SheetType.BOTTOM,
+          width: isWideOverlayContainer(this.overlayWidthVp)
+            ? adaptiveOverlayWidth(this.overlayWidthVp, ADAPTIVE_OVERLAY_MENU_WIDTH_VP) : '100%',
+          height: SheetSize.FIT_CONTENT,
+          dragBar: !isWideOverlayContainer(this.overlayWidthVp),
+          showClose: false,
+          maskColor: '#99000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.actionsSheetShown) {
+              this.actionsSheetShown = false;
+            }
+          }
+        })
         .onClick((): void => {
           this.actionsSheetShown = true;
         })

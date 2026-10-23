@@ -239,8 +239,9 @@ export struct ContentFilterSettingsPage {
     .edgeEffect(EdgeEffect.Spring)
     .backgroundColor($r('app.color.page_background'))
     .bindSheet($$this.settingsSheetShown, this.settingsSheet(), {
+      preferType: SheetType.CENTER,
       height: SheetSize.FIT_CONTENT,
-      dragBar: true,
+      dragBar: false,
       showClose: false,
       backgroundColor: $r('app.color.card_background')
     })
