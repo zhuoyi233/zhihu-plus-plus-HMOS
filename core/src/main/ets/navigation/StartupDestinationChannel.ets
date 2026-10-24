@@ -113,7 +113,8 @@ export function appDestinationIdentity(destination: AppDestination): string {
         encodeURIComponent(destination.answerId ?? '');
     case AppDestinationName.CONTINUOUS_ANSWER:
       return `${destination.name}:${encodeURIComponent((destination as ContinuousAnswerDestination).questionId)}:` +
-        encodeURIComponent((destination as ContinuousAnswerDestination).answerId ?? '');
+        encodeURIComponent((destination as ContinuousAnswerDestination).answerId ?? '') + ':' +
+        encodeURIComponent((destination as ContinuousAnswerDestination).sort ?? '');
     case AppDestinationName.WRITE_PIN:
       return `${destination.name}:${encodeURIComponent(destination.draftId)}`;
     case AppDestinationName.COMMENT:

@@ -341,8 +341,9 @@ struct Index {
           domainFixtureProbeContent: (onBack: () => void): void => this.domainFixtureProbeContent(onBack),
           continuousReadingProtoContent: (onBack: () => void): void => this.continuousReadingProtoContent(onBack),
           continuousAnswerContent: (questionId: string, answerId: string | undefined,
-            navigate: (destination: AppDestination) => void, onBack: () => void): void =>
-            this.continuousAnswerContent(questionId, answerId, navigate, onBack)
+            sort: string | undefined, navigate: (destination: AppDestination) => void,
+            onBack: () => void): void =>
+            this.continuousAnswerContent(questionId, answerId, sort, navigate, onBack)
         });
       } else {
         Text('正在恢复登录状态');
@@ -776,11 +777,12 @@ struct Index {
   }
 
   @Builder
-  continuousAnswerContent(questionId: string, answerId: string | undefined,
+  continuousAnswerContent(questionId: string, answerId: string | undefined, sort: string | undefined,
     navigate: (destination: AppDestination) => void, onBack: () => void) {
     ContinuousAnswerPage({
       questionId: questionId,
       seedAnswerId: answerId ?? '',
+      sortOrder: sort ?? 'default',
       navigate: navigate,
       onBack: onBack,
       feedRepository: this.questionAnswerFeedFactory(),

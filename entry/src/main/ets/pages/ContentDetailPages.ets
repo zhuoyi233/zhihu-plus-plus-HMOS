@@ -2534,10 +2534,11 @@ struct ContentDetailPage {
       .width('100%').padding($r('app.float.card_padding'))
       .borderRadius($r('app.float.card_radius')).backgroundColor($r('app.color.surface_background'))
       .accessibilityText('打开回答').onClick((): void => {
-        // 偏好为连续阅读时直接进连续流（计划 §2.2：从问题页点回答继承问题 ID 与所点回答）。
+        // 偏好为连续阅读时直接进连续流（计划 §2.2：继承问题 ID、排序与所点回答）。
         if (AppStorage.get<string>('answerReadingMode') === 'continuous') {
           this.navigate({ name: AppDestinationName.CONTINUOUS_ANSWER,
-            questionId: this.activeContentId, answerId: item.feedItem.target.id });
+            questionId: this.activeContentId, answerId: item.feedItem.target.id,
+            sort: this.answersController?.snapshot().sortOrder });
           return;
         }
         const repository = this.questionAnswerFeedFactory();

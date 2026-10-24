@@ -160,7 +160,8 @@ export struct AppShell {
   @BuilderParam imageProbeContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam continuousReadingProtoContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam continuousAnswerContent: (questionId: string, answerId: string | undefined,
-    navigate: (destination: AppDestination) => void, onBack: () => void) => void = this.emptyPage;
+    sort: string | undefined, navigate: (destination: AppDestination) => void,
+    onBack: () => void) => void = this.emptyPage;
   @BuilderParam databaseProbeContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam deepLinkProbeContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam qrScanProbeContent: (onBack: () => void) => void = this.emptyProbe;
@@ -1043,6 +1044,7 @@ export struct AppShell {
         this.continuousAnswerContent(
           (destination as ContinuousAnswerDestination).questionId,
           (destination as ContinuousAnswerDestination).answerId,
+          (destination as ContinuousAnswerDestination).sort,
           (destination: AppDestination): void => this.navigate(destination),
           (): void => {
             this.pathStack.pop();
@@ -1056,10 +1058,22 @@ export struct AppShell {
             (destination as ContinuousAnswerDestination).questionId),
           divider: { showType: DividerShowType.OFF }
         } })
-      .hideTitleBar(this.imagePreviewUrl.length > 0)
+      .hideTitleBar(this.imagePreviewUrl.length > 0 || this.detailImmersiveActive)
+      .onShown((): void => {
+        AppStorage.setOrCreate('continuousAnswerRouteVisible', true);
+      })
+      .onHidden((): void => {
+        AppStorage.setOrCreate('continuousAnswerRouteVisible', false);
+      })
       .onBackPressed((): boolean => {
         if (this.imagePreviewUrl.length > 0) {
           AppStorage.setOrCreate('imagePreviewUrl', '');
+          return true;
+        }
+        // 沉浸阅读中先退出沉浸（对齐回答/文章页交互），再次返回才离页。
+        if (this.detailImmersiveActive) {
+          AppStorage.setOrCreate('detailImmersiveExitTick',
+            (AppStorage.get<number>('detailImmersiveExitTick') ?? 0) + 1);
           return true;
         }
         return false;

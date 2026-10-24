@@ -135,11 +135,13 @@ export interface WhatsNewDestination {
   readonly version?: string;
 }
 
-/** 连续阅读页（同一问题的回答连续滚动）：questionId 必填，answerId 为所点回答种子（可缺省）。 */
+/** 连续阅读页（同一问题的回答连续滚动）：questionId 必填，answerId 为所点回答种子、
+ * sort 为问题页继承的排序（缺省 default）。 */
 export interface ContinuousAnswerDestination {
   readonly name: AppDestinationName.CONTINUOUS_ANSWER;
   readonly questionId: string;
   readonly answerId?: string;
+  readonly sort?: string;
 }
 
 export type AppDestination = StatelessDestination | InfrastructureDestination | ContentDestination |
@@ -562,14 +564,21 @@ function decodePrivateMessage(wire: JsonObjectValue): PrivateMessageDestination 
 function decodeContinuousAnswer(wire: JsonObjectValue): ContinuousAnswerDestination | undefined {
   const questionId = readString(wire, 'questionId');
   const answerId = readString(wire, 'answerId');
+  const sort = readString(wire, 'sort');
   if (questionId === undefined || !isSafeDecimalContentId(questionId) ||
     (answerId !== undefined && !isSafeDecimalContentId(answerId)) ||
-    !hasOnlyFields(wire, ['name', 'questionId', 'answerId'])) {
+    (sort !== undefined && sort !== 'default' && sort !== 'updated') ||
+    !hasOnlyFields(wire, ['name', 'questionId', 'answerId', 'sort'])) {
     return undefined;
   }
-  return answerId === undefined
-    ? { name: AppDestinationName.CONTINUOUS_ANSWER, questionId: questionId }
-    : { name: AppDestinationName.CONTINUOUS_ANSWER, questionId: questionId, answerId: answerId };
+  if (answerId === undefined) {
+    return sort === undefined
+      ? { name: AppDestinationName.CONTINUOUS_ANSWER, questionId: questionId }
+      : { name: AppDestinationName.CONTINUOUS_ANSWER, questionId: questionId, sort: sort };
+  }
+  return sort === undefined
+    ? { name: AppDestinationName.CONTINUOUS_ANSWER, questionId: questionId, answerId: answerId }
+    : { name: AppDestinationName.CONTINUOUS_ANSWER, questionId: questionId, answerId: answerId, sort: sort };
 }
 
 function decodeWriteAnswer(wire: JsonObjectValue): WriteAnswerDestination | undefined {

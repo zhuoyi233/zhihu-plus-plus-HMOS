@@ -56,7 +56,8 @@ import {
   readerHeadingFontSize
 } from './ReaderTypography';
 import { ContinuousFullTextRecord, ContinuousFullTextScheduler, ContinuousFullTextSource } from './ContinuousAnswerState';
-import { QuestionAnswersController, QuestionAnswersViewState } from './QuestionAnswersState';
+import { QuestionAnswersController, QuestionAnswersPhase, QuestionAnswersViewState } from './QuestionAnswersState';
+import { QuestionAnswerSortOrder } from 'data';
 import {
   ContinuousRow,
   ContinuousRowKind,
@@ -170,6 +171,8 @@ class RepositoryFullTextSource implements ContinuousFullTextSource {
 export struct ContinuousAnswerPage {
   questionId: string = '';
   seedAnswerId: string = '';
+  /** 问题页继承的排序（'default' | 'updated'，计划 §2.2）。 */
+  sortOrder: string = 'default';
   navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {};
   onBack: () => void = (): void => {};
   feedRepository: QuestionAnswerFeedRepository | undefined = undefined;
@@ -190,6 +193,11 @@ export struct ContinuousAnswerPage {
   @StorageProp('contentBlockSpacing') private blockSpacingPercent: number = 100;
   @StorageProp('contentTypographyPreset') private typographyPreset: string = 'comfortable';
   @StorageProp('imagePreviewUrl') @Watch('onImagePreviewChanged') private imagePreviewUrl: string = '';
+  /** 沉浸阅读（与回答/文章页共用全局广播）：隐藏顶栏，返回键先退出沉浸。 */
+  @StorageProp('detailImmersiveActive') private detailImmersiveActive: boolean = false;
+  @StorageProp('detailImmersiveExitTick') @Watch('onImmersiveExitTick') private immersiveExitTick: number = 0;
+  /** 路由可见性（AppShell onShown/onHidden 广播）：离页停止预取与分页，回页恢复。 */
+  @StorageProp('continuousAnswerRouteVisible') @Watch('onRouteVisibleChanged') private routeVisible: boolean = true;
 
   private readonly dataSource: ContinuousStreamDataSource = new ContinuousStreamDataSource();
   private readonly scroller: Scroller = new Scroller();
@@ -240,11 +248,25 @@ export struct ContinuousAnswerPage {
         // 位置存储不可用只影响跨模式段落交接，不影响阅读。
       }
     }
+    // 沉浸态是页面私有广播：进入连续页一律从非沉浸开始，离页同样复位避免污染其他页。
+    AppStorage.setOrCreate('detailImmersiveActive', false);
     if (this.feedRepository !== undefined) {
+      // 排序继承：经 seed 携带初始 sortOrder，避免 activate 首拉后再 setSortOrder 重拉一次。
+      const initialOrder = this.sortOrder === 'updated'
+        ? QuestionAnswerSortOrder.UPDATED : QuestionAnswerSortOrder.DEFAULT;
+      const seed: QuestionAnswersViewState = {
+        phase: QuestionAnswersPhase.IDLE,
+        items: [],
+        loadingMore: false,
+        canLoadMore: false,
+        sortOrder: initialOrder,
+        errorMessage: '',
+        requiresLogin: false
+      };
       this.feedController = new QuestionAnswersController(this.feedRepository, this.questionId,
         (state: QuestionAnswersViewState): void => {
           this.onFeedState(state);
-        });
+        }, seed);
       this.feedController.activate();
     }
     const repoA = this.fullTextRepositoryA;
@@ -271,6 +293,7 @@ export struct ContinuousAnswerPage {
     this.disposed = true;
     this.feedController?.deactivate();
     this.scheduler?.dispose();
+    AppStorage.setOrCreate('detailImmersiveActive', false);
     if (this.dwellTimer >= 0) {
       clearTimeout(this.dwellTimer);
       this.dwellTimer = -1;
@@ -1138,6 +1161,30 @@ export struct ContinuousAnswerPage {
     // 图片预览经 AppStorage 广播（AppShell 控制顶栏隐藏与返回键），无需本地状态。
   }
 
+  private onImmersiveExitTick(): void {
+    // 返回键退出沉浸（AppShell 分支发 tick，语义同回答/文章页）。
+    AppStorage.setOrCreate('detailImmersiveActive', false);
+  }
+
+  private onRouteVisibleChanged(): void {
+    if (this.disposed) {
+      return;
+    }
+    // 离页（评论/作者页/切后台路由被覆盖）停止预取与分页，回页恢复。
+    if (this.routeVisible) {
+      this.scheduler?.activate();
+      this.feedController?.activate();
+      this.scheduleDwellConfirm();
+    } else {
+      this.scheduler?.deactivate();
+      this.feedController?.deactivate();
+      if (this.dwellTimer >= 0) {
+        clearTimeout(this.dwellTimer);
+        this.dwellTimer = -1;
+      }
+    }
+  }
+
   // ---------- 渲染 ----------
 
   private bodyFontFp(): number {
@@ -1171,8 +1218,9 @@ export struct ContinuousAnswerPage {
         .scrollBar(BarState.Off)
         .cachedCount(6)
         .edgeEffect(EdgeEffect.Spring)
-        // 沉浸式标题栏是覆盖层：顶部让出状态栏+标题行高度（P0 结论），正文不穿顶栏。
-        .padding({ left: 16, right: 16, top: 116 })
+        // 沉浸式标题栏是覆盖层：顶部让出状态栏+标题行高度（P0 结论），正文不穿顶栏；
+        // 沉浸阅读隐藏标题栏后只保留状态栏让位。
+        .padding({ left: 16, right: 16, top: this.detailImmersiveActive ? 56 : 116 })
         .onScrollIndex((start: number, end: number): void => {
           this.firstVisibleIndex = start;
           this.lastVisibleIndex = end;
@@ -1663,6 +1711,13 @@ export struct ContinuousAnswerPage {
         .borderRadius(16)
         .backgroundColor($r('app.color.surface_background'))
         .bindMenu([
+          {
+            value: '沉浸阅读',
+            action: (): void => {
+              AppStorage.setOrCreate('detailImmersiveActive', !this.detailImmersiveActive);
+              this.toast(this.detailImmersiveActive ? '已进入沉浸式，按返回键即可退出' : '已退出沉浸式');
+            }
+          },
           {
             value: '复制链接',
             action: (): void => {
