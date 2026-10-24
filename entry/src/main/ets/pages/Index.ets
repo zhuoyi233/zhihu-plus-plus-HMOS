@@ -149,6 +149,9 @@ struct Index {
   @State private continuousAnswerRepositoryA?: ContentRepository = undefined;
   @State private continuousAnswerRepositoryB?: ContentRepository = undefined;
   @State private continuousQuestionRepository?: ContentRepository = undefined;
+  /** 连续页专属划线点赞与卡片元数据仓库：与详情页实例隔离，避免单飞 client 互斥。 */
+  @State private continuousSegmentReactionRepository?: SegmentReactionRepository = undefined;
+  @State private continuousLinkCardMetaRepository?: LinkCardMetaRepository = undefined;
   @State private peopleRepository?: PeopleDetailRepository = undefined;
   @State private peopleContentRepository?: PeopleContentRepository = undefined;
   @State private pinRepository?: PinRepository = undefined;
@@ -235,6 +238,8 @@ struct Index {
       this.continuousAnswerRepositoryA = new DefaultContentRepository(new ZhihuHttpClient(session));
       this.continuousAnswerRepositoryB = new DefaultContentRepository(new ZhihuHttpClient(session));
       this.continuousQuestionRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
+      this.continuousSegmentReactionRepository = new DefaultSegmentReactionRepository(new ZhihuHttpClient(session));
+      this.continuousLinkCardMetaRepository = new DefaultLinkCardMetaRepository(new ZhihuHttpClient(session));
       this.peopleRepository = new DefaultPeopleRepository(new ZhihuHttpClient(session));
       this.peopleContentRepository = new DefaultPeopleContentRepository(new ZhihuHttpClient(session));
       this.pinRepository = new DefaultPinRepository(new ZhihuHttpClient(session));
@@ -794,7 +799,9 @@ struct Index {
       collectionRepository: this.collectionRepository,
       session: this.session,
       openedContentStore: this.openedContentStore,
-      historyUploader: this.readHistoryUploader
+      historyUploader: this.readHistoryUploader,
+      segmentReactionRepository: this.continuousSegmentReactionRepository,
+      linkCardMetaRepository: this.continuousLinkCardMetaRepository
     });
   }
 

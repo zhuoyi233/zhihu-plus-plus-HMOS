@@ -1,5 +1,9 @@
 import { ReaderInlineKind, ReaderInlineRun } from 'reader';
-import { SegmentInfoParagraph } from 'data';
+import {
+  effectiveSegmentMeta,
+  SegmentInfoMark,
+  SegmentInfoParagraph
+} from 'data';
 
 /** 他人划线引用（点击打开点赞/评论面板）。 */
 export interface SegmentHighlightRef {
@@ -175,4 +179,75 @@ export function flattenStyledTextSegments(
     }
   });
   return result;
+}
+
+/**
+ * 合并同区间的划线 mark（对齐上游 SegmentHighlightUtils.mergeSameRangeMarks）：
+ * 点赞会给同一文本位置创建属于自己的 seg，detail 重载后该段落会有多个同区间 mark。
+ * 合并规则：segIds 按 master 优先顺序去重拼接；isLike/isSpan 取任一为真；
+ * likeCount/commentCount/myCommentCount 取最大值。
+ */
+export function mergeSameRangeMarks(paragraphs: SegmentInfoParagraph[]): SegmentInfoParagraph[] {
+  return paragraphs.map((paragraph: SegmentInfoParagraph): SegmentInfoParagraph => {
+    if (paragraph.marks.length <= 1) {
+      return paragraph;
+    }
+    const groups = new Map<string, SegmentInfoMark[]>();
+    paragraph.marks.forEach((mark: SegmentInfoMark): void => {
+      const key = `${mark.startIndex}:${mark.endIndex}`;
+      const bucket = groups.get(key);
+      if (bucket === undefined) {
+        groups.set(key, [mark]);
+      } else {
+        bucket.push(mark);
+      }
+    });
+    const merged: SegmentInfoMark[] = [];
+    groups.forEach((bucket: SegmentInfoMark[]): void => {
+      const ordered: SegmentInfoMark[] = bucket.filter((mark: SegmentInfoMark): boolean => mark.masterSegInfo !== undefined)
+        .concat(bucket.filter((mark: SegmentInfoMark): boolean => mark.masterSegInfo === undefined));
+      const segIds: string[] = [];
+      ordered.forEach((mark: SegmentInfoMark): void => {
+        const meta = effectiveSegmentMeta(mark);
+        if (meta === undefined) {
+          return;
+        }
+        meta.segIds.forEach((segId: string): void => {
+          if (!segIds.includes(segId)) {
+            segIds.push(segId);
+          }
+        });
+      });
+      let likeCount = 0;
+      let commentCount = 0;
+      let myCommentCount = 0;
+      let isLike = false;
+      let isSpan = false;
+      ordered.forEach((mark: SegmentInfoMark): void => {
+        const meta = effectiveSegmentMeta(mark);
+        if (meta === undefined) {
+          return;
+        }
+        likeCount = Math.max(likeCount, meta.likeCount);
+        commentCount = Math.max(commentCount, meta.commentCount);
+        myCommentCount = Math.max(myCommentCount, meta.myCommentCount);
+        isLike = isLike || meta.isLike;
+        isSpan = isSpan || meta.isSpan;
+      });
+      merged.push({
+        startIndex: bucket[0].startIndex,
+        endIndex: bucket[0].endIndex,
+        segInfo: {
+          segIds: segIds,
+          isLike: isLike,
+          likeCount: likeCount,
+          commentCount: commentCount,
+          myCommentCount: myCommentCount,
+          isSpan: isSpan
+        }
+      });
+    });
+    merged.sort((a: SegmentInfoMark, b: SegmentInfoMark): number => a.startIndex - b.startIndex);
+    return { pid: paragraph.pid, text: paragraph.text, marks: merged };
+  });
 }

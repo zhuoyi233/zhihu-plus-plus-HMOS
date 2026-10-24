@@ -97,6 +97,7 @@ import lastReadTouchRepositoryTest from './LastReadTouchRepository.test';
 import linkCardMetaTest from './LinkCardMeta.test';
 import segmentReactionRepositoryTest from './SegmentReactionRepository.test';
 import continuousStreamDataSourceTest from './ContinuousStreamDataSource.test';
+import linkCardMetaLoaderTest from './LinkCardMetaLoader.test';
 import continuousAnswerStateTest from './ContinuousAnswerState.test';
 
 export default function testsuite(): void {
@@ -200,4 +201,5 @@ export default function testsuite(): void {
   segmentReactionRepositoryTest();
   continuousStreamDataSourceTest();
   continuousAnswerStateTest();
+  linkCardMetaLoaderTest();
 }

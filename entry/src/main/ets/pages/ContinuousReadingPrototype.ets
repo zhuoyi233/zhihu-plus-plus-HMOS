@@ -6,7 +6,7 @@ import {
   ReaderInlineKind,
   ReaderInlineRun
 } from 'reader';
-import { ContentBlockFormula, ContentInlineFormula } from './NativeContentDocument';
+import { ContentBlockFormula, ContentInlineFormula } from './ReaderBlockView';
 import { DEFAULT_THEME_COLOR, onThemeColor } from 'data';
 import {
   readerBlockSpacing,

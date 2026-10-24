@@ -1,9 +1,9 @@
 import { pasteboard } from '@kit.BasicServicesKit';
 import { Want } from '@kit.AbilityKit';
-import { LengthMetrics } from '@ohos.arkui.node';
 import { AppDestination, AppDestinationName, resolveZhihuLink, toAppDestination } from 'core';
 import {
   Answer,
+  AnswerDoubleTapAction,
   AppPreferencesStore,
   ChannelContentItem,
   CollectionRepository,
@@ -13,7 +13,10 @@ import {
   ContentVoteResult,
   createReaderPositionStore,
   DEFAULT_THEME_COLOR,
+  effectiveSegmentMeta,
   FollowRepository,
+  LinkCardMeta,
+  LinkCardMetaRepository,
   LoginSessionGateway,
   onThemeColor,
   OpenedContentStore,
@@ -23,6 +26,10 @@ import {
   ReaderPosition,
   ReaderPositionRepository,
   readerPositionKey,
+  SegmentInfoMark,
+  SegmentInfoMeta,
+  SegmentInfoParagraph,
+  SegmentReactionRepository,
   UserProfile,
   VoteRepository
 } from 'data';
@@ -31,16 +38,16 @@ import {
   parseZhihuHtml,
   ReaderBlock,
   ReaderBlockKind,
-  ReaderImageBlock,
-  ReaderInlineKind,
   ReaderInlineRun
 } from 'reader';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { createSystemShareService } from '../platform/SystemShareService';
+import { performConfirmHaptic } from '../platform/HapticFeedback';
 import { ShareOutcome, SharePayloadKind, ShareTextPayload } from '../platform/ShareContracts';
 import { CollectionDialogComponent } from './CollectionDialogComponent';
-import { flattenStyledTextSegments, StyledTextSegment } from './ContentAnnotations';
-import { ContentBlockFormula, ContentInlineFormula } from './NativeContentDocument';
+import { mergeSameRangeMarks } from './ContentAnnotations';
+import { LinkCardMetaLoader, ReaderBlockView } from './ReaderBlockView';
+import { SegmentPill } from './components/SegmentPill';
 import { contentDetailErrorMessage, LoadedContentDetail, recordContentOpen } from './ContentDetailState';
 import { formatContentDateTime } from './ContentDetailPages';
 import {
@@ -49,12 +56,7 @@ import {
   readerPositionFraction,
   readerPositionTargetY
 } from './ReaderPositionAnchor';
-import {
-  readerBlockSpacing,
-  readerBodyFontSize,
-  readerBodyLineHeight,
-  readerHeadingFontSize
-} from './ReaderTypography';
+import { readerBlockSpacing } from './ReaderTypography';
 import { ContinuousFullTextRecord, ContinuousFullTextScheduler, ContinuousFullTextSource } from './ContinuousAnswerState';
 import { QuestionAnswersController, QuestionAnswersPhase, QuestionAnswersViewState } from './QuestionAnswersState';
 import { QuestionAnswerSortOrder } from 'data';
@@ -186,10 +188,12 @@ export struct ContinuousAnswerPage {
   /** 阅读记录（本地 upsert + 云端上报）：停留确认后写入（计划 §4.4），预取不写。 */
   openedContentStore: OpenedContentStore | undefined = undefined;
   historyUploader: ReadHistoryUploadRepository | undefined = undefined;
+  /** 他人划线点赞/评论仓库（连续页专属实例，避免与详情页共用单飞 client 互斥）。 */
+  segmentReactionRepository: SegmentReactionRepository | undefined = undefined;
+  /** 推荐阅读卡片元数据仓库（连续页专属实例）：串行拉取站内赞同/评论计数。 */
+  linkCardMetaRepository: LinkCardMetaRepository | undefined = undefined;
 
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
-  @StorageProp('contentFontSize') private fontSizePercent: number = 100;
-  @StorageProp('contentLineHeight') private lineHeightPercent: number = 160;
   @StorageProp('contentBlockSpacing') private blockSpacingPercent: number = 100;
   @StorageProp('contentTypographyPreset') private typographyPreset: string = 'comfortable';
   @StorageProp('imagePreviewUrl') @Watch('onImagePreviewChanged') private imagePreviewUrl: string = '';
@@ -238,6 +242,23 @@ export struct ContinuousAnswerPage {
   @State private statusLine: string = '正在加载回答列表…';
   @State private collectionAnswerId: string = '';
   @State private feedErrorLine: string = '';
+  /** 双击动作偏好（单篇详情页同款 AppStorage 广播；aboutToAppear 从持久化恢复）。 */
+  @StorageProp('answerDoubleTapAction') private answerDoubleTapAction: AnswerDoubleTapAction =
+    AnswerDoubleTapAction.ASK;
+  /** 推荐阅读卡片站内元数据（url → meta）：串行拉取后回填并强制对应卡片行重建。 */
+  @State private linkCardMetas: Map<string, LinkCardMeta> = new Map();
+  private linkCardMetaLoader?: LinkCardMetaLoader = undefined;
+  /** 逐答他人划线（已合并同区间 mark）：按回答缓存，供划线叠加与面板读取。 */
+  private readonly segmentInfosCache: Map<string, SegmentInfoParagraph[]> = new Map();
+  @State private segmentSheetShown: boolean = false;
+  @State private segmentSheetAnswerId: string = '';
+  @State private segmentSheetPid: string = '';
+  @State private segmentSheetMarkIndex: number = -1;
+  @State private segmentSheetInfos: SegmentInfoParagraph[] = [];
+  private segmentSheetOpenedAt: number = 0;
+  private segmentLikeBusy: boolean = false;
+  @State private doubleTapAskSheetShown: boolean = false;
+  private doubleTapAskAnswerId: string = '';
 
   aboutToAppear(): void {
     const context = getAbilityContext();
@@ -247,6 +268,22 @@ export struct ContinuousAnswerPage {
       } catch (_error) {
         // 位置存储不可用只影响跨模式段落交接，不影响阅读。
       }
+      // 双击动作偏好：与单篇详情页同键恢复并广播，双击分发与设置页修改实时联动。
+      void new AppPreferencesStore(context).loadAnswerDoubleTapAction()
+        .then((action: AnswerDoubleTapAction): void => {
+          if (!this.disposed) {
+            AppStorage.setOrCreate('answerDoubleTapAction', action);
+          }
+        }).catch((_error: Error): void => {});
+    }
+    // 卡片元数据串行加载：回填后强制对应卡片行重建（惰性行不随状态自动重渲染）。
+    const metaRepository = this.linkCardMetaRepository;
+    if (metaRepository !== undefined) {
+      const loader = new LinkCardMetaLoader(metaRepository);
+      loader.onUpdate = (url: string, meta: LinkCardMeta): void => {
+        this.applyLinkCardMeta(url, meta);
+      };
+      this.linkCardMetaLoader = loader;
     }
     // 沉浸态是页面私有广播：进入连续页一律从非沉浸开始，离页同样复位避免污染其他页。
     AppStorage.setOrCreate('detailImmersiveActive', false);
@@ -293,6 +330,8 @@ export struct ContinuousAnswerPage {
     this.disposed = true;
     this.feedController?.deactivate();
     this.scheduler?.dispose();
+    this.linkCardMetaLoader?.dispose();
+    this.linkCardMetaLoader = undefined;
     AppStorage.setOrCreate('detailImmersiveActive', false);
     if (this.dwellTimer >= 0) {
       clearTimeout(this.dwellTimer);
@@ -350,6 +389,7 @@ export struct ContinuousAnswerPage {
       const answer = record.answer;
       const scoped = this.scopedBlocks(answerId, parseZhihuHtml(answer.contentHtml));
       this.answerBlocks.set(answerId, scoped);
+      this.loadLinkCardMetas(scoped);
       const rows: Array<ContinuousRow> = continuousBlockRows(answerId, scoped);
       this.indexReferenceRows(answerId, rows);
       rows.push(continuousDateRow(answerId, answerDateLine(answer)));
@@ -611,6 +651,8 @@ export struct ContinuousAnswerPage {
       if (!near && record.phase === 'ready') {
         scheduler.evict(answerId, this.measuredBodyHeightVp.get(answerId) ?? 0);
         this.answerBlocks.delete(answerId);
+        // 淘汰后回看会重新拉取全文，划线缓存一并作废，避免旧回包的划线被复用。
+        this.segmentInfosCache.delete(answerId);
       } else if (near && record.phase === 'evicted') {
         scheduler.restore(answerId);
       }
@@ -1187,14 +1229,6 @@ export struct ContinuousAnswerPage {
 
   // ---------- 渲染 ----------
 
-  private bodyFontFp(): number {
-    return readerBodyFontSize(this.fontSizePercent, this.typographyPreset);
-  }
-
-  private bodyLineHeightFp(): number {
-    return readerBodyLineHeight(this.fontSizePercent, this.lineHeightPercent, this.typographyPreset);
-  }
-
   private blockSpacingVp(): number {
     return readerBlockSpacing(this.blockSpacingPercent, this.typographyPreset);
   }
@@ -1246,6 +1280,40 @@ export struct ContinuousAnswerPage {
       }
       .width('100%')
       .height('100%')
+
+      // 划线面板与双击动作询问面板：独立空节点挂 bindSheet（对齐单篇详情页多弹层模式）。
+      Column()
+        .bindSheet(this.segmentSheetShown, this.segmentSheet(), {
+          preferType: SheetType.CENTER,
+          height: SheetSize.FIT_CONTENT,
+          dragBar: false,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onWillDismiss: (action: DismissSheetAction): void => this.guardSegmentSheetDismiss(action),
+          onDisappear: (): void => {
+            if (this.segmentSheetShown) {
+              this.segmentSheetShown = false;
+              this.segmentSheetAnswerId = '';
+              this.segmentSheetPid = '';
+              this.segmentSheetMarkIndex = -1;
+            }
+          }
+        })
+      Column()
+        .bindSheet(this.doubleTapAskSheetShown, this.doubleTapAskSheet(), {
+          preferType: SheetType.CENTER,
+          height: SheetSize.FIT_CONTENT,
+          dragBar: false,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.doubleTapAskSheetShown) {
+              this.doubleTapAskSheetShown = false;
+            }
+          }
+        })
     }
     .width('100%')
     .height('100%')
@@ -1277,6 +1345,156 @@ export struct ContinuousAnswerPage {
         this.collectionAnswerId = '';
       }
     })
+  }
+
+  /** 他人划线面板：引用文本 + 点赞/评论胶囊 + 复制（对齐单篇详情页 segmentActionSheet）。 */
+  @Builder
+  private segmentSheet() {
+    Column({ space: $r('app.float.spacing_medium') }) {
+      Text('划线片段')
+        .id('segment_sheet_title')
+        .fontSize($r('app.float.segment_sheet_title_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
+      Text(`“${this.currentSegmentQuote()}”`)
+        .id('segment_sheet_quote')
+        .fontSize($r('app.float.segment_quote_font_size'))
+        .lineHeight($r('app.float.segment_quote_line_height'))
+        .fontColor($r('app.color.primary_text'))
+        .copyOption(CopyOptions.LocalDevice)
+        .width('100%')
+      if (this.currentSegmentMeta() !== undefined) {
+        Row({ space: $r('app.float.spacing_small') }) {
+          SegmentPill({
+            icon: this.currentSegmentMeta()!.isLike
+              ? $r('sys.symbol.hand_thumbsup_fill') : $r('sys.symbol.hand_thumbsup'),
+            count: `${this.currentSegmentMeta()!.likeCount}`,
+            active: this.currentSegmentMeta()!.isLike,
+            iconAccent: false,
+            testId: 'segment_sheet_like',
+            label: this.currentSegmentMeta()!.isLike ? '取消点赞该划线' : '点赞该划线',
+            onTap: (): void => { void this.onSegmentLike(); }
+          })
+          SegmentPill({
+            icon: $r('sys.symbol.text_bubble_left_2'),
+            count: `${this.currentSegmentMeta()!.commentCount}`,
+            active: false,
+            iconAccent: true,
+            testId: 'segment_sheet_comment',
+            label: '查看该划线的评论',
+            onTap: (): void => {
+              this.openSegmentComments();
+            }
+          })
+          Button({ type: ButtonType.Normal, stateEffect: true }) {
+            SymbolGlyph($r('sys.symbol.doc_filled_on_doc'))
+              .fontSize(20)
+              .fontColor([$r('app.color.secondary_text')])
+          }
+          .id('segment_sheet_copy')
+          .width($r('app.float.segment_action_button_height'))
+          .height($r('app.float.segment_action_button_height'))
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText('复制划线内容')
+          .onClick((): void => {
+            const quote = this.currentSegmentQuote();
+            if (quote.length === 0) {
+              return;
+            }
+            try {
+              const pasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, quote);
+              pasteboard.getSystemPasteboard().setData(pasteData).then((): void => {
+                this.toast('已复制划线内容');
+              }).catch((_error: Error): void => {
+                this.toast('复制失败，请重试');
+              });
+            } catch (_error) {
+              this.toast('复制失败，请重试');
+            }
+          })
+        }
+        .width('100%')
+      }
+    }
+    .id('segment_action_sheet')
+    .width('100%')
+    .padding({ top: 16, bottom: 24, left: 20, right: 20 })
+  }
+
+  /** 双击动作询问面板（对齐单篇详情页 doubleTapAskSheet）：选择后记住并立即执行。 */
+  @Builder
+  private doubleTapAskSheet() {
+    Column({ space: $r('app.float.spacing_small') }) {
+      Text('设置双击正文动作')
+        .fontSize($r('app.float.heading_font_size'))
+        .fontWeight(FontWeight.Bold)
+        .fontColor($r('app.color.primary_text'))
+        .width('100%')
+      Text('选择以后双击正文时默认执行的动作。选择后会立即保存到设置，你也可以稍后在设置中修改。')
+        .fontSize($r('app.float.secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .width('100%')
+      Button('设为无操作', { type: ButtonType.Normal, stateEffect: true })
+        .id('answer_double_tap_none')
+        .width('100%')
+        .fontSize($r('app.float.body_font_size'))
+        .fontColor($r('app.color.primary_text'))
+        .backgroundColor($r('app.color.control_background'))
+        .borderRadius($r('app.float.card_radius'))
+        .onClick((): void => {
+          this.doubleTapAskSheetShown = false;
+          this.saveDoubleTapAction(AnswerDoubleTapAction.NONE);
+        })
+      Button('设为点赞', { type: ButtonType.Normal, stateEffect: true })
+        .id('answer_double_tap_vote_up')
+        .width('100%')
+        .fontSize($r('app.float.body_font_size'))
+        .fontColor($r('app.color.primary_text'))
+        .backgroundColor($r('app.color.control_background'))
+        .borderRadius($r('app.float.card_radius'))
+        .onClick((): void => {
+          this.doubleTapAskSheetShown = false;
+          this.saveDoubleTapAction(AnswerDoubleTapAction.VOTE_UP);
+          performConfirmHaptic();
+          const answerId = this.doubleTapAskAnswerId;
+          if (answerId.length > 0 && this.voteSnapshot(answerId).voteState !== ContentVoteState.UP) {
+            this.vote(answerId, ContentVoteState.UP);
+          }
+        })
+      Button('设为打开评论区', { type: ButtonType.Normal, stateEffect: true })
+        .id('answer_double_tap_open_comments')
+        .width('100%')
+        .fontSize($r('app.float.body_font_size'))
+        .fontColor($r('app.color.primary_text'))
+        .backgroundColor($r('app.color.control_background'))
+        .borderRadius($r('app.float.card_radius'))
+        .onClick((): void => {
+          this.doubleTapAskSheetShown = false;
+          this.saveDoubleTapAction(AnswerDoubleTapAction.OPEN_COMMENTS);
+          performConfirmHaptic();
+          const answerId = this.doubleTapAskAnswerId;
+          if (answerId.length > 0) {
+            this.confirmAnswerRead(answerId);
+            this.navigate({ name: AppDestinationName.COMMENT, contentType: 'answer', contentId: answerId });
+          }
+        })
+      Button('设为开关沉浸式', { type: ButtonType.Normal, stateEffect: true })
+        .id('answer_double_tap_toggle_immersive')
+        .width('100%')
+        .fontSize($r('app.float.body_font_size'))
+        .fontColor($r('app.color.primary_text'))
+        .backgroundColor($r('app.color.control_background'))
+        .borderRadius($r('app.float.card_radius'))
+        .onClick((): void => {
+          this.doubleTapAskSheetShown = false;
+          this.saveDoubleTapAction(AnswerDoubleTapAction.TOGGLE_IMMERSIVE);
+          AppStorage.setOrCreate('detailImmersiveActive', !this.detailImmersiveActive);
+        })
+    }
+    .id('answer_double_tap_sheet')
+    .width('100%')
+    .padding($r('app.float.spacing_medium'))
   }
 
   @Builder
@@ -1418,170 +1636,284 @@ export struct ContinuousAnswerPage {
 
   @Builder
   private streamBlock(row: ContinuousRow) {
-    Column() {
-      if (row.block !== undefined) {
-        this.blockContent(row.answerId, row.block)
-      }
-    }
-    .width('100%')
-  }
-
-  @Builder
-  private blockContent(answerId: string, block: ReaderBlock) {
-    if (block.kind === ReaderBlockKind.HEADING) {
-      Text(block.text)
-        .id(`cont_heading_${block.id}`)
-        .fontSize(readerHeadingFontSize(this.fontSizePercent))
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.primary_text'))
-        .width('100%')
-    } else if (block.kind === ReaderBlockKind.DIVIDER) {
-      Divider().margin({ top: 8, bottom: 8 })
-    } else if (block.kind === ReaderBlockKind.FORMULA) {
-      ContentBlockFormula({ item: block })
-    } else if (block.kind === ReaderBlockKind.IMAGE) {
-      ReaderImageBlock({
-        item: block,
-        secondaryTextColor: $r('app.color.secondary_text'),
-        onPreview: (url: string): void => {
-          AppStorage.setOrCreate('imagePreviewUrl', url);
+    if (row.block !== undefined) {
+      ReaderBlockView({
+        item: row.block,
+        previousBlock: this.previousBlockOf(row.answerId, row.block),
+        segmentInfos: this.segmentInfosOf(row.answerId),
+        linkCardMeta: this.linkCardMetas.get(row.block.sourceUrl),
+        onLinkClick: (url: string): void => this.onContentLinkClick(url),
+        onReferenceClick: (numero: number): void => this.scrollToReference(row.answerId, numero),
+        onReferenceBack: (numero: number): void => this.scrollBackToReference(row.answerId, numero),
+        onVideoOpen: (videoId: string): void => {
+          if (videoId.length > 0) {
+            this.navigate({ name: AppDestinationName.VIDEO, id: videoId });
+          }
+        },
+        onSegmentClick: (paragraph: SegmentInfoParagraph, markIndex: number): void =>
+          this.openSegmentSheet(row.answerId, paragraph, markIndex),
+        onBodyDoubleTap: (): void => this.onBodyDoubleTapAction(row.answerId),
+        onBodySelectionActive: (_active: boolean): void => {
+          // 连续页没有单篇的过滑切答手势，选区信号无需挂起手势；保留通道与单篇对齐。
         }
       })
-    } else if (block.kind === ReaderBlockKind.VIDEO) {
-      this.videoCard(block)
-    } else if (block.kind === ReaderBlockKind.LINK_CARD) {
-      this.linkCard(block)
-    } else if (block.kind === ReaderBlockKind.REFERENCE) {
-      this.referenceEntry(answerId, block)
-    } else if (block.inlineRuns.length > 0) {
-      if (this.inlineHasFormula(block)) {
-        ContentInlineFormula({ item: block, onLinkClick: (url: string): void => this.onContentLinkClick(url) })
-      } else {
-        Text() {
-          this.styledSpanChildren(answerId, block)
+    }
+  }
+
+  /** 同一回答中上一个正文块：ReaderBlockView 据此计算标题/图片/引用的段前留白。 */
+  private previousBlockOf(answerId: string, block: ReaderBlock): ReaderBlock | undefined {
+    const blocks = this.answerBlocks.get(answerId);
+    if (blocks === undefined) {
+      return undefined;
+    }
+    const index = blocks.findIndex((item: ReaderBlock): boolean => item.id === block.id);
+    if (index <= 0) {
+      return undefined;
+    }
+    return blocks[index - 1];
+  }
+
+  /** 逐答他人划线（合并同区间 mark）：按回答懒加载缓存，供划线叠加与面板读取。 */
+  private segmentInfosOf(answerId: string): SegmentInfoParagraph[] {
+    const cached = this.segmentInfosCache.get(answerId);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const answer = this.scheduler?.record(answerId)?.answer;
+    const infos = answer === undefined ? [] : mergeSameRangeMarks(answer.segmentInfos ?? []);
+    this.segmentInfosCache.set(answerId, infos);
+    return infos;
+  }
+
+  /**
+   * 推荐阅读卡片元数据拉取（串行与去重在 LinkCardMetaLoader 内）：失败或非站内资源
+   * 静默跳过，卡片保持展示链接地址的回退形态。
+   */
+  private loadLinkCardMetas(blocks: Array<ReaderBlock>): void {
+    const loader = this.linkCardMetaLoader;
+    if (loader === undefined) {
+      return;
+    }
+    const urls: Array<string> = [];
+    blocks.forEach((block: ReaderBlock): void => {
+      if (block.kind === ReaderBlockKind.LINK_CARD && block.sourceUrl.length > 0 &&
+        !urls.includes(block.sourceUrl)) {
+        urls.push(block.sourceUrl);
+      }
+    });
+    if (urls.length > 0) {
+      loader.load(urls);
+    }
+  }
+
+  /** 元数据回填：更新状态并对引用该 url 的卡片行 delete+add 强制重建（惰性行不随状态重渲染）。 */
+  private applyLinkCardMeta(url: string, meta: LinkCardMeta): void {
+    const updated: Map<string, LinkCardMeta> = new Map();
+    this.linkCardMetas.forEach((existing: LinkCardMeta, key: string): void => {
+      updated.set(key, existing);
+    });
+    updated.set(url, meta);
+    this.linkCardMetas = updated;
+    const total = this.dataSource.totalCount();
+    for (let i = 0; i < total; i++) {
+      const row = this.dataSource.rowAt(i);
+      if (row.kind === ContinuousRowKind.BLOCK && row.block !== undefined &&
+        row.block.kind === ReaderBlockKind.LINK_CARD && row.block.sourceUrl === url) {
+        this.dataSource.replaceRowAt(row.key, row);
+      }
+    }
+  }
+
+  // ---------- 他人划线互动（对齐单篇详情页面板） ----------
+
+  private openSegmentSheet(answerId: string, paragraph: SegmentInfoParagraph, markIndex: number): void {
+    const mark = paragraph.marks[markIndex];
+    if (mark === undefined || effectiveSegmentMeta(mark) === undefined) {
+      return;
+    }
+    this.segmentSheetAnswerId = answerId;
+    this.segmentSheetPid = paragraph.pid;
+    this.segmentSheetMarkIndex = markIndex;
+    this.segmentSheetOpenedAt = Date.now();
+    this.segmentSheetInfos = this.segmentInfosOf(answerId);
+    this.segmentSheetShown = true;
+  }
+
+  /** 面板打开后极短时间内的关闭一律拦截：双击划线句的第二击会落在刚弹出的面板遮罩上。 */
+  private guardSegmentSheetDismiss(action: DismissSheetAction): void {
+    if (Date.now() - this.segmentSheetOpenedAt < 400) {
+      return;
+    }
+    action.dismiss();
+  }
+
+  private currentSegmentMeta(): SegmentInfoMeta | undefined {
+    const paragraph = this.segmentSheetInfos.find((p: SegmentInfoParagraph): boolean =>
+      p.pid === this.segmentSheetPid);
+    if (paragraph === undefined) {
+      return undefined;
+    }
+    const mark = paragraph.marks[this.segmentSheetMarkIndex];
+    return mark === undefined ? undefined : effectiveSegmentMeta(mark);
+  }
+
+  private currentSegmentQuote(): string {
+    const paragraph = this.segmentSheetInfos.find((p: SegmentInfoParagraph): boolean =>
+      p.pid === this.segmentSheetPid);
+    if (paragraph === undefined) {
+      return '';
+    }
+    const mark = paragraph.marks[this.segmentSheetMarkIndex];
+    if (mark === undefined) {
+      return '';
+    }
+    const start = Math.max(0, Math.min(paragraph.text.length, mark.startIndex));
+    const end = Math.max(0, Math.min(paragraph.text.length, mark.endIndex));
+    return end > start ? paragraph.text.substring(start, end) : '';
+  }
+
+  /** 乐观更新某条划线的元信息（点赞数/是否已赞）：同时刷新面板与缓存。 */
+  private applySegmentMeta(answerId: string, pid: string, markIndex: number, meta: SegmentInfoMeta): void {
+    const applyTo = (paragraphs: SegmentInfoParagraph[]): SegmentInfoParagraph[] => {
+      const next: Array<SegmentInfoParagraph> = [];
+      paragraphs.forEach((p: SegmentInfoParagraph): void => {
+        if (p.pid !== pid) {
+          next.push(p);
+          return;
         }
-        .fontSize(this.bodyFontFp())
-        .lineHeight(this.bodyLineHeightFp())
-        .copyOption(CopyOptions.LocalDevice)
-        .width('100%')
-      }
-    } else if (block.kind === ReaderBlockKind.LIST_ITEM) {
-      Text(`• ${block.text}`)
-        .fontSize(this.bodyFontFp())
-        .lineHeight(this.bodyLineHeightFp())
-        .fontColor($r('app.color.primary_text'))
-        .width('100%')
-    } else {
-      Text(block.text)
-        .id(`cont_block_${block.id}`)
-        .fontSize(this.bodyFontFp())
-        .lineHeight(this.bodyLineHeightFp())
-        .fontColor($r('app.color.primary_text'))
-        .width('100%')
+        const marks: Array<SegmentInfoMark> = [];
+        p.marks.forEach((m: SegmentInfoMark, index: number): void => {
+          if (index !== markIndex) {
+            marks.push(m);
+            return;
+          }
+          const updated: SegmentInfoMark = {
+            startIndex: m.startIndex,
+            endIndex: m.endIndex,
+            segInfo: m.segInfo !== undefined ? meta : m.segInfo,
+            masterSegInfo: m.masterSegInfo !== undefined ? meta : m.masterSegInfo
+          };
+          marks.push(updated);
+        });
+        next.push({ pid: p.pid, text: p.text, marks: marks });
+      });
+      return next;
+    };
+    const cached = this.segmentInfosCache.get(answerId);
+    if (cached !== undefined) {
+      this.segmentInfosCache.set(answerId, applyTo(cached));
+    }
+    if (this.segmentSheetAnswerId === answerId) {
+      this.segmentSheetInfos = applyTo(this.segmentSheetInfos);
     }
   }
 
-  @Builder
-  private videoCard(block: ReaderBlock) {
-    Stack({ alignContent: Alignment.Center }) {
-      if (block.sourceUrl.length > 0) {
-        Image(block.sourceUrl).width('100%').height(200).objectFit(ImageFit.Cover)
-      } else {
-        Row().width('100%').height(200).backgroundColor('#202124')
-      }
-      Button({ type: ButtonType.Circle, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.play_fill')).fontSize(30).fontColor([Color.White])
-      }
-      .width(56)
-      .height(56)
-      .padding(0)
-      .backgroundColor('#B3000000')
+  /**
+   * 切换划线点赞（乐观更新 + 真实请求，失败回滚）。结构约束（对齐单篇详情页）：
+   * busy 翻转与回滚必须无条件执行（finally）；失败分支里可能抛错的 toast 自带 try 兜底，
+   * 否则一次异常会让 busy 永久为 true，后续点赞全被守卫挡掉且毫无反馈。
+   */
+  private async onSegmentLike(): Promise<void> {
+    if (this.segmentLikeBusy || this.segmentReactionRepository === undefined ||
+      this.session === undefined || this.segmentSheetMarkIndex < 0) {
+      return;
     }
-    .id(`cont_video_${block.id}`)
-    .width('100%')
-    .height(200)
-    .borderRadius(12)
-    .clip(true)
-    .onClick((): void => {
-      if (block.targetId !== undefined && block.targetId.length > 0) {
-        this.navigate({ name: AppDestinationName.VIDEO, id: block.targetId });
+    const answerId = this.segmentSheetAnswerId;
+    const pid = this.segmentSheetPid;
+    const markIndex = this.segmentSheetMarkIndex;
+    const paragraph = this.segmentSheetInfos.find((p: SegmentInfoParagraph): boolean => p.pid === pid);
+    if (paragraph === undefined) {
+      return;
+    }
+    const mark = paragraph.marks[markIndex];
+    const before = mark === undefined ? undefined : effectiveSegmentMeta(mark);
+    if (before === undefined) {
+      return;
+    }
+    const optimistic: SegmentInfoMeta = {
+      segIds: before.segIds,
+      isLike: !before.isLike,
+      likeCount: before.isLike ? Math.max(0, before.likeCount - 1) : before.likeCount + 1,
+      commentCount: before.commentCount,
+      myCommentCount: before.myCommentCount,
+      isSpan: before.isSpan
+    };
+    this.segmentLikeBusy = true;
+    try {
+      this.applySegmentMeta(answerId, pid, markIndex, optimistic);
+      const result = await this.segmentReactionRepository
+        .toggleSegmentLike('answer', answerId, paragraph, markIndex);
+      this.applySegmentMeta(answerId, pid, markIndex, result);
+    } catch (_error) {
+      this.applySegmentMeta(answerId, pid, markIndex, before);
+      try {
+        this.toast('操作失败，请稍后重试');
+      } catch (_toastError) {
+        // toast 抛错不得吞掉回滚与 busy 释放（已先行完成）。
       }
-    })
+    } finally {
+      this.segmentLikeBusy = false;
+    }
   }
 
-  @Builder
-  private linkCard(block: ReaderBlock) {
-    Row({ space: 12 }) {
-      Column({ space: 6 }) {
-        Text(block.text)
-          .fontSize(this.bodyFontFp())
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.primary_text'))
-          .maxLines(2)
-          .width('100%')
-        Text(block.displayUrl ?? block.sourceUrl)
-          .fontSize(12)
-          .fontColor($r('app.color.secondary_text'))
-          .maxLines(1)
-          .width('100%')
-      }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
+  private openSegmentComments(): void {
+    const meta = this.currentSegmentMeta();
+    if (meta === undefined) {
+      return;
     }
-    .width('100%')
-    .padding(12)
-    .borderRadius(8)
-    .backgroundColor($r('app.color.surface_background'))
-    .borderWidth(1)
-    .borderColor($r('app.color.secondary_text'))
-    .onClick((): void => {
-      if (block.sourceUrl.length > 0) {
-        this.onContentLinkClick(block.sourceUrl);
-      }
-    })
+    const paragraph = this.segmentSheetInfos.find((p: SegmentInfoParagraph): boolean =>
+      p.pid === this.segmentSheetPid);
+    const mark = paragraph === undefined ? undefined : paragraph.marks[this.segmentSheetMarkIndex];
+    this.segmentSheetShown = false;
+    this.navigate({
+      name: AppDestinationName.COMMENT,
+      contentType: 'answer',
+      contentId: this.segmentSheetAnswerId,
+      segmentId: meta.segIds.join(','),
+      segmentContent: this.currentSegmentQuote(),
+      segmentParagraphId: this.segmentSheetPid,
+      segmentStartOffset: mark === undefined ? 0 : mark.startIndex,
+      segmentEndOffset: mark === undefined ? 0 : mark.endIndex
+    });
   }
 
-  @Builder
-  private referenceEntry(answerId: string, block: ReaderBlock) {
-    Row({ space: 8 }) {
-      Text(`[${block.reference?.numero ?? ''}]`)
-        .fontSize(this.bodyFontFp() * 0.85)
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.primary_text'))
-      SymbolGlyph($r('sys.symbol.arrowshape_turn_up_left'))
-        .fontSize(this.bodyFontFp() * 0.85)
-        .fontColor([this.resolvedThemeColor])
-        .onClick((): void => this.scrollBackToReference(answerId, block.reference?.numero ?? 0))
-        .accessibilityText('返回正文引用位置')
-      Column({ space: 4 }) {
-        if (block.text.length > 0) {
-          Text(block.text)
-            .fontSize(this.bodyFontFp() * 0.85)
-            .fontColor($r('app.color.primary_text'))
-            .width('100%')
-        }
-        if (block.reference !== undefined && block.reference.url.length > 0) {
-          Text(block.reference.url)
-            .fontSize(this.bodyFontFp() * 0.85)
-            .fontColor(this.resolvedThemeColor)
-            .wordBreak(WordBreak.BREAK_ALL)
-            .width('100%')
-            .onClick((): void => {
-              if (block.reference !== undefined) {
-                this.onContentLinkClick(block.reference.url);
-              }
-            })
-        }
-      }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
+  // ---------- 双击正文动作（对齐单篇详情页分发） ----------
+
+  private onBodyDoubleTapAction(answerId: string): void {
+    const action = this.answerDoubleTapAction;
+    if (action === AnswerDoubleTapAction.NONE) {
+      return;
     }
-    .alignItems(VerticalAlign.Top)
-    .width('100%')
+    if (action === AnswerDoubleTapAction.OPEN_COMMENTS) {
+      performConfirmHaptic();
+      this.confirmAnswerRead(answerId);
+      this.navigate({ name: AppDestinationName.COMMENT, contentType: 'answer', contentId: answerId });
+      return;
+    }
+    if (action === AnswerDoubleTapAction.TOGGLE_IMMERSIVE) {
+      AppStorage.setOrCreate('detailImmersiveActive', !this.detailImmersiveActive);
+      return;
+    }
+    if (action === AnswerDoubleTapAction.VOTE_UP) {
+      performConfirmHaptic();
+      // 对齐上游 voteUpFromDoubleTap：已赞保持原状，不因双击取消点赞。
+      if (this.voteSnapshot(answerId).voteState !== ContentVoteState.UP) {
+        this.vote(answerId, ContentVoteState.UP);
+      }
+      return;
+    }
+    this.doubleTapAskAnswerId = answerId;
+    this.doubleTapAskSheetShown = true;
   }
 
-  private inlineHasFormula(block: ReaderBlock): boolean {
-    return block.inlineRuns.some((run: ReaderInlineRun): boolean => run.kind === ReaderInlineKind.FORMULA);
+  /** 保存双击动作（询问面板选择）：先广播 AppStorage 再落盘，与单篇详情页同键。 */
+  private saveDoubleTapAction(action: AnswerDoubleTapAction): void {
+    AppStorage.setOrCreate('answerDoubleTapAction', action);
+    const context = getAbilityContext();
+    if (context !== undefined) {
+      void new AppPreferencesStore(context).saveAnswerDoubleTapAction(action).catch((_error: Error): void => {
+      });
+    }
   }
 
   private scrollToReference(answerId: string, numero: number): void {
@@ -1620,35 +1952,6 @@ export struct ContinuousAnswerPage {
         this.scroller.scrollToIndex(index, true, ScrollAlign.START);
       }
     }
-  }
-
-  /** 样式化 Span 序列（复用 ContentAnnotations 的展平逻辑，链接/参考标记可点）。
-   * 他人划线叠加是 P4 范围，这里传空 segments；Span 才支持 textBackgroundStyle。 */
-  @Builder
-  private styledSpanChildren(answerId: string, block: ReaderBlock) {
-    ForEach(flattenStyledTextSegments(block.inlineRuns, block.text, []),
-      (seg: StyledTextSegment, index: number) => {
-        Span(seg.text)
-          .fontSize(seg.superscript || seg.subscript ? this.bodyFontFp() * 0.75 : this.bodyFontFp())
-          .fontWeight(seg.bold ? FontWeight.Bold : FontWeight.Normal)
-          .fontStyle(seg.italic ? FontStyle.Italic : FontStyle.Normal)
-          .fontFamily(seg.code ? 'monospace' : 'HarmonyOS Sans')
-          .fontColor(seg.linkUrl.length > 0 || seg.referenceNumero !== undefined
-            ? this.resolvedThemeColor : $r('app.color.primary_text'))
-          .textBackgroundStyle(seg.code
-            ? { color: '#14808080', radius: 3 }
-            : { color: Color.Transparent, radius: 0 })
-          .baselineOffset(LengthMetrics.vp(seg.superscript ? this.bodyFontFp() * 0.35 : 0))
-          .onClick((): void => {
-            if (seg.linkUrl.length > 0) {
-              this.onContentLinkClick(seg.linkUrl);
-              return;
-            }
-            if (seg.referenceNumero !== undefined && seg.referenceNumero > 0) {
-              this.scrollToReference(answerId, seg.referenceNumero);
-            }
-          })
-      }, (seg: StyledTextSegment, index: number): string => `${index}:${seg.text}`)
   }
 
   @Builder

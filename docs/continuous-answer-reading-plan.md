@@ -2,7 +2,7 @@
 
 制定日期：2026-10-24。源码核对基线：`1b572364`。
 
-状态：**P0 原型、P2 数据状态层、P3 页面与入口、P4 第一组（阅读历史 + 跨模式段落锚点交接）与第二组（排序继承/沉浸阅读/离页调度）已完成（记录见 §8-§10，真实数据验证通过），P1 正式渲染单元抽离与 P4 其余项（朗读/沉浸/划线/重过滤）、P5 完整验收待实施。本次用户已确认范围为**同一问题的回答连续阅读**。保留现有详情页，增加一种可选择的阅读方式；参考图用于确定交互结构，视觉继续使用项目的主题、排版和鸿蒙组件。
+状态：**P0 原型、P1 正式渲染单元抽离、P2 数据状态层、P3 页面与入口、P4 第一组（阅读历史 + 跨模式段落锚点交接）与第二组（排序继承/沉浸阅读/离页调度）已完成（记录见 §8-§11，真实数据验证通过），P4 其余项（朗读/重过滤/顶部让位联动）与 P5 完整验收待实施。本次用户已确认范围为**同一问题的回答连续阅读**。保留现有详情页，增加一种可选择的阅读方式；参考图用于确定交互结构，视觉继续使用项目的主题、排版和鸿蒙组件。
 
 ## 1. 目标与范围
 
@@ -320,3 +320,38 @@ pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall
 - **沉浸阅读**（§5）：逐答更多菜单新增「沉浸阅读」，复用全局 `detailImmersiveActive`/`detailImmersiveExitTick` 广播；AppShell 连续页分支隐藏顶栏 + 返回键先退沉浸，页面顶部让位在 116vp（非沉浸）/56vp（沉浸）间切换，进出页面强制复位沉浸态避免污染其他页面。
 - **离页调度暂停**（§4.4）：AppShell onShown/onHidden 广播 `continuousAnswerRouteVisible`，页面 @Watch 联动 scheduler 与分页控制器的 activate/deactivate（离页停止预取与分页、暂停停留计时，回页恢复）。
 - 验证：Hypium 913/913；模拟器实测沉浸开关（截图 `.tmp/shots/imm.jpeg`：顶栏隐藏、正文上移、跨答边界照常）与返回键退出沉浸（标题栏恢复）；排序继承的控制器路径复用既有 `QuestionAnswerFeed` 测试面。
+
+## 11. P1 实施记录（2026-10-24）
+
+批次状态：**P1 完成**（正式渲染单元抽离 + 连续页完整保真度接入）。实现位于 5800 工作树（基于 `e52fc617`），未提交。
+
+### 11.1 交付物
+
+- **`entry/src/main/ets/pages/ReaderBlockView.ets`（新）**：共享正文块渲染单元。从 `NativeContentDocument.ets` 迁出 `ContentInlineFormula`/`ContentBlockFormula`/`formulaDecodeDensity`，新增：
+  - `ReaderBlockView` 组件——引用缩进与左边框、段前留白（`readerBlockLeadingSpace`）、样式化 Span × 他人划线虚线叠加与点击、双击识别（`DoubleTapDetector`）与双击后 800ms 选词抑制窗口、选区状态转发、链接卡片元数据行（回退展示链接地址）、公式主题/字号 tick 翻转分支强制重建、参考条目 ↩、视频卡片、图片 caption 字号/行距/间距排版；
+  - `LinkCardMetaLoader` 类——卡片元数据串行拉取（ZhihuHttpClient 单飞约束）+ URL 去重（含在途）+ dispose 丢弃排队与迟到回包。
+  - 宿主回调显式绑定事件来源（`onLinkClick`/`onReferenceClick`/`onReferenceBack`/`onVideoOpen`/`onSegmentClick`/`onBodyDoubleTap`/`onBodySelectionActive`），滚动定位与导航由宿主实现。
+- **`NativeContentDocument.ets` 瘦身（2155→1093 行）**：`readerBlock` 委托 `ReaderBlockView`；卡片元数据改用 `LinkCardMetaLoader`，回填时递增对应 url 的行键版本（`blockRowKey`）强制仅重建该卡片行；排版/主题变化仍走 `renderRevision` 整体重建（行为不变）；阅读进度/翻页/折叠视口/边界信号不动。
+- **`ContinuousAnswerPage.ets` 补齐保真度**：删除简化渲染路径（`blockContent`/`videoCard`/`linkCard`/`referenceEntry`/`styledSpanChildren`），正文块全部经 `ReaderBlockView` 渲染：
+  - 他人划线：逐答 `mergeSameRangeMarks(answer.segmentInfos)` 懒加载缓存（淘汰即作废），叠加渲染 + 点击弹出划线面板（引用文本 + 点赞乐观更新/失败回滚（连续页专属 `SegmentReactionRepository` 实例）+ 划线评论跳转（复用 COMMENT 路由 segment 参数）+ 复制），400ms 误触拦截对齐单篇；
+  - 双击动作：aboutToAppear 恢复偏好并广播 `answerDoubleTapAction`（与单篇同键），分发 NONE/打开评论区/切换沉浸式/点赞（已赞不取消，对齐上游 `voteUpFromDoubleTap`）/ASK（连续页自带询问面板，选择后保存并立即执行）；
+  - 卡片元数据：连续页专属 `LinkCardMetaRepository` 实例串行拉取，回填后对引用该 url 的卡片行 `replaceRowAt`（delete+add）强制重建（P0 结论：按值传参的惰性行不随状态重渲染）；
+  - 排版保真：标题 styled runs、引用缩进/边框、图片 caption、公式 tick 重建——原简化路径缺失项全部对齐单篇。
+- **`ContentAnnotations.ets`**：`mergeSameRangeMarks` 从 `ContentDetailPages` 迁入并导出（连续页复用）。
+- **`Index.ets`**：连续页注入专属 `continuousSegmentReactionRepository`/`continuousLinkCardMetaRepository`（独立 ZhihuHttpClient，避免与详情页单飞互斥）。
+- **测试**：`LinkCardMetaLoader.test.ets` 5 用例（串行顺序、URL 去重、失败续行、dispose 丢弃、非站内 undefined 跳过）；`SegmentHighlight.test.ets` 新增 `mergeSameRangeMarks` 4 用例（单 mark 不变、同区间 master 优先并集、异区间隔离排序、跨段落独立）。Hypium 全量 **922/922 通过**（913→922）。
+
+### 11.2 验证
+
+- `verify-harmony.ps1 -SkipDependencyInstall`（API 26 编译 + Hypium 922/922）与完整构建（assembleHap + 签名）均通过。
+- API 23 模拟器（127.0.0.1:5555，已登录）冒烟：
+  - 单篇回答详情经共享组件渲染正常（作者头/赞同·评论数/标题/列表项/段落）；
+  - 单篇更多菜单「切换到连续阅读」：正文样式化渲染正常，跨答边界同屏（第一篇日期行 + 逐答操作栏 + 分隔带 + 第二篇信息头 3597·374 条评论 + 正文开头，截图 `.tmp/shots/p1_boundary.jpeg`）；
+  - 连续页双击正文弹出「设置双击正文动作」询问面板（双击识别经 `ReaderBlockView` 生效），Back 收起；
+  - 逐答更多菜单「切换到单篇阅读」→ 单篇页正常渲染（模式往返回归通过）。
+- 未真机验证（代码路径与单篇共用、逻辑由单测覆盖）：他人划线叠加与面板（需带划线的回答）、卡片元数据回填（需带推荐阅读卡片的回答）、公式渲染（需公式回答；公式组件代码未改，仅实例化宿主由文档组件换为块组件）。
+
+### 11.3 与计划的偏差
+
+- §9.3-1 的渲染保真度缺口（他人划线叠加、双击动作、选区手势挂起通道、链接卡片元数据回填与划线互动）已全部补齐，无新增偏差。
+- P4 剩余：朗读、已加载正文的屏蔽重过滤、顶部让位 `contentStartOffset` 联动；上述三项真机补验可随 P5 一并进行。

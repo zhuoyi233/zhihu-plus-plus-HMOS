@@ -15,7 +15,7 @@ import {
   ReaderInlineRun,
   readerDocumentStats
 } from 'reader';
-import { formulaDecodeDensity } from './NativeContentDocument';
+import { formulaDecodeDensity } from './ReaderBlockView';
 
 @Component
 struct ReaderInlineFormulaBlock {
