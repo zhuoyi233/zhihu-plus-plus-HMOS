@@ -29,12 +29,18 @@ import {
   AppPageStatusPanel,
   FeedLoadMoreIndicator,
   FeedPullDownIndicatorHost,
-  floatingTitleBarOffset
+  floatingTitleBarOffset,
+  PULL_REFRESH_PULL_DOWN_RATIO,
+  PULL_REFRESH_TRIGGER_OFFSET_VP,
+  pullDownRefreshPlaceholder
 } from './AppPageChrome';
 import { HomeFeedController, HomeFeedPhase, HomeFeedViewState } from './HomeFeedState';
 import { HomeFeedMenuAction, HomeFeedMenuItem, homeFeedMenuItems, resolveHomeFeedBlockUser, resolveHomeFeedTopics } from './HomeFeedMenuState';
 import { HOME_FEED_SCROLL_KEY, topLevelScrollRegistry } from './TopLevelScrollRegistry';
 import { DraggableRefreshButton } from './components/DraggableRefreshButton';
+
+/** 下拉头回弹/收起后的静默窗口（ms）：期间再往下滑不触发刷新。 */
+const REFRESH_SETTLE_QUIET_MS: number = 500;
 
 @Component
 export struct HomeFeedPage {
@@ -98,9 +104,13 @@ export struct HomeFeedPage {
   // 状态栏高度（vp）晚于首帧到达时重算首屏让位（让位 = 状态栏 + 顶栏 56vp）
   @StorageProp('statusBarHeightVp') @Watch('rebuildFlowLayout') private statusBarHeightVp: number = 0;
   @State private flowSections: WaterFlowSections = new WaterFlowSections();
-  @State private flowLayout: FeedFlowLayout = buildFeedFlowLayout([], [], 1, 0, false, 0, floatingTitleBarOffset());
+  @State private flowLayout: FeedFlowLayout = buildFeedFlowLayout([], [], 1, 1, false, 0);
   private firstVisibleIndex: number = 0;
   private feedHeightVp: number = 0;
+  /** 本次手势按下时列表是否已在顶部：只有顶部起手才算有意下拉刷新。 */
+  private pullGestureFromTop: boolean = true;
+  /** 下拉头最近一次回弹/收起的时刻：此后的短静默期内不响应下拉刷新。 */
+  private lastRefreshSettleTime: number = 0;
 
   aboutToAppear(): void {
     // 登记给根 HdsNavigation 做 bindToScrollable：驱动标题栏滚动模糊。
@@ -173,12 +183,11 @@ export struct HomeFeedPage {
     if (this.tabScrollTopTabIndex !== 0) {
       return;
     }
-    if (this.firstVisibleIndex > 0) {
-      this.firstVisibleIndex = 0;
-      this.listScroller.scrollToIndex(0, true, ScrollAlign.START);
-    } else {
-      this.controller?.refresh();
-    }
+    // 单击只回到顶部，不再在顶部时刷新：刷新改为连续点击两次页签触发（双击路径）。
+    // 必须滚到内容起点（offset 0）而不是 scrollToIndex(0)：首个瀑布流分组带标题栏让位边距，
+    // 按下标对齐会把首行卡片顶到屏幕最上沿、盖住标题栏与下拉刷新圆圈。
+    this.firstVisibleIndex = 0;
+    this.listScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: true });
   }
 
   build() {
@@ -193,12 +202,20 @@ export struct HomeFeedPage {
         } else {
           Refresh({
             refreshing: this.refreshing,
-            refreshingContent: this.indicator?.view(),
-            offset: 80,
-            friction: 100
+            builder: pullDownRefreshPlaceholder,
+            refreshingContent: this.indicator?.view()
           }) {
             WaterFlow({ scroller: this.listScroller, sections: this.flowSections,
               layoutMode: WaterFlowLayoutMode.SLIDING_WINDOW }) {
+              // 顶部让位条目：高度 = 悬浮标题栏下沿。让位必须是真实条目而非分组 margin，
+              // 系统「点状态栏回顶」等按条目对齐的方式只把第 0 个条目贴到容器顶部。
+              FlowItem() {
+                Row()
+                  .width('100%')
+                  .height(floatingTitleBarOffset())
+              }
+              .width('100%')
+
               if (this.errorMessage.length > 0) {
                 FlowItem() {
                   Row({ space: $r('app.float.spacing_small') }) {
@@ -257,6 +274,13 @@ export struct HomeFeedPage {
                 AppStorage.setOrCreate('bottomBarHiddenByScroll', offset > 0);
               }
             })
+            // 记录手势起手时是否在顶部：从列表中间回滑到顶部后继续下拉的过冲
+            // 也会被 Refresh 判成下拉刷新，需要据此区分。
+            .onTouch((event: TouchEvent): void => {
+              if (event.type === TouchType.Down) {
+                this.pullGestureFromTop = this.listScroller.currentOffset().yOffset <= 1;
+              }
+            })
             .scrollBar(BarState.Off)
             .height('100%')
             .edgeEffect(EdgeEffect.Spring)
@@ -270,8 +294,35 @@ export struct HomeFeedPage {
           .id('home_pull_refresh')
           .width('100%')
           .layoutWeight(1)
-          .onRefreshing(() => this.controller?.refresh())
-          .onStateChange((status: RefreshStatus): void => this.indicator?.onStateChange(status))
+          // 官方属性（offset/friction 已于 API 11 废弃）：把刷新阈值抬到明显高于普通回弹，
+          // 普通下拉只回弹、不刷新；需要下拉约半屏高才触发。
+          .refreshOffset(PULL_REFRESH_TRIGGER_OFFSET_VP)
+          .pullDownRatio(PULL_REFRESH_PULL_DOWN_RATIO)
+          .onRefreshing(() => {
+            // 程序化刷新（双击页签/登录重载）把 refreshing 置 true 时也会回调本事件：
+            // 此时控制器已在刷新，再调 refresh() 会排队一次重复请求（表现为刷新两轮）。
+            if (this.refreshing) {
+              return;
+            }
+            // 回弹/下拉头收起后的短时间内不响应下拉：拉到顶回弹时再往下滑不应触发刷新。
+            if (Date.now() - this.lastRefreshSettleTime <= REFRESH_SETTLE_QUIET_MS) {
+              this.suppressPullRefresh();
+              return;
+            }
+            // 非顶部起手（回滑到顶后继续下拉的过冲）同样不刷新。
+            if (!this.pullGestureFromTop) {
+              this.suppressPullRefresh();
+              return;
+            }
+            this.controller?.refresh();
+          })
+          .onStateChange((status: RefreshStatus): void => {
+            this.indicator?.onStateChange(status);
+            // 下拉头回到 Inactive、或一次刷新收尾（Done）都算“回弹/收起”，记录时刻用于静默。
+            if (status === RefreshStatus.Inactive || status === RefreshStatus.Done) {
+              this.lastRefreshSettleTime = Date.now();
+            }
+          })
         }
 
         if (this.blockingMessage.length > 0) {
@@ -773,14 +824,23 @@ export struct HomeFeedPage {
 
   private rebuildFlowLayout(): void {
     const columns: number = this.feedWidthVp >= FEED_TWO_COLUMN_MIN_WIDTH ? 2 : 1;
-    const leading: number = (this.errorMessage.length > 0 ? 1 : 0) +
+    // +1：首个 FlowItem 是标题栏让位条目（高度 = 悬浮顶栏下沿）。
+    const leading: number = 1 + (this.errorMessage.length > 0 ? 1 : 0) +
       (isUpdateAnnouncementVisible(this.pendingUpdateVersion, this.dismissedUpdateVersion) ? 1 : 0);
     const gap: number = this.usesCardSurface() ? this.getUIContext().px2vp(this.getUIContext().getHostContext()!.resourceManager.getNumber($r('app.float.spacing_medium').id)) : 0;
     this.flowLayout = buildFeedFlowLayout(
       this.items.map((item: FeedItem): string => feedItemIdentity(item)),
       [],
-      columns, leading, this.loadingMore, gap, floatingTitleBarOffset());
+      columns, leading, this.loadingMore, gap);
     this.flowSections.splice(0, this.flowSections.length(), this.flowLayout.sections);
+  }
+
+  /** 忽略本次下拉：Refresh 已自行进入刷新态，短暂置 true 再复位让它收起，不发起请求。 */
+  private suppressPullRefresh(): void {
+    this.refreshing = true;
+    setTimeout((): void => {
+      this.refreshing = false;
+    }, 80);
   }
 
   private applyState(state: HomeFeedViewState): void {

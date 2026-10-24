@@ -33,6 +33,10 @@
       "value": "#B3FFFFFF"
     },
     {
+      "name": "root_chrome_glass_background",
+      "value": "#99FFFFFF"
+    },
+    {
       "name": "card_background",
       "value": "#FFFFFF"
     },

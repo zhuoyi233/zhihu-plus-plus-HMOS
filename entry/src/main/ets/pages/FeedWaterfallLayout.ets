@@ -24,7 +24,7 @@ export interface FeedFlowLayout {
 
 /** Full-width chrome and date headings are separate one-column sections. */
 export function buildFeedFlowLayout(keys: Array<string>, dates: Array<string>, columns: number,
-  leadingCount: number, loadingMore: boolean, gap: number, topOffset: number): FeedFlowLayout {
+  leadingCount: number, loadingMore: boolean, gap: number): FeedFlowLayout {
   const entries: Array<FeedFlowEntry> = [];
   const groups: Array<SectionOptions> = [];
   if (leadingCount > 0) {
@@ -51,7 +51,10 @@ export function buildFeedFlowLayout(keys: Array<string>, dates: Array<string>, c
     groups.push({ itemsCount: 1, crossCount: 1 });
   }
   for (let index = 0; index < groups.length; index += 1) {
-    groups[index].margin = { top: index === 0 ? topOffset : gap };
+    // 首组不加顶部 margin：顶部让位改由真实的让位条目（第 0 个 FlowItem）承担，
+    // 否则「按条目对齐」的回顶实现（系统点状态栏回顶、scrollToIndex）会跳过 margin，
+    // 把首行卡片顶到屏幕最上沿、盖住标题栏。
+    groups[index].margin = { top: index === 0 ? 0 : gap };
   }
   return { entries: entries, sections: groups, leadingCount: leadingCount };
 }

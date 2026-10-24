@@ -32,7 +32,10 @@ import {
   AppPageStatusPanel,
   FeedLoadMoreIndicator,
   FeedPullDownIndicatorHost,
-  floatingTitleBarOffset
+  floatingTitleBarOffset,
+  PULL_REFRESH_PULL_DOWN_RATIO,
+  PULL_REFRESH_TRIGGER_OFFSET_VP,
+  pullDownRefreshPlaceholder
 } from './AppPageChrome';
 import {
   ChannelFeedController,
@@ -45,6 +48,11 @@ import { dailyStoryDetailErrorMessage } from './DailyStoryDetailState';
 import { dailyFeedDateAtIndex, formatDailyDate } from './DailyFeedDates';
 import { DraggableRefreshButton } from './components/DraggableRefreshButton';
 import { topLevelScrollRegistry } from './TopLevelScrollRegistry';
+import { getAbilityContext } from '../entryability/AbilityContextHolder';
+import { Want } from '@kit.AbilityKit';
+
+/** 下拉头回弹/收起后的静默窗口（ms）：期间再往下滑不触发刷新。 */
+const REFRESH_SETTLE_QUIET_MS: number = 500;
 
 @Component
 export struct ChannelFeedPage {
@@ -99,6 +107,8 @@ export struct ChannelFeedPage {
   @State private blockingBusy: boolean = false;
   @State private dailyStoryOpening: boolean = false;
   @State private dailyStoryOpenError: string = '';
+  /** 无法原生阅读时的日报原文地址：有值时错误弹窗提供“用浏览器打开”。 */
+  @State private dailyStoryOpenUrl: string = '';
   private controller?: ChannelFeedController;
   private blockingAction?: BlockingActionController;
   private pendingBlockItem?: ChannelContentItem = undefined;
@@ -107,10 +117,14 @@ export struct ChannelFeedPage {
   // 状态栏高度（vp）晚于首帧到达时重算首屏让位（让位 = 状态栏 + 顶栏 56vp）
   @StorageProp('statusBarHeightVp') @Watch('rebuildFlowLayout') private statusBarHeightVp: number = 0;
   @State private flowSections: WaterFlowSections = new WaterFlowSections();
-  @State private flowLayout: FeedFlowLayout = buildFeedFlowLayout([], [], 1, 0, false, 0, floatingTitleBarOffset());
+  @State private flowLayout: FeedFlowLayout = buildFeedFlowLayout([], [], 1, 1, false, 0);
   private firstVisibleIndex: number = 0;
   private handledDateSelectionTick: number = 0;
   private pageActive: boolean = false;
+  /** 本次手势按下时列表是否已在顶部：只有顶部起手才算有意下拉刷新。 */
+  private pullGestureFromTop: boolean = true;
+  /** 下拉头最近一次回弹/收起的时刻：此后的短静默期内不响应下拉刷新。 */
+  private lastRefreshSettleTime: number = 0;
 
   aboutToAppear(): void {
     this.pageActive = true;
@@ -211,12 +225,11 @@ export struct ChannelFeedPage {
     if (this.tabScrollTopTabIndex !== this.tabIndexOfSource()) {
       return;
     }
-    if (this.firstVisibleIndex > 0) {
-      this.firstVisibleIndex = 0;
-      this.listScroller.scrollToIndex(0, true, ScrollAlign.START);
-    } else {
-      this.controller?.refresh();
-    }
+    // 单击只回到顶部，不再在顶部时刷新：刷新改为连续点击两次页签触发（双击路径）。
+    // 必须滚到内容起点（offset 0）而不是 scrollToIndex(0)：首个瀑布流分组带标题栏让位边距，
+    // 按下标对齐会把首行卡片顶到屏幕最上沿、盖住标题栏与下拉刷新圆圈。
+    this.firstVisibleIndex = 0;
+    this.listScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: true });
   }
 
   private onLoginFeedReloadTick(): void {
@@ -243,12 +256,20 @@ export struct ChannelFeedPage {
       } else {
         Refresh({
           refreshing: this.refreshing,
-          refreshingContent: this.indicator?.view(),
-          offset: 80,
-          friction: 100
+          builder: pullDownRefreshPlaceholder,
+          refreshingContent: this.indicator?.view()
         }) {
           WaterFlow({ scroller: this.listScroller, sections: this.flowSections,
               layoutMode: WaterFlowLayoutMode.SLIDING_WINDOW }) {
+            // 顶部让位条目：高度 = 悬浮标题栏下沿。让位必须是真实条目而非分组 margin，
+            // 系统「点状态栏回顶」等按条目对齐的方式只把第 0 个条目贴到容器顶部。
+            FlowItem() {
+              Row()
+                .width('100%')
+                .height(floatingTitleBarOffset())
+            }
+            .width('100%')
+
             if (this.errorMessage.length > 0) {
               FlowItem() {
                 Row({ space: $r('app.float.spacing_small') }) {
@@ -310,6 +331,13 @@ export struct ChannelFeedPage {
                 AppStorage.setOrCreate('bottomBarHiddenByScroll', offset > 0);
               }
             })
+            // 记录手势起手时是否在顶部：从列表中间回滑到顶部后继续下拉的过冲
+            // 也会被 Refresh 判成下拉刷新，需要据此区分。
+            .onTouch((event: TouchEvent): void => {
+              if (event.type === TouchType.Down) {
+                this.pullGestureFromTop = this.listScroller.currentOffset().yOffset <= 1;
+              }
+            })
             .scrollBar(BarState.Off)
             // 容器挂到组件后再登记一次：aboutToAppear 时 Scroller 还没挂上组件，
             // 根标题栏绑定它拿不到偏移，必须等挂载后才能建立订阅。
@@ -331,10 +359,35 @@ export struct ChannelFeedPage {
         }
         .width('100%')
         .layoutWeight(1)
+        // 官方属性（offset/friction 已于 API 11 废弃）：把刷新阈值抬到明显高于普通回弹，
+        // 普通下拉只回弹、不刷新；需要下拉约半屏高才触发。
+        .refreshOffset(PULL_REFRESH_TRIGGER_OFFSET_VP)
+        .pullDownRatio(PULL_REFRESH_PULL_DOWN_RATIO)
         .onRefreshing((): void => {
+          // 程序化刷新（双击页签/热榜按钮）把 refreshing 置 true 时也会回调本事件：
+          // 此时控制器已在刷新，再调 refresh() 会排队一次重复请求（表现为刷新两轮）。
+          if (this.refreshing) {
+            return;
+          }
+          // 回弹/下拉头收起后的短时间内不响应下拉：拉到顶回弹时再往下滑不应触发刷新。
+          if (Date.now() - this.lastRefreshSettleTime <= REFRESH_SETTLE_QUIET_MS) {
+            this.suppressPullRefresh();
+            return;
+          }
+          // 非顶部起手（回滑到顶后继续下拉的过冲）同样不刷新。
+          if (!this.pullGestureFromTop) {
+            this.suppressPullRefresh();
+            return;
+          }
           this.controller?.refresh();
         })
-        .onStateChange((status: RefreshStatus): void => this.indicator?.onStateChange(status))
+        .onStateChange((status: RefreshStatus): void => {
+          this.indicator?.onStateChange(status);
+          // 下拉头回到 Inactive、或一次刷新收尾（Done）都算“回弹/收起”，记录时刻用于静默。
+          if (status === RefreshStatus.Inactive || status === RefreshStatus.Done) {
+            this.lastRefreshSettleTime = Date.now();
+          }
+        })
       }
 
       if (this.blockingMessage.length > 0) {
@@ -380,22 +433,26 @@ export struct ChannelFeedPage {
         })
       }
 
-      // 打开日报正文时的全屏进度遮罩（无中间跳转页，给触达反馈）。
+      // 打开日报正文时的加载提示：只显示刷新圆圈，不压暗整页（避免点击瞬间整屏发黑）。
       if (this.dailyStoryOpening) {
-        Column({ space: 12 }) {
-          LoadingProgress()
-            .width(40)
-            .height(40)
-            .color(this.resolvedThemeColor)
-          Text('正在打开日报原文…')
-            .id(`channel_${this.source}_daily_opening`)
-            .fontSize($r('app.float.body_font_size'))
-            .fontColor($r('app.color.primary_text'))
+        Column() {
+          Column({ space: $r('app.float.spacing_small') }) {
+            LoadingProgress()
+              .width(32)
+              .height(32)
+              .color(this.resolvedThemeColor)
+            Text('正在打开日报原文…')
+              .id(`channel_${this.source}_daily_opening`)
+              .fontSize($r('app.float.secondary_font_size'))
+              .fontColor($r('app.color.secondary_text'))
+          }
+          .padding($r('app.float.card_padding'))
+          .borderRadius($r('app.float.card_radius'))
+          .backgroundColor($r('app.color.surface_background'))
         }
         .width('100%')
         .height('100%')
         .justifyContent(FlexAlign.Center)
-        .backgroundColor('#66000000')
       }
 
       // 打开失败提示。
@@ -409,14 +466,33 @@ export struct ChannelFeedPage {
               .fontSize($r('app.float.secondary_font_size'))
               .fontColor($r('app.color.secondary_text'))
               .textAlign(TextAlign.Center)
-            Button('确定')
-              .backgroundColor(this.resolvedThemeColor)
-              .fontColor(onThemeColor(this.resolvedThemeColor))
-              .id(`channel_${this.source}_daily_open_error_ok`)
-              .width('100%')
-              .onClick((): void => {
-                this.dailyStoryOpenError = '';
-              })
+            if (this.dailyStoryOpenUrl.length > 0) {
+              Button('用浏览器打开')
+                .backgroundColor(this.resolvedThemeColor)
+                .fontColor(onThemeColor(this.resolvedThemeColor))
+                .id(`channel_${this.source}_daily_open_browser`)
+                .width('100%')
+                .onClick((): void => {
+                  this.openDailyStoryInBrowser();
+                })
+              Button('取消')
+                .backgroundColor($r('app.color.surface_background'))
+                .fontColor($r('app.color.primary_text'))
+                .id(`channel_${this.source}_daily_open_cancel`)
+                .width('100%')
+                .onClick((): void => {
+                  this.dismissDailyStoryOpenError();
+                })
+            } else {
+              Button('确定')
+                .backgroundColor(this.resolvedThemeColor)
+                .fontColor(onThemeColor(this.resolvedThemeColor))
+                .id(`channel_${this.source}_daily_open_error_ok`)
+                .width('100%')
+                .onClick((): void => {
+                  this.dismissDailyStoryOpenError();
+                })
+            }
           }
           .width('80%')
           .padding($r('app.float.card_padding'))
@@ -494,7 +570,13 @@ export struct ChannelFeedPage {
           .accessibilityText('屏蔽作者或关键词')
         }
         .width('100%')
-        FeedContentSummary({ target: item.feedItem.target, showStatistics: this.source !== ChannelFeedSource.HOT })
+        // 热榜条目是问题（接口只给 question，无作者）：不渲染作者行，避免「空头像 + 知乎用户」；
+        // 统计改由 HotQuestionStatistics 呈现热度/回答/关注（对齐安卓上游问题卡的详情行）。
+        FeedContentSummary({
+          target: item.feedItem.target,
+          showStatistics: this.source !== ChannelFeedSource.HOT,
+          showAuthor: this.source !== ChannelFeedSource.HOT
+        })
         if (this.showFeedThumbnail && (item.feedItem.target.thumbnailUrl ?? '').length > 0) {
           Image(item.feedItem.target.thumbnailUrl)
             .width('100%')
@@ -595,15 +677,17 @@ export struct ChannelFeedPage {
     })
     .accessibilityText(`知乎日报：${item.story.title}`)
     .onClick((): void => {
-      this.openDailyStory(item.story.id);
+      this.openDailyStory(item.story.id, item.story.url);
     })
   }
 
   /**
    * 直接打开日报正文：先取目标（问题/回答/文章）再一步导航，避免经过
    * DailyStoryDetailPage 中间跳转页（用户看到“多了一个页面”）。
+   * 知乎部分日报（如「瞎扯」合集）的 originUrl 是 question/None/answer/None，
+   * 没有单一原生正文可跳，此时改为提供浏览器打开原文。
    */
-  private async openDailyStory(storyId: string): Promise<void> {
+  private async openDailyStory(storyId: string, storyUrl: string): Promise<void> {
     const repository = this.dailyStoryRepository;
     if (repository === undefined) {
       this.navigate({ name: AppDestinationName.DAILY_STORY, id: storyId });
@@ -614,18 +698,41 @@ export struct ChannelFeedPage {
     }
     this.dailyStoryOpening = true;
     this.dailyStoryOpenError = '';
+    this.dailyStoryOpenUrl = '';
+    let unsupportedUrl: string = '';
     try {
       const destination: AppDestination | undefined = await repository.getDestination(storyId);
       if (destination !== undefined) {
         this.navigate(destination);
       } else {
-        this.dailyStoryOpenError = '该日报暂不支持原生阅读';
+        unsupportedUrl = storyUrl.length > 0 ? storyUrl : `https://daily.zhihu.com/story/${storyId}`;
+        this.dailyStoryOpenError = '该日报暂不支持原生阅读，可在浏览器中查看原文';
       }
     } catch (error) {
       this.dailyStoryOpenError = dailyStoryDetailErrorMessage(error);
     } finally {
       this.dailyStoryOpening = false;
+      this.dailyStoryOpenUrl = unsupportedUrl;
     }
+  }
+
+  private dismissDailyStoryOpenError(): void {
+    this.dailyStoryOpenError = '';
+    this.dailyStoryOpenUrl = '';
+  }
+
+  /** 用系统浏览器打开日报原文（对齐上游「由于知乎的 Bug，无法找到原文」的兜底）。 */
+  private openDailyStoryInBrowser(): void {
+    const url = this.dailyStoryOpenUrl;
+    const context = getAbilityContext();
+    this.dismissDailyStoryOpenError();
+    if (context === undefined || url.length === 0) {
+      return;
+    }
+    const want: Want = { action: 'ohos.want.action.viewData', uri: url };
+    context.startAbility(want).catch((_error: Error): void => {
+      this.getUIContext().getPromptAction().showToast({ message: '暂时无法打开浏览器' });
+    });
   }
 
   private contentBlockMenu(item: ChannelContentItem): Array<MenuElement> {
@@ -782,14 +889,23 @@ export struct ChannelFeedPage {
 
   private rebuildFlowLayout(): void {
     const columns: number = this.feedWidthVp >= FEED_TWO_COLUMN_MIN_WIDTH ? 2 : 1;
-    const leading: number = (this.errorMessage.length > 0 ? 1 : 0) +
+    // +1：首个 FlowItem 是标题栏让位条目（高度 = 悬浮顶栏下沿）。
+    const leading: number = 1 + (this.errorMessage.length > 0 ? 1 : 0) +
       (this.topContentVisible ? 1 : 0);
     const gap: number = this.usesCardSurface() ? this.getUIContext().px2vp(this.getUIContext().getHostContext()!.resourceManager.getNumber($r('app.float.spacing_medium').id)) : 0;
     this.flowLayout = buildFeedFlowLayout(
       this.items.map((item: ChannelFeedItem): string => channelFeedItemIdentity(item)),
       this.items.map((item: ChannelFeedItem): string => item.kind === ChannelFeedItemKind.DAILY_STORY ? item.story.date : ''),
-      columns, leading, this.loadingMore, gap, floatingTitleBarOffset());
+      columns, leading, this.loadingMore, gap);
     this.flowSections.splice(0, this.flowSections.length(), this.flowLayout.sections);
+  }
+
+  /** 忽略本次下拉：Refresh 已自行进入刷新态，短暂置 true 再复位让它收起，不发起请求。 */
+  private suppressPullRefresh(): void {
+    this.refreshing = true;
+    setTimeout((): void => {
+      this.refreshing = false;
+    }, 80);
   }
 
   private applyState(state: ChannelFeedViewState): void {

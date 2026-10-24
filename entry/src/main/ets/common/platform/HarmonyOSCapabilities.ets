@@ -33,6 +33,14 @@ export class HarmonyOSCapabilities {
   }
 
   /**
+   * 系统材质能力检测：`uiMaterial`（`systemMaterial` 属性）自 API 26 起可用。
+   * 只能在调用 `systemMaterial` 前用它门禁，勿把材质对象传给 API 23 设备。
+   */
+  static supportsSystemMaterial(): boolean {
+    return deviceInfo.sdkApiVersion >= 26;
+  }
+
+  /**
    * 沉浸式标题栏样式（HdsNavigation titleBar 的 systemMaterialEffect +
    * IMMERSIVE_GRADIENT_BLUR 滚动效果）仅在 API 26 真机验证过渲染正常；
    * API 23 真机上会渲染为不透明白色遮挡条盖住滚动正文（材质层降级为

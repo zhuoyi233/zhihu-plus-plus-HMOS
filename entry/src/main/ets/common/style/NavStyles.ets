@@ -182,7 +182,9 @@ export function getRootChromeTitleBarStyle(materialMode: ImmersiveMaterialMode,
       },
       scrollEffectStyle: {
         backgroundStyle: {
-          backgroundColor: $r('app.color.immersive_title_background'),
+          // 滚动态用更透的底色（60%）：内容颜色能透上来，标题栏里的搜索胶囊才呈玻璃感。
+          // 该底色只用于材质路径；API 23 兜底路径仍用 70% 的 root_chrome_background。
+          backgroundColor: $r('app.color.root_chrome_glass_background'),
           maskExtraHeight: ROOT_CHROME_SCROLL_MASK_EXTRA_HEIGHT
         }
       }

@@ -5,7 +5,15 @@ import { publishQuestionTitle } from './QuestionTitleBar';
 import { publishAnswerTitle, AnswerTitleBar } from './AnswerTitleBar';
 import { publishArticleTitle } from './ArticleTitleBar';
 import { FeedContentSummary } from './components/FeedContentSummary';
-import { AppPageStatusKind, AppPageStatusPanel, FeedPullDownIndicatorHost, FLOATING_TITLE_BAR_OFFSET } from './AppPageChrome';
+import {
+  AppPageStatusKind,
+  AppPageStatusPanel,
+  FeedPullDownIndicatorHost,
+  FLOATING_TITLE_BAR_OFFSET,
+  PULL_REFRESH_PULL_DOWN_RATIO,
+  PULL_REFRESH_TRIGGER_OFFSET_VP,
+  pullDownRefreshPlaceholder
+} from './AppPageChrome';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { Want } from '@kit.AbilityKit';
@@ -1964,7 +1972,11 @@ struct ContentDetailPage {
 
   @Builder
   private questionDocument(content: LoadedContentDetail) {
-    Refresh({ refreshing: $$this.refreshingAnswers, refreshingContent: this.indicator?.view() }) {
+    Refresh({
+      refreshing: $$this.refreshingAnswers,
+      builder: pullDownRefreshPlaceholder,
+      refreshingContent: this.indicator?.view()
+    }) {
       NativeContentDocument({
         html: contentHtml(content), emptyMessage: contentEmptyMessage(content), collapsible: true,
         linkCardMetaRepository: this.linkCardMetaRepository,
@@ -1988,7 +2000,10 @@ struct ContentDetailPage {
           }
         }
       })
-    }.height('100%').width('100%').onRefreshing((): void => { void this.refreshQuestion(); })
+    }.height('100%').width('100%')
+      .refreshOffset(PULL_REFRESH_TRIGGER_OFFSET_VP)
+      .pullDownRatio(PULL_REFRESH_PULL_DOWN_RATIO)
+      .onRefreshing((): void => { void this.refreshQuestion(); })
       .onStateChange((status: RefreshStatus): void => this.indicator?.onStateChange(status))
   }
 

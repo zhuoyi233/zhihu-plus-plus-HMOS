@@ -11,7 +11,7 @@ export default function feedWaterfallLayoutTest(): void {
       expect(homeFeedInitialItemTarget(1138, 10000, 94)).assertEqual(60);
     });
     it('keepsOddContentAsIndependentItemsBetweenFullWidthChrome', 0, () => {
-      const layout = buildFeedFlowLayout(['a', 'b', 'c'], [], 2, 2, true, 14, 94);
+      const layout = buildFeedFlowLayout(['a', 'b', 'c'], [], 2, 2, true, 14);
       expect(layout.entries.length).assertEqual(3);
       expect(layout.sections.length).assertEqual(3);
       expect(layout.sections[0].crossCount).assertEqual(1);
@@ -23,7 +23,7 @@ export default function feedWaterfallLayoutTest(): void {
       expect(feedFlowItemIndex(layout, 5)).assertEqual(2);
     });
     it('separatesDatesAndMapsHeadingsBackToSourceItems', 0, () => {
-      const layout = buildFeedFlowLayout(['a', 'b', 'c'], ['20261023', '20261023', '20261022'], 2, 1, false, 14, 94);
+      const layout = buildFeedFlowLayout(['a', 'b', 'c'], ['20261023', '20261023', '20261022'], 2, 1, false, 14);
       expect(layout.entries.length).assertEqual(5);
       expect(layout.sections.length).assertEqual(5);
       expect(layout.sections[2].itemsCount).assertEqual(2);
@@ -33,14 +33,14 @@ export default function feedWaterfallLayoutTest(): void {
       expect(feedFlowItemIndex(layout, 5)).assertEqual(2);
     });
     it('keepsStableContentKeysWhenColumnsChangeOrContentIsRemoved', 0, () => {
-      const wide = buildFeedFlowLayout(['a', 'b', 'c'], [], 2, 0, false, 14, 94);
-      const narrow = buildFeedFlowLayout(['a', 'c'], [], 1, 0, false, 0, 94);
+      const wide = buildFeedFlowLayout(['a', 'b', 'c'], [], 2, 0, false, 14);
+      const narrow = buildFeedFlowLayout(['a', 'c'], [], 1, 0, false, 0);
       expect(wide.entries[2].key).assertEqual(narrow.entries[1].key);
       expect(narrow.sections[0].crossCount).assertEqual(1);
       expect(narrow.entries[1].itemIndex).assertEqual(1);
     });
     it('doesNotCreateZeroCountSectionsForEmptyFeeds', 0, () => {
-      const layout = buildFeedFlowLayout([], [], 2, 0, false, 14, 94);
+      const layout = buildFeedFlowLayout([], [], 2, 0, false, 14);
       expect(layout.sections.length).assertEqual(0);
       expect(feedFlowItemIndex(layout, 0)).assertEqual(-1);
     });

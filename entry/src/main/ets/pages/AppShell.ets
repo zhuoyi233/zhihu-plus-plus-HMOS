@@ -45,7 +45,8 @@ import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import bundleManager from '@ohos.bundle.bundleManager';
 import { Want } from '@kit.AbilityKit';
 import {
-  SymbolGlyphModifier
+  SymbolGlyphModifier,
+  uiMaterial
 } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { resourceManager } from '@kit.LocalizationKit';
@@ -94,6 +95,26 @@ import { ChannelFeedInteractionBridge } from './ChannelFeedState';
 import { dailyDateCursor, dailyPickerDate, formatDailyDate } from './DailyFeedDates';
 
 const PROJECT_HOME_URI: string = 'https://github.com/zhuoyi233/zhihu-plus-plus-HMOS';
+
+/**
+ * 顶栏玻璃材质（`uiMaterial`，API 26 专属）。
+ * 兼容线仍是 API 23：低版本返回 undefined，调用点用 `backgroundBlurStyle` 兜底，
+ * 系统材质只在高版本设备上生效。
+ */
+function createTitleBarGlassMaterial(): uiMaterial.Material | undefined {
+  // 系统材质是 API 26 专属：低版本 kit 里没有该模块，构造会抛异常（实测 API 24 模拟器
+  // 抛错但不崩），因此必须按版本门禁并兜底，低版本改用 backgroundBlurStyle。
+  if (!HarmonyOSCapabilities.supportsSystemMaterial()) {
+    return undefined;
+  }
+  try {
+    return new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.ULTRA_THIN });
+  } catch (_error) {
+    return undefined;
+  }
+}
+
+const TITLE_BAR_GLASS_MATERIAL: uiMaterial.Material | undefined = createTitleBarGlassMaterial();
 
 @Component
 export struct AppShell {
@@ -1075,13 +1096,17 @@ export struct AppShell {
         controller: this.tabsController,
         onTabDoubleTap: (index: number): void => {
           // 双击页签刷新对应 feed（“我的”除外）；跨页面信号经 AppStorage 广播。
+          // 先广播回到顶部、再广播刷新：滑动数据时双击也按“先回顶 → 再刷新”执行。
           const tab = this.tabAtDisplayIndex(index);
           if (tab < TopLevelTab.HOME || tab > TopLevelTab.DAILY) {
             return;
           }
+          AppStorage.setOrCreate('tabScrollTopTabIndex', tab);
+          AppStorage.setOrCreate('tabScrollTopTick', (AppStorage.get<number>('tabScrollTopTick') ?? 0) + 1);
+          // 先写目标页签再自增 tick：@Watch 在 tick 写入时同步触发，顺序反了会读到上一次的目标页签。
+          AppStorage.setOrCreate('tabRefreshTabIndex', tab);
           const nextTick = (AppStorage.get<number>('tabRefreshTick') ?? 0) + 1;
           AppStorage.setOrCreate('tabRefreshTick', nextTick);
-          AppStorage.setOrCreate('tabRefreshTabIndex', tab);
         },
         onCurrentTabTap: (index: number): void => {
           const tab = this.tabAtDisplayIndex(index);
@@ -1356,6 +1381,23 @@ export struct AppShell {
     .hitTestBehavior(HitTestMode.Transparent)
   }
 
+  /** 搜索胶囊内边距：有系统材质时用玻璃胶囊的收窄内边距，低版本保持原有模糊兜底样式。 */
+  private searchPillPadding(): Padding {
+    if (TITLE_BAR_GLASS_MATERIAL !== undefined) {
+      return { left: 14, right: 14 };
+    }
+    return {
+      top: $r('app.float.spacing_small'),
+      bottom: $r('app.float.spacing_small'),
+      left: $r('app.float.spacing_small'),
+      right: $r('app.float.spacing_small')
+    };
+  }
+
+  private searchPillRadius(): Length {
+    return TITLE_BAR_GLASS_MATERIAL !== undefined ? 20 : $r('app.float.card_radius');
+  }
+
   @Builder
   private rootTitleBarContent() {
     Stack({ alignContent: Alignment.Center }) {
@@ -1376,11 +1418,13 @@ export struct AppShell {
         .id('home_titlebar_search')
         .layoutWeight(1)
         .height(40)
-        .padding($r('app.float.spacing_small'))
+        .padding(this.searchPillPadding())
         .backgroundColor(Color.Transparent)
-        // uiMaterial 全家族为 API 26 专属；工程最低兼容 API 23，标题栏玻璃一律走模糊兜底
-        .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
-        .borderRadius($r('app.float.card_radius'))
+        // API 26 起可给任意组件设置系统材质（薄玻璃胶囊）；低版本退回模糊兜底。
+        .backgroundBlurStyle(TITLE_BAR_GLASS_MATERIAL === undefined
+          ? BlurStyle.COMPONENT_ULTRA_THIN : BlurStyle.NONE)
+        .systemMaterial(TITLE_BAR_GLASS_MATERIAL)
+        .borderRadius(this.searchPillRadius())
         .accessibilityText('打开搜索')
         .onClick((): void => this.navigate({ name: AppDestinationName.SEARCH, query: '' }))
 
@@ -1394,7 +1438,10 @@ export struct AppShell {
         .height(40)
         .padding(0)
         .backgroundColor(Color.Transparent)
-        .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
+        // 与搜索胶囊同款沉浸光感材质：圆形薄玻璃底；低版本退回模糊兜底。
+        .backgroundBlurStyle(TITLE_BAR_GLASS_MATERIAL === undefined
+          ? BlurStyle.COMPONENT_ULTRA_THIN : BlurStyle.NONE)
+        .systemMaterial(TITLE_BAR_GLASS_MATERIAL)
         .accessibilityText('打开通知')
         .onClick((): void => this.navigate({ name: AppDestinationName.NOTIFICATION }))
       }
@@ -1429,7 +1476,10 @@ export struct AppShell {
         .height(40)
         .padding(0)
         .backgroundColor(Color.Transparent)
-        .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
+        // 顶栏图标统一沉浸光感材质（圆形薄玻璃底），与搜索/通知一致；低版本退回模糊兜底。
+        .backgroundBlurStyle(TITLE_BAR_GLASS_MATERIAL === undefined
+          ? BlurStyle.COMPONENT_ULTRA_THIN : BlurStyle.NONE)
+        .systemMaterial(TITLE_BAR_GLASS_MATERIAL)
         .accessibilityText('刷新热榜')
         .onClick((): void => {
           this.hotReloadToken += 1;
@@ -1467,7 +1517,10 @@ export struct AppShell {
         .height(40)
         .padding(0)
         .backgroundColor(Color.Transparent)
-        .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
+        // 顶栏图标统一沉浸光感材质（圆形薄玻璃底），与搜索/通知一致；低版本退回模糊兜底。
+        .backgroundBlurStyle(TITLE_BAR_GLASS_MATERIAL === undefined
+          ? BlurStyle.COMPONENT_ULTRA_THIN : BlurStyle.NONE)
+        .systemMaterial(TITLE_BAR_GLASS_MATERIAL)
         .accessibilityText('选择日报日期')
         .onClick((): void => {
           this.openDailyDatePicker();

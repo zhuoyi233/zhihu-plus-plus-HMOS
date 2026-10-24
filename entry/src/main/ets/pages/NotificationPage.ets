@@ -22,7 +22,13 @@ import { NotificationController, NotificationPhase, NotificationViewState } from
 import { NOTIFICATION_HUB_REFRESH_TICK_KEY, NOTIFICATION_HUB_BUSY_KEY, NOTIFICATION_HUB_MARK_READ_TICK_KEY,
   NOTIFICATION_HUB_UNREAD_TOTAL_KEY } from './NotificationTitleBar';
 import { timelineItemDestination } from './NotificationLinkResolver';
-import { FeedPullDownIndicatorHost, FLOATING_TITLE_BAR_OFFSET } from './AppPageChrome';
+import {
+  FeedPullDownIndicatorHost,
+  FLOATING_TITLE_BAR_OFFSET,
+  PULL_REFRESH_PULL_DOWN_RATIO,
+  PULL_REFRESH_TRIGGER_OFFSET_VP,
+  pullDownRefreshPlaceholder
+} from './AppPageChrome';
 
 /** 会话行右侧日期（对齐上游 `notificationListDate`：MM-dd）。 */
 function conversationDate(item: MobileNotificationTimelineItem): string {
@@ -162,9 +168,8 @@ export struct NotificationPage {
       } else {
         Refresh({
           refreshing: $$this.refreshing,
-          refreshingContent: this.indicator?.view(),
-          offset: 80,
-          friction: 100
+          builder: pullDownRefreshPlaceholder,
+          refreshingContent: this.indicator?.view()
         }) {
           List({ space: 0 }) {
             ListItem() {
@@ -250,6 +255,8 @@ export struct NotificationPage {
         .id('notifications_pull_refresh')
         .width('100%')
         .layoutWeight(1)
+        .refreshOffset(PULL_REFRESH_TRIGGER_OFFSET_VP)
+        .pullDownRatio(PULL_REFRESH_PULL_DOWN_RATIO)
         .onRefreshing((): void => { void this.pullRefresh(); })
         .onStateChange((status: RefreshStatus): void => this.indicator?.onStateChange(status))
       }

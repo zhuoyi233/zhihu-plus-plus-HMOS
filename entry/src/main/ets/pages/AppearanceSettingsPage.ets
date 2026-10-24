@@ -276,7 +276,7 @@ export struct AppearanceSettingsPage {
           .width('100%')
           .padding($r('app.float.card_padding'))
           Divider().color($r('app.color.divider_color'))
-          this.switchSetting('点击底部导航栏回到顶部/刷新', '点击当前页签回到顶部，已在顶部时刷新；双击直接刷新', this.tapToRefresh,
+          this.switchSetting('点击底部导航栏回到顶部/刷新', '点击当前页签回到顶部；连续点击两次刷新（滑动中双击会先回到顶部再刷新）', this.tapToRefresh,
             'appearance_tap_to_refresh', (value: boolean): void => this.updateExperienceBoolean('tapToRefresh', value))
           Divider().color($r('app.color.divider_color'))
           this.switchSetting('滚动时自动隐藏底部导航栏', '上划时隐藏，下划时重新显示', this.autoHideBottomBar,

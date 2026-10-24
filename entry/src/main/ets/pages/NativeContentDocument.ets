@@ -1356,7 +1356,9 @@ export struct NativeContentDocument {
           this.positionLastIndex = end;
           this.schedulePositionSave();
         })
-        .onScrollStop((): void => this.persistReaderPosition())
+        .onScrollStop((): void => {
+          this.persistReaderPosition();
+        })
         // 触底回调：问题详情页据此加载回答信息流下一页。
         .onReachEnd((): void => {
           this.updateBottomEdge(true);
@@ -1376,6 +1378,8 @@ export struct NativeContentDocument {
         // 同时维护底部边界状态：贴底后回滚（y 减小）即离开底边；y 反向增大只可能是
         // 内容增高后继续上滚（onReachEnd 提前触发的残余滚动在 2px 容差内不复位）。
         .onDidScroll((): void => {
+          // 只有真正发生位移才算滚动：轻点不改变偏移，不会刷新滚动静默时刻。
+          this.bodyTapDetector.markScrollActive();
           const yOffset = this.scroller.currentOffset().yOffset;
           if (yOffset < this.lastYOffset - 0.5 || yOffset > this.lastYOffset + 2) {
             this.updateBottomEdge(false);
