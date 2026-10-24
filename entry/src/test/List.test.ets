@@ -96,6 +96,8 @@ import readHistoryUploadRepositoryTest from './ReadHistoryUploadRepository.test'
 import lastReadTouchRepositoryTest from './LastReadTouchRepository.test';
 import linkCardMetaTest from './LinkCardMeta.test';
 import segmentReactionRepositoryTest from './SegmentReactionRepository.test';
+import continuousStreamDataSourceTest from './ContinuousStreamDataSource.test';
+import continuousAnswerStateTest from './ContinuousAnswerState.test';
 
 export default function testsuite(): void {
   feedWaterfallLayoutTest();
@@ -196,4 +198,6 @@ export default function testsuite(): void {
   readHistoryUploadRepositoryTest();
   lastReadTouchRepositoryTest();
   segmentReactionRepositoryTest();
+  continuousStreamDataSourceTest();
+  continuousAnswerStateTest();
 }

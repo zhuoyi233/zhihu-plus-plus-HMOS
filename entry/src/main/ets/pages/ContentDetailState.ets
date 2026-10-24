@@ -183,14 +183,7 @@ export class ContentDetailController {
 
   /** 历史记录展示标题：回答用问题标题，问题/文章用自身标题；缺失时为空串，由列表页回退显示。 */
   private recordTitle(content: LoadedContentDetail): string {
-    switch (content.kind) {
-      case ContentDetailKind.QUESTION:
-        return content.value.title;
-      case ContentDetailKind.ANSWER:
-        return content.value.questionTitle ?? '';
-      case ContentDetailKind.ARTICLE:
-        return content.value.title;
-    }
+    return contentRecordTitle(content);
   }
 
   private async recordOpenIfConfigured(content: LoadedContentDetail, generation: number): Promise<void> {
@@ -198,34 +191,11 @@ export class ContentDetailController {
     if (store === undefined) {
       return;
     }
-    try {
-      await store.upsert({
-        contentKey: contentDetailIdentity(content.kind, content.value.id),
-        openedAt: Date.now(),
-        contentType: content.kind,
-        title: this.recordTitle(content)
-      });
-      if (this.isCurrent(generation)) {
-        this.openedRecordPhase = OpenedRecordPhase.RECORDED;
-        this.emit();
-      }
-      this.reportCloudHistory(contentDetailIdentity(content.kind, content.value.id));
-    } catch (_error) {
-      if (this.isCurrent(generation)) {
-        this.openedRecordPhase = OpenedRecordPhase.FAILED;
-        this.emit();
-      }
+    const recorded = await recordContentOpen(store, this.historyUploader, content);
+    if (this.isCurrent(generation)) {
+      this.openedRecordPhase = recorded ? OpenedRecordPhase.RECORDED : OpenedRecordPhase.FAILED;
+      this.emit();
     }
-  }
-
-  /** 对齐上游 addReadHistory：本地记录成功后向知乎云端上报一条阅读历史，失败静默不阻塞页面。 */
-  private reportCloudHistory(contentKey: string): void {
-    const uploader = this.historyUploader;
-    if (uploader === undefined) {
-      return;
-    }
-    uploader.add(contentKey).catch((_error: Error): void => {
-    });
   }
 
   private isCurrent(generation: number): boolean {
@@ -237,6 +207,41 @@ export class ContentDetailController {
       this.observer(this.snapshot());
     }
   }
+}
+
+/** 历史记录展示标题：回答用问题标题，问题/文章用自身标题；缺失时为空串，由列表页回退显示。 */
+export function contentRecordTitle(content: LoadedContentDetail): string {
+  switch (content.kind) {
+    case ContentDetailKind.QUESTION:
+      return content.value.title;
+    case ContentDetailKind.ANSWER:
+      return content.value.questionTitle ?? '';
+    case ContentDetailKind.ARTICLE:
+      return content.value.title;
+  }
+}
+
+/**
+ * 取得正文后的阅读记录入口（连续阅读计划 P1 抽离）：本地 upsert + 按现有规则云端上报
+ * （对齐上游 addReadHistory，失败静默不阻塞阅读）。返回本地记录是否成功，供调用方区分状态。
+ */
+export async function recordContentOpen(store: OpenedContentStore,
+  uploader: ReadHistoryUploadRepository | undefined, content: LoadedContentDetail): Promise<boolean> {
+  try {
+    await store.upsert({
+      contentKey: contentDetailIdentity(content.kind, content.value.id),
+      openedAt: Date.now(),
+      contentType: content.kind,
+      title: contentRecordTitle(content)
+    });
+  } catch (_error) {
+    return false;
+  }
+  if (uploader !== undefined) {
+    uploader.add(contentDetailIdentity(content.kind, content.value.id)).catch((_error: Error): void => {
+    });
+  }
+  return true;
 }
 
 export function contentDetailIdentity(kind: ContentDetailKind, id: string): string {

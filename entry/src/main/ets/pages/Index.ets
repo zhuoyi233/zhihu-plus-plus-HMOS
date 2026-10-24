@@ -82,6 +82,8 @@ import { QrScanProbePage } from './QrScanProbe';
 import { QrDesktopLoginScanPage } from './QrDesktopLoginScanPage';
 import { ReaderProbe } from './ReaderProbe';
 import { ImageProbe } from './ImageProbe';
+import { ContinuousReadingPrototype } from './ContinuousReadingPrototype';
+import { ContinuousAnswerPage } from './ContinuousAnswerPage';
 import { TechnicalLabPage } from './TechnicalLabPage';
 import { HomeFeedPage } from './HomeFeedPage';
 import { SearchPage } from './SearchPage';
@@ -143,6 +145,10 @@ struct Index {
   private questionAnswerFeedFactory: () => QuestionAnswerFeedRepository | undefined = () => undefined;
   @State private answerRepository?: ContentRepository = undefined;
   @State private articleRepository?: ContentRepository = undefined;
+  /** 连续阅读专用仓库：全文双槽位 + 问题标题各持独立 HTTP client，规避单飞互斥（计划 §4.2）。 */
+  @State private continuousAnswerRepositoryA?: ContentRepository = undefined;
+  @State private continuousAnswerRepositoryB?: ContentRepository = undefined;
+  @State private continuousQuestionRepository?: ContentRepository = undefined;
   @State private peopleRepository?: PeopleDetailRepository = undefined;
   @State private peopleContentRepository?: PeopleContentRepository = undefined;
   @State private pinRepository?: PinRepository = undefined;
@@ -226,6 +232,9 @@ struct Index {
         new DefaultQuestionAnswerFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.answerRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
       this.articleRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
+      this.continuousAnswerRepositoryA = new DefaultContentRepository(new ZhihuHttpClient(session));
+      this.continuousAnswerRepositoryB = new DefaultContentRepository(new ZhihuHttpClient(session));
+      this.continuousQuestionRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
       this.peopleRepository = new DefaultPeopleRepository(new ZhihuHttpClient(session));
       this.peopleContentRepository = new DefaultPeopleContentRepository(new ZhihuHttpClient(session));
       this.pinRepository = new DefaultPinRepository(new ZhihuHttpClient(session));
@@ -329,7 +338,11 @@ struct Index {
           qrScanProbeContent: (onBack: () => void): void => this.qrScanProbeContent(onBack),
           qrDesktopLoginScanContent: (onBack: () => void): void => this.qrDesktopLoginScanContent(onBack),
           backgroundTaskProbeContent: (onBack: () => void): void => this.backgroundTaskProbeContent(onBack),
-          domainFixtureProbeContent: (onBack: () => void): void => this.domainFixtureProbeContent(onBack)
+          domainFixtureProbeContent: (onBack: () => void): void => this.domainFixtureProbeContent(onBack),
+          continuousReadingProtoContent: (onBack: () => void): void => this.continuousReadingProtoContent(onBack),
+          continuousAnswerContent: (questionId: string, answerId: string | undefined,
+            navigate: (destination: AppDestination) => void, onBack: () => void): void =>
+            this.continuousAnswerContent(questionId, answerId, navigate, onBack)
         });
       } else {
         Text('正在恢复登录状态');
@@ -755,6 +768,32 @@ struct Index {
   @Builder
   domainFixtureProbeContent(onBack: () => void) {
     DomainFixtureProbe({ onBack: onBack });
+  }
+
+  @Builder
+  continuousReadingProtoContent(onBack: () => void) {
+    ContinuousReadingPrototype({ onBack: onBack });
+  }
+
+  @Builder
+  continuousAnswerContent(questionId: string, answerId: string | undefined,
+    navigate: (destination: AppDestination) => void, onBack: () => void) {
+    ContinuousAnswerPage({
+      questionId: questionId,
+      seedAnswerId: answerId ?? '',
+      navigate: navigate,
+      onBack: onBack,
+      feedRepository: this.questionAnswerFeedFactory(),
+      questionRepository: this.continuousQuestionRepository,
+      fullTextRepositoryA: this.continuousAnswerRepositoryA,
+      fullTextRepositoryB: this.continuousAnswerRepositoryB,
+      voteRepository: this.voteRepository,
+      followRepository: this.followRepository,
+      collectionRepository: this.collectionRepository,
+      session: this.session,
+      openedContentStore: this.openedContentStore,
+      historyUploader: this.readHistoryUploader
+    });
   }
 
 }

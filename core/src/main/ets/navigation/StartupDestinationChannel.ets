@@ -1,5 +1,5 @@
 import { DeepLinkDestination, DeepLinkType } from './DeepLinkResolver';
-import { decodeAppDestination, AppDestination, AppDestinationName } from './AppDestination';
+import { decodeAppDestination, AppDestination, AppDestinationName, ContinuousAnswerDestination } from './AppDestination';
 
 export type StartupDestinationListener = (destination: AppDestination) => void;
 
@@ -111,6 +111,9 @@ export function appDestinationIdentity(destination: AppDestination): string {
     case AppDestinationName.WRITE_ANSWER:
       return `${destination.name}:${encodeURIComponent(destination.questionId)}:` +
         encodeURIComponent(destination.answerId ?? '');
+    case AppDestinationName.CONTINUOUS_ANSWER:
+      return `${destination.name}:${encodeURIComponent((destination as ContinuousAnswerDestination).questionId)}:` +
+        encodeURIComponent((destination as ContinuousAnswerDestination).answerId ?? '');
     case AppDestinationName.WRITE_PIN:
       return `${destination.name}:${encodeURIComponent(destination.draftId)}`;
     case AppDestinationName.COMMENT:

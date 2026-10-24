@@ -436,8 +436,9 @@ export struct ContentImagePreview {
   }
 }
 
+// 导出供连续阅读原型（ContinuousReadingPrototype）复用同一公式渲染实现。
 @Component
-struct ContentInlineFormula {
+export struct ContentInlineFormula {
   item: ReaderBlock = {
     id: '',
     kind: ReaderBlockKind.PARAGRAPH,
@@ -628,7 +629,7 @@ struct ContentInlineFormula {
 }
 
 @Component
-struct ContentBlockFormula {
+export struct ContentBlockFormula {
   item: ReaderBlock = {
     id: '',
     kind: ReaderBlockKind.FORMULA,

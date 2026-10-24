@@ -175,6 +175,10 @@ export struct TechnicalLabPage {
               testId: 'open_image_probe', grouped: true,
               onRowClick: (): void => this.navigate({ name: AppDestinationName.IMAGE_PROBE }) })
             Divider().color($r('app.color.divider_color'))
+            AppNavigationRow({ title: '连续阅读原型', description: 'P0：单列表连续滚动 · 懒加载 · 锚点补偿 · 正文释放',
+              testId: 'open_continuous_reading_proto', grouped: true,
+              onRowClick: (): void => this.navigate({ name: AppDestinationName.CONTINUOUS_READING_PROTOTYPE }) })
+            Divider().color($r('app.color.divider_color'))
             AppNavigationRow({ title: '数据库迁移', description: '验证本地数据库结构升级',
               testId: 'open_database_probe', grouped: true,
               onRowClick: (): void => this.navigate({ name: AppDestinationName.DATABASE_PROBE }) })

@@ -2534,6 +2534,12 @@ struct ContentDetailPage {
       .width('100%').padding($r('app.float.card_padding'))
       .borderRadius($r('app.float.card_radius')).backgroundColor($r('app.color.surface_background'))
       .accessibilityText('打开回答').onClick((): void => {
+        // 偏好为连续阅读时直接进连续流（计划 §2.2：从问题页点回答继承问题 ID 与所点回答）。
+        if (AppStorage.get<string>('answerReadingMode') === 'continuous') {
+          this.navigate({ name: AppDestinationName.CONTINUOUS_ANSWER,
+            questionId: this.activeContentId, answerId: item.feedItem.target.id });
+          return;
+        }
         const repository = this.questionAnswerFeedFactory();
         const seed = this.answersController?.snapshot();
         if (repository !== undefined && seed !== undefined) {
@@ -2919,6 +2925,25 @@ struct ContentDetailPage {
       }
       .width('100%')
       .padding({ top: 8, bottom: 8 })
+
+      if (this.kind === ContentDetailKind.ANSWER) {
+        this.menuSettingRow('切换到连续阅读', $r('sys.symbol.list_bullet'), 'detail_menu_continuous_reading',
+          true, true, (): void => {
+            const content = this.content;
+            if (content === undefined || content.kind !== ContentDetailKind.ANSWER) {
+              return;
+            }
+            this.actionMenuShown = false;
+            const context = getAbilityContext();
+            if (context !== undefined) {
+              void new AppPreferencesStore(context).saveAnswerReadingMode('continuous')
+                .catch((_error: Error): void => {});
+            }
+            AppStorage.setOrCreate('answerReadingMode', 'continuous');
+            this.navigate({ name: AppDestinationName.CONTINUOUS_ANSWER,
+              questionId: content.value.questionId, answerId: content.value.id });
+          })
+      }
 
       this.menuSettingRow('外观与阅读体验', $r('sys.symbol.eye'), 'detail_menu_appearance_settings',
         true, true, (): void => {

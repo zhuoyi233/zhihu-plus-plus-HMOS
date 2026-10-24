@@ -86,6 +86,7 @@ export struct AppearanceSettingsPage {
   @StorageProp('pinAnswerDate') private pinAnswerDate: boolean = false;
   @StorageProp('answerSwitchMode') private answerSwitchMode: string = AnswerSwitchMode.VERTICAL;
   @StorageProp('answerSwitchSensitivity') private answerSwitchSensitivity: number = 1;
+  @StorageProp('answerReadingMode') private answerReadingMode: string = 'single';
   @StorageProp('startDestination') private startDestination: string = 'Home';
   @StorageProp('bottomBarItems') private bottomBarItems: string = 'Home,Following,Hot,Daily,Settings';
   @StorageProp('tapToRefresh') private tapToRefresh: boolean = true;
@@ -237,6 +238,11 @@ export struct AppearanceSettingsPage {
               onChange: (value: number): void => this.updateExperienceNumber('answerSwitchSensitivity', value)
             })
           }
+          Divider().color($r('app.color.divider_color'))
+          this.selectSetting('回答阅读模式', '打开回答时的默认阅读方式；连续模式下切答手势不生效（仅单篇）',
+            this.answerReadingMode === 'continuous' ? '连续' : '单篇', this.answerReadingModeOptions(),
+            this.answerReadingMode === 'continuous' ? 1 : 0, 'appearance_answer_reading_mode',
+            (index: number): void => this.updateAnswerReadingMode(index))
           Divider().color($r('app.color.divider_color'))
           this.selectSetting('双击正文动作', '详情页双击正文时执行，默认询问；可用动作取决于页面',
             answerDoubleTapActionLabel(this.answerDoubleTapAction), this.answerDoubleTapSelectOptions(),
@@ -910,6 +916,23 @@ export struct AppearanceSettingsPage {
     const values: AnswerSwitchMode[] = [AnswerSwitchMode.OFF, AnswerSwitchMode.VERTICAL, AnswerSwitchMode.HORIZONTAL];
     if (index >= 0 && index < values.length) {
       this.updateExperienceString('answerSwitchMode', values[index]);
+    }
+  }
+
+  /** 回答阅读模式（连续阅读计划 §2.2）：独立偏好键，非法值由存储层回退单篇。 */
+  private answerReadingModeOptions(): SelectOption[] {
+    const labels: Array<string> = ['单篇', '连续'];
+    return labels.map((label: string): SelectOption => {
+      return { value: label } as SelectOption;
+    });
+  }
+
+  private updateAnswerReadingMode(index: number): void {
+    const mode = index === 1 ? 'continuous' : 'single';
+    AppStorage.setOrCreate('answerReadingMode', mode);
+    const context = getAbilityContext();
+    if (context !== undefined) {
+      void new AppPreferencesStore(context).saveAnswerReadingMode(mode).catch((_error: Error): void => {});
     }
   }
 

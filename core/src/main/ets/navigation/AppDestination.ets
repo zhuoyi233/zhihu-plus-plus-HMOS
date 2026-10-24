@@ -42,6 +42,8 @@ export enum AppDestinationName {
   QR_DESKTOP_LOGIN_SCAN = 'QrDesktopLoginScan',
   BACKGROUND_TASK_PROBE = 'BackgroundTaskProbe',
   DOMAIN_FIXTURE_PROBE = 'DomainFixtureProbe',
+  CONTINUOUS_READING_PROTOTYPE = 'ContinuousReadingPrototype',
+  CONTINUOUS_ANSWER = 'ContinuousAnswer',
   WRITE_ANSWER = 'WriteAnswer',
   WRITE_PIN = 'WritePin',
   PIN_DRAFTS = 'PinDrafts'
@@ -69,7 +71,9 @@ export interface InfrastructureDestination {
     AppDestinationName.DATABASE_PROBE | AppDestinationName.DEEP_LINK_PROBE |
     AppDestinationName.QR_SCAN_PROBE | AppDestinationName.QR_DESKTOP_LOGIN_SCAN |
     AppDestinationName.BACKGROUND_TASK_PROBE |
-    AppDestinationName.DOMAIN_FIXTURE_PROBE | AppDestinationName.PIN_DRAFTS;
+    AppDestinationName.DOMAIN_FIXTURE_PROBE | AppDestinationName.PIN_DRAFTS |
+    AppDestinationName.CONTINUOUS_READING_PROTOTYPE |
+    AppDestinationName.CONTINUOUS_ANSWER;
 }
 
 export interface ContentDestination {
@@ -131,9 +135,16 @@ export interface WhatsNewDestination {
   readonly version?: string;
 }
 
+/** 连续阅读页（同一问题的回答连续滚动）：questionId 必填，answerId 为所点回答种子（可缺省）。 */
+export interface ContinuousAnswerDestination {
+  readonly name: AppDestinationName.CONTINUOUS_ANSWER;
+  readonly questionId: string;
+  readonly answerId?: string;
+}
+
 export type AppDestination = StatelessDestination | InfrastructureDestination | ContentDestination |
   CommentDestination | SearchDestination | WriteAnswerDestination | WritePinDestination |
-  NotificationEntryDestination | PrivateMessageDestination | WhatsNewDestination;
+  NotificationEntryDestination | PrivateMessageDestination | WhatsNewDestination | ContinuousAnswerDestination;
 
 export const MAX_SEARCH_QUERY_LENGTH: number = 200;
 export const MAX_DECIMAL_CONTENT_ID_LENGTH: number = 30;
@@ -206,6 +217,8 @@ export function isAppDestinationName(name: string): boolean {
     case AppDestinationName.QR_DESKTOP_LOGIN_SCAN:
     case AppDestinationName.BACKGROUND_TASK_PROBE:
     case AppDestinationName.DOMAIN_FIXTURE_PROBE:
+    case AppDestinationName.CONTINUOUS_READING_PROTOTYPE:
+    case AppDestinationName.CONTINUOUS_ANSWER:
     case AppDestinationName.WRITE_ANSWER:
     case AppDestinationName.WRITE_PIN:
     case AppDestinationName.PIN_DRAFTS:
@@ -297,6 +310,10 @@ export function decodeAppDestination(name: string, param: Object): AppDestinatio
       return hasNoParameters(wire) ? { name: AppDestinationName.BACKGROUND_TASK_PROBE } : undefined;
     case AppDestinationName.DOMAIN_FIXTURE_PROBE:
       return hasNoParameters(wire) ? { name: AppDestinationName.DOMAIN_FIXTURE_PROBE } : undefined;
+    case AppDestinationName.CONTINUOUS_READING_PROTOTYPE:
+      return hasNoParameters(wire) ? { name: AppDestinationName.CONTINUOUS_READING_PROTOTYPE } : undefined;
+    case AppDestinationName.CONTINUOUS_ANSWER:
+      return decodeContinuousAnswer(wire);
     case AppDestinationName.PIN_DRAFTS:
       return hasNoParameters(wire) ? { name: AppDestinationName.PIN_DRAFTS } : undefined;
     case AppDestinationName.QUESTION:
@@ -401,6 +418,8 @@ export function isInfrastructureDestination(destination: AppDestination): boolea
     case AppDestinationName.QR_DESKTOP_LOGIN_SCAN:
     case AppDestinationName.BACKGROUND_TASK_PROBE:
     case AppDestinationName.DOMAIN_FIXTURE_PROBE:
+    case AppDestinationName.CONTINUOUS_READING_PROTOTYPE:
+    case AppDestinationName.CONTINUOUS_ANSWER:
     case AppDestinationName.PIN_DRAFTS:
       return true;
     default:
@@ -538,6 +557,19 @@ function decodePrivateMessage(wire: JsonObjectValue): PrivateMessageDestination 
     avatarUrl: avatarUrl
   };
   return destination;
+}
+
+function decodeContinuousAnswer(wire: JsonObjectValue): ContinuousAnswerDestination | undefined {
+  const questionId = readString(wire, 'questionId');
+  const answerId = readString(wire, 'answerId');
+  if (questionId === undefined || !isSafeDecimalContentId(questionId) ||
+    (answerId !== undefined && !isSafeDecimalContentId(answerId)) ||
+    !hasOnlyFields(wire, ['name', 'questionId', 'answerId'])) {
+    return undefined;
+  }
+  return answerId === undefined
+    ? { name: AppDestinationName.CONTINUOUS_ANSWER, questionId: questionId }
+    : { name: AppDestinationName.CONTINUOUS_ANSWER, questionId: questionId, answerId: answerId };
 }
 
 function decodeWriteAnswer(wire: JsonObjectValue): WriteAnswerDestination | undefined {

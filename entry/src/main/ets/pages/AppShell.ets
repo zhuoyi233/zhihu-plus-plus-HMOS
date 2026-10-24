@@ -59,6 +59,7 @@ import {
   NotificationEntryDestination,
   AppDestination,
   PrivateMessageDestination,
+  ContinuousAnswerDestination,
   AppDestinationName,
   shouldReloadAfterAuthentication,
   startupDestinationChannel,
@@ -157,6 +158,9 @@ export struct AppShell {
     onScanDesktopLogin: () => void) => void = this.emptyLogin;
   @BuilderParam readerProbeContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam imageProbeContent: (onBack: () => void) => void = this.emptyProbe;
+  @BuilderParam continuousReadingProtoContent: (onBack: () => void) => void = this.emptyProbe;
+  @BuilderParam continuousAnswerContent: (questionId: string, answerId: string | undefined,
+    navigate: (destination: AppDestination) => void, onBack: () => void) => void = this.emptyPage;
   @BuilderParam databaseProbeContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam deepLinkProbeContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam qrScanProbeContent: (onBack: () => void) => void = this.emptyProbe;
@@ -175,6 +179,8 @@ export struct AppShell {
   /** 回答/文章详情页沉浸式阅读中（页面广播）：隐藏 NavDestination 顶栏（对齐上游 topBar={}）。 */
   @StorageProp('detailImmersiveActive') private detailImmersiveActive: boolean = false;
   @StorageProp('detailTitleHiddenByScroll') private detailTitleHiddenByScroll: boolean = false;
+  /** 连续阅读页问题标题（页面加载后广播；空串显示占位标题）。 */
+  @StorageProp('continuousAnswerTitle') private continuousAnswerTitle: string = '';
   @StorageProp('answerOverscrollActive') private answerOverscrollActive: boolean = false;
   @StorageProp('answerSwitchMode') private answerSwitchMode: string = 'vertical';
   @StorageProp('peopleTitleStates') private peopleTitleStates: PeopleTitleState[] = [];
@@ -320,6 +326,7 @@ export struct AppShell {
     void this.restoreExperiencePreferences();
     void this.restoreImmersiveMaterialLevel();
     void this.restoreDeveloperMode();
+    void this.restoreAnswerReadingMode();
     this.refreshInstalledVersionLabel();
     this.unsubscribeStartupDestination?.();
     const listener: StartupDestinationListener = (destination: AppDestination): void => {
@@ -441,6 +448,27 @@ export struct AppShell {
   @Builder
   emptyProbe(_onBack: () => void) {
     Blank();
+  }
+
+  /** 连续阅读页固定问题标题：点击进入问题页（计划 §2.1）；标题由页面异步广播。 */
+  @Builder
+  continuousAnswerTitleBar(questionId: string) {
+    Row() {
+      Text(this.continuousAnswerTitle.length > 0 ? this.continuousAnswerTitle : '连续阅读')
+        .id('continuous_answer_title')
+        .fontSize($r('app.float.heading_font_size'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.primary_text'))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .layoutWeight(1)
+        .onClick((): void => {
+          this.navigate({ name: AppDestinationName.QUESTION, id: questionId });
+        })
+        .accessibilityText('查看问题详情')
+    }
+    .width('100%')
+    .padding({ left: 12, right: 12 })
   }
 
   @Builder
@@ -996,6 +1024,46 @@ export struct AppShell {
       }
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: { title: { mainTitle: '图片诊断' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === AppDestinationName.CONTINUOUS_READING_PROTOTYPE) {
+      HdsNavDestination() {
+        this.continuousReadingProtoContent((): void => {
+          this.pathStack.pop();
+        });
+      }
+      // 原型页自带控制栏与状态行：用不透明标题栏让正文排在标题栏下方（聊天页先例），
+      // 避免沉浸悬浮标题栏压住页顶控件（whats-new 页已踩过同类坑）。
+      .titleBar({ style: getChatTitleBarStyle(),
+        content: { title: { mainTitle: '连续阅读原型' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === AppDestinationName.CONTINUOUS_ANSWER) {
+      HdsNavDestination() {
+        this.continuousAnswerContent(
+          (destination as ContinuousAnswerDestination).questionId,
+          (destination as ContinuousAnswerDestination).answerId,
+          (destination: AppDestination): void => this.navigate(destination),
+          (): void => {
+            this.pathStack.pop();
+          }
+        );
+      }
+      // 固定问题标题（点击进问题页），正文列表自带顶部 padding。
+      .titleBar({ style: getChatTitleBarStyle(), avoidLayoutSafeArea: true,
+        content: {
+          stackBuilder: (): void => this.continuousAnswerTitleBar(
+            (destination as ContinuousAnswerDestination).questionId),
+          divider: { showType: DividerShowType.OFF }
+        } })
+      .hideTitleBar(this.imagePreviewUrl.length > 0)
+      .onBackPressed((): boolean => {
+        if (this.imagePreviewUrl.length > 0) {
+          AppStorage.setOrCreate('imagePreviewUrl', '');
+          return true;
+        }
+        return false;
+      })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.DATABASE_PROBE) {
@@ -2818,6 +2886,20 @@ export struct AppShell {
       this.developerModeEnabled = await new AppPreferencesStore(context).loadDeveloperMode();
     } catch (_error) {
       this.developerModeEnabled = false;
+    }
+  }
+
+  /** 回答阅读模式（连续阅读计划 §2.2）：启动时恢复并广播，问题页/详情菜单按此路由。 */
+  private async restoreAnswerReadingMode(): Promise<void> {
+    const context = getAbilityContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      AppStorage.setOrCreate('answerReadingMode',
+        await new AppPreferencesStore(context).loadAnswerReadingMode());
+    } catch (_error) {
+      AppStorage.setOrCreate('answerReadingMode', 'single');
     }
   }
 
