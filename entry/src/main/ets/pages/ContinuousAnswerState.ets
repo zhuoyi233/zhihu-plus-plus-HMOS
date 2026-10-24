@@ -133,6 +133,21 @@ export class ContinuousFullTextScheduler {
     this.ensure([answerId]);
   }
 
+  /**
+   * 彻底移除（屏蔽重过滤用）：清记录并退出排队；在途回包因记录缺失在 fetch
+   * 落账守卫处自然丢弃（与淘汰同款语义）。inFlight 保留到回包 settle 自清，
+   * 避免 settle 前重复 ensure 同一回答时出现并发双请求。
+   */
+  drop(answerId: string): void {
+    const queueIndex = this.queue.indexOf(answerId);
+    if (queueIndex >= 0) {
+      this.queue.splice(queueIndex, 1);
+    }
+    if (this.records.delete(answerId)) {
+      this.notify();
+    }
+  }
+
   record(answerId: string): ContinuousFullTextRecord | undefined {
     return this.records.get(answerId);
   }

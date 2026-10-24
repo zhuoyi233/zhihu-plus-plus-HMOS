@@ -255,4 +255,23 @@ export class ContinuousStreamDataSource implements IDataSource {
     }
     return start;
   }
+
+  /**
+   * 整体移除某回答的全部行（信息头 + 正文区 + 分隔带，屏蔽重过滤用）：
+   * 从后往前 onDataDelete（与 replaceBodyRows 同款倒序约定）。
+   * 返回移除的行数；找不到该回答时返回 0。
+   */
+  removeAnswerRows(answerId: string): number {
+    let removed = 0;
+    for (let i = this.rows.length - 1; i >= 0; i--) {
+      if (this.rows[i].answerId !== answerId) {
+        continue;
+      }
+      this.rows.splice(i, 1);
+      const deleting = i;
+      removed += 1;
+      this.listeners.forEach((listener: DataChangeListener): void => listener.onDataDelete(deleting));
+    }
+    return removed;
+  }
 }

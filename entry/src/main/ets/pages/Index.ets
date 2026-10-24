@@ -2,6 +2,7 @@ import { AppDestination, AppDestinationName } from 'core';
 import {
   AppPreferencesStore,
   BlockedFeedHistoryStore,
+  ContentBlockingMatcher,
   BlockingRuleMatcher,
   BlockingRuleStore,
   ChannelFeedRepository,
@@ -152,6 +153,8 @@ struct Index {
   /** 连续页专属划线点赞与卡片元数据仓库：与详情页实例隔离，避免单飞 client 互斥。 */
   @State private continuousSegmentReactionRepository?: SegmentReactionRepository = undefined;
   @State private continuousLinkCardMetaRepository?: LinkCardMetaRepository = undefined;
+  /** 内容屏蔽匹配器（RULES_ONLY）：连续页屏蔽后对已加载回答重过滤。 */
+  @State private contentBlockingMatcher?: ContentBlockingMatcher = undefined;
   @State private peopleRepository?: PeopleDetailRepository = undefined;
   @State private peopleContentRepository?: PeopleContentRepository = undefined;
   @State private pinRepository?: PinRepository = undefined;
@@ -212,6 +215,7 @@ struct Index {
       this.openedContentStore = openedContentStore;
       this.blockingRuleStore = blockingRuleStore;
       this.blockedFeedHistoryStore = blockedFeedHistoryStore;
+      this.contentBlockingMatcher = blockingMatcher;
       this.preferencesStore = preferencesStore;
       const remoteHistory = new RemoteHistorySync(new HttpRemoteHistorySource(new ZhihuHttpClient(session)),
         new RemoteReadStore(getAppDatabase(context)), (): string => {
@@ -801,7 +805,10 @@ struct Index {
       openedContentStore: this.openedContentStore,
       historyUploader: this.readHistoryUploader,
       segmentReactionRepository: this.continuousSegmentReactionRepository,
-      linkCardMetaRepository: this.continuousLinkCardMetaRepository
+      linkCardMetaRepository: this.continuousLinkCardMetaRepository,
+      rules: this.blockingRuleStore,
+      history: this.blockedFeedHistoryStore,
+      blockingMatcher: this.contentBlockingMatcher
     });
   }
 

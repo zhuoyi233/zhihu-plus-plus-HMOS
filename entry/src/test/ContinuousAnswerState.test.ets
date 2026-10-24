@@ -182,5 +182,30 @@ export default function continuousAnswerStateTest(): void {
       await flush();
       expect(fixture.phaseOf('a')).assertEqual('ready');
     });
+
+    it('dropRemovesRecordAndCancelsQueue', 0, async () => {
+      const fixture = new SchedulerFixture();
+      fixture.scheduler.activate();
+      fixture.scheduler.ensure(['a', 'b', 'c']);
+      expect(fixture.phaseOf('a')).assertEqual('loading');
+      expect(fixture.phaseOf('b')).assertEqual('loading');
+      expect(fixture.phaseOf('c')).assertEqual('pending');
+      // 排队中的回答被屏蔽移除：清记录、退出排队，后续不再请求。
+      fixture.scheduler.drop('c');
+      expect(fixture.phaseOf('c')).assertEqual('missing');
+      fixture.sourceA.resolve('a');
+      fixture.sourceB.resolve('b');
+      await flush();
+      expect(fixture.totalCalls()).assertEqual(2);
+      // 在途回包到达前被 drop：记录缺失，落账守卫直接丢弃。
+      fixture.scheduler.ensure(['d']);
+      expect(fixture.phaseOf('d')).assertEqual('loading');
+      fixture.scheduler.drop('d');
+      fixture.sourceA.resolve('d');
+      fixture.sourceB.resolve('d');
+      await flush();
+      expect(fixture.phaseOf('d')).assertEqual('missing');
+      expect(fixture.totalCalls()).assertEqual(3);
+    });
   });
 }

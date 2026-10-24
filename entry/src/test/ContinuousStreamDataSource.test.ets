@@ -174,5 +174,27 @@ export default function continuousStreamDataSourceTest(): void {
       expect(dataSource.rowAt(1).key).assertEqual('a1:block:p1');
       expect(dataSource.replaceRowAt('missing-key', fixtureBlockRow('a1', 'x'))).assertFalse();
     });
+
+    it('removeAnswerRowsRemovesWholeAnswerSpan', 0, () => {
+      const dataSource = new ContinuousStreamDataSource();
+      const listener = new RecordingListener();
+      dataSource.registerDataChangeListener(listener);
+      dataSource.replaceAll([
+        continuousHeaderRow('a1'),
+        ...fixtureReadyBody('a1', ['p1', 'p2']),
+        continuousHeaderRow('a2'),
+        ...fixtureReadyBody('a2', ['p3']),
+        continuousStreamEndRow('end')
+      ]);
+      listener.events.splice(0, listener.events.length);
+      const removed = dataSource.removeAnswerRows('a1');
+      expect(removed).assertEqual(4);
+      // 从后往前删：剩余行索引稳定，事件索引按删除后状态计。
+      expect(listener.events.join(',')).assertEqual('delete@3,delete@2,delete@1,delete@0');
+      expect(dataSource.totalCount()).assertEqual(4);
+      expect(dataSource.rowAt(0).key).assertEqual('a2:header');
+      expect(dataSource.rowAt(3).key).assertEqual('stream-end:end');
+      expect(dataSource.removeAnswerRows('missing')).assertEqual(0);
+    });
   });
 }
