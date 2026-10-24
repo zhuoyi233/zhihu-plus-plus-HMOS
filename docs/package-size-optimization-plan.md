@@ -93,6 +93,35 @@
 
 ## 4. 阶段二：Release 出包与调试验证分离
 
+### 0.5.10 符号映射增量回归（2026-10-24）
+
+正式发布的 0.5.9 未签名包为 3,295,090 字节，0.5.10 首次 Release 包为 5,466,120 字节。
+逐条目比较发现新增 `ets/symbolMap.map` 为 2,073,940 字节，占增量约 95.5%；字节码仅增加
+91,776 字节，内置更新说明增加 4,509 字节。隔离旧符号文件后重新编译仍会生成该文件，
+不能仅靠清理现有缓存解决。
+
+发行流程在 `entry/hvigorfile.ts` 的 Release `PackageHap` 执行前，将符号表逐字节核对后移至
+包外 `outputs/<target>/mapping/`，再按最终 HAP 哈希归档；Debug 不执行此处理。
+原发行检查仅排除 `sourceMaps.map`，现检查所有 `ets/*.map`，并在复制发行产物前同时检查
+未签名与签名包，防止任一包夹带映射。体积分析脚本同步将符号映射归入映射类别。
+
+回归命令：
+
+```powershell
+node --experimental-strip-types scripts/test-release-symbol-maps.mjs
+pwsh -NoProfile -File scripts/test-release-package.ps1
+pwsh -NoProfile -File scripts/test-release-notes.ps1
+```
+
+分别覆盖归档字节一致性、无文件与重复构建、失败保留现场、两类 HAP 的映射拒绝，以及内置说明恢复。
+完整验证仍按编译/Hypium → Debug → Release 顺序执行；交付前核对映射归档、更新说明与产物指纹。
+
+修复后未签名包为 **3,392,070 字节**，较修复前减少 **2,074,050 字节（37.9%）**。
+逐条目内容 SHA-256 比对只有 `symbolMap.map` 被移除，其余文件（含字节码与更新日志）均一致；
+符号表与源码映射在包外按新 HAP 哈希归档。归档回归 **4/4**、包映射检查 **8/8**、
+更新说明回归 **22/22** 通过；编译/Hypium、Debug、最终 Release 验证均通过 **902/902**。
+验证在提交前工作区进行，构建记录为 `HEAD=4d5763a7`、`dirty=true`；合并后的正式发版仍须重新出包验证。
+
 ### 工作项
 
 主要涉及 `scripts/verify-harmony.ps1`，必要时新增独立的发行构建脚本。

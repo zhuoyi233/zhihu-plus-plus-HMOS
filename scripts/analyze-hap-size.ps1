@@ -31,7 +31,7 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 $categoryLegend = [ordered]@{
   'bytecode'           = 'ArkTS 字节码（ets/modules.abc）'
-  'sourcemap'          = '源码映射（ets/sourceMaps.map）'
+  'sourcemap'          = '源码与符号映射（ets/*.map）'
   'metadata'           = '包描述与资源索引（module.json、pack.info、pkgContextInfo.json、resources.index）'
   'rawfile-update'     = 'rawfile 内更新清单（resources/rawfile/update/）'
   'rawfile-diagnostics' = 'rawfile 内诊断资源（reader_probe.html、fixtures/）'
@@ -44,7 +44,7 @@ function Classify-HapEntry {
   param([string]$FullName)
 
   if ($FullName -eq 'ets/modules.abc') { return 'bytecode' }
-  if ($FullName -eq 'ets/sourceMaps.map') { return 'sourcemap' }
+  if ($FullName -like 'ets/*.map') { return 'sourcemap' }
   if ($FullName -in @('module.json', 'pack.info', 'pkgContextInfo.json', 'resources.index')) {
     return 'metadata'
   }

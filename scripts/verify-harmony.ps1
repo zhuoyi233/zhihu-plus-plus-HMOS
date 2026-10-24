@@ -30,6 +30,7 @@ $script:Product = 'default'
 $script:BuildMode = $BuildMode
 $script:RepositoryRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 . (Join-Path $PSScriptRoot 'lib/release-notes.ps1')
+. (Join-Path $PSScriptRoot 'lib/release-package.ps1')
 
 function Resolve-ExistingFile {
   param(
@@ -200,6 +201,7 @@ function Copy-ReleaseArtifacts {
   foreach ($suffix in @('unsigned', 'signed')) {
     $source = Join-Path $HapDirectory "entry-default-$suffix.hap"
     if (Test-Path -LiteralPath $source -PathType Leaf) {
+      Assert-HapNoSourceMap -HapPath $source
       Assert-HapReleaseNotes -HapPath $source -VersionName $VersionName -ExpectedNotes $ExpectedNotes
     } elseif ($suffix -eq 'unsigned') {
       throw "缺少未签名 HAP：$source"
@@ -245,22 +247,6 @@ function Copy-ReleaseMappingArchive {
   New-Item -ItemType Directory -Path $archiveDir -Force | Out-Null
   Copy-Item -Path (Join-Path $mappingDir '*') -Destination $archiveDir -Recurse -Force
   Write-Host "映射归档：$archiveDir"
-}
-
-function Assert-HapNoSourceMap {
-  param([string]$HapPath)
-
-  Add-Type -AssemblyName System.IO.Compression.FileSystem
-  $archive = [System.IO.Compression.ZipFile]::OpenRead($HapPath)
-  try {
-    $sourceMap = $archive.Entries | Where-Object { $_.FullName -eq 'ets/sourceMaps.map' } | Select-Object -First 1
-    if ($null -ne $sourceMap) {
-      throw "发行 HAP 不应包含 ets/sourceMaps.map：$HapPath"
-    }
-  } finally {
-    $archive.Dispose()
-  }
-  Write-Host '发行 HAP 不含源码映射（ets/sourceMaps.map）'
 }
 
 function Assert-HapApiVersions {
