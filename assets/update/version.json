@@ -1,15 +1,15 @@
 {
-  "tag_name": "HMOSv0.5.9",
-  "name": "HMOSv0.5.9",
-  "html_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.5.9",
-  "published_at": "2026-10-21T03:50:08Z",
-  "body": "# ZhihuPlusPlus-HMOS v0.5.9\r\n\r\n本次更新以**首页推荐与内容过滤体验升级**为重点，补齐服务器已读历史同步与话题屏蔽，完善关注动态排序和想法详情交互。自 v0.5.8 起，发版准备前共 9 个提交。\r\n\r\n## ✨ 首页与关注\r\n\r\n- 首页卡片调整为标题、作者、摘要和页脚的排版顺序，缩略图与摘要并排展示，更多菜单移至右下角。\r\n- 移动推荐卡片保留服务端页脚统计原文，完善质量指标解析与推荐信息展示。\r\n- 首页卡片菜单对齐安卓 Lite，支持加载内容关联话题并添加话题屏蔽，长名称可完整查看。\r\n- 关注页保留“推荐 / 动态”频道，动态新增“默认 / 按时间”排序，频道与排序选择独立保存。\r\n\r\n## 🛡️ 已读同步与内容过滤\r\n\r\n- 同步当前账号的服务器阅读历史，首页智能过滤结合本机与服务器已读记录隐藏已读内容，并保留已关注作者例外。\r\n- 历史同步在后台执行，首页最多等待首屏 300 毫秒，后续结果仅过滤尚未浏览的列表尾部。\r\n- 本机与服务器已读身份持续保留，历史页的展示数量上限不再裁剪已读身份。\r\n- 未关注作者的内容曝光一次后，再次推荐时可由智能过滤隐藏；支持通过设置调整过滤行为。\r\n- 完善智能过滤与关注作者选项、统计入口和质量阈值的开关联动，修复阈值保存后显示不及时的问题。\r\n- 质量屏蔽卡片展示被屏蔽内容的标题与原因，区分提问者专属屏蔽范围，并完善屏蔽规则备份兼容。\r\n\r\n## 🐞 问题修复\r\n\r\n- 修复关注流响应较大时分页加载失败的问题。\r\n- 修复信息流与个人页摘要直接显示 HTML 标签的问题，保留链接和提及文字。\r\n- 修复想法详情排版与点赞交互，补齐独立的沉浸光感底栏胶囊。\r\n\r\n## 📥 下载与安装\r\n\r\n1. 下载下方附件 `ZhihuPlusPlus-HMOS-v0.5.9-unsigned.hap`\r\n2. 使用 [小白调试助手](https://github.com/likuai2010/auto-installer) 或 [HoKit](https://github.com/yabi-zzh/HoKit/releases) 自行签名\r\n3. 覆盖安装即可升级，原有登录状态、设置与历史数据会保留\r\n\r\n> [!IMPORTANT]\r\n> 要求设备系统为 **HarmonyOS 6.1.0（API 23）及以上**。\r\n> 服务器已读历史同步需要登录，已读内容过滤受智能内容过滤设置控制。\r\n> 本项目非知乎官方产品，内容来自知乎网站，服务端接口变化可能导致部分功能失效。",
+  "tag_name": "HMOSv0.5.10",
+  "name": "HMOSv0.5.10",
+  "html_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/tag/HMOSv0.5.10",
+  "published_at": "2026-10-24T05:31:50Z",
+  "body": "# ZhihuPlusPlus-HMOS v0.5.10\r\n\r\n本次更新以**宽屏信息流与舒适阅读体验**为重点，带来自适应两列信息流、默认舒适排版、阅读位置恢复，以及手机和平板的菜单与收藏交互改进。自 v0.5.9 起，发版准备前共 5 个提交。\r\n\r\n## 🖥️ 宽屏信息流\r\n\r\n- 首页、关注、热榜和日报支持自适应两列瀑布流，随横竖屏切换与窗口缩放调整布局，充分利用大屏空间。\r\n- 宽屏首页补足首屏内容，日报日期标题保持整行显示，并改善加载动画的底栏避让。\r\n- 各页签使用独立顶栏滚动效果，修复切换页签时模糊效果串扰，改善首屏留白与滚动渐变模糊。\r\n- 感谢 [@wuqiangroy](https://github.com/wuqiangroy) 对宽屏两列信息流布局的贡献（[#98](https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/pull/98)）。\r\n\r\n## 📖 阅读排版与位置恢复\r\n\r\n- 默认采用舒适排版，调整问题、回答和文章的标题层级、作者信息及正文留白，保留原有排版与自定义阅读参数。\r\n- 正文跟随系统字号并适配宽窗口，改善公式缩放、横竖屏排版与文末操作区域的空间避让。\r\n- 按回答和文章保存阅读位置，改善返回、重新进入和应用重启后的恢复，以及调整字号后的定位。\r\n- 修复公式中的中文缺字与方框文字排版，长句支持换行并随窗口宽度重新排版。\r\n\r\n## 🎨 菜单与收藏交互\r\n\r\n- 宽窗口菜单靠近操作入口，手机使用底部面板，删除与清空等短确认改为原生居中对话框。\r\n- 收藏面板按内容收高，在宽窗口居中显示，选择收藏夹与新建表单可在面板内切换。\r\n- 改善手机表单的键盘避让，输入区可滚动，取消与提交按钮保持在键盘上方，并保留退出时的草稿确认。\r\n- 恢复屏蔽规则、屏蔽记录和个人主页的更多操作入口，统一个人主页返回与更多按钮的圆形外观及按压反馈。\r\n\r\n## 🐞 问题修复与更新说明\r\n\r\n- 修复收藏夹内容摘要露出 HTML 标签的问题。\r\n- 主题模式按钮根据窗口宽度与系统字号调整排列，改善大字号下的换行与宽屏空间利用。\r\n- 私信会话顶栏使用不透明底色，避免消息正文透出后与标题叠字。\r\n- 修复问题页关注或取消关注后，信息头关注数未同步更新的问题。\r\n- 发行包自动内置本版本完整更新说明，并加强更新清单与安装包附件信息校验。\r\n\r\n## 📥 下载与安装\r\n\r\n1. 下载下方附件 `ZhihuPlusPlus-HMOS-v0.5.10-unsigned.hap`\r\n2. 使用 [小白调试助手](https://github.com/likuai2010/auto-installer) 或 [HoKit](https://github.com/yabi-zzh/HoKit/releases) 自行签名\r\n3. 覆盖安装即可升级，原有登录状态、设置与历史数据会保留\r\n\r\n> [!IMPORTANT]\r\n> 要求设备系统为 **HarmonyOS 6.1.0（API 23）及以上**。\r\n> 本版默认使用舒适排版，可在外观设置的“正文排版”中切换“原有排版”，或调整字号、行高与段间距。\r\n> 本项目非知乎官方产品，内容来自知乎网站，服务端接口变化可能导致部分功能失效。\r\n",
   "assets": [
     {
-      "name": "ZhihuPlusPlus-HMOS-v0.5.9-unsigned.hap",
-      "browser_download_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/download/HMOSv0.5.9/ZhihuPlusPlus-HMOS-v0.5.9-unsigned.hap",
-      "size": 3295090,
-      "sha256": "bc4fba4dea11fc815deddeaea2814909bf91ebec3ffba3a1c34b8143ef9cb6df"
+      "name": "ZhihuPlusPlus-HMOS-v0.5.10-unsigned.hap",
+      "browser_download_url": "https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/download/HMOSv0.5.10/ZhihuPlusPlus-HMOS-v0.5.10-unsigned.hap",
+      "size": 3392070,
+      "sha256": "0beb486ec02dbce35eaeaa272909562c3b422e1b27b48d6c27ae473717beb6bc"
     }
   ]
 }
