@@ -4,6 +4,7 @@ import { AppDestination, AppDestinationName, resolveZhihuLink, toAppDestination 
 import {
   Answer,
   AnswerDoubleTapAction,
+  answerDoubleTapActionLabel,
   AppPreferencesStore,
   BlockableContentSummary,
   BlockedFeedHistoryGateway,
@@ -298,6 +299,7 @@ export struct ContinuousAnswerPage {
   private segmentLikeBusy: boolean = false;
   @State private doubleTapAskSheetShown: boolean = false;
   private doubleTapAskAnswerId: string = '';
+  private lastBodyDoubleTapAt: number = 0;
   /** 朗读服务状态 tick（AppStorage 广播）：逐答菜单朗读态随播报状态刷新。 */
   @StorageProp('speechPlaybackTick') private speechPlaybackTick: number = 0;
   /** 账号变更广播（退出/切换登录）：互动弹层与乐观缓存立即失效（计划 §4.4）。 */
@@ -1750,6 +1752,13 @@ export struct ContinuousAnswerPage {
             }
           }
         })
+        // 与详情页相同：可选中文本用 ReaderBlockView 的原始 touch，正文空白用父容器手势。
+        // 连续流含多篇回答和操作栏，必须按双击落点判定所属正文，不能直接使用活动回答。
+        .gesture(TapGesture({ count: 2 }).onAction((event: GestureEvent): void => {
+          if (event.fingerList.length > 0) {
+            this.onBodyGapDoubleTap(event.fingerList[0].localY);
+          }
+        }))
         .onScrollStop((): void => {
           this.updateActiveAnswer();
           this.ensureWindow();
@@ -2525,7 +2534,47 @@ export struct ContinuousAnswerPage {
 
   // ---------- 双击正文动作（对齐单篇详情页分发） ----------
 
+  /** 仅正文块和同一回答相邻正文块间的留白响应父手势，信息头/日期/操作栏不响应。 */
+  private onBodyGapDoubleTap(localY: number): void {
+    const total = this.dataSource.totalCount();
+    let previousRow: ContinuousRow | undefined = undefined;
+    let previousBottom: number = 0;
+    for (let i = this.firstVisibleIndex; i <= Math.min(this.lastVisibleIndex, total - 1); i++) {
+      const rect = this.scroller.getItemRect(i);
+      if (rect.height <= 0) {
+        continue;
+      }
+      const row = this.dataSource.rowAt(i);
+      if (localY >= rect.y && localY < rect.y + rect.height) {
+        if (row.kind === ContinuousRowKind.BLOCK && row.block !== undefined &&
+          row.block.kind !== ReaderBlockKind.IMAGE && row.block.kind !== ReaderBlockKind.VIDEO &&
+          row.block.kind !== ReaderBlockKind.LINK_CARD && row.block.kind !== ReaderBlockKind.REFERENCE) {
+          this.onBodyDoubleTapAction(row.answerId);
+        }
+        return;
+      }
+      if (localY >= previousBottom && localY < rect.y && previousRow !== undefined &&
+        previousRow.kind === ContinuousRowKind.BLOCK && row.kind === ContinuousRowKind.BLOCK &&
+        previousRow.answerId === row.answerId) {
+        this.onBodyDoubleTapAction(row.answerId);
+        return;
+      }
+      previousRow = row;
+      previousBottom = rect.y + rect.height;
+    }
+  }
+
   private onBodyDoubleTapAction(answerId: string): void {
+    if (this.disposed || this.imagePreviewUrl.length > 0 || this.segmentSheetShown ||
+      this.doubleTapAskSheetShown || this.scheduler?.record(answerId)?.phase !== 'ready') {
+      return;
+    }
+    // Text 原始触摸与父手势可能在同一序列回调，避免沉浸式开关被连续切换两次。
+    const now = Date.now();
+    if (now - this.lastBodyDoubleTapAt < 300) {
+      return;
+    }
+    this.lastBodyDoubleTapAt = now;
     const action = this.answerDoubleTapAction;
     if (action === AnswerDoubleTapAction.NONE) {
       return;
@@ -2560,6 +2609,7 @@ export struct ContinuousAnswerPage {
       void new AppPreferencesStore(context).saveAnswerDoubleTapAction(action).catch((_error: Error): void => {
       });
     }
+    this.toast(`已将双击正文动作设为：${answerDoubleTapActionLabel(action)}`);
   }
 
   private scrollToReference(answerId: string, numero: number): void {
