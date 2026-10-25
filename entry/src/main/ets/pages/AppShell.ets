@@ -2860,6 +2860,7 @@ export struct AppShell {
       AppStorage.setOrCreate('showFeedThumbnail', value.showFeedThumbnail);
       AppStorage.setOrCreate('showRefreshFab', value.showRefreshFab);
       AppStorage.setOrCreate('feedCardStyle', value.feedCardStyle);
+      AppStorage.setOrCreate('feedColumnMode', value.feedColumnMode);
     } catch (_error) {
       // 读取失败时沿用与上游一致的默认值。
     }

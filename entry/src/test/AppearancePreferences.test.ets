@@ -2,8 +2,11 @@ import { describe, expect, it } from '@ohos/hypium';
 import {
   decodeFabOpacity,
   decodeFeedCardStyle,
+  decodeFeedColumnMode,
+  defaultAppearancePreferences,
   defaultExperiencePreferences,
   FeedCardStyle,
+  FeedColumnMode,
   normalizeAppearancePreferences,
   normalizeBottomBarItems,
   normalizeExperiencePreferences,
@@ -25,17 +28,27 @@ export default function appearancePreferencesTest(): void {
       expect(decodeFeedCardStyle('material')).assertEqual(FeedCardStyle.DIVIDER);
     });
 
+    it('keepsFeedColumnModesAndFallsBackToAuto', 0, () => {
+      expect(decodeFeedColumnMode(FeedColumnMode.ONE)).assertEqual(FeedColumnMode.ONE);
+      expect(decodeFeedColumnMode('4')).assertEqual(FeedColumnMode.FOUR);
+      expect(decodeFeedColumnMode('six')).assertEqual(FeedColumnMode.AUTO);
+      expect(decodeFeedColumnMode(7)).assertEqual(FeedColumnMode.AUTO);
+      expect(defaultAppearancePreferences().feedColumnMode).assertEqual(FeedColumnMode.AUTO);
+    });
+
     it('keepsFeedVisibilityPreferencesAndNormalizesValues', 0, () => {
       const value = normalizeAppearancePreferences({
         fabOpacity: 83,
         showFeedThumbnail: false,
         showRefreshFab: true,
-        feedCardStyle: FeedCardStyle.CARD
+        feedCardStyle: FeedCardStyle.CARD,
+        feedColumnMode: FeedColumnMode.THREE
       });
       expect(value.fabOpacity).assertEqual(85);
       expect(value.showFeedThumbnail).assertFalse();
       expect(value.showRefreshFab).assertTrue();
       expect(value.feedCardStyle).assertEqual(FeedCardStyle.CARD);
+      expect(value.feedColumnMode).assertEqual(FeedColumnMode.THREE);
     });
 
     it('normalizesBottomNavigationSelectionAndOrder', 0, () => {

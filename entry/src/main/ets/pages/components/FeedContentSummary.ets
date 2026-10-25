@@ -9,6 +9,8 @@ export struct FeedContentSummary {
   };
   showTitle: boolean = true;
   showStatistics: boolean = true;
+  /** 摘要行数：信息流多列时收窄卡宽传入 2，其余场景保持默认 3 行。 */
+  summaryMaxLines: number = 3;
 
   build() {
     Column({ space: $r('app.float.spacing_small') }) {
@@ -35,7 +37,7 @@ export struct FeedContentSummary {
         Text(this.target.excerpt)
           .fontSize($r('app.float.body_font_size'))
           .fontColor($r('app.color.primary_text'))
-          .maxLines(3).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
+          .maxLines(this.summaryMaxLines).textOverflow({ overflow: TextOverflow.Ellipsis }).width('100%')
       }
       if (this.showStatistics) {
         Text(`${this.target.voteupCount ?? '—'} 赞同 · ${this.target.commentCount ?? '—'} 评论`)

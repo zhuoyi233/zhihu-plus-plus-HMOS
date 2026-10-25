@@ -1,14 +1,68 @@
 import { describe, expect, it } from '@ohos/hypium';
-import { buildFeedFlowLayout, feedFlowItemIndex, homeFeedInitialItemTarget } from '../main/ets/pages/FeedWaterfallLayout';
+import {
+  buildFeedFlowLayout,
+  feedAnchorFlowIndex,
+  feedColumnCandidates,
+  feedMinCardWidthVp,
+  FeedFlowLayout,
+  feedSectionSignature,
+  feedFlowItemIndex,
+  homeFeedInitialItemTarget,
+  resolveFeedColumnSpec
+} from '../main/ets/pages/FeedWaterfallLayout';
 
 export default function feedWaterfallLayoutTest(): void {
   describe('feedWaterfallLayoutTest', () => {
     it('sizesTheInitialBatchForWideViewportWithTwoBufferRows', 0, () => {
       expect(homeFeedInitialItemTarget(599, 1022, 94)).assertEqual(1);
       expect(homeFeedInitialItemTarget(600, 1022, 94)).assertEqual(22);
-      expect(homeFeedInitialItemTarget(1138, 711, 94)).assertEqual(16);
+      expect(homeFeedInitialItemTarget(1138, 711, 94)).assertEqual(24);
+      expect(homeFeedInitialItemTarget(1200, 1022, 94)).assertEqual(44);
       expect(homeFeedInitialItemTarget(1138, 0, 94)).assertEqual(1);
       expect(homeFeedInitialItemTarget(1138, 10000, 94)).assertEqual(60);
+    });
+    it('reducesInitialBatchWhenFontScaleShrinksColumnCount', 0, () => {
+      // 字号放大提高最小卡宽：1200vp 从 4 列降为 2 列，首屏目标同步减半
+      expect(feedMinCardWidthVp(1.8)).assertEqual(504);
+      expect(resolveFeedColumnSpec(1200).columns).assertEqual(4);
+      expect(resolveFeedColumnSpec(1200, { minCardWidthVp: 504 }).columns).assertEqual(2);
+      expect(homeFeedInitialItemTarget(1200, 1022, 94, 504)).assertEqual(22);
+    });
+    it('resolvesColumnBreakpointsFromMeasuredPageWidth', 0, () => {
+      expect(feedColumnCandidates(599)).assertEqual(1);
+      expect(feedColumnCandidates(600)).assertEqual(2);
+      expect(feedColumnCandidates(899)).assertEqual(2);
+      expect(feedColumnCandidates(900)).assertEqual(3);
+      expect(feedColumnCandidates(1199)).assertEqual(3);
+      expect(feedColumnCandidates(1200)).assertEqual(4);
+    });
+    it('keepsCardWidthAboveMinimumAndSingleColumnFillsContent', 0, () => {
+      // 进入 2/3/4 列边界时卡宽约 281/283/284vp
+      expect(resolveFeedColumnSpec(600).cardWidth).assertEqual(281);
+      expect(Math.round(resolveFeedColumnSpec(900).cardWidth)).assertEqual(283);
+      expect(resolveFeedColumnSpec(1200).cardWidth).assertEqual(283.5);
+      // 宽度容不下最小卡宽时回退单列，卡片占满内容宽度
+      const narrow = resolveFeedColumnSpec(590);
+      expect(narrow.columns).assertEqual(1);
+      expect(narrow.cardWidth).assertEqual(566);
+      const clamped = resolveFeedColumnSpec(620, { minCardWidthVp: 400 });
+      expect(clamped.columns).assertEqual(1);
+      expect(clamped.cardWidth).assertEqual(596);
+    });
+    it('handlesUnmeasuredAndDegenerateSizes', 0, () => {
+      const unmeasured = resolveFeedColumnSpec(0);
+      expect(unmeasured.columns).assertEqual(1);
+      expect(unmeasured.cardWidth).assertEqual(0);
+      expect(unmeasured.contentWidth).assertEqual(0);
+      const tiny = resolveFeedColumnSpec(10);
+      expect(tiny.columns).assertEqual(1);
+      expect(tiny.cardWidth).assertEqual(0);
+    });
+    it('honorsRequestedColumnsWithinWidthProtection', 0, () => {
+      expect(resolveFeedColumnSpec(1200, { requestedColumns: 2 }).columns).assertEqual(2);
+      expect(resolveFeedColumnSpec(1200, { requestedColumns: 0 }).columns).assertEqual(4);
+      // 窄窗请求 4 列仍受最小卡宽保护，退到单列
+      expect(resolveFeedColumnSpec(400, { requestedColumns: 4 }).columns).assertEqual(1);
     });
     it('keepsOddContentAsIndependentItemsBetweenFullWidthChrome', 0, () => {
       const layout = buildFeedFlowLayout(['a', 'b', 'c'], [], 2, 2, true, 14, 94);
@@ -43,6 +97,35 @@ export default function feedWaterfallLayoutTest(): void {
       const layout = buildFeedFlowLayout([], [], 2, 0, false, 14, 94);
       expect(layout.sections.length).assertEqual(0);
       expect(feedFlowItemIndex(layout, 0)).assertEqual(-1);
+    });
+    it('skipsSectionSpliceOnlyWhenGroupingIsUnchanged', 0, () => {
+      const first = buildFeedFlowLayout(['a', 'b', 'c'], [], 2, 1, true, 14, 94);
+      const sameGrouping = buildFeedFlowLayout(['a', 'x', 'c'], [], 2, 1, true, 14, 94);
+      const columnsChanged = buildFeedFlowLayout(['a', 'b', 'c'], [], 3, 1, true, 14, 94);
+      const footerGone = buildFeedFlowLayout(['a', 'b', 'c'], [], 2, 1, false, 14, 94);
+      const offsetChanged = buildFeedFlowLayout(['a', 'b', 'c'], [], 2, 1, true, 14, 90);
+      const gapChanged = buildFeedFlowLayout(['a', 'b', 'c'], [], 2, 1, true, 0, 94);
+      expect(feedSectionSignature(sameGrouping)).assertEqual(feedSectionSignature(first));
+      expect(feedSectionSignature(columnsChanged) !== feedSectionSignature(first)).assertTrue();
+      expect(feedSectionSignature(footerGone) !== feedSectionSignature(first)).assertTrue();
+      expect(feedSectionSignature(offsetChanged) !== feedSectionSignature(first)).assertTrue();
+      expect(feedSectionSignature(gapChanged) !== feedSectionSignature(first)).assertTrue();
+    });
+    it('mapsAnchorContentToFlowIndexAcrossColumnChanges', 0, () => {
+      const wide: FeedFlowLayout = buildFeedFlowLayout(['a', 'b', 'c'], [], 2, 1, false, 14, 94);
+      expect(feedAnchorFlowIndex(wide, 0)).assertEqual(1);
+      expect(feedAnchorFlowIndex(wide, 2)).assertEqual(3);
+      // 日期标题与锚点内容同屏：锚点落在日期通栏项上
+      const dated: FeedFlowLayout =
+        buildFeedFlowLayout(['a', 'b', 'c'], ['20261023', '20261023', '20261022'], 2, 0, false, 14, 94);
+      expect(feedAnchorFlowIndex(dated, 2)).assertEqual(3);
+      // 锚点被过滤后落在仍存在的相邻内容
+      const filtered: FeedFlowLayout = buildFeedFlowLayout(['a', 'c'], [], 1, 0, false, 0, 94);
+      expect(feedAnchorFlowIndex(filtered, 1)).assertEqual(1);
+      // 锚点超出末尾时取最后一项，空列表返回 -1
+      expect(feedAnchorFlowIndex(wide, 9)).assertEqual(3);
+      expect(feedAnchorFlowIndex(wide, -1)).assertEqual(-1);
+      expect(feedAnchorFlowIndex(buildFeedFlowLayout([], [], 2, 0, false, 14, 94), 0)).assertEqual(-1);
     });
   });
 }

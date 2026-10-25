@@ -12,8 +12,10 @@ import {
   decodeContentLineHeight,
   decodeImmersiveMaterialModeText,
   DEFAULT_THEME_COLOR,
-  FeedCardStyle,
+  decodeFeedColumnMode,
   ExperiencePreferences,
+  FeedCardStyle,
+  FeedColumnMode,
   ImmersiveMaterialMode,
   normalizeBottomBarItems,
   normalizeExperiencePreferences,
@@ -53,6 +55,25 @@ interface SliderSettingOptions {
   onChange: (value: number) => void;
 }
 
+const FEED_COLUMN_MODES: FeedColumnMode[] = [
+  FeedColumnMode.AUTO, FeedColumnMode.ONE, FeedColumnMode.TWO, FeedColumnMode.THREE, FeedColumnMode.FOUR
+];
+
+function feedColumnModeLabelOf(mode: FeedColumnMode): string {
+  switch (mode) {
+    case FeedColumnMode.ONE:
+      return '单列';
+    case FeedColumnMode.TWO:
+      return '双列';
+    case FeedColumnMode.THREE:
+      return '三列';
+    case FeedColumnMode.FOUR:
+      return '四列';
+    default:
+      return '自动';
+  }
+}
+
 @Component
 export struct AppearanceSettingsPage {
   @Prop themeMode: AppThemeMode = AppThemeMode.SYSTEM;
@@ -76,6 +97,7 @@ export struct AppearanceSettingsPage {
   @StorageProp('showFeedThumbnail') private showFeedThumbnail: boolean = true;
   @StorageProp('showRefreshFab') private showRefreshFab: boolean = true;
   @StorageProp('feedCardStyle') private feedCardStyle: string = FeedCardStyle.DIVIDER;
+  @StorageProp('feedColumnMode') private feedColumnMode: string = FeedColumnMode.AUTO;
   @StorageProp('answerDoubleTapAction') private answerDoubleTapAction: AnswerDoubleTapAction =
     AnswerDoubleTapAction.ASK;
   @StorageProp('titleAutoHide') private titleAutoHide: boolean = false;
@@ -140,7 +162,7 @@ export struct AppearanceSettingsPage {
             value: this.fabOpacity, min: 10, max: 100, step: 5,
             testId: 'appearance_fab_opacity', showSteps: false,
             onChange: (value: number): void => {
-              this.updateAppearance(value, this.showFeedThumbnail, this.showRefreshFab, this.feedCardStyleValue());
+              this.updateAppearance(value, this.showFeedThumbnail, this.showRefreshFab, this.feedCardStyleValue(), this.feedColumnModeValue());
             }
           })
         }
@@ -182,17 +204,21 @@ export struct AppearanceSettingsPage {
         Column() {
           this.switchSetting('显示信息流缩略图', '在有封面信息时显示内容缩略图', this.showFeedThumbnail,
             'appearance_feed_thumbnail', (value: boolean): void => {
-              this.updateAppearance(this.fabOpacity, value, this.showRefreshFab, this.feedCardStyleValue());
+              this.updateAppearance(this.fabOpacity, value, this.showRefreshFab, this.feedCardStyleValue(), this.feedColumnModeValue());
             })
           Divider().color($r('app.color.divider_color'))
           this.switchSetting('显示刷新悬浮按钮', '在信息流右下角显示快捷刷新按钮', this.showRefreshFab,
             'appearance_refresh_fab', (value: boolean): void => {
-              this.updateAppearance(this.fabOpacity, this.showFeedThumbnail, value, this.feedCardStyleValue());
+              this.updateAppearance(this.fabOpacity, this.showFeedThumbnail, value, this.feedCardStyleValue(), this.feedColumnModeValue());
             })
           Divider().color($r('app.color.divider_color'))
           this.selectSetting('信息流样式', '卡片样式使用圆角卡片展示，分割线样式使用细线分隔条目。',
             this.feedCardStyleLabel(), this.feedCardStyleOptions(), this.feedCardStyleIndex(),
             'appearance_feed_style', (index: number): void => this.updateFeedCardStyle(index))
+          Divider().color($r('app.color.divider_color'))
+          this.selectSetting('信息流列数', '自动按窗口宽度在 1～4 列间切换；手动档位在空间不足时仍会自动减少列数。',
+            this.feedColumnModeLabel(), this.feedColumnModeOptions(), this.feedColumnModeIndex(),
+            'appearance_feed_columns', (index: number): void => this.updateFeedColumnMode(index))
         }
         .width('100%')
         .borderRadius($r('app.float.card_radius'))
@@ -844,6 +870,32 @@ export struct AppearanceSettingsPage {
     return [{ value: '卡片样式' }, { value: '分割线样式' }];
   }
 
+  private feedColumnModeOptions(): SelectOption[] {
+    return FEED_COLUMN_MODES.map((mode: FeedColumnMode): SelectOption => {
+      return { value: feedColumnModeLabelOf(mode) } as SelectOption;
+    });
+  }
+
+  private feedColumnModeIndex(): number {
+    const index: number = FEED_COLUMN_MODES.indexOf(this.feedColumnModeValue());
+    return index >= 0 ? index : 0;
+  }
+
+  private feedColumnModeLabel(): string {
+    return feedColumnModeLabelOf(this.feedColumnModeValue());
+  }
+
+  private feedColumnModeValue(): FeedColumnMode {
+    return decodeFeedColumnMode(this.feedColumnMode);
+  }
+
+  private updateFeedColumnMode(index: number): void {
+    if (index >= 0 && index < FEED_COLUMN_MODES.length) {
+      this.updateAppearance(this.fabOpacity, this.showFeedThumbnail, this.showRefreshFab,
+        this.feedCardStyleValue(), FEED_COLUMN_MODES[index]);
+    }
+  }
+
   private feedCardStyleIndex(): number {
     return this.feedCardStyleValue() === FeedCardStyle.CARD ? 0 : 1;
   }
@@ -854,9 +906,9 @@ export struct AppearanceSettingsPage {
 
   private updateFeedCardStyle(index: number): void {
     if (index === 0) {
-      this.updateAppearance(this.fabOpacity, this.showFeedThumbnail, this.showRefreshFab, FeedCardStyle.CARD);
+      this.updateAppearance(this.fabOpacity, this.showFeedThumbnail, this.showRefreshFab, FeedCardStyle.CARD, this.feedColumnModeValue());
     } else if (index === 1) {
-      this.updateAppearance(this.fabOpacity, this.showFeedThumbnail, this.showRefreshFab, FeedCardStyle.DIVIDER);
+      this.updateAppearance(this.fabOpacity, this.showFeedThumbnail, this.showRefreshFab, FeedCardStyle.DIVIDER, this.feedColumnModeValue());
     }
   }
 
@@ -1152,17 +1204,19 @@ export struct AppearanceSettingsPage {
   }
 
   private updateAppearance(fabOpacity: number, showFeedThumbnail: boolean, showRefreshFab: boolean,
-    feedCardStyle: FeedCardStyle): void {
+    feedCardStyle: FeedCardStyle, feedColumnMode: FeedColumnMode): void {
     const value: AppearancePreferences = normalizeAppearancePreferences({
       fabOpacity: fabOpacity,
       showFeedThumbnail: showFeedThumbnail,
       showRefreshFab: showRefreshFab,
-      feedCardStyle: feedCardStyle
+      feedCardStyle: feedCardStyle,
+      feedColumnMode: feedColumnMode
     });
     AppStorage.setOrCreate('fabOpacity', value.fabOpacity);
     AppStorage.setOrCreate('showFeedThumbnail', value.showFeedThumbnail);
     AppStorage.setOrCreate('showRefreshFab', value.showRefreshFab);
     AppStorage.setOrCreate('feedCardStyle', value.feedCardStyle);
+    AppStorage.setOrCreate('feedColumnMode', value.feedColumnMode);
     void this.store?.saveAppearancePreferences(value).then((): void => {
       this.statusMessage = '';
     }).catch((_error: Object): void => {

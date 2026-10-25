@@ -70,6 +70,7 @@ const FAB_OPACITY_KEY = 'fabOpacity';
 const SHOW_FEED_THUMBNAIL_KEY = 'showFeedThumbnail';
 const SHOW_REFRESH_FAB_KEY = 'showRefreshFab';
 const FEED_CARD_STYLE_KEY = 'feedCardStyle';
+const FEED_COLUMN_MODE_KEY = 'feedColumnMode';
 const FOLLOWING_FEED_TAB_INDEX_KEY = 'followingFeedTabIndex';
 const FOLLOWING_TIME_ORDER_KEY = 'followingTimeOrder';
 const DEVELOPER_MODE_KEY = 'developer';
@@ -98,11 +99,37 @@ export enum FeedCardStyle {
   DIVIDER = 'divider'
 }
 
+/** 信息流列数档位：auto 随宽度断点 1～4 列，1～4 为期望值（实际列数仍受宽度与最小卡宽保护）。 */
+export enum FeedColumnMode {
+  AUTO = 'auto',
+  ONE = '1',
+  TWO = '2',
+  THREE = '3',
+  FOUR = '4'
+}
+
+export function decodeFeedColumnMode(value: preferences.ValueType): FeedColumnMode {
+  if (value === FeedColumnMode.ONE) {
+    return FeedColumnMode.ONE;
+  }
+  if (value === FeedColumnMode.TWO) {
+    return FeedColumnMode.TWO;
+  }
+  if (value === FeedColumnMode.THREE) {
+    return FeedColumnMode.THREE;
+  }
+  if (value === FeedColumnMode.FOUR) {
+    return FeedColumnMode.FOUR;
+  }
+  return FeedColumnMode.AUTO;
+}
+
 export interface AppearancePreferences {
   fabOpacity: number;
   showFeedThumbnail: boolean;
   showRefreshFab: boolean;
   feedCardStyle: FeedCardStyle;
+  feedColumnMode: FeedColumnMode;
 }
 
 /** 可拖动悬浮按钮的位置，坐标以按钮左上角相对页面可视域的 vp 值保存。 */
@@ -234,7 +261,8 @@ export function defaultAppearancePreferences(): AppearancePreferences {
     fabOpacity: DEFAULT_FAB_OPACITY,
     showFeedThumbnail: true,
     showRefreshFab: true,
-    feedCardStyle: FeedCardStyle.DIVIDER
+    feedCardStyle: FeedCardStyle.DIVIDER,
+    feedColumnMode: FeedColumnMode.AUTO
   };
 }
 
@@ -254,7 +282,8 @@ export function normalizeAppearancePreferences(value: AppearancePreferences): Ap
     fabOpacity: decodeFabOpacity(value.fabOpacity),
     showFeedThumbnail: value.showFeedThumbnail,
     showRefreshFab: value.showRefreshFab,
-    feedCardStyle: decodeFeedCardStyle(value.feedCardStyle)
+    feedCardStyle: decodeFeedCardStyle(value.feedCardStyle),
+    feedColumnMode: decodeFeedColumnMode(value.feedColumnMode)
   };
 }
 
@@ -1112,11 +1141,13 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
       const showFeedThumbnail = await store.get(SHOW_FEED_THUMBNAIL_KEY, defaults.showFeedThumbnail);
       const showRefreshFab = await store.get(SHOW_REFRESH_FAB_KEY, defaults.showRefreshFab);
       const feedCardStyle = await store.get(FEED_CARD_STYLE_KEY, defaults.feedCardStyle);
+      const feedColumnMode = await store.get(FEED_COLUMN_MODE_KEY, defaults.feedColumnMode);
       return normalizeAppearancePreferences({
         fabOpacity: decodeFabOpacity(fabOpacity),
         showFeedThumbnail: typeof showFeedThumbnail === 'boolean' ? showFeedThumbnail : defaults.showFeedThumbnail,
         showRefreshFab: typeof showRefreshFab === 'boolean' ? showRefreshFab : defaults.showRefreshFab,
-        feedCardStyle: decodeFeedCardStyle(feedCardStyle)
+        feedCardStyle: decodeFeedCardStyle(feedCardStyle),
+        feedColumnMode: decodeFeedColumnMode(feedColumnMode)
       });
     } catch (error) {
       if (error instanceof Error) {
@@ -1187,6 +1218,7 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
       await store.put(SHOW_FEED_THUMBNAIL_KEY, value.showFeedThumbnail);
       await store.put(SHOW_REFRESH_FAB_KEY, value.showRefreshFab);
       await store.put(FEED_CARD_STYLE_KEY, value.feedCardStyle);
+      await store.put(FEED_COLUMN_MODE_KEY, value.feedColumnMode);
       await store.flush();
     } catch (error) {
       if (error instanceof Error) {

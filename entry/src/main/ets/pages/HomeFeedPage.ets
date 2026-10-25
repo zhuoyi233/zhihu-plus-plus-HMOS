@@ -1,4 +1,18 @@
-import { buildFeedFlowLayout, FeedFlowEntry, FeedFlowLayout, feedFlowItemIndex, FEED_TWO_COLUMN_MIN_WIDTH, homeFeedInitialItemTarget } from './FeedWaterfallLayout';
+import {
+  buildFeedFlowLayout,
+  feedAnchorFlowIndex,
+  FeedColumnSpec,
+  feedMinCardWidthVp,
+  FeedFlowEntry,
+  FeedFlowLayout,
+  feedFlowItemIndex,
+  feedSectionSignature,
+  FEED_ESTIMATED_CARD_HEIGHT_VP,
+  homeFeedInitialItemTarget,
+  resolveFeedColumnSpec
+} from './FeedWaterfallLayout';
+import { FeedAnchorRestorer } from './FeedColumnAnchorRestore';
+import { feedRenderChrome, FeedFlowDataSource, FeedRenderItem, FeedRenderKind, feedRenderContent } from './FeedFlowDataSource';
 import { AppDestination, AppDestinationName } from 'core';
 import {
   onThemeColor,
@@ -12,6 +26,7 @@ import {
   FeedItem,
   FeedRepository,
   FeedTargetKind,
+  FeedColumnMode,
   isUpdateAnnouncementVisible,
   OpenedContentStore,
   LastReadTouchEntry,
@@ -97,10 +112,25 @@ export struct HomeFeedPage {
   @State @Watch('rebuildFlowLayout') private feedWidthVp: number = 0;
   // 状态栏高度（vp）晚于首帧到达时重算首屏让位（让位 = 状态栏 + 顶栏 56vp）
   @StorageProp('statusBarHeightVp') @Watch('rebuildFlowLayout') private statusBarHeightVp: number = 0;
+  // 系统字号缩放：放大时提高最小卡宽，必要时自动减少列数
+  @StorageProp('systemFontSizeScale') @Watch('rebuildFlowLayout') private systemFontSizeScale: number = 1;
+  // 信息流列数偏好：auto 随断点，手动档位作为期望值仍受宽度保护（AppShell 冷启动广播，经
+  // AppStorage + @StorageProp + @Watch 接收，不用 HdsTabs 树下不可靠的 Provide/Consume）
+  @StorageProp('feedColumnMode') @Watch('rebuildFlowLayout') private feedColumnMode: string = FeedColumnMode.AUTO;
+  // 最终列数与卡宽保存在页面本地（不用全局单值，避免离屏缓存页互相覆盖），经组件参数/状态传给卡片
+  @State private feedColumns: number = 1;
+  private feedCardWidthVp: number = 0;
+  private feedHeightVp: number = 0;
   @State private flowSections: WaterFlowSections = new WaterFlowSections();
   @State private flowLayout: FeedFlowLayout = buildFeedFlowLayout([], [], 1, 0, false, 0, floatingTitleBarOffset());
+  // LazyForEach 数据源：通栏项、内容与加载尾统一协调，通知与 sections 同源
+  private readonly flowDataSource: FeedFlowDataSource = new FeedFlowDataSource();
+  private lastSectionSignature: string = '';
+  private readonly anchorRestorer: FeedAnchorRestorer = new FeedAnchorRestorer();
+  // 不足一屏补屏的限次计数：内容有增长才重置，防止过滤稀少或重复游标时循环请求
+  private fillAttempts: number = 0;
+  private fillAttemptSize: number = 0;
   private firstVisibleIndex: number = 0;
-  private feedHeightVp: number = 0;
 
   aboutToAppear(): void {
     // 登记给根 HdsNavigation 做 bindToScrollable：驱动标题栏滚动模糊。
@@ -132,6 +162,7 @@ export struct HomeFeedPage {
     this.indicator?.dispose();
     this.indicator = undefined;
     this.controller?.deactivate();
+    this.anchorRestorer.cancel();
     this.closeFeedMenu();
     this.menuRequestId += 1;
     this.menuRepository?.cancel();
@@ -199,53 +230,21 @@ export struct HomeFeedPage {
           }) {
             WaterFlow({ scroller: this.listScroller, sections: this.flowSections,
               layoutMode: WaterFlowLayoutMode.SLIDING_WINDOW }) {
-              if (this.errorMessage.length > 0) {
+              // 通栏项（错误横幅/更新公告/加载尾）与内容统一进数据源，经同一份布局快照协调数量
+              LazyForEach(this.flowDataSource, (renderItem: FeedRenderItem) => {
                 FlowItem() {
-                  Row({ space: $r('app.float.spacing_small') }) {
-                    Text(this.errorMessage)
-                      .id('home_recoverable_error_text')
-                      .fontSize($r('app.float.secondary_font_size'))
-                      .fontColor($r('app.color.secondary_text'))
-                      .layoutWeight(1)
-                    Button('重试')
-                      .backgroundColor(this.resolvedThemeColor)
-                      .fontColor(onThemeColor(this.resolvedThemeColor))
-                      .id('home_recoverable_error_retry')
-                      .onClick(() => this.controller?.retry())
-                  }
-                  .width('100%')
-                  .padding($r('app.float.spacing_small'))
-                  .borderRadius($r('app.float.card_radius'))
-                  .backgroundColor($r('app.color.surface_background'))
-                }
-              }
-
-              if (isUpdateAnnouncementVisible(this.pendingUpdateVersion, this.dismissedUpdateVersion)) {
-                FlowItem() {
-                  this.updateAnnouncementCard()
-                }
-              }
-
-              ForEach(this.items, (item: FeedItem) => {
-                FlowItem() {
-                  this.feedCard(item);
+                  this.flowRenderItem(renderItem)
                 }
                 .width('100%')
-              }, (item: FeedItem): string => feedItemIdentity(item))
-
-              if (this.loadingMore) {
-                // 尾部留白避让悬浮底栏，加载动画保持完整可见。
-                FlowItem() {
-                  FeedLoadMoreIndicator({ elementId: 'home_load_more' })
-                }
-                .width('100%')
-              }
+              }, (renderItem: FeedRenderItem): string => renderItem.key)
             }
+            .cachedCount(Math.max(5, this.feedColumns * 2))
             .onScrollIndex((start: number, end: number): void => {
               const lastItem: number = feedFlowItemIndex(this.flowLayout, end);
               this.controller?.markVisibleThrough(lastItem);
-              // 多列首屏可能容纳整页数据，提前请求下一页，避免只能等待触底事件。
-              if (lastItem >= this.items.length - 3 && this.items.length > 0 && this.canLoadMore) {
+              // 多列首屏可能容纳整页数据，按列数保留两行余量提前请求下一页，避免只能等待触底事件。
+              if (lastItem >= this.items.length - this.prefetchMargin() && this.items.length > 0 &&
+                this.canLoadMore) {
                 this.controller?.loadMore();
               }
               this.firstVisibleIndex = start;
@@ -299,6 +298,8 @@ export struct HomeFeedPage {
         }
         this.feedHeightVp = Number(area.height);
         this.updateInitialItemTarget();
+        // 视口变化后补判内容是否不足一屏（单列切多列、宽窗首屏等）
+        this.maybeFillViewport();
       })
 
       if (this.showRefreshFab && this.phase === HomeFeedPhase.READY) {
@@ -318,6 +319,40 @@ export struct HomeFeedPage {
     .height('100%')
     .alignContent(Alignment.TopStart)
     .backgroundColor($r('app.color.page_background'))
+  }
+
+  @Builder
+  private flowRenderItem(renderItem: FeedRenderItem) {
+    if (renderItem.kind === FeedRenderKind.ERROR_BANNER) {
+      this.recoverableErrorBanner()
+    } else if (renderItem.kind === FeedRenderKind.UPDATE_ANNOUNCEMENT) {
+      this.updateAnnouncementCard()
+    } else if (renderItem.kind === FeedRenderKind.LOADING_FOOTER) {
+      // 尾部留白避让悬浮底栏，加载动画保持完整可见。
+      FeedLoadMoreIndicator({ elementId: 'home_load_more' })
+    } else {
+      this.feedCard(renderItem.payload as FeedItem)
+    }
+  }
+
+  @Builder
+  private recoverableErrorBanner() {
+    Row({ space: $r('app.float.spacing_small') }) {
+      Text(this.errorMessage)
+        .id('home_recoverable_error_text')
+        .fontSize($r('app.float.secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .layoutWeight(1)
+      Button('重试')
+        .backgroundColor(this.resolvedThemeColor)
+        .fontColor(onThemeColor(this.resolvedThemeColor))
+        .id('home_recoverable_error_retry')
+        .onClick(() => this.controller?.retry())
+    }
+    .width('100%')
+    .padding($r('app.float.spacing_small'))
+    .borderRadius($r('app.float.card_radius'))
+    .backgroundColor($r('app.color.surface_background'))
   }
 
   @Builder
@@ -514,7 +549,8 @@ export struct HomeFeedPage {
           Text(item.target.excerpt)
             .fontSize($r('app.float.body_font_size'))
             .fontColor($r('app.color.secondary_text'))
-            .maxLines(3)
+            // 多列卡宽收窄，摘要由三行收至两行；单列保持现有行为
+            .maxLines(this.feedColumns > 1 ? 2 : 3)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%')
         }
@@ -763,24 +799,145 @@ export struct HomeFeedPage {
   }
 
   private usesCardSurface(): boolean {
-    return this.feedWidthVp >= FEED_TWO_COLUMN_MIN_WIDTH || this.feedCardStyle === 'card';
+    return this.feedColumns > 1 || this.feedCardStyle === 'card';
+  }
+
+  private flowGapVp(): number {
+    return this.getUIContext().px2vp(this.getUIContext().getHostContext()!.resourceManager
+      .getNumber($r('app.float.spacing_medium').id));
+  }
+
+  /** 可见索引预取余量：至少保留原 3 条，多列时保留两行内容。 */
+  private prefetchMargin(): number {
+    return Math.max(3, this.feedColumns * 2);
   }
 
   private updateInitialItemTarget(): void {
     this.controller?.setInitialItemTarget(
-      homeFeedInitialItemTarget(this.feedWidthVp, this.feedHeightVp, floatingTitleBarOffset()));
+      homeFeedInitialItemTarget(this.feedWidthVp, this.feedHeightVp, floatingTitleBarOffset(),
+        feedMinCardWidthVp(this.systemFontSizeScale)));
+  }
+
+  /**
+   * 视口估算容量（不带首屏缓冲）：按估高与列数推算铺满一屏所需条数，
+   * 供数据/视口变化后补判；估高仅服务预取，不决定卡片实际高度。
+   */
+  private estimatedViewportItems(): number {
+    if (this.feedHeightVp <= 0) {
+      return 0;
+    }
+    const rows: number = Math.ceil(Math.max(0, this.feedHeightVp - floatingTitleBarOffset()) /
+      FEED_ESTIMATED_CARD_HEIGHT_VP);
+    return Math.max(1, rows) * this.feedColumns;
+  }
+
+  /** 数据或视口变化后内容不足一屏时补拉一页；限次且内容有增长才重置，防止循环请求。 */
+  private maybeFillViewport(): void {
+    if (this.phase !== HomeFeedPhase.READY || !this.canLoadMore || this.refreshing || this.loadingMore) {
+      return;
+    }
+    if (this.estimatedViewportItems() <= 0 || this.items.length >= this.estimatedViewportItems()) {
+      return;
+    }
+    if (this.items.length > this.fillAttemptSize) {
+      this.fillAttempts = 0;
+    }
+    if (this.fillAttempts >= 3) {
+      return;
+    }
+    this.fillAttempts += 1;
+    this.fillAttemptSize = this.items.length;
+    this.controller?.loadMore();
+  }
+
+  /** 换列保位仅在静止的 READY 态、且已滚动离开顶部时启动，避免与刷新、手势竞争。 */
+  private canPreserveAnchor(): boolean {
+    return this.phase === HomeFeedPhase.READY && !this.refreshing && !this.loadingMore &&
+      this.firstVisibleIndex > 0 && this.items.length > 0;
+  }
+
+  private scheduleAnchorRestore(anchorItemIndex: number, spec: FeedColumnSpec): void {
+    const flowIndex: number = feedAnchorFlowIndex(this.flowLayout, anchorItemIndex);
+    if (flowIndex < 0) {
+      return;
+    }
+    const entryIndex: number = flowIndex - this.flowLayout.leadingCount;
+    const entry: FeedFlowEntry | undefined = this.flowLayout.entries[entryIndex];
+    this.anchorRestorer.schedule({
+      flowIndex: flowIndex,
+      expectedItemWidth: entry !== undefined && entry.date.length > 0 ? spec.contentWidth : spec.cardWidth,
+      extraOffsetVp: floatingTitleBarOffset()
+    }, this.listScroller);
+  }
+
+  private spliceSectionsIfNeeded(): void {
+    const signature: string = feedSectionSignature(this.flowLayout);
+    if (signature === this.lastSectionSignature) {
+      return;
+    }
+    this.lastSectionSignature = signature;
+    this.flowSections.splice(0, this.flowSections.length(), this.flowLayout.sections);
+  }
+
+  /** 按当前布局快照构建渲染条目并做最小化通知（追加/删除/重载）。 */
+  private applyRenderItems(): void {
+    const renderItems: Array<FeedRenderItem> = [];
+    if (this.errorMessage.length > 0) {
+      renderItems.push(feedRenderChrome('chrome:error', FeedRenderKind.ERROR_BANNER));
+    }
+    if (isUpdateAnnouncementVisible(this.pendingUpdateVersion, this.dismissedUpdateVersion)) {
+      renderItems.push(feedRenderChrome('chrome:announcement', FeedRenderKind.UPDATE_ANNOUNCEMENT));
+    }
+    const items: Array<FeedItem> = this.items;
+    this.flowLayout.entries.forEach((entry: FeedFlowEntry): void => {
+      renderItems.push(feedRenderContent(entry.key, entry.itemIndex, items[entry.itemIndex]));
+    });
+    if (this.loadingMore) {
+      renderItems.push(feedRenderChrome('chrome:footer', FeedRenderKind.LOADING_FOOTER));
+    }
+    this.flowDataSource.applyLayout(renderItems);
+  }
+
+  /** 手动列数档位转期望值：0 表示自动断点，实际列数仍由 resolveFeedColumnSpec 钳制。 */
+  private requestedFeedColumns(): number {
+    if (this.feedColumnMode === FeedColumnMode.ONE) {
+      return 1;
+    }
+    if (this.feedColumnMode === FeedColumnMode.TWO) {
+      return 2;
+    }
+    if (this.feedColumnMode === FeedColumnMode.THREE) {
+      return 3;
+    }
+    if (this.feedColumnMode === FeedColumnMode.FOUR) {
+      return 4;
+    }
+    return 0;
   }
 
   private rebuildFlowLayout(): void {
-    const columns: number = this.feedWidthVp >= FEED_TWO_COLUMN_MIN_WIDTH ? 2 : 1;
+    const spec: FeedColumnSpec = resolveFeedColumnSpec(this.feedWidthVp, {
+      columnGapVp: this.flowGapVp(),
+      minCardWidthVp: feedMinCardWidthVp(this.systemFontSizeScale),
+      requestedColumns: this.requestedFeedColumns()
+    });
+    const columnsChanged: boolean = spec.columns !== this.feedColumns;
+    const anchorItemIndex: number = columnsChanged && this.canPreserveAnchor()
+      ? feedFlowItemIndex(this.flowLayout, this.firstVisibleIndex) : -1;
+    this.feedColumns = spec.columns;
+    this.feedCardWidthVp = spec.cardWidth;
     const leading: number = (this.errorMessage.length > 0 ? 1 : 0) +
       (isUpdateAnnouncementVisible(this.pendingUpdateVersion, this.dismissedUpdateVersion) ? 1 : 0);
-    const gap: number = this.usesCardSurface() ? this.getUIContext().px2vp(this.getUIContext().getHostContext()!.resourceManager.getNumber($r('app.float.spacing_medium').id)) : 0;
+    const gap: number = this.usesCardSurface() ? this.flowGapVp() : 0;
     this.flowLayout = buildFeedFlowLayout(
       this.items.map((item: FeedItem): string => feedItemIdentity(item)),
       [],
-      columns, leading, this.loadingMore, gap, floatingTitleBarOffset());
-    this.flowSections.splice(0, this.flowSections.length(), this.flowLayout.sections);
+      spec.columns, leading, this.loadingMore, gap, floatingTitleBarOffset());
+    this.spliceSectionsIfNeeded();
+    this.applyRenderItems();
+    if (anchorItemIndex >= 0) {
+      this.scheduleAnchorRestore(anchorItemIndex, spec);
+    }
   }
 
   private applyState(state: HomeFeedViewState): void {
@@ -795,6 +952,8 @@ export struct HomeFeedPage {
     this.canLoadMore = state.canLoadMore;
     this.errorMessage = state.errorMessage ?? '';
     this.requiresLogin = state.requiresLogin;
+    // 数据变化（含过滤删除、屏蔽移除）后补判内容是否不足一屏
+    this.maybeFillViewport();
   }
 }
 
