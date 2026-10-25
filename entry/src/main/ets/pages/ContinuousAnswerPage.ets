@@ -102,6 +102,12 @@ interface UserBlockCandidate {
   userName: string;
 }
 
+/** 种子跨模式位置恢复解析出的落定目标（回答作用域 block 行 + 块内比例）。 */
+interface SeedRestoreTarget {
+  key: string;
+  fraction: number;
+}
+
 interface AnswerVoteSnapshot {
   voteState?: ContentVoteState;
   voteupCount: number;
@@ -245,6 +251,19 @@ export struct ContinuousAnswerPage {
   private dwellTimer: number = -1;
   private dwellAnswerId: string = '';
   private seedRestored: boolean = false;
+  /** 种子全文先于分页就绪时，恢复挂起到 buildStream 之后再登记落定目标（P5 实测回归）。 */
+  private seedRestorePending: boolean = false;
+  /** 落定校准期间用户触摸列表即让位，不再程序化校正。 */
+  private seedLandingTouched: boolean = false;
+  /** 种子落定目标（rowKey 寻址）与状态：登记后等上方正文物化平息再一次性定位。
+   * 期间抑制 dwell 写历史与淘汰——视口停在流顶不代表用户意图，且种子可能被误释放。 */
+  private seedLandingKey: string = '';
+  private seedLandingFraction: number = -1;
+  private seedLandingSeedIndex: number = -1;
+  private seedLandingStable: number = 0;
+  private seedLandingScrolled: boolean = false;
+  private seedLandingStarted: boolean = false;
+  private lastAboveBodyMutationAt: number = 0;
 
   private streamIds: Array<string> = [];
   private streamBuilt: boolean = false;
@@ -524,7 +543,12 @@ export struct ContinuousAnswerPage {
       }
     });
     if (!this.streamBuilt) {
-      this.syncStreamSeed(ids, state);
+      // activate() 会在首拉前发射 INITIAL_LOADING 空态：种子同步必须等首个已完成回包
+      // （READY/EMPTY/ERROR），否则会把空态当作「无更多」而错误走种子置顶分支。
+      if (state.phase === QuestionAnswersPhase.READY || state.phase === QuestionAnswersPhase.EMPTY ||
+        state.phase === QuestionAnswersPhase.ERROR) {
+        this.syncStreamSeed(ids, state);
+      }
       return;
     }
     this.appendFeedDelta(ids, state);
@@ -580,10 +604,9 @@ export struct ContinuousAnswerPage {
         if (this.disposed) {
           return;
         }
-        const index = this.dataSource.indexOfRowKey(continuousHeaderRowKey(target));
-        if (index >= 0) {
-          this.scroller.scrollToIndex(index, false, ScrollAlign.START);
-        }
+        // 登记种子落定目标（含挂起的位置恢复）；实际滚动等上方正文物化平息后执行，
+        // 见 seedLandingTick（P5 实测回归：占位尺度下的立即定位会被上方物化海啸推走）。
+        this.beginSeedLanding(target);
       }, 120);
     }
     this.ensureWindow();
@@ -659,6 +682,13 @@ export struct ContinuousAnswerPage {
       if (this.dataSource.indexOfRowKey(continuousHeaderRowKey(record.answerId)) >= 0) {
         this.applyBodyMutation(record.answerId, this.bodyRowsFor(record.answerId));
         this.refreshAnswerRow(continuousHeaderRowKey(record.answerId));
+        // 上方回答正文物化（占位行→真实行整段替换）会推移落定视口，记录最近一次发生时间。
+        if (this.seedLandingKey.length > 0) {
+          const materializedIndex = this.streamIds.indexOf(record.answerId);
+          if (materializedIndex >= 0 && materializedIndex < this.seedLandingSeedIndex) {
+            this.lastAboveBodyMutationAt = Date.now();
+          }
+        }
       }
       // 种子答就绪后按共享位置记录恢复段落锚点（单篇→连续交接）。
       if (record.answerId === this.seedAnswerId && record.phase === 'ready') {
@@ -676,7 +706,9 @@ export struct ContinuousAnswerPage {
       return;
     }
     const windowIds: Array<string> = [];
-    for (let i = this.activeAnswerIndex - 1; i <= this.activeAnswerIndex + 2; i++) {
+    const indices: Array<number> = [this.activeAnswerIndex, this.activeAnswerIndex + 1,
+      this.activeAnswerIndex - 1, this.activeAnswerIndex + 2];
+    for (const i of indices) {
       const answerId = this.streamIds[i];
       if (answerId !== undefined && !windowIds.includes(answerId)) {
         windowIds.push(answerId);
@@ -686,13 +718,17 @@ export struct ContinuousAnswerPage {
       windowIds.push(this.seedAnswerId);
     }
     if (windowIds.length > 0) {
-      scheduler.ensure(windowIds);
+      scheduler.ensure(windowIds, true);
     }
   }
 
   private applyEvictionPolicy(): void {
     const scheduler = this.scheduler;
     if (scheduler === undefined || this.activeAnswerIndex < 0) {
+      return;
+    }
+    if (this.seedLandingKey.length > 0) {
+      // 落定期间视口停在流顶不代表用户位置，且目标回答可能不在窗口内被误释放。
       return;
     }
     for (let i = 0; i < this.streamIds.length; i++) {
@@ -717,7 +753,10 @@ export struct ContinuousAnswerPage {
     const headerIndex = this.dataSource.indexOfRowKey(continuousHeaderRowKey(answerId));
     const touchesViewport = headerIndex >= 0 && headerIndex + 1 <= this.lastVisibleIndex;
     if (touchesViewport) {
-      this.captureAnchor();
+      // 同一帧多答物化/淘汰共用变更前锚点；后续回调尚未布局，不能再按旧 rect 捕获新行。
+      if (this.anchorKey.length === 0) {
+        this.captureAnchor();
+      }
       this.clearRowMeasurements(answerId);
     }
     const startIndex = this.dataSource.replaceBodyRows(answerId, nextRows);
@@ -785,6 +824,8 @@ export struct ContinuousAnswerPage {
     if (rect.height <= 0) {
       this.restoreAttempt += 1;
       if (this.restoreAttempt < ANCHOR_RESTORE_MAX_ATTEMPTS) {
+        // 行区间替换可能使锚点离开惰性渲染窗口，先按稳定 key 重定位，再校准块内比例。
+        this.scroller.scrollToIndex(index, false, ScrollAlign.START);
         this.restoreTimer = setTimeout((): void => {
           this.restoreTimer = -1;
           this.restoreAnchorOnce();
@@ -833,6 +874,9 @@ export struct ContinuousAnswerPage {
   }
 
   private updateActiveAnswer(): void {
+    if (this.anchorKey.length > 0) {
+      return;
+    }
     if (this.viewportHeightVp <= 0) {
       return;
     }
@@ -869,7 +913,7 @@ export struct ContinuousAnswerPage {
     }
     this.activeAnswerIndex = candidate;
     this.refreshStatus();
-    this.applyEvictionPolicy();
+    // 淘汰合并到 onScrollStop，避免手势/动量期间改变上方行区间。
     this.ensureWindow();
     this.scheduleDwellConfirm();
   }
@@ -890,6 +934,7 @@ export struct ContinuousAnswerPage {
     const active = this.activeAnswerIndex >= 0 && this.activeAnswerIndex < this.streamIds.length
       ? `回答 ${this.activeAnswerIndex + 1}/${this.streamIds.length}` : '回答 -';
     this.statusLine = `${active} · 已加载 ${this.streamIds.length} · 就绪 ${ready} · 已释放 ${evicted} · 失败 ${errored}`;
+    console.debug(`[ContinuousReader] ${this.statusLine}`);
   }
 
   // ---------- 阅读记录与逐答位置（计划 §4.4） ----------
@@ -899,6 +944,10 @@ export struct ContinuousAnswerPage {
     if (this.dwellTimer >= 0) {
       clearTimeout(this.dwellTimer);
       this.dwellTimer = -1;
+    }
+    if (this.seedLandingKey.length > 0) {
+      // 落定期间视口停在流顶（等待上方物化平息），不是用户的阅读位置，不确认已读。
+      return;
     }
     const answerId = this.activeAnswerIndex >= 0 && this.activeAnswerIndex < this.streamIds.length
       ? this.streamIds[this.activeAnswerIndex] : '';
@@ -989,62 +1038,158 @@ export struct ContinuousAnswerPage {
     }
   }
 
-  /** 种子答就绪后按共享位置记录恢复段落锚点（单篇页保存的同格式，跨模式交接）。 */
+  /** 种子答就绪后按共享位置记录恢复段落锚点（单篇页保存的同格式，跨模式交接）。
+   * 流未建时只挂起标记（临时占位行上无有效行索引），由 beginSeedLanding 并入处理；
+   * 流已建且落定目标未实际滚动时，允许把头部落定升级为段落恢复（feed 快于种子正文的时序）。 */
   private restoreSeedPosition(answerId: string): void {
     if (this.seedRestored || this.positionStore === undefined) {
       return;
     }
+    if (!this.streamBuilt) {
+      this.seedRestorePending = true;
+      return;
+    }
+    this.seedRestored = true;
+    const restored = this.resolveSeedRestore(answerId);
+    if (restored === undefined || this.seedLandingScrolled) {
+      return;
+    }
+    this.seedLandingKey = restored.key;
+    this.seedLandingFraction = restored.fraction;
+    this.seedLandingSeedIndex = this.streamIds.indexOf(answerId);
+    this.seedLandingStable = 0;
+  }
+
+  /** 读取共享位置记录并解析为落定行（回答作用域 block 行）与块内比例。 */
+  private resolveSeedRestore(answerId: string): SeedRestoreTarget | undefined {
+    if (this.positionStore === undefined) {
+      return undefined;
+    }
     const key = readerPositionKey('answer', answerId);
     if (key.length === 0) {
-      return;
+      return undefined;
     }
     let position: ReaderPosition | undefined = undefined;
     try {
       position = this.positionStore.load(key);
     } catch (_error) {
-      return;
+      return undefined;
     }
     if (position === undefined || (position.blockIndex === -1 && position.fraction === 0)) {
-      this.seedRestored = true;
-      return;
+      return undefined;
     }
     const blocks = this.answerBlocks.get(answerId);
     if (blocks === undefined) {
-      this.seedRestored = true;
-      return;
+      return undefined;
     }
     const blockIndex = readerPositionBlockIndex(position, blocks);
     if (blockIndex < 0) {
-      this.seedRestored = true;
+      return undefined;
+    }
+    const target: SeedRestoreTarget = {
+      key: `${answerId}:block:${blocks[blockIndex].id}`,
+      fraction: position.fraction
+    };
+    return target;
+  }
+
+  /**
+   * 登记种子落定目标：默认回答开头；存在跨模式位置记录时升级为段落行。
+   * 实际滚动由 seedLandingTick 在上方正文物化平息后执行。
+   */
+  private beginSeedLanding(target: string): void {
+    if (this.seedLandingStarted || this.disposed) {
       return;
     }
-    const rowKey = `${answerId}:block:${blocks[blockIndex].id}`;
-    const rowIndex = this.dataSource.indexOfRowKey(rowKey);
-    if (rowIndex < 0) {
-      this.seedRestored = true;
+    this.seedLandingStarted = true;
+    this.seedLandingKey = continuousHeaderRowKey(target);
+    this.seedLandingFraction = -1;
+    this.seedLandingSeedIndex = this.streamIds.indexOf(target);
+    this.seedLandingStable = 0;
+    this.seedLandingScrolled = false;
+    this.lastAboveBodyMutationAt = Date.now();
+    if (this.seedRestorePending) {
+      this.seedRestorePending = false;
+      this.restoreSeedPosition(this.seedAnswerId);
+    }
+    this.seedLandingTick(0);
+  }
+
+  /**
+   * 种子落定（P5 实测回归）：scrollToIndex 依赖未渲染行的估计高度且异步生效；即使首落点
+   * 正确，上方回答正文随后物化（占位行→真实行整段替换、不在渲染区、行索引整体后移）也会
+   * 把像素锚定的视口推离落点，还可能令种子被淘汰机制释放。既有 reportRowHeight 补偿只覆盖
+   * 已渲染行，覆盖不到该场景。因此登记目标后等待「上方已请求回答全部终态且 1.2s 内无上方
+   * 物化」再一次性定位，并按 rowKey 逐次解析行做小步校正，连续两次在位即完成；
+   * 用户触摸列表即让位，预算用尽则放弃并恢复 dwell/淘汰。
+   */
+  private seedLandingTick(attempt: number): void {
+    if (this.disposed || this.seedLandingTouched || attempt >= 24) {
+      this.seedLandingKey = '';
       return;
     }
-    this.seedRestored = true;
-    const fraction = position.fraction;
     setTimeout((): void => {
-      if (this.disposed) {
+      if (this.disposed || this.seedLandingTouched || this.seedLandingKey.length === 0) {
         return;
       }
-      this.scroller.scrollToIndex(rowIndex, false, ScrollAlign.START);
-      setTimeout((): void => {
-        if (this.disposed) {
-          return;
-        }
-        const rect = this.scroller.getItemRect(rowIndex);
-        if (rect.height <= 0) {
-          return;
-        }
-        const delta = rect.y - readerPositionTargetY(fraction, rect.height, this.topInsetVp());
-        if (Math.abs(delta) > 1) {
-          this.scroller.scrollBy(0, delta);
-        }
-      }, 80);
-    }, 60);
+      if (!this.seedLandingAboveQuiet()) {
+        this.seedLandingTick(attempt + 1);
+        return;
+      }
+      const rowIndex = this.dataSource.indexOfRowKey(this.seedLandingKey);
+      if (rowIndex < 0) {
+        this.seedLandingTick(attempt + 1);
+        return;
+      }
+      const rect = this.scroller.getItemRect(rowIndex);
+      if (rect.height <= 0) {
+        this.scroller.scrollToIndex(rowIndex, false, ScrollAlign.START);
+        this.seedLandingScrolled = true;
+        this.seedLandingTick(attempt + 1);
+        return;
+      }
+      const expectedY = this.seedLandingFraction >= 0
+        ? readerPositionTargetY(this.seedLandingFraction, rect.height, this.topInsetVp())
+        : this.topInsetVp();
+      const delta = rect.y - expectedY;
+      if (Math.abs(delta) > 8) {
+        this.scroller.scrollBy(0, delta);
+        this.seedLandingScrolled = true;
+        this.seedLandingStable = 0;
+        this.seedLandingTick(attempt + 1);
+        return;
+      }
+      this.seedLandingStable += 1;
+      if (this.seedLandingStable >= 2) {
+        this.seedLandingKey = '';
+        // 落定期间的 dwell 被抑制，完成后按当前活动回答补一次调度。
+        this.scheduleDwellConfirm();
+        return;
+      }
+      this.seedLandingTick(attempt + 1);
+    }, 300);
+  }
+
+  /** 落定上方是否平静：最近 1.2s 无上方正文物化，且已请求记录均到终态。 */
+  private seedLandingAboveQuiet(): boolean {
+    if (Date.now() - this.lastAboveBodyMutationAt < 1200) {
+      return false;
+    }
+    const scheduler = this.scheduler;
+    if (scheduler === undefined) {
+      return true;
+    }
+    for (let i = 0; i < this.seedLandingSeedIndex && i < this.streamIds.length; i++) {
+      const answerId = this.streamIds[i];
+      if (answerId === undefined || answerId.length === 0) {
+        continue;
+      }
+      const record = scheduler.record(answerId);
+      if (record !== undefined && record.phase !== 'ready' && record.phase !== 'error') {
+        return false;
+      }
+    }
+    return true;
   }
 
   // ---------- 逐答互动 ----------
@@ -1075,7 +1220,7 @@ export struct ContinuousAnswerPage {
       voteupCount: voteupCount,
       commentCount: commentCount
     };
-    this.votes.set(answerId, snapshot);
+    // 仅缓存用户互动；初始占位的零值不能遮住随后到达的真实统计。
     return snapshot;
   }
 
@@ -1558,6 +1703,7 @@ export struct ContinuousAnswerPage {
           }, (row: ContinuousRow): string => row.key)
         }
         .id('continuous_answer_list')
+
         .width('100%')
         .height('100%')
         .scrollBar(BarState.Off)
@@ -1573,6 +1719,17 @@ export struct ContinuousAnswerPage {
           this.firstVisibleIndex = start;
           this.lastVisibleIndex = end;
           this.updateActiveAnswer();
+        })
+        .onTouch((event: TouchEvent): void => {
+          if (event.type === TouchType.Down) {
+            this.seedLandingTouched = true;
+            this.seedLandingKey = '';
+            this.anchorKey = '';
+            if (this.restoreTimer >= 0) {
+              clearTimeout(this.restoreTimer);
+              this.restoreTimer = -1;
+            }
+          }
         })
         .onScrollStop((): void => {
           this.updateActiveAnswer();
@@ -1988,6 +2145,7 @@ export struct ContinuousAnswerPage {
             this.failedAvatarIds.add(row.answerId);
             this.refreshAnswerRow(continuousHeaderRowKey(row.answerId));
           })
+          .onClick((): void => this.openAuthorProfile(row.answerId))
       } else {
         Text(this.authorNameOf(row.answerId).substring(0, 1))
           .width(40)
@@ -1997,6 +2155,7 @@ export struct ContinuousAnswerPage {
           .fontColor($r('app.color.primary_text'))
           .textAlign(TextAlign.Center)
           .fontSize(18)
+          .onClick((): void => this.openAuthorProfile(row.answerId))
       }
       Column({ space: 2 }) {
         Text(this.authorNameOf(row.answerId))
@@ -2005,6 +2164,7 @@ export struct ContinuousAnswerPage {
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.primary_text'))
           .maxLines(1)
+          .onClick((): void => this.openAuthorProfile(row.answerId))
         if (this.authorHeadlineOf(row.answerId).length > 0) {
           Text(this.authorHeadlineOf(row.answerId))
             .fontSize(12)
@@ -2035,6 +2195,16 @@ export struct ContinuousAnswerPage {
 
   private authorNameOf(answerId: string): string {
     return this.authorOf(answerId).name;
+  }
+
+  /** 点击作者进入个人主页（对齐单篇信息头，计划 §2.1；P5 验收补齐）。 */
+  private openAuthorProfile(answerId: string): void {
+    const author = this.authorOf(answerId);
+    const identifier = author.urlToken.length > 0 ? author.urlToken : author.id;
+    if (identifier.length === 0) {
+      return;
+    }
+    this.navigate({ name: AppDestinationName.PEOPLE, id: identifier });
   }
 
   private authorHeadlineOf(answerId: string): string {
@@ -2380,7 +2550,7 @@ export struct ContinuousAnswerPage {
 
   @Builder
   private answerActions(row: ContinuousRow) {
-    Row({ space: 8 }) {
+    Flex({ direction: FlexDirection.Row, wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
       Text(`赞同 ${formatVoteCount(this.voteSnapshot(row.answerId).voteupCount)}`)
         .id(`cont_vote_up_${row.answerId}`)
         .accessibilityText(`赞同 ${this.authorNameOf(row.answerId)} 的回答`)
@@ -2388,6 +2558,7 @@ export struct ContinuousAnswerPage {
         .fontColor(this.voteSnapshot(row.answerId).voteState === ContentVoteState.UP
           ? onThemeColor(this.resolvedThemeColor) : $r('app.color.primary_text'))
         .padding({ left: 14, right: 14, top: 7, bottom: 7 })
+        .margin({ right: 8, bottom: 8 })
         .borderRadius(16)
         .backgroundColor(this.voteSnapshot(row.answerId).voteState === ContentVoteState.UP
           ? this.resolvedThemeColor : $r('app.color.surface_background'))
@@ -2397,6 +2568,7 @@ export struct ContinuousAnswerPage {
         .fontSize(13)
         .fontColor($r('app.color.primary_text'))
         .padding({ left: 14, right: 14, top: 7, bottom: 7 })
+        .margin({ right: 8, bottom: 8 })
         .borderRadius(16)
         .backgroundColor(this.voteSnapshot(row.answerId).voteState === ContentVoteState.DOWN
           ? this.resolvedThemeColor : $r('app.color.surface_background'))
@@ -2407,6 +2579,7 @@ export struct ContinuousAnswerPage {
         .fontSize(13)
         .fontColor($r('app.color.primary_text'))
         .padding({ left: 14, right: 14, top: 7, bottom: 7 })
+        .margin({ right: 8, bottom: 8 })
         .borderRadius(16)
         .backgroundColor($r('app.color.surface_background'))
         .onClick((): void => {
@@ -2423,6 +2596,7 @@ export struct ContinuousAnswerPage {
         .fontSize(13)
         .fontColor($r('app.color.primary_text'))
         .padding({ left: 14, right: 14, top: 7, bottom: 7 })
+        .margin({ right: 8, bottom: 8 })
         .borderRadius(16)
         .backgroundColor($r('app.color.surface_background'))
         .onClick((): void => {
@@ -2433,13 +2607,13 @@ export struct ContinuousAnswerPage {
             contentId: row.answerId
           });
         })
-      Blank()
       Text('···')
         .id(`cont_more_${row.answerId}`)
         .accessibilityText(`${this.authorNameOf(row.answerId)} 回答的更多操作`)
         .fontSize(16)
         .fontColor($r('app.color.primary_text'))
         .padding({ left: 12, right: 12, top: 7, bottom: 7 })
+        .margin({ right: 8, bottom: 8 })
         .borderRadius(16)
         .backgroundColor($r('app.color.surface_background'))
         .bindMenu([
@@ -2492,7 +2666,7 @@ export struct ContinuousAnswerPage {
     .id(`cont_actions_${row.answerId}`)
     .width('100%')
     .padding({ top: 8 })
-    .alignItems(VerticalAlign.Center)
+
   }
 
   @Builder
@@ -2520,9 +2694,6 @@ export struct ContinuousAnswerPage {
       Text('正文已释放，回看将重新加载')
         .id(`cont_released_${row.answerId}`)
         .fontSize(13)
-        .fontColor($r('app.color.secondary_text'))
-      Text(`占位高度 ${Math.round(row.estimatedHeightVp)} vp`)
-        .fontSize(11)
         .fontColor($r('app.color.secondary_text'))
     }
     .width('100%')

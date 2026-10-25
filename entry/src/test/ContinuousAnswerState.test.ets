@@ -207,5 +207,78 @@ export default function continuousAnswerStateTest(): void {
       expect(fixture.phaseOf('d')).assertEqual('missing');
       expect(fixture.totalCalls()).assertEqual(3);
     });
+
+    it('outOfOrderCompletionReusesOnlyTheIdleSource', 0, async () => {
+      const fixture = new SchedulerFixture();
+      fixture.scheduler.activate();
+      fixture.scheduler.ensure(['a', 'b', 'c', 'd']);
+      fixture.sourceB.resolve('b');
+      await flush();
+      expect(fixture.sourceA.calls.join(',')).assertEqual('a');
+      expect(fixture.sourceB.calls.join(',')).assertEqual('b,c');
+      fixture.sourceB.resolve('c');
+      await flush();
+      expect(fixture.sourceA.calls.join(',')).assertEqual('a');
+      expect(fixture.sourceB.calls.join(',')).assertEqual('b,c,d');
+    });
+
+    it('restoreBeforeOldRequestSettlesRefetchesWithoutAcceptingOldBody', 0, async () => {
+      const fixture = new SchedulerFixture();
+      fixture.scheduler.activate();
+      fixture.scheduler.ensure(['a']);
+      fixture.scheduler.evict('a', 480);
+      fixture.scheduler.restore('a');
+      expect(fixture.phaseOf('a')).assertEqual('pending');
+      fixture.sourceA.resolve('a');
+      await flush();
+      expect(fixture.phaseOf('a')).assertEqual('loading');
+      expect(fixture.totalCalls()).assertEqual(2);
+      fixture.sourceA.resolve('a');
+      fixture.sourceB.resolve('a');
+      await flush();
+      expect(fixture.phaseOf('a')).assertEqual('ready');
+    });
+
+    it('dropAndRecreateDoesNotAcceptTheRemovedRequestsResult', 0, async () => {
+      const fixture = new SchedulerFixture();
+      fixture.scheduler.activate();
+      fixture.scheduler.ensure(['a']);
+      fixture.scheduler.drop('a');
+      fixture.scheduler.ensure(['a']);
+      fixture.sourceA.reject('a', '旧会话错误');
+      await flush();
+      expect(fixture.phaseOf('a')).assertEqual('loading');
+      expect(fixture.totalCalls()).assertEqual(2);
+      fixture.sourceA.resolve('a');
+      fixture.sourceB.resolve('a');
+      await flush();
+      expect(fixture.phaseOf('a')).assertEqual('ready');
+    });
+
+    it('visibleRequestMovesAheadOfQueuedPrefetch', 0, async () => {
+      const fixture = new SchedulerFixture();
+      fixture.scheduler.activate();
+      fixture.scheduler.ensure(['a', 'b', 'prefetch']);
+      fixture.scheduler.ensure(['visible'], true);
+      fixture.sourceB.resolve('b');
+      await flush();
+      expect(fixture.phaseOf('visible')).assertEqual('loading');
+      expect(fixture.phaseOf('prefetch')).assertEqual('pending');
+      expect(fixture.totalCalls()).assertEqual(3);
+    });
+
+    it('disposeDropsLateResultAndDoesNotNotifyOrStartQueuedRequests', 0, async () => {
+      const fixture = new SchedulerFixture();
+      fixture.scheduler.activate();
+      fixture.scheduler.ensure(['a', 'b', 'c']);
+      const previous = fixture.lastSnapshot;
+      fixture.scheduler.dispose();
+      fixture.sourceA.resolve('a');
+      fixture.sourceB.reject('b', '离页后失败');
+      await flush();
+      expect(fixture.lastSnapshot === previous).assertTrue();
+      expect(fixture.scheduler.snapshot().length).assertEqual(0);
+      expect(fixture.totalCalls()).assertEqual(2);
+    });
   });
 }

@@ -39,7 +39,7 @@ export class ContinuousFullTextScheduler {
   private readonly queue: Array<string> = [];
   private observer?: ContinuousFullTextObserver;
   private active: boolean = false;
-  private nextSlot: number = 0;
+  private readonly busySlots: Set<number> = new Set();
 
   constructor(sourceFactory: () => ContinuousFullTextSource, concurrency: number,
     observer: ContinuousFullTextObserver) {
@@ -69,10 +69,11 @@ export class ContinuousFullTextScheduler {
   dispose(): void {
     this.deactivate();
     this.observer = undefined;
+    this.records.clear();
   }
 
   /** 窗口请求：缺失的建 pending、已 pending 的入队；ready/error/evicted 不动。 */
-  ensure(answerIds: Array<string>): void {
+  ensure(answerIds: Array<string>, prioritize: boolean = false): void {
     answerIds.forEach((answerId: string): void => {
       const existing = this.records.get(answerId);
       if (existing === undefined) {
@@ -88,6 +89,11 @@ export class ContinuousFullTextScheduler {
         this.queue.push(answerId);
       }
     });
+    if (prioritize) {
+      const preferred = answerIds.filter((id: string): boolean => this.queue.includes(id));
+      const remaining = this.queue.filter((id: string): boolean => !preferred.includes(id));
+      this.queue.splice(0, this.queue.length, ...preferred, ...remaining);
+    }
     this.pump();
   }
 
@@ -171,24 +177,30 @@ export class ContinuousFullTextScheduler {
         continue;
       }
       this.inFlight.add(answerId);
-      this.records.set(answerId, {
+      const requestRecord: ContinuousFullTextRecord = {
         answerId: answerId,
         phase: 'loading',
         measuredHeightVp: 0
-      });
-      const source = this.sources[this.nextSlot % this.sources.length];
-      this.nextSlot += 1;
-      void this.fetch(source, answerId);
+      };
+      this.records.set(answerId, requestRecord);
+      // 按实际空闲槽派发；请求乱序完成时轮转会复用仍在忙的单飞 HTTP client。
+      let slot = 0;
+      while (this.busySlots.has(slot)) {
+        slot += 1;
+      }
+      this.busySlots.add(slot);
+      void this.fetch(this.sources[slot], answerId, slot, requestRecord);
     }
     this.notify();
   }
 
-  private async fetch(source: ContinuousFullTextSource, answerId: string): Promise<void> {
+  private async fetch(source: ContinuousFullTextSource, answerId: string, slot: number,
+    requestRecord: ContinuousFullTextRecord): Promise<void> {
     try {
       const answer = await source.getAnswer(answerId);
       const record = this.records.get(answerId);
       // 淘汰是权威语义：在途回包到达前被淘汰的回答直接丢弃结果。
-      if (record === undefined || record.phase !== 'loading') {
+      if (record !== requestRecord) {
         return;
       }
       this.records.set(answerId, {
@@ -199,7 +211,7 @@ export class ContinuousFullTextScheduler {
       });
     } catch (error) {
       const record = this.records.get(answerId);
-      if (record === undefined || record.phase !== 'loading') {
+      if (record !== requestRecord) {
         return;
       }
       this.records.set(answerId, {
@@ -211,6 +223,11 @@ export class ContinuousFullTextScheduler {
       });
     } finally {
       this.inFlight.delete(answerId);
+      this.busySlots.delete(slot);
+      // 回看/移除后重建可能早于旧请求结束；旧回包不落账，新的 pending 仍需补排。
+      if (this.records.get(answerId)?.phase === 'pending' && !this.queue.includes(answerId)) {
+        this.queue.push(answerId);
+      }
       this.pump();
     }
   }

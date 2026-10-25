@@ -421,7 +421,6 @@ export function isInfrastructureDestination(destination: AppDestination): boolea
     case AppDestinationName.BACKGROUND_TASK_PROBE:
     case AppDestinationName.DOMAIN_FIXTURE_PROBE:
     case AppDestinationName.CONTINUOUS_READING_PROTOTYPE:
-    case AppDestinationName.CONTINUOUS_ANSWER:
     case AppDestinationName.PIN_DRAFTS:
       return true;
     default:
