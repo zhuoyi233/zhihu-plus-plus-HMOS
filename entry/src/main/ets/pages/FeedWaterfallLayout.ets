@@ -1,8 +1,13 @@
 /** 旧双列断点，保留供兼容判断；列数策略统一走 resolveFeedColumnSpec。 */
 export const FEED_TWO_COLUMN_MIN_WIDTH: number = 600;
-/** 三列、四列候选断点（页面容器 vp 宽度，拟定值，以设备验收为准）。 */
-export const FEED_THREE_COLUMN_MIN_WIDTH: number = 900;
-export const FEED_FOUR_COLUMN_MIN_WIDTH: number = 1200;
+/**
+ * 三列、四列断点，对齐官方横向断点体系（HarmonyOS 响应式布局指南）：
+ * sm [320,600)、md [600,840)、lg [840,1440)、xl [1440,∞)。
+ * 600/840/1440 分别是双列/三列/四列候选起点；实际列数仍受最小卡宽保护
+ * （如 840~895vp 因容不下 3×280vp 卡仍为双列）。
+ */
+export const FEED_THREE_COLUMN_MIN_WIDTH: number = 840;
+export const FEED_FOUR_COLUMN_MIN_WIDTH: number = 1440;
 
 /** 信息流最大列数。 */
 export const FEED_MAX_COLUMNS: number = 4;

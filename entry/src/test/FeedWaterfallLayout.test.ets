@@ -17,30 +17,32 @@ export default function feedWaterfallLayoutTest(): void {
       expect(homeFeedInitialItemTarget(599, 1022, 94)).assertEqual(1);
       expect(homeFeedInitialItemTarget(600, 1022, 94)).assertEqual(22);
       expect(homeFeedInitialItemTarget(1138, 711, 94)).assertEqual(24);
-      expect(homeFeedInitialItemTarget(1200, 1022, 94)).assertEqual(44);
+      expect(homeFeedInitialItemTarget(1200, 1022, 94)).assertEqual(33);
+      expect(homeFeedInitialItemTarget(1440, 1022, 94)).assertEqual(44);
       expect(homeFeedInitialItemTarget(1138, 0, 94)).assertEqual(1);
       expect(homeFeedInitialItemTarget(1138, 10000, 94)).assertEqual(60);
     });
     it('reducesInitialBatchWhenFontScaleShrinksColumnCount', 0, () => {
-      // 字号放大提高最小卡宽：1200vp 从 4 列降为 2 列，首屏目标同步减半
+      // 字号放大提高最小卡宽：1440vp 从 4 列降为 2 列，首屏目标同步减半
       expect(feedMinCardWidthVp(1.8)).assertEqual(504);
-      expect(resolveFeedColumnSpec(1200).columns).assertEqual(4);
-      expect(resolveFeedColumnSpec(1200, { minCardWidthVp: 504 }).columns).assertEqual(2);
-      expect(homeFeedInitialItemTarget(1200, 1022, 94, 504)).assertEqual(22);
+      expect(resolveFeedColumnSpec(1440).columns).assertEqual(4);
+      expect(resolveFeedColumnSpec(1440, { minCardWidthVp: 504 }).columns).assertEqual(2);
+      expect(homeFeedInitialItemTarget(1440, 1022, 94, 504)).assertEqual(22);
     });
     it('resolvesColumnBreakpointsFromMeasuredPageWidth', 0, () => {
+      // 对齐官方横向断点：sm/md 600、md/lg 840、lg/xl 1440
       expect(feedColumnCandidates(599)).assertEqual(1);
       expect(feedColumnCandidates(600)).assertEqual(2);
-      expect(feedColumnCandidates(899)).assertEqual(2);
-      expect(feedColumnCandidates(900)).assertEqual(3);
-      expect(feedColumnCandidates(1199)).assertEqual(3);
-      expect(feedColumnCandidates(1200)).assertEqual(4);
+      expect(feedColumnCandidates(839)).assertEqual(2);
+      expect(feedColumnCandidates(840)).assertEqual(3);
+      expect(feedColumnCandidates(1439)).assertEqual(3);
+      expect(feedColumnCandidates(1440)).assertEqual(4);
     });
     it('keepsCardWidthAboveMinimumAndSingleColumnFillsContent', 0, () => {
-      // 进入 2/3/4 列边界时卡宽约 281/283/284vp
+      // 进入 2/3/4 列边界时卡宽约 281/283/344vp（4 列自 xl 1440 起）
       expect(resolveFeedColumnSpec(600).cardWidth).assertEqual(281);
       expect(Math.round(resolveFeedColumnSpec(900).cardWidth)).assertEqual(283);
-      expect(resolveFeedColumnSpec(1200).cardWidth).assertEqual(283.5);
+      expect(resolveFeedColumnSpec(1440).cardWidth).assertEqual(343.5);
       // 宽度容不下最小卡宽时回退单列，卡片占满内容宽度
       const narrow = resolveFeedColumnSpec(590);
       expect(narrow.columns).assertEqual(1);
@@ -60,7 +62,8 @@ export default function feedWaterfallLayoutTest(): void {
     });
     it('honorsRequestedColumnsWithinWidthProtection', 0, () => {
       expect(resolveFeedColumnSpec(1200, { requestedColumns: 2 }).columns).assertEqual(2);
-      expect(resolveFeedColumnSpec(1200, { requestedColumns: 0 }).columns).assertEqual(4);
+      expect(resolveFeedColumnSpec(1200, { requestedColumns: 0 }).columns).assertEqual(3);
+      expect(resolveFeedColumnSpec(1440, { requestedColumns: 0 }).columns).assertEqual(4);
       // 窄窗请求 4 列仍受最小卡宽保护，退到单列
       expect(resolveFeedColumnSpec(400, { requestedColumns: 4 }).columns).assertEqual(1);
     });
