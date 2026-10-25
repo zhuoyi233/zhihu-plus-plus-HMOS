@@ -201,6 +201,11 @@ export struct AppearanceSettingsPage {
 
         this.sectionTitle('回答页')
         Column() {
+          this.selectSetting('回答阅读模式', '打开回答时的默认阅读方式；连续模式下切答手势不生效（仅单篇）',
+            this.answerReadingMode === 'continuous' ? '连续' : '单篇', this.answerReadingModeOptions(),
+            this.answerReadingMode === 'continuous' ? 1 : 0, 'appearance_answer_reading_mode',
+            (index: number): void => this.updateAnswerReadingMode(index))
+          Divider().color($r('app.color.divider_color'))
           this.switchSetting('自动隐藏回答标题', '滚动时自动隐藏回答标题栏', this.titleAutoHide,
             'appearance_title_auto_hide', (value: boolean): void => this.updateExperienceBoolean('titleAutoHide', value))
           Divider().color($r('app.color.divider_color'))
@@ -238,11 +243,6 @@ export struct AppearanceSettingsPage {
               onChange: (value: number): void => this.updateExperienceNumber('answerSwitchSensitivity', value)
             })
           }
-          Divider().color($r('app.color.divider_color'))
-          this.selectSetting('回答阅读模式', '打开回答时的默认阅读方式；连续模式下切答手势不生效（仅单篇）',
-            this.answerReadingMode === 'continuous' ? '连续' : '单篇', this.answerReadingModeOptions(),
-            this.answerReadingMode === 'continuous' ? 1 : 0, 'appearance_answer_reading_mode',
-            (index: number): void => this.updateAnswerReadingMode(index))
           Divider().color($r('app.color.divider_color'))
           this.selectSetting('双击正文动作', '详情页双击正文时执行，默认询问；可用动作取决于页面',
             answerDoubleTapActionLabel(this.answerDoubleTapAction), this.answerDoubleTapSelectOptions(),
