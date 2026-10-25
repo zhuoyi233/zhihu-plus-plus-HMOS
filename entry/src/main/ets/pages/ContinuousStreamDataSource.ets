@@ -28,6 +28,8 @@ export interface ContinuousRow {
   readonly estimatedHeightVp: number;
   /** 非 BLOCK 行的展示文案（日期行/状态行）。 */
   readonly label: string;
+  /** 日期行的完整属地，独立布局以便整段换行。 */
+  readonly ipInfo?: string;
 }
 
 const STREAM_END_ANSWER_ID = 'stream-end';
@@ -63,13 +65,14 @@ export function continuousBlockRows(answerId: string, blocks: Array<ReaderBlock>
   return rows;
 }
 
-export function continuousDateRow(answerId: string, label: string): ContinuousRow {
+export function continuousDateRow(answerId: string, label: string, ipInfo: string = ''): ContinuousRow {
   return {
     key: `${answerId}:date`,
     answerId: answerId,
     kind: ContinuousRowKind.DATE_ROW,
     estimatedHeightVp: 24,
-    label: label
+    label: label,
+    ipInfo: ipInfo
   };
 }
 

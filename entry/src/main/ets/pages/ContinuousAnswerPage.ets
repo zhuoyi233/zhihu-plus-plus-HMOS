@@ -167,9 +167,6 @@ function answerDateLine(answer: Answer): string {
   if (updated.length > 0 && updated !== created) {
     parts.push(`编辑于 ${updated}`);
   }
-  if (answer.ipInfo !== undefined && answer.ipInfo.length > 0) {
-    parts.push(`IP 属地 ${answer.ipInfo}`);
-  }
   return parts.join(' · ');
 }
 
@@ -466,7 +463,7 @@ export struct ContinuousAnswerPage {
       this.loadLinkCardMetas(scoped);
       const rows: Array<ContinuousRow> = continuousBlockRows(answerId, scoped);
       this.indexReferenceRows(answerId, rows);
-      rows.push(continuousDateRow(answerId, answerDateLine(answer)));
+      rows.push(continuousDateRow(answerId, answerDateLine(answer), answer.ipInfo ?? ''));
       rows.push(continuousActionsRow(answerId));
       rows.push(divider);
       return rows;
@@ -2122,11 +2119,28 @@ export struct ContinuousAnswerPage {
     } else if (row.kind === ContinuousRowKind.BLOCK) {
       this.streamBlock(row)
     } else if (row.kind === ContinuousRowKind.DATE_ROW) {
-      Text(row.label)
-        .fontSize(12)
-        .fontColor($r('app.color.secondary_text'))
-        .width('100%')
-        .padding({ top: 8 })
+      // 时间与属地分别测量；剩余行宽不足时让整个属地换行，避免只把地名挤到下一行。
+      Flex({ direction: FlexDirection.Row, wrap: FlexWrap.Wrap, alignItems: ItemAlign.Start }) {
+        if (row.label.length > 0) {
+          Text(row.label)
+            .id(`cont_date_${row.answerId}`)
+            .fontSize(12)
+            .fontColor($r('app.color.secondary_text'))
+            .constraintSize({ maxWidth: '100%' })
+            .flexShrink(0)
+            .margin({ right: 8 })
+        }
+        if (row.ipInfo !== undefined && row.ipInfo.length > 0) {
+          Text(`IP 属地 ${row.ipInfo}`)
+            .id(`cont_ip_${row.answerId}`)
+            .fontSize(12)
+            .fontColor($r('app.color.secondary_text'))
+            .constraintSize({ maxWidth: '100%' })
+            .flexShrink(0)
+        }
+      }
+      .width('100%')
+      .padding({ top: 8 })
     } else if (row.kind === ContinuousRowKind.ACTIONS_ROW) {
       this.answerActions(row)
     } else if (row.kind === ContinuousRowKind.DIVIDER_BAND) {
@@ -2588,118 +2602,152 @@ export struct ContinuousAnswerPage {
 
   @Builder
   private answerActions(row: ContinuousRow) {
-    Flex({ direction: FlexDirection.Row, wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
-      Text(`赞同 ${formatVoteCount(this.voteSnapshot(row.answerId).voteupCount)}`)
-        .id(`cont_vote_up_${row.answerId}`)
-        .accessibilityText(`赞同 ${this.authorNameOf(row.answerId)} 的回答`)
-        .fontSize(13)
-        .fontColor(this.voteSnapshot(row.answerId).voteState === ContentVoteState.UP
-          ? onThemeColor(this.resolvedThemeColor) : $r('app.color.primary_text'))
-        .padding({ left: 14, right: 14, top: 7, bottom: 7 })
-        .margin({ right: 8, bottom: 8 })
-        .borderRadius(16)
-        .backgroundColor(this.voteSnapshot(row.answerId).voteState === ContentVoteState.UP
-          ? this.resolvedThemeColor : $r('app.color.surface_background'))
-        .onClick((): void => this.vote(row.answerId, ContentVoteState.UP))
-      Text('反对')
-        .accessibilityText(`反对 ${this.authorNameOf(row.answerId)} 的回答`)
-        .fontSize(13)
-        .fontColor($r('app.color.primary_text'))
-        .padding({ left: 14, right: 14, top: 7, bottom: 7 })
-        .margin({ right: 8, bottom: 8 })
-        .borderRadius(16)
-        .backgroundColor(this.voteSnapshot(row.answerId).voteState === ContentVoteState.DOWN
-          ? this.resolvedThemeColor : $r('app.color.surface_background'))
-        .onClick((): void => this.vote(row.answerId, ContentVoteState.DOWN))
-      Text('收藏')
-        .id(`cont_favorite_${row.answerId}`)
-        .accessibilityText(`收藏 ${this.authorNameOf(row.answerId)} 的回答`)
-        .fontSize(13)
-        .fontColor($r('app.color.primary_text'))
-        .padding({ left: 14, right: 14, top: 7, bottom: 7 })
-        .margin({ right: 8, bottom: 8 })
-        .borderRadius(16)
-        .backgroundColor($r('app.color.surface_background'))
-        .onClick((): void => {
-          if (this.collectionRepository !== undefined && this.session !== undefined) {
+    Flex({ direction: FlexDirection.Row, wrap: FlexWrap.Wrap,
+      justifyContent: FlexAlign.SpaceBetween, alignItems: ItemAlign.Center }) {
+      Row({ space: 6 }) {
+        Button({ type: ButtonType.Normal, stateEffect: false }) {
+          Row({ space: 4 }) {
+            SymbolGlyph(this.voteSnapshot(row.answerId).voteState === ContentVoteState.UP
+              ? $r('sys.symbol.arrowtriangle_left_fill') : $r('sys.symbol.arrowtriangle_left'))
+              .fontSize('20vp')
+              .fontColor([this.resolvedThemeColor])
+              .rotate({ x: 0, y: 0, z: 1, angle: 90 })
+            Text(formatVoteCount(this.voteSnapshot(row.answerId).voteupCount))
+              .fontSize($r('app.float.secondary_font_size'))
+              .maxFontScale(1.3)
+              .fontWeight(this.voteSnapshot(row.answerId).voteState === ContentVoteState.UP
+                ? FontWeight.Bold : FontWeight.Medium)
+              .fontColor(this.resolvedThemeColor)
+          }
+          .padding({ left: 8, right: 8, top: 8, bottom: 8 })
+        }
+          .constraintSize({ minHeight: 36 })
+          .id(`cont_vote_up_${row.answerId}`)
+          .accessibilityText(`赞同 ${this.authorNameOf(row.answerId)} 的回答，${this.voteSnapshot(row.answerId).voteupCount} 赞同，${this.voteSnapshot(row.answerId).voteState === ContentVoteState.UP ? '已赞同' : '未赞同'}`)
+          .borderRadius(18)
+          .backgroundColor($r('app.color.surface_background'))
+          .onClick((): void => this.vote(row.answerId, ContentVoteState.UP))
+        Button({ type: ButtonType.Normal, stateEffect: false }) {
+          SymbolGlyph(this.voteSnapshot(row.answerId).voteState === ContentVoteState.DOWN
+            ? $r('sys.symbol.arrowtriangle_left_fill') : $r('sys.symbol.arrowtriangle_left'))
+            .fontSize('20vp')
+            .fontColor([this.resolvedThemeColor])
+            .rotate({ x: 0, y: 0, z: 1, angle: -90 })
+        }
+          .id(`cont_vote_down_${row.answerId}`)
+          .accessibilityText(`反对 ${this.authorNameOf(row.answerId)} 的回答，${this.voteSnapshot(row.answerId).voteState === ContentVoteState.DOWN ? '已反对' : '未反对'}`)
+          .width(36)
+          .height(36)
+          .borderRadius(18)
+          .backgroundColor($r('app.color.surface_background'))
+          .onClick((): void => this.vote(row.answerId, ContentVoteState.DOWN))
+      }
+      .margin({ bottom: 8 })
+      Row({ space: 6 }) {
+        Button({ type: ButtonType.Normal, stateEffect: false }) {
+          SymbolGlyph($r('sys.symbol.bookmark'))
+            .fontSize('20vp')
+            .fontColor([$r('app.color.secondary_text')])
+        }
+          .id(`cont_favorite_${row.answerId}`)
+          .accessibilityText(`收藏 ${this.authorNameOf(row.answerId)} 的回答`)
+          .width(36)
+          .height(36)
+          .borderRadius(18)
+          .backgroundColor($r('app.color.surface_background'))
+          .onClick((): void => {
+            if (this.collectionRepository !== undefined && this.session !== undefined) {
+              this.confirmAnswerRead(row.answerId);
+              this.collectionAnswerId = row.answerId;
+            } else {
+              this.toast('收藏功能需要登录');
+            }
+          })
+        Button({ type: ButtonType.Normal, stateEffect: false }) {
+          Row({ space: 4 }) {
+            SymbolGlyph($r('sys.symbol.message'))
+              .fontSize('20vp')
+              .fontColor([$r('app.color.secondary_text')])
+            Text(formatVoteCount(this.voteSnapshot(row.answerId).commentCount))
+              .fontSize($r('app.float.secondary_font_size'))
+              .maxFontScale(1.3)
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.secondary_text'))
+          }
+          .padding({ left: 6, right: 6, top: 8, bottom: 8 })
+        }
+          .constraintSize({ minHeight: 36 })
+          .id(`cont_comment_${row.answerId}`)
+          .accessibilityText(`查看 ${this.authorNameOf(row.answerId)} 回答的评论，${this.voteSnapshot(row.answerId).commentCount} 条`)
+          .borderRadius(18)
+          .backgroundColor($r('app.color.surface_background'))
+          .onClick((): void => {
             this.confirmAnswerRead(row.answerId);
-            this.collectionAnswerId = row.answerId;
-          } else {
-            this.toast('收藏功能需要登录');
-          }
-        })
-      Text(`评论 ${formatVoteCount(this.voteSnapshot(row.answerId).commentCount)}`)
-        .id(`cont_comment_${row.answerId}`)
-        .accessibilityText(`查看 ${this.authorNameOf(row.answerId)} 回答的评论`)
-        .fontSize(13)
-        .fontColor($r('app.color.primary_text'))
-        .padding({ left: 14, right: 14, top: 7, bottom: 7 })
-        .margin({ right: 8, bottom: 8 })
-        .borderRadius(16)
-        .backgroundColor($r('app.color.surface_background'))
-        .onClick((): void => {
-          this.confirmAnswerRead(row.answerId);
-          this.navigate({
-            name: AppDestinationName.COMMENT,
-            contentType: 'answer',
-            contentId: row.answerId
-          });
-        })
-      Text('···')
-        .id(`cont_more_${row.answerId}`)
-        .accessibilityText(`${this.authorNameOf(row.answerId)} 回答的更多操作`)
-        .fontSize(16)
-        .fontColor($r('app.color.primary_text'))
-        .padding({ left: 12, right: 12, top: 7, bottom: 7 })
-        .margin({ right: 8, bottom: 8 })
-        .borderRadius(16)
-        .backgroundColor($r('app.color.surface_background'))
-        .bindMenu([
-          {
-            value: this.isAnswerSpeaking(row.answerId) ? '停止朗读' : '朗读本回答',
-            action: (): void => {
-              void this.toggleAnswerSpeech(row.answerId);
+            this.navigate({
+              name: AppDestinationName.COMMENT,
+              contentType: 'answer',
+              contentId: row.answerId
+            });
+          })
+        Button({ type: ButtonType.Normal, stateEffect: false }) {
+          SymbolGlyph($r('sys.symbol.ellipsis_circle'))
+            .fontSize('20vp')
+            .fontColor([$r('app.color.secondary_text')])
+        }
+          .id(`cont_more_${row.answerId}`)
+          .accessibilityText(`${this.authorNameOf(row.answerId)} 回答的更多操作`)
+          .width(36)
+          .height(36)
+          .borderRadius(18)
+          .backgroundColor($r('app.color.surface_background'))
+          .bindMenu([
+            {
+              value: this.isAnswerSpeaking(row.answerId) ? '停止朗读' : '朗读本回答',
+              action: (): void => {
+                void this.toggleAnswerSpeech(row.answerId);
+              }
+            },
+            {
+              value: '沉浸阅读',
+              action: (): void => {
+                AppStorage.setOrCreate('detailImmersiveActive', !this.detailImmersiveActive);
+                this.toast(this.detailImmersiveActive ? '已进入沉浸式，按返回键即可退出' : '已退出沉浸式');
+              }
+            },
+            {
+              value: '复制链接',
+              action: (): void => {
+                this.copyAnswerLink(row.answerId);
+              }
+            },
+            {
+              value: '分享',
+              action: (): void => {
+                this.shareAnswer(row.answerId);
+              }
+            },
+            {
+              value: '屏蔽作者',
+              action: (): void => {
+                this.openUserBlockSheet(row.answerId);
+              }
+            },
+            {
+              value: '屏蔽关键词',
+              action: (): void => {
+                this.keywordBlockInput = '';
+                this.keywordBlockVisible = true;
+              }
+            },
+            {
+              value: '切换到单篇阅读',
+              action: (): void => {
+                this.switchToSingleAnswer(row.answerId);
+              }
             }
-          },
-          {
-            value: '沉浸阅读',
-            action: (): void => {
-              AppStorage.setOrCreate('detailImmersiveActive', !this.detailImmersiveActive);
-              this.toast(this.detailImmersiveActive ? '已进入沉浸式，按返回键即可退出' : '已退出沉浸式');
-            }
-          },
-          {
-            value: '复制链接',
-            action: (): void => {
-              this.copyAnswerLink(row.answerId);
-            }
-          },
-          {
-            value: '分享',
-            action: (): void => {
-              this.shareAnswer(row.answerId);
-            }
-          },
-          {
-            value: '屏蔽作者',
-            action: (): void => {
-              this.openUserBlockSheet(row.answerId);
-            }
-          },
-          {
-            value: '屏蔽关键词',
-            action: (): void => {
-              this.keywordBlockInput = '';
-              this.keywordBlockVisible = true;
-            }
-          },
-          {
-            value: '切换到单篇阅读',
-            action: (): void => {
-              this.switchToSingleAnswer(row.answerId);
-            }
-          }
-        ])
+          ])
+      }
+      .margin({ bottom: 8 })
     }
     .id(`cont_actions_${row.answerId}`)
     .width('100%')
