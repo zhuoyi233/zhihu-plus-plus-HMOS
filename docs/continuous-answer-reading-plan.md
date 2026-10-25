@@ -455,3 +455,27 @@ P5 仍是**部分完成**，不能把以上构建与冒烟结果改写为全部�
 - 该包已通过本轮两条顺序验证命令并安装到上述模拟器；本节后的改动仅为验收文档，不涉及再次修改编译源码。
 
 验收结束已恢复系统标准字体（第 2 档）、默认显示缩放、竖屏、应用深色主题与起始 160% 阅读字号；模拟器留在连续阅读界面。
+
+
+### 13.5 API 26 顶栏沉浸光感专项回归（2026-10-25）
+
+用户将同一 connectKey 切换为 **ZhihuPlus_API26 / 127.0.0.1:5555**，设备查询 API 为 **26**。本轮所有仓库与设备命令继续从 5800 工作树执行，覆盖安装该工作树已有验证包；未新增渲染代码，仅补充设备验收记录。此前 §13.2–13.4 的 API 23 结果与包哈希属于各自历史会话，不能混用。
+
+API 26 连续阅读通过 getContinuousAnswerTitleBarStyle 直接调用与回答详情页相同的 getPersistentImmersiveTitleBarStyle，使用 HDS IMMERSIVE_GRADIENT_BLUR 和同一光感挡位策略。实际 UI 中没有 API 23 兼容层 continuous_answer_title_blur，启动日志记录 systemMaterialTypes=[101]，设置页精美挡位未出现不支持降级提示。
+
+| 场景 | API 26 实测结果与证据 |
+| --- | --- |
+| 回答详情页对照 | 长回答 734966062，单篇与连续页正文进入顶栏后均呈现原生模糊；api26-answer-scroll.jpeg / api26-cont-scroll-1.jpeg |
+| 连续正文 / 停下 / 回滚 | 多次滑过正文和公式，停止及反向滚动后模糊仍在；api26-cont-scroll-2.jpeg / api26-cont-reverse.jpeg |
+| 跨回答与彩色图片 | 从 2091206450836149421 滑到 1965871339249341094，并显示下一答 1951667685688587906；图片滚入顶栏后真实模糊，未出现白色硬遮挡或效果消失；api26-teacher-image-through.jpeg |
+| 图片预览与沉浸阅读 | 真实图片预览、沉浸阅读期间连续页标题与返回键隐藏，Back 后恢复；api26-preview-layout.json / api26-immersive-layout.json |
+| 导航 | 顶栏返回单篇、点击标题进入同一问题、返回连续页正常；api26-back-single.txt / api26-title-question.txt / api26-title-return.txt |
+| 主题与光感挡位 | 跟随系统的浅色 + 精美、深色 + 精美、深色 + 流畅均检查实际滚动效果；api26-dark-exquisite.jpeg / api26-dark-smooth.jpeg。未据此宣称自适应与轻柔挡位完整通过 |
+| 横竖屏 | 首次旋转因系统旋转锁定仍为竖屏，未计通过；临时解锁后实际窗口为 2856×1320，模糊保持且标题与返回键不重叠，随后恢复 1320×2856；api26-landscape-real.jpeg / api26-landscape-real-layout.json |
+| 后台恢复 | Home 后重启原 Ability，标题、图片、下一答头部的 id 与 bounds 前后完全一致，模糊保持；api26-background-before.json / api26-background-after.json，比较结果见 .tmp/api26-background-result.json |
+
+截图、dump 统一位于本工作树 .tmp/shots/api26-*，命令摘要位于 .tmp/api26-*，均不入库。验收结束恢复进入前的 **跟随系统 + 精美、竖屏、系统旋转锁定开启**，主题色及阅读字号未改，模拟器停留在连续阅读页。
+
+本轮安装包为 entry/build/default/outputs/default/entry-default-signed.hap（本工作树内），Debug **0.5.10 / 1000510**，大小 **9,274,397 字节**，SHA-256 **03da86ee254aba0957e1f7ba4d0932e4e55aae4afaec85b844aa9379ed8ec8af**。沿用该包生成时连续两轮严格验证通过的 **930/930** 结果（.tmp/continuous-gradient-compile.log / .tmp/continuous-gradient-debug.log），本轮设备测试未重跑 Hypium，也未生成 Release 产物。
+
+本节只补充 API 26 顶栏视觉与相关导航回归，P5 仍为部分完成。API 23 样式收敛、真实设备性能及 §13.3 的其他未完成项目不因本次通过而变更状态；未量化旋转后的锚点误差，未测真实帧耗时。

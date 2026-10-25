@@ -46,6 +46,8 @@ import {
   ReaderBlockKind,
   ReaderInlineRun
 } from 'reader';
+import { HarmonyOSCapabilities } from '../common/platform/HarmonyOSCapabilities';
+import { FLOATING_TITLE_BAR_OFFSET, ROOT_TITLE_BAR_CONTENT_HEIGHT } from './AppPageChrome';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { createSystemShareService } from '../platform/SystemShareService';
 import { performConfirmHaptic } from '../platform/HapticFeedback';
@@ -224,6 +226,7 @@ export struct ContinuousAnswerPage {
   @StorageProp('contentTypographyPreset') private typographyPreset: string = 'comfortable';
   @StorageProp('imagePreviewUrl') @Watch('onImagePreviewChanged') private imagePreviewUrl: string = '';
   /** 沉浸阅读（与回答/文章页共用全局广播）：隐藏顶栏，返回键先退出沉浸。 */
+  @StorageProp('statusBarHeightVp') private statusBarHeightVp: number = 0;
   @StorageProp('detailImmersiveActive') private detailImmersiveActive: boolean = false;
   @StorageProp('detailImmersiveExitTick') @Watch('onImmersiveExitTick') private immersiveExitTick: number = 0;
   /** 路由可见性（AppShell onShown/onHidden 广播）：离页停止预取与分页，回页恢复。 */
@@ -1685,6 +1688,25 @@ export struct ContinuousAnswerPage {
     return this.detailImmersiveActive ? 56 : CONTINUOUS_TOP_INSET_VP;
   }
 
+  private titleBarBlurHeightVp(): number {
+    return Math.max(FLOATING_TITLE_BAR_OFFSET, this.statusBarHeightVp + ROOT_TITLE_BAR_CONTENT_HEIGHT);
+  }
+
+  @Builder
+  private titleBarBlurMask() {
+    Column()
+      .width('100%')
+      .height('100%')
+      .linearGradient({
+        direction: GradientDirection.Bottom,
+        colors: [['#FFFFFFFF', 0],
+          ['#FFFFFFFF', this.titleBarBlurHeightVp() / (this.titleBarBlurHeightVp() + 40)],
+          ['#00FFFFFF', 1]]
+      })
+      .blendMode(BlendMode.DST_IN, BlendApplyType.OFFSCREEN)
+      .hitTestBehavior(HitTestMode.None)
+  }
+
   private blockSpacingVp(): number {
     return readerBlockSpacing(this.blockSpacingPercent, this.typographyPreset);
   }
@@ -1709,7 +1731,7 @@ export struct ContinuousAnswerPage {
         .scrollBar(BarState.Off)
         .cachedCount(6)
         .edgeEffect(EdgeEffect.Spring)
-        // 沉浸式标题栏是覆盖层：顶部让出状态栏+标题行高度（P0 结论），正文不穿顶栏；
+        // 沉浸式标题栏是覆盖层：首屏让出状态栏+标题行高度（P0 结论），滚动后正文穿过材质层；
         // 沉浸阅读隐藏标题栏后只保留状态栏让位。
         .padding({ left: 16, right: 16 })
         // 顶部让位随正文滚动（contentStartOffset，对齐单篇正文）：视口延伸到悬浮标题栏
@@ -1751,6 +1773,22 @@ export struct ContinuousAnswerPage {
       }
       .width('100%')
       .height('100%')
+
+      // API 23 使用透明 HDS 标题内容 + 独立背景模糊；渐变遮罩仅作用于模糊层，
+      // 从标题下沿向正文延伸 40vp 淡出，不裁切原始正文，也不叠加系统材质的实色底。
+      if (!HarmonyOSCapabilities.supportsImmersiveTitleBarStyle() &&
+        !this.detailImmersiveActive && this.imagePreviewUrl.length === 0) {
+        Column()
+          .id('continuous_answer_title_blur')
+          .width('100%')
+          .height(this.titleBarBlurHeightVp() + 40)
+          .backgroundEffect({ radius: 24, saturation: 1, brightness: 1,
+            color: $r('app.color.root_chrome_background') })
+          .overlay(this.titleBarBlurMask())
+          .blendMode(BlendMode.SRC_OVER, BlendApplyType.OFFSCREEN)
+          .hitTestBehavior(HitTestMode.None)
+          .accessibilityLevel('no')
+      }
 
       // 划线面板与双击动作询问面板：独立空节点挂 bindSheet（对齐单篇详情页多弹层模式）。
       Column()

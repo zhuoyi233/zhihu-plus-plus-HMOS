@@ -140,6 +140,20 @@ export function getPersistentImmersiveTitleBarStyle(materialMode: ImmersiveMater
   };
 }
 
+/** 连续阅读的 API 23 背景由页面渐变模糊层承载，HDS 只绘制标题内容，避免双重底色形成白色硬边。 */
+export function getContinuousAnswerTitleBarStyle(materialMode: ImmersiveMaterialMode,
+  materialSupport: ImmersiveMaterialSupportState): TitleBarStyleOptions {
+  if (HarmonyOSCapabilities.supportsImmersiveTitleBarStyle()) {
+    return getPersistentImmersiveTitleBarStyle(materialMode, materialSupport);
+  }
+  return {
+    blurStrategy: BlurStrategy.DISABLE,
+    scrollEffectOpts: { enableScrollEffect: false, scrollEffectType: ScrollEffectType.COMMON_BLUR },
+    originalStyle: { backgroundStyle: { backgroundColor: Color.Transparent } },
+    scrollEffectStyle: { backgroundStyle: { backgroundColor: Color.Transparent } }
+  };
+}
+
 /**
  * 顶级页签（首页/关注/热榜/日报/我的）根顶栏样式，对齐华为原生应用（花粉俱乐部/应用市场）
  * 的「沉浸光感标题栏」实现：材质层 + 渐变模糊 + 内容区从顶栏下方穿过。

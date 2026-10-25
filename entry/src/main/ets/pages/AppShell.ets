@@ -76,7 +76,7 @@ import {
   topLevelTabForDestination
 } from './TopLevelTabs';
 import { DividerShowType, hdsMaterial, HdsNavDestination, HdsNavigation, HdsNavigationAttribute, HdsNavigationTitleMode, HdsTabsController } from '@kit.UIDesignKit';
-import { getChatTitleBarStyle, getImmersiveTitleBarStyle, getPersistentImmersiveTitleBarStyle, getRootChromeTitleBarStyle } from '../common/style/NavStyles';
+import { getContinuousAnswerTitleBarStyle, getChatTitleBarStyle, getImmersiveTitleBarStyle, getPersistentImmersiveTitleBarStyle, getRootChromeTitleBarStyle } from '../common/style/NavStyles';
 import {
   decodeImmersiveMaterialSupport,
   ImmersiveMaterialSupportState
@@ -456,18 +456,30 @@ export struct AppShell {
   continuousAnswerTitleBar(questionId: string) {
     // 与问题详情页一致：返回键与标题在同一 Row 中分配空间，隐藏外层 HDS 默认返回键。
     Row({ space: 8 }) {
-      Button({ type: ButtonType.Normal }) {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(20)
-          .fontColor([$r('app.color.primary_text')])
+      // 复用回答详情页的 HDS 玻璃画布；不支持沉浸材质时使用主题中性底色。
+      Stack({ alignContent: Alignment.Center }) {
+        if (this.supportsImmersiveMaterial()) {
+          materialCanvas(52, 52)
+        }
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.chevron_left'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+        .id('continuous_answer_back')
+        .width(40)
+        .height(40)
+        .padding(0)
+        .borderRadius(20)
+        .backgroundColor(this.supportsImmersiveMaterial()
+          ? Color.Transparent : $r('app.color.surface_background'))
+        .accessibilityText('返回')
+        .onClick((): void => { this.pathStack.pop(); })
       }
-      .id('continuous_answer_back')
-      .width(40)
-      .height(40)
-      .borderRadius(20)
-      .backgroundColor($r('app.color.surface_background'))
-      .accessibilityText('返回')
-      .onClick((): void => { this.pathStack.pop(); })
+      .width(44)
+      .height(44)
+      .borderRadius(22)
+      .clip(true)
       Text(this.continuousAnswerTitle.length > 0 ? this.continuousAnswerTitle : '连续阅读')
         .id('continuous_answer_title')
         .fontSize($r('app.float.heading_font_size'))
@@ -485,6 +497,8 @@ export struct AppShell {
         .accessibilityText('查看问题详情')
     }
     .width('100%')
+    .height(48)
+    .alignItems(VerticalAlign.Center)
     .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding') })
   }
 
@@ -1067,8 +1081,9 @@ export struct AppShell {
           }
         );
       }
-      // 固定问题标题（点击进问题页），正文列表自带 contentStartOffset。
-      .titleBar({ style: getChatTitleBarStyle(), avoidLayoutSafeArea: true,
+      // API 26 沿用回答详情页材质，API 23 由页面承载渐变模糊，避免 HDS 背板硬切正文。
+      .titleBar({ style: getContinuousAnswerTitleBarStyle(
+        this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: {
           stackBuilder: (): void => this.continuousAnswerTitleBar(
             (destination as ContinuousAnswerDestination).questionId),
