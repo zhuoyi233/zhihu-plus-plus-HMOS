@@ -454,22 +454,38 @@ export struct AppShell {
   /** 连续阅读页固定问题标题：点击进入问题页（计划 §2.1）；标题由页面异步广播。 */
   @Builder
   continuousAnswerTitleBar(questionId: string) {
-    Row() {
+    // 与问题详情页一致：返回键与标题在同一 Row 中分配空间，隐藏外层 HDS 默认返回键。
+    Row({ space: 8 }) {
+      Button({ type: ButtonType.Normal }) {
+        SymbolGlyph($r('sys.symbol.chevron_left'))
+          .fontSize(20)
+          .fontColor([$r('app.color.primary_text')])
+      }
+      .id('continuous_answer_back')
+      .width(40)
+      .height(40)
+      .borderRadius(20)
+      .backgroundColor($r('app.color.surface_background'))
+      .accessibilityText('返回')
+      .onClick((): void => { this.pathStack.pop(); })
       Text(this.continuousAnswerTitle.length > 0 ? this.continuousAnswerTitle : '连续阅读')
         .id('continuous_answer_title')
         .fontSize($r('app.float.heading_font_size'))
+        .maxFontScale(1.3)
         .fontWeight(FontWeight.Medium)
         .fontColor($r('app.color.primary_text'))
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .layoutWeight(1)
+        .height(40)
+        .clip(true)
         .onClick((): void => {
           this.navigate({ name: AppDestinationName.QUESTION, id: questionId });
         })
         .accessibilityText('查看问题详情')
     }
     .width('100%')
-    .padding({ left: 12, right: 12 })
+    .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding') })
   }
 
   @Builder
@@ -1051,13 +1067,14 @@ export struct AppShell {
           }
         );
       }
-      // 固定问题标题（点击进问题页），正文列表自带顶部 padding。
+      // 固定问题标题（点击进问题页），正文列表自带 contentStartOffset。
       .titleBar({ style: getChatTitleBarStyle(), avoidLayoutSafeArea: true,
         content: {
           stackBuilder: (): void => this.continuousAnswerTitleBar(
             (destination as ContinuousAnswerDestination).questionId),
           divider: { showType: DividerShowType.OFF }
         } })
+      .hideBackButton(true)
       .hideTitleBar(this.imagePreviewUrl.length > 0 || this.detailImmersiveActive)
       .onShown((): void => {
         AppStorage.setOrCreate('continuousAnswerRouteVisible', true);
