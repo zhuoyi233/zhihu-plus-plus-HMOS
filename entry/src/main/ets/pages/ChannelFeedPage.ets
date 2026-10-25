@@ -2,7 +2,9 @@ import {
   buildFeedFlowLayout,
   feedAnchorFlowIndex,
   FeedColumnSpec,
+  feedDailyMinCardWidthVp,
   feedMinCardWidthVp,
+  FEED_DAILY_COLUMN_TARGET,
   FeedFlowEntry,
   FeedFlowLayout,
   feedFlowItemIndex,
@@ -549,37 +551,45 @@ export struct ChannelFeedPage {
 
   @Builder
   private dailyCard(item: ChannelDailyStoryItem) {
+    // 4×1 实验布局：竖排小卡——缩略图全宽（1.6 比例）+ 标题 3 行 + hint 1 行。
+    // 日报页要求同一天内卡片高度对齐：标题/hint 恒占满行数高度（fp 单位随系统字号
+    // 缩放）、无图用等比占位块，使每张卡严格等高，瀑布流在该页退化为对齐网格。
     Button({ type: ButtonType.Normal, stateEffect: true }) {
-      Row({ space: $r('app.float.spacing_medium') }) {
+      Column({ space: $r('app.float.spacing_small') }) {
         if (this.showFeedThumbnail && item.story.imageUrl !== undefined && /^https:\/\/[^\s]+$/i.test(item.story.imageUrl)) {
           Image(item.story.imageUrl)
-            .width('28%')
-            .aspectRatio(1)
+            .width('100%')
+            .aspectRatio(1.6)
             .borderRadius($r('app.float.spacing_small'))
             .objectFit(ImageFit.Cover)
             .alt('日报缩略图')
-        }
-        Column({ space: $r('app.float.spacing_small') }) {
-          Text(item.story.title)
-            .fontSize($r('app.float.body_font_size'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.primary_text'))
-            .maxLines(4)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        } else {
+          // 无缩略图（或偏好关闭）时的等比占位，维持整卡高度一致
+          Column()
             .width('100%')
-          if (item.story.hint.trim().length > 0) {
-            Text(item.story.hint)
-              .fontSize($r('app.float.secondary_font_size'))
-              .fontColor($r('app.color.secondary_text'))
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .width('100%')
-          }
+            .aspectRatio(1.6)
+            .borderRadius($r('app.float.spacing_small'))
+            .backgroundColor($r('app.color.control_background'))
         }
-        .alignItems(HorizontalAlign.Start)
-        .layoutWeight(1)
+        Text(item.story.title)
+          .fontSize($r('app.float.body_font_size'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.primary_text'))
+          .lineHeight('24fp')
+          .height('72fp')
+          .maxLines(3)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+        Text(item.story.hint)
+          .fontSize($r('app.float.secondary_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .lineHeight('22fp')
+          .height('22fp')
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
       }
-      .alignItems(VerticalAlign.Top)
+      .alignItems(HorizontalAlign.Start)
       .width('100%')
     }
     .id(`channel_daily_${item.story.id}`)
@@ -933,11 +943,20 @@ export struct ChannelFeedPage {
   }
 
   private rebuildFlowLayout(): void {
-    const spec: FeedColumnSpec = resolveFeedColumnSpec(this.feedWidthVp, {
-      columnGapVp: this.flowGapVp(),
-      minCardWidthVp: feedMinCardWidthVp(this.systemFontSizeScale),
-      requestedColumns: this.requestedFeedColumns()
-    });
+    // 日报走 4×1 实验布局：目标 4 列竖排小卡，专属最小卡宽；通栏项（日期标题等）仍单列。
+    // 非日报源沿用信息流列数偏好与常规最小卡宽。
+    const daily: boolean = this.source === ChannelFeedSource.DAILY;
+    const spec: FeedColumnSpec = daily
+      ? resolveFeedColumnSpec(this.feedWidthVp, {
+        columnGapVp: this.flowGapVp(),
+        minCardWidthVp: feedDailyMinCardWidthVp(this.systemFontSizeScale),
+        requestedColumns: FEED_DAILY_COLUMN_TARGET
+      })
+      : resolveFeedColumnSpec(this.feedWidthVp, {
+        columnGapVp: this.flowGapVp(),
+        minCardWidthVp: feedMinCardWidthVp(this.systemFontSizeScale),
+        requestedColumns: this.requestedFeedColumns()
+      });
     const columnsChanged: boolean = spec.columns !== this.feedColumns;
     const anchorItemIndex: number = columnsChanged && this.canPreserveAnchor()
       ? feedFlowItemIndex(this.flowLayout, this.firstVisibleIndex) : -1;

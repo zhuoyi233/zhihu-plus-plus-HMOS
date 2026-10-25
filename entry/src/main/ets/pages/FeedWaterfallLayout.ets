@@ -12,6 +12,9 @@ export const FEED_PAGE_HORIZONTAL_PADDING_VP: number = 12;
 export const FEED_COLUMN_GAP_VP: number = 14;
 /** 常规字号下的最小卡片宽度起点；字号放大按 feedMinCardWidthVp 比例提高。 */
 export const FEED_BASE_MIN_CARD_WIDTH_VP: number = 280;
+/** 日报 4×1 实验布局的目标列数与专属最小卡宽（竖排小卡可比信息流卡更窄）。 */
+export const FEED_DAILY_COLUMN_TARGET: number = 4;
+export const FEED_DAILY_BASE_MIN_CARD_WIDTH_VP: number = 240;
 /** 首屏容量估算用的单行卡高（较短卡片的经验值，仅服务预取，不决定实际布局）。 */
 export const FEED_ESTIMATED_CARD_HEIGHT_VP: number = 112;
 
@@ -36,6 +39,12 @@ export function feedColumnCandidates(pageWidthVp: number): number {
 export function feedMinCardWidthVp(fontScale: number): number {
   const scale: number = Number.isFinite(fontScale) && fontScale >= 1 ? Math.min(2, fontScale) : 1;
   return Math.round(FEED_BASE_MIN_CARD_WIDTH_VP * scale);
+}
+
+/** 日报 4×1 实验布局的最小卡宽；同样随系统字号缩放提高，上限 2 倍。 */
+export function feedDailyMinCardWidthVp(fontScale: number): number {
+  const scale: number = Number.isFinite(fontScale) && fontScale >= 1 ? Math.min(2, fontScale) : 1;
+  return Math.round(FEED_DAILY_BASE_MIN_CARD_WIDTH_VP * scale);
 }
 
 export interface FeedColumnSpec {
