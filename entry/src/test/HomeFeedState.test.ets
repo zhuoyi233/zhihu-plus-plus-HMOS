@@ -6,7 +6,7 @@ import {
   HomeFeedViewState,
   mergeUniqueFeedItems
 } from '../main/ets/pages/HomeFeedState';
-import { homeFeedActionLabel, homeFeedDestination, homeFeedDetailsLabel, homeFeedFooterLabel } from '../main/ets/pages/HomeFeedPage';
+import { homeFeedActionLabel, homeFeedDestination, homeFeedDetailsLabel, homeFeedFooterLabel, resolveHomeFeedDestination } from '../main/ets/pages/HomeFeedPage';
 
 interface PendingRequest {
   resolve: (page: FeedPage) => void;
@@ -416,6 +416,73 @@ export default function homeFeedStateTest(): void {
       expect(homeFeedDestination(feed('q', FeedTargetKind.QUESTION)).name).assertEqual('Question');
       expect(homeFeedDestination(feed('a', FeedTargetKind.ANSWER)).name).assertEqual('Answer');
       expect(homeFeedDestination(feed('z', FeedTargetKind.ARTICLE)).name).assertEqual('Article');
+    });
+
+    it('opensContinuousHomeAnswerAtTheClickedSeedWithoutExtraLookup', 0, async () => {
+      const item = feed('seed');
+      item.target.id = '2091206450836149421';
+      item.target.questionId = '123456';
+      let lookups = 0;
+      const destination = await resolveHomeFeedDestination(item, 'continuous', async (_id: string): Promise<string> => {
+        lookups += 1;
+        return '999';
+      });
+      expect(JSON.stringify(destination)).assertEqual(JSON.stringify({
+        name: 'ContinuousAnswer', questionId: '123456', answerId: '2091206450836149421'
+      }));
+      expect(lookups).assertEqual(0);
+    });
+
+    it('resolvesMissingQuestionIdBeforeOpeningContinuousHomeAnswer', 0, async () => {
+      const item = feed('missing');
+      let requestedAnswer = '';
+      const destination = await resolveHomeFeedDestination(item, 'continuous', async (id: string): Promise<string> => {
+        requestedAnswer = id;
+        return ' 123456 ';
+      });
+      expect(requestedAnswer).assertEqual(item.target.id);
+      expect(JSON.stringify(destination)).assertEqual(JSON.stringify({
+        name: 'ContinuousAnswer', questionId: '123456', answerId: item.target.id
+      }));
+    });
+
+    it('keepsSingleAndOtherContentRoutesWithoutResolvingQuestions', 0, async () => {
+      let lookups = 0;
+      const loader = async (_id: string): Promise<string> => { lookups += 1; return '123'; };
+      const item = feed('answer');
+      expect((await resolveHomeFeedDestination(item, 'single', loader)).name).assertEqual('Answer');
+      expect((await resolveHomeFeedDestination(item, 'invalid', loader)).name).assertEqual('Answer');
+      expect((await resolveHomeFeedDestination(feed('q', FeedTargetKind.QUESTION), 'continuous', loader)).name)
+        .assertEqual('Question');
+      expect((await resolveHomeFeedDestination(feed('z', FeedTargetKind.ARTICLE), 'continuous', loader)).name)
+        .assertEqual('Article');
+      expect((await resolveHomeFeedDestination(feed('v', FeedTargetKind.VIDEO), 'continuous', loader)).name)
+        .assertEqual('Video');
+      expect(lookups).assertEqual(0);
+    });
+
+    it('looksUpMalformedSummaryQuestionIdsAndRejectsInvalidResults', 0, async () => {
+      const item = feed('invalid');
+      item.target.questionId = 'not-a-question';
+      let failed = false;
+      try {
+        await resolveHomeFeedDestination(item, 'continuous', async (_id: string): Promise<string> => '');
+      } catch (_error) {
+        failed = true;
+      }
+      expect(failed).assertTrue();
+    });
+
+    it('doesNotSilentlyOpenSingleModeWhenQuestionLookupFails', 0, async () => {
+      let failed = false;
+      try {
+        await resolveHomeFeedDestination(feed('offline'), 'continuous', async (_id: string): Promise<string> => {
+          throw new Error('offline');
+        });
+      } catch (_error) {
+        failed = true;
+      }
+      expect(failed).assertTrue();
     });
 
     it('preservesFirstOccurrenceWhenMergingPages', 0, () => {

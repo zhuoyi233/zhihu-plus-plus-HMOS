@@ -1,5 +1,5 @@
 import { buildFeedFlowLayout, FeedFlowEntry, FeedFlowLayout, feedFlowItemIndex, FEED_TWO_COLUMN_MIN_WIDTH, homeFeedInitialItemTarget } from './FeedWaterfallLayout';
-import { AppDestination, AppDestinationName } from 'core';
+import { AppDestination, AppDestinationName, isSafeDecimalContentId } from 'core';
 import {
   onThemeColor,
   ContentRepository,
@@ -91,6 +91,8 @@ export struct HomeFeedPage {
   private blockingAction?: BlockingActionController;
   private menuRepository?: ContentRepository = undefined;
   private menuRequestId: number = 0;
+  private openRequestId: number = 0;
+  private openRepository: ContentRepository | undefined = undefined;
   /** 本会话已批量上报过曝光（touch）的条目，对齐上游 reportedTouchedItems 去重。 */
   private readonly reportedTouchIdentities: Set<string> = new Set<string>();
   private readonly listScroller: Scroller = new Scroller();
@@ -129,6 +131,9 @@ export struct HomeFeedPage {
   }
 
   aboutToDisappear(): void {
+    this.openRequestId += 1;
+    this.openRepository?.cancel();
+    this.openRepository = undefined;
     this.indicator?.dispose();
     this.indicator = undefined;
     this.controller?.deactivate();
@@ -452,7 +457,7 @@ export struct HomeFeedPage {
     .accessibilityText((item.target.qualityFilterReason ?? '').length > 0
       ? `已屏蔽：${item.target.qualityFilterReason}`
       : `打开${feedKindLabel(item.target.kind)}：${item.target.title}`)
-    .onClick((): void => this.openFeedItem(item))
+    .onClick((): void => { void this.openFeedItem(item); })
   }
 
   @Builder
@@ -544,15 +549,42 @@ export struct HomeFeedPage {
     .alignItems(VerticalAlign.Center)
   }
 
-  private openFeedItem(item: FeedItem): void {
-    void this.openedContentStore?.upsert({
-      contentKey: `${item.target.kind}:${item.target.id}`,
-      openedAt: Date.now(),
-      contentType: item.target.kind,
-      title: item.target.title
-    }).catch((_error: Error): void => {});
-    this.reportLastReadTouch(item, 'read');
-    this.navigate(homeFeedDestination(item));
+  private async openFeedItem(item: FeedItem): Promise<void> {
+    const requestId = ++this.openRequestId;
+    this.openRepository?.cancel();
+    this.openRepository = undefined;
+    try {
+      // 点击时读取广播值，设置变更后已挂载的首页卡片也立即遵循最新模式。
+      const mode = AppStorage.get<string>('answerReadingMode') ?? 'single';
+      const destination = await resolveHomeFeedDestination(item, mode, async (answerId: string): Promise<string> => {
+        const repository = this.contentRepositoryFactory();
+        if (repository === undefined) {
+          throw new Error('Answer repository unavailable');
+        }
+        this.openRepository = repository;
+        const answer = await repository.getAnswer(answerId);
+        return answer.questionId;
+      });
+      if (requestId !== this.openRequestId) {
+        return;
+      }
+      void this.openedContentStore?.upsert({
+        contentKey: `${item.target.kind}:${item.target.id}`,
+        openedAt: Date.now(),
+        contentType: item.target.kind,
+        title: item.target.title
+      }).catch((_error: Error): void => {});
+      this.reportLastReadTouch(item, 'read');
+      this.navigate(destination);
+    } catch (_error) {
+      if (requestId === this.openRequestId) {
+        this.getUIContext().getPromptAction().showToast({ message: '暂时无法打开回答，请稍后重试' });
+      }
+    } finally {
+      if (requestId === this.openRequestId) {
+        this.openRepository = undefined;
+      }
+    }
   }
 
   /** 对齐上游 lastread/touch：点击上报 read、feed 曝光批量上报 touch，游客态由仓库静默跳过。 */
@@ -805,6 +837,27 @@ function lastReadTouchEntryOf(item: FeedItem, action: string): LastReadTouchEntr
     return undefined;
   }
   return { kind: kind, id: item.target.id, action: action };
+}
+
+/** 首页回答遵循阅读偏好；摘要缺失/无效的问题 ID 只按需查询，不误退回单篇。 */
+export async function resolveHomeFeedDestination(item: FeedItem, readingMode: string,
+  loadQuestionId: (answerId: string) => Promise<string>): Promise<AppDestination> {
+  if (item.target.kind !== FeedTargetKind.ANSWER || readingMode !== 'continuous') {
+    return homeFeedDestination(item);
+  }
+  let questionId = item.target.questionId?.trim() ?? '';
+  if (!isSafeDecimalContentId(questionId)) {
+    questionId = (await loadQuestionId(item.target.id)).trim();
+  }
+  if (!isSafeDecimalContentId(questionId)) {
+    throw new Error('Invalid answer question ID');
+  }
+  const destination: AppDestination = {
+    name: AppDestinationName.CONTINUOUS_ANSWER,
+    questionId: questionId,
+    answerId: item.target.id
+  };
+  return destination;
 }
 
 export function homeFeedDestination(item: FeedItem): AppDestination {
