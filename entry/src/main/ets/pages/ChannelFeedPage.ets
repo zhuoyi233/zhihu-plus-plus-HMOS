@@ -5,6 +5,7 @@ import {
   feedDailyMinCardWidthVp,
   feedMinCardWidthVp,
   FEED_DAILY_COLUMN_TARGET,
+  FEED_THREE_COLUMN_MIN_WIDTH,
   FeedFlowEntry,
   FeedFlowLayout,
   feedFlowItemIndex,
@@ -551,46 +552,78 @@ export struct ChannelFeedPage {
 
   @Builder
   private dailyCard(item: ChannelDailyStoryItem) {
-    // 4×1 实验布局：竖排小卡——缩略图全宽（1.6 比例）+ 标题 3 行 + hint 1 行。
-    // 日报页要求同一天内卡片高度对齐：标题/hint 恒占满行数高度（fp 单位随系统字号
-    // 缩放）、无图用等比占位块，使每张卡严格等高，瀑布流在该页退化为对齐网格。
+    // 日报卡：多列走 4×1 竖排等高网格卡；单列回落为原有“图左文右”横排（窄屏单卡占满整行）。
     Button({ type: ButtonType.Normal, stateEffect: true }) {
-      Column({ space: $r('app.float.spacing_small') }) {
-        if (this.showFeedThumbnail && item.story.imageUrl !== undefined && /^https:\/\/[^\s]+$/i.test(item.story.imageUrl)) {
-          Image(item.story.imageUrl)
+      if (this.feedColumns > 1) {
+        Column({ space: $r('app.float.spacing_small') }) {
+          if (this.showFeedThumbnail && item.story.imageUrl !== undefined && /^https:\/\/[^\s]+$/i.test(item.story.imageUrl)) {
+            Image(item.story.imageUrl)
+              .width('100%')
+              .aspectRatio(1.6)
+              .borderRadius($r('app.float.spacing_small'))
+              .objectFit(ImageFit.Cover)
+              .alt('日报缩略图')
+          } else {
+            // 无缩略图（或偏好关闭）时的等比占位，维持整卡高度一致
+            Column()
+              .width('100%')
+              .aspectRatio(1.6)
+              .borderRadius($r('app.float.spacing_small'))
+              .backgroundColor($r('app.color.control_background'))
+          }
+          Text(item.story.title)
+            .fontSize($r('app.float.body_font_size'))
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.primary_text'))
+            .lineHeight('24fp')
+            .height('72fp')
+            .maxLines(3)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%')
-            .aspectRatio(1.6)
-            .borderRadius($r('app.float.spacing_small'))
-            .objectFit(ImageFit.Cover)
-            .alt('日报缩略图')
-        } else {
-          // 无缩略图（或偏好关闭）时的等比占位，维持整卡高度一致
-          Column()
+          Text(item.story.hint)
+            .fontSize($r('app.float.secondary_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .lineHeight('22fp')
+            .height('22fp')
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%')
-            .aspectRatio(1.6)
-            .borderRadius($r('app.float.spacing_small'))
-            .backgroundColor($r('app.color.control_background'))
         }
-        Text(item.story.title)
-          .fontSize($r('app.float.body_font_size'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.primary_text'))
-          .lineHeight('24fp')
-          .height('72fp')
-          .maxLines(3)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .width('100%')
-        Text(item.story.hint)
-          .fontSize($r('app.float.secondary_font_size'))
-          .fontColor($r('app.color.secondary_text'))
-          .lineHeight('22fp')
-          .height('22fp')
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .width('100%')
+        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+      } else {
+        Row({ space: $r('app.float.spacing_medium') }) {
+          if (this.showFeedThumbnail && item.story.imageUrl !== undefined && /^https:\/\/[^\s]+$/i.test(item.story.imageUrl)) {
+            Image(item.story.imageUrl)
+              .width('28%')
+              .aspectRatio(1)
+              .borderRadius($r('app.float.spacing_small'))
+              .objectFit(ImageFit.Cover)
+              .alt('日报缩略图')
+          }
+          Column({ space: $r('app.float.spacing_small') }) {
+            Text(item.story.title)
+              .fontSize($r('app.float.body_font_size'))
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.primary_text'))
+              .maxLines(4)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .width('100%')
+            if (item.story.hint.trim().length > 0) {
+              Text(item.story.hint)
+                .fontSize($r('app.float.secondary_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .width('100%')
+            }
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+        }
+        .alignItems(VerticalAlign.Top)
+        .width('100%')
       }
-      .alignItems(HorizontalAlign.Start)
-      .width('100%')
     }
     .id(`channel_daily_${item.story.id}`)
     .width('100%')
@@ -943,15 +976,21 @@ export struct ChannelFeedPage {
   }
 
   private rebuildFlowLayout(): void {
-    // 日报走 4×1 实验布局：目标 4 列竖排小卡，专属最小卡宽；通栏项（日期标题等）仍单列。
-    // 非日报源沿用信息流列数偏好与常规最小卡宽。
+    // 日报：≥900vp 宽屏启用 4×1 目标（竖排等高小卡，专属最小卡宽）；窄于 900vp
+    // 禁用该布局，回到常规自动断点——手机横屏 816vp 即 2 列、竖屏单列横排卡。
+    // 通栏项（日期标题等）始终单列；非日报源沿用信息流列数偏好与常规最小卡宽。
     const daily: boolean = this.source === ChannelFeedSource.DAILY;
     const spec: FeedColumnSpec = daily
-      ? resolveFeedColumnSpec(this.feedWidthVp, {
-        columnGapVp: this.flowGapVp(),
-        minCardWidthVp: feedDailyMinCardWidthVp(this.systemFontSizeScale),
-        requestedColumns: FEED_DAILY_COLUMN_TARGET
-      })
+      ? (this.feedWidthVp >= FEED_THREE_COLUMN_MIN_WIDTH
+        ? resolveFeedColumnSpec(this.feedWidthVp, {
+          columnGapVp: this.flowGapVp(),
+          minCardWidthVp: feedDailyMinCardWidthVp(this.systemFontSizeScale),
+          requestedColumns: FEED_DAILY_COLUMN_TARGET
+        })
+        : resolveFeedColumnSpec(this.feedWidthVp, {
+          columnGapVp: this.flowGapVp(),
+          minCardWidthVp: feedDailyMinCardWidthVp(this.systemFontSizeScale)
+        }))
       : resolveFeedColumnSpec(this.feedWidthVp, {
         columnGapVp: this.flowGapVp(),
         minCardWidthVp: feedMinCardWidthVp(this.systemFontSizeScale),
