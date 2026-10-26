@@ -74,6 +74,8 @@ const FEED_COLUMN_MODE_KEY = 'feedColumnMode';
 const FOLLOWING_FEED_TAB_INDEX_KEY = 'followingFeedTabIndex';
 const FOLLOWING_TIME_ORDER_KEY = 'followingTimeOrder';
 const DEVELOPER_MODE_KEY = 'developer';
+/** 回答阅读模式：'single' 单篇（默认）/ 'continuous' 连续（docs/continuous-answer-reading-plan.md §2.2）。 */
+const ANSWER_READING_MODE_KEY = 'answerReadingMode';
 const SPEECH_SPEED_KEY = 'readingSpeechSpeed';
 const SPEECH_PITCH_KEY = 'readingSpeechPitch';
 const SPEECH_PERSON_KEY = 'readingSpeechPerson';
@@ -620,6 +622,40 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
     } catch (error) {
       const detail = error instanceof Error ? error : undefined;
       throw new Error(appPreferencesFailureMessage('Following time order save', detail));
+    }
+  }
+
+  /** 回答阅读模式：缺失或非法值回退单篇（对齐计划 §7.1 偏好回退语义）。 */
+  async loadAnswerReadingMode(): Promise<string> {
+    await this.saveQueue;
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      const value = await store.get(ANSWER_READING_MODE_KEY, 'single');
+      return typeof value === 'string' && value === 'continuous' ? 'continuous' : 'single';
+    } catch (error) {
+      const detail = error instanceof Error ? error : undefined;
+      throw new Error(appPreferencesFailureMessage('Answer reading mode load', detail));
+    }
+  }
+
+  saveAnswerReadingMode(mode: string): Promise<void> {
+    const normalized = mode === 'continuous' ? 'continuous' : 'single';
+    const operation = this.saveQueue.then(
+      (): Promise<void> => this.writeAnswerReadingMode(normalized),
+      (): Promise<void> => this.writeAnswerReadingMode(normalized)
+    );
+    this.saveQueue = operation.then((): void => {}, (): void => {});
+    return operation;
+  }
+
+  private async writeAnswerReadingMode(mode: string): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      await store.put(ANSWER_READING_MODE_KEY, mode);
+      await store.flush();
+    } catch (error) {
+      const detail = error instanceof Error ? error : undefined;
+      throw new Error(appPreferencesFailureMessage('Answer reading mode save', detail));
     }
   }
 

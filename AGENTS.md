@@ -276,11 +276,13 @@ $hdc = "hdc"
 
 - 无 `TextEncoder`：用 `data` 模块 `Utf8.ets` 的 `utf8Encode`。
 
-- 最低兼容 API 23：`uiMaterial` 全家族（`@ohos.arkui.uiMaterial`，含 `ImmersiveMaterial`/
-  `systemMaterial`/`getMaterialInfo`）是 API 26 专属，**禁止 import**，否则 API 23 设备载入
-  即崩；普通组件玻璃效果用 `backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)` 兜底，
-  系统材质只能走 HDS 组件（`hdsMaterial`/`HdsTabs` 等，自 6.1.0(23) 起可用）。
-  新 API 起始版本可在 SDK `hms/ets/api/device-define/api-version/*.json` 查表核实。
+- 沉浸光感材质（自定义组件）：`uiMaterial` 全家族是 API 26 专属，最低兼容仍是 API 23，
+  必须**运行时门禁**后使用——`HarmonyOSCapabilities.supportsSystemMaterial()` 为真才构造材质并
+  `.systemMaterial(...)`，否则传 `undefined` 并用 `backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)`
+  兜底（参考 `AppShell` 的 `TITLE_BAR_GLASS_MATERIAL`）。静态 `import { uiMaterial } from '@kit.ArkUI'`
+  实测在低版本不崩，但 `new uiMaterial.ImmersiveMaterial(...)` 会抛异常，务必包 try/catch。
+  HDS 组件（`hdsMaterial`/`HdsTabs`/标题栏）仍走 `systemMaterialEffect`，自 6.1.0(23) 起可用；
+  低算力设备由系统自动降级。新 API 起始版本可在 SDK `hms/ets/api/device-define/api-version/*.json` 查表核实。
 
 - 图标用鸿蒙官方 Symbol：`SymbolGlyph($r('sys.symbol.xxx'))`（如 `more`/`arrow_up`/
   `bookmark`/`message`），名称以官方符号库为准，勿猜（`ellipsis` 等不存在）。

@@ -2,6 +2,7 @@ import { AppDestination, AppDestinationName } from 'core';
 import {
   AppPreferencesStore,
   BlockedFeedHistoryStore,
+  ContentBlockingMatcher,
   BlockingRuleMatcher,
   BlockingRuleStore,
   ChannelFeedRepository,
@@ -82,6 +83,9 @@ import { QrScanProbePage } from './QrScanProbe';
 import { QrDesktopLoginScanPage } from './QrDesktopLoginScanPage';
 import { ReaderProbe } from './ReaderProbe';
 import { ImageProbe } from './ImageProbe';
+import { ContinuousReadingPrototype } from './ContinuousReadingPrototype';
+import { ContinuousAnswerPage } from './ContinuousAnswerPage';
+import { ContinuousAnswerRepositories } from './ContinuousAnswerRepositories';
 import { TechnicalLabPage } from './TechnicalLabPage';
 import { HomeFeedPage } from './HomeFeedPage';
 import { SearchPage } from './SearchPage';
@@ -143,6 +147,10 @@ struct Index {
   private questionAnswerFeedFactory: () => QuestionAnswerFeedRepository | undefined = () => undefined;
   @State private answerRepository?: ContentRepository = undefined;
   @State private articleRepository?: ContentRepository = undefined;
+  private continuousRepositoriesFactory: () => ContinuousAnswerRepositories = (): ContinuousAnswerRepositories =>
+    new ContinuousAnswerRepositories();
+  /** 内容屏蔽匹配器（RULES_ONLY）：连续页屏蔽后对已加载回答重过滤。 */
+  @State private contentBlockingMatcher?: ContentBlockingMatcher = undefined;
   @State private peopleRepository?: PeopleDetailRepository = undefined;
   @State private peopleContentRepository?: PeopleContentRepository = undefined;
   @State private pinRepository?: PinRepository = undefined;
@@ -203,6 +211,7 @@ struct Index {
       this.openedContentStore = openedContentStore;
       this.blockingRuleStore = blockingRuleStore;
       this.blockedFeedHistoryStore = blockedFeedHistoryStore;
+      this.contentBlockingMatcher = blockingMatcher;
       this.preferencesStore = preferencesStore;
       const remoteHistory = new RemoteHistorySync(new HttpRemoteHistorySource(new ZhihuHttpClient(session)),
         new RemoteReadStore(getAppDatabase(context)), (): string => {
@@ -226,6 +235,7 @@ struct Index {
         new DefaultQuestionAnswerFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.answerRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
       this.articleRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
+      this.continuousRepositoriesFactory = (): ContinuousAnswerRepositories => new ContinuousAnswerRepositories(session);
       this.peopleRepository = new DefaultPeopleRepository(new ZhihuHttpClient(session));
       this.peopleContentRepository = new DefaultPeopleContentRepository(new ZhihuHttpClient(session));
       this.pinRepository = new DefaultPinRepository(new ZhihuHttpClient(session));
@@ -329,7 +339,12 @@ struct Index {
           qrScanProbeContent: (onBack: () => void): void => this.qrScanProbeContent(onBack),
           qrDesktopLoginScanContent: (onBack: () => void): void => this.qrDesktopLoginScanContent(onBack),
           backgroundTaskProbeContent: (onBack: () => void): void => this.backgroundTaskProbeContent(onBack),
-          domainFixtureProbeContent: (onBack: () => void): void => this.domainFixtureProbeContent(onBack)
+          domainFixtureProbeContent: (onBack: () => void): void => this.domainFixtureProbeContent(onBack),
+          continuousReadingProtoContent: (onBack: () => void): void => this.continuousReadingProtoContent(onBack),
+          continuousAnswerContent: (questionId: string, answerId: string | undefined,
+            sort: string | undefined, navigate: (destination: AppDestination) => void,
+            onBack: () => void): void =>
+            this.continuousAnswerContent(questionId, answerId, sort, navigate, onBack)
         });
       } else {
         Text('正在恢复登录状态');
@@ -755,6 +770,32 @@ struct Index {
   @Builder
   domainFixtureProbeContent(onBack: () => void) {
     DomainFixtureProbe({ onBack: onBack });
+  }
+
+  @Builder
+  continuousReadingProtoContent(onBack: () => void) {
+    ContinuousReadingPrototype({ onBack: onBack });
+  }
+
+  @Builder
+  continuousAnswerContent(questionId: string, answerId: string | undefined, sort: string | undefined,
+    navigate: (destination: AppDestination) => void, onBack: () => void) {
+    ContinuousAnswerPage({
+      questionId: questionId,
+      seedAnswerId: answerId ?? '',
+      sortOrder: sort ?? 'default',
+      navigate: navigate,
+      onBack: onBack,
+      feedRepository: this.questionAnswerFeedFactory(),
+      repositoriesFactory: this.continuousRepositoriesFactory,
+      collectionRepository: this.collectionRepository,
+      session: this.session,
+      openedContentStore: this.openedContentStore,
+      historyUploader: this.readHistoryUploader,
+      rules: this.blockingRuleStore,
+      history: this.blockedFeedHistoryStore,
+      blockingMatcher: this.contentBlockingMatcher
+    });
   }
 
 }

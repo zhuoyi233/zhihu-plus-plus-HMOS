@@ -1,5 +1,7 @@
 import feedWaterfallLayoutTest from './FeedWaterfallLayout.test';
 import feedFlowDataSourceTest from './FeedFlowDataSource.test';
+import continuousAnswerLifecycleTest from './ContinuousAnswerLifecycle.test';
+import continuousReferenceNavigatorTest from './ContinuousReferenceNavigator.test';
 import homeFeedMenuStateTest from './HomeFeedMenuState.test';
 import adaptiveOverlayLayoutTest from './AdaptiveOverlayLayout.test';
 import apiLevelTest from './ApiLevel.test';
@@ -97,6 +99,9 @@ import readHistoryUploadRepositoryTest from './ReadHistoryUploadRepository.test'
 import lastReadTouchRepositoryTest from './LastReadTouchRepository.test';
 import linkCardMetaTest from './LinkCardMeta.test';
 import segmentReactionRepositoryTest from './SegmentReactionRepository.test';
+import continuousStreamDataSourceTest from './ContinuousStreamDataSource.test';
+import linkCardMetaLoaderTest from './LinkCardMetaLoader.test';
+import continuousAnswerStateTest from './ContinuousAnswerState.test';
 
 export default function testsuite(): void {
   feedWaterfallLayoutTest();
@@ -198,4 +203,9 @@ export default function testsuite(): void {
   readHistoryUploadRepositoryTest();
   lastReadTouchRepositoryTest();
   segmentReactionRepositoryTest();
+  continuousStreamDataSourceTest();
+  continuousAnswerStateTest();
+  continuousAnswerLifecycleTest();
+  continuousReferenceNavigatorTest();
+  linkCardMetaLoaderTest();
 }

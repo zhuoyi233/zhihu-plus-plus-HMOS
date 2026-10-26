@@ -1,12 +1,8 @@
 import { fileIo, fileUri } from '@kit.CoreFileKit';
-import { image } from '@kit.ImageKit';
 import { http } from '@kit.NetworkKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { Want } from '@kit.AbilityKit';
-import { display } from '@kit.ArkUI';
-import { LengthMetrics } from '@ohos.arkui.node';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
-import { DoubleTapDetector } from './DoubleTapDetector';
 import {
   createSystemShareService
 } from '../platform/SystemShareService';
@@ -21,57 +17,33 @@ import {
   createReaderPositionStore,
   ReaderPosition,
   ReaderPositionRepository,
-  effectiveSegmentMeta,
-  getAppSessionOwner,
-  getGuestDeviceCookieManager,
   LinkCardMeta,
   LinkCardMetaRepository,
-  SegmentInfoMark,
-  SegmentInfoParagraph,
-  toCookieHeader
+  SegmentInfoParagraph
 } from 'data';
 import {
-  boxedFormulaText,
-  FORMULA_EM_PER_EX,
-  formulaDisplaySize,
-  FormulaDisplaySize,
   clearFormulaByteCache,
-  loadFormulaPixelMap,
   parseZhihuHtml,
   ReaderBlock,
   ReaderBlockDataSource,
   ReaderBlockKind,
-  ReaderImageBlock,
-  ReaderInlineKind,
   ReaderInlineRun
 } from 'reader';
-import {
-  flattenStyledTextSegments,
-  HighlightSegment,
-  SegmentHighlightRef,
-  splitTextByHighlights,
-  StyledTextSegment
-} from './ContentAnnotations';
 import {
   READING_PROGRESS_BAR_HIT_WIDTH_VP,
   READING_PROGRESS_BAR_RIGHT_INSET_VP,
   ReadingProgressBar
 } from './components/ReadingProgressBar';
-import {
-  readerBlockSpacing,
-  readerBodyFontSize,
-  readerBodyLineHeight,
-  readerHeadingFontSize
-} from './ReaderTypography';
-import { linkCardMetaLine } from './LinkCardMetaText';
-import { readerBlockLeadingSpace } from './ReaderBlockLayout';
-import { readerCaptionLineHeightFp, readerHorizontalPaddingVp } from './ReaderViewportLayout';
+import { readerBlockSpacing } from './ReaderTypography';
+import { readerHorizontalPaddingVp } from './ReaderViewportLayout';
 import {
   readerBlockSignature,
   readerPositionBlockIndex,
   readerPositionFraction,
   readerPositionTargetY
 } from './ReaderPositionAnchor';
+import { LinkCardMetaLoader, ReaderBlockView } from './ReaderBlockView';
+import { DoubleTapDetector } from './DoubleTapDetector';
 
 /**
  * 块高缺失时的估算兜底（vp）：未渲染块按实测平均块高估，无实测值时用该值。
@@ -93,13 +65,6 @@ const IMAGE_PREVIEW_MAX_SCALE = 2;
  */
 const COLLAPSIBLE_TOGGLE_ZONE_VP = 48;
 
-/**
- * 双击后临时禁选窗口（ms）：需覆盖双击选词判定（第二击抬起后立即）与双击序列中
- * 第二击演化成长按的选词触发（按下后约 500ms）两个时机，取 800ms 留余量；
- * 正常的独立长按选词没有前置双击，不经过此窗口。
- */
-const DOUBLE_TAP_SELECTION_SUPPRESS_MS = 800;
-
 function clampPreviewScale(value: number): number {
   return Math.min(IMAGE_PREVIEW_MAX_SCALE, Math.max(1, value));
 }
@@ -113,21 +78,6 @@ function clampValue(value: number, limit: number): number {
 
 function isTrustedPreviewImageUrl(value: string): boolean {
   return /^https:\/\/(?:picx?|pic[0-9]+)\.zhimg\.com\//i.test(value);
-}
-
-/**
- * 公式解码采样密度（px/ex）：字号 × 0.5em/ex × 屏幕密度——让栅格与显示物理像素
- * 1:1，规避"固定 15px/ex 采样在显示端被放大"造成的模糊（issue #51）。
- */
-export function formulaDecodeDensity(fontSizeFp: number): number {
-  let density = 1;
-  try {
-    density = display.getDefaultDisplaySync().densityPixels;
-  } catch (_error) {
-    density = 1;
-  }
-  const safeDensity = Number.isFinite(density) && density > 0 ? density : 1;
-  return fontSizeFp * FORMULA_EM_PER_EX * safeDensity;
 }
 
 function previewImageExtension(value: string): string {
@@ -437,331 +387,8 @@ export struct ContentImagePreview {
 }
 
 @Component
-struct ContentInlineFormula {
-  item: ReaderBlock = {
-    id: '',
-    kind: ReaderBlockKind.PARAGRAPH,
-    text: '',
-    sourceUrl: '',
-    inlineRuns: []
-  };
-  /** 排版偏好与宿主同源（AppStorage 广播），行内公式所在段落随字号/行高联动。 */
-  @StorageProp('contentFontSize') private fontSizePercent: number = 100;
-  @StorageProp('contentLineHeight') private lineHeightPercent: number = 160;
-  @StorageProp('contentTypographyPreset') private typographyPreset: string = 'comfortable';
-  @StorageProp('formulaForegroundColor') private formulaColor: string = '#111111';
-  @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
-  /** 正文内联链接点击回调（行内公式所在段落同样生效）。 */
-  onLinkClick?: (url: string) => void;
-  /** 参考标记点击回调：跳转文末参考条目（NativeContentDocument.scrollToReference）。 */
-  onReferenceClick?: (numero: number) => void;
-  /** 行内公式段落 Text 的选区状态回调（转发宿主，语义同 NativeContentDocument.onBodySelectionActive）。 */
-  onBodySelectionActive?: (active: boolean) => void;
-  @State private loadedRunIds: Array<string> = [];
-  private pixelMaps: Map<string, image.PixelMap> = new Map();
-  /** 公式 SVG 固有尺寸（ex 单位，run.id → exSize）：显示尺寸按 ex × 字号换算。 */
-  private formulaExSizes: Map<string, FormulaDisplaySize> = new Map();
-  @State @Watch('onFormulaWidthChanged') private formulaAvailableWidth: number = 320;
-  private active: boolean = false;
-  private loadGeneration: number = 0;
-
-  aboutToAppear(): void {
-    this.active = true;
-    this.loadFormulas();
-  }
-
-  private onFormulaWidthChanged(): void {
-    if (this.active && this.item.inlineRuns.some((run: ReaderInlineRun): boolean =>
-      run.kind === ReaderInlineKind.FORMULA && boxedFormulaText(run.text) !== undefined)) {
-      this.loadFormulas();
-    }
-  }
-
-  private loadFormulas(): void {
-    const generation = ++this.loadGeneration;
-    this.item.inlineRuns.forEach((run: ReaderInlineRun): void => {
-      if (run.kind === ReaderInlineKind.FORMULA) {
-        this.loadFormula(run, generation);
-      }
-    });
-  }
-
-  aboutToDisappear(): void {
-    this.active = false;
-    this.loadGeneration += 1;
-    this.loadedRunIds = [];
-    this.pixelMaps.forEach((pixelMap: image.PixelMap): void => {
-      pixelMap.release();
-    });
-    this.pixelMaps.clear();
-    this.formulaExSizes.clear();
-  }
-
-  build() {
-    Text() {
-      if (this.item.kind === ReaderBlockKind.LIST_ITEM) {
-        Span('• ')
-      }
-      ForEach(this.item.inlineRuns, (run: ReaderInlineRun) => {
-        if (run.kind === ReaderInlineKind.TEXT || !this.loadedRunIds.includes(run.id) ||
-          this.pixelMaps.get(run.id) === undefined) {
-          if (run.kind === ReaderInlineKind.TEXT) {
-            Span(run.text)
-              .fontSize(readerBodyFontSize(this.fontSizePercent, this.typographyPreset) *
-                (run.referenceNumero !== undefined ? 0.75 : 1))
-              .baselineOffset(run.referenceNumero !== undefined ?
-                LengthMetrics.vp(readerBodyFontSize(this.fontSizePercent, this.typographyPreset) * 0.35) : LengthMetrics.vp(0))
-              .fontColor((run.linkUrl ?? '').length > 0 || run.referenceNumero !== undefined
-                ? this.resolvedThemeColor : $r('app.color.primary_text'))
-              .fontWeight(run.bold === true ? FontWeight.Bold : FontWeight.Normal)
-              .fontStyle(run.italic === true ? FontStyle.Italic : FontStyle.Normal)
-              .decoration({
-                type: run.strikethrough === true ? TextDecorationType.LineThrough : TextDecorationType.None,
-                style: TextDecorationStyle.SOLID,
-                color: Color.Transparent
-              })
-              .textBackgroundStyle(run.mark === true
-                ? { color: '#66FDD835', radius: 3 }
-                : { color: Color.Transparent, radius: 0 })
-              .onClick((): void => {
-                const link = run.linkUrl ?? '';
-                if (link.length > 0) {
-                  if (this.onLinkClick !== undefined) {
-                    this.onLinkClick(link);
-                  }
-                  return;
-                }
-                if (run.referenceNumero !== undefined && this.onReferenceClick !== undefined) {
-                  this.onReferenceClick(run.referenceNumero);
-                }
-              })
-          } else {
-            Span(`「${run.text}」`)
-              .fontColor($r('app.color.secondary_text'))
-          }
-        } else {
-          ImageSpan(this.pixelMaps.get(run.id) ?? run.text)
-            .id(`content_inline_formula_${run.id}`)
-            .width(this.displaySize(run.id).width)
-            .height(this.displaySize(run.id).height)
-            .objectFit(ImageFit.Contain)
-            .verticalAlign(ImageSpanAlignment.CENTER)
-            .onError((): void => {
-              this.failFormula(run.id);
-            })
-        }
-      }, (run: ReaderInlineRun): string => run.id)
-    }
-    .fontSize(readerBodyFontSize(this.fontSizePercent, this.typographyPreset))
-    .lineHeight(readerBodyLineHeight(this.fontSizePercent, this.lineHeightPercent, this.typographyPreset))
-    .fontColor($r('app.color.primary_text'))
-    // 鸿蒙原生长按选字：启用系统文本选择菜单（复制 / 全选 / 翻译 / 分享等"更多操作"）。
-    .copyOption(CopyOptions.LocalDevice)
-    .onTextSelectionChange((start: number, end: number): void => {
-      this.onBodySelectionActive?.(start !== end);
-    })
-    .width('100%')
-    .onAreaChange((_oldArea: Area, area: Area): void => {
-      this.formulaAvailableWidth = Number(area.width);
-    })
-  }
-
-  private displaySize(id: string): FormulaDisplaySize {
-    const exSize = this.formulaExSizes.get(id);
-    return formulaDisplaySize(exSize?.width ?? 0, exSize?.height ?? 0,
-      this.formulaFontSizeVp(), this.formulaAvailableWidth);
-  }
-
-  private formulaFontSizeVp(): number {
-    const context = this.getUIContext();
-    return context.px2vp(context.fp2px(readerBodyFontSize(this.fontSizePercent, this.typographyPreset)));
-  }
-
-  private async loadFormula(run: ReaderInlineRun, generation: number): Promise<void> {
-    let pixelMap: image.PixelMap | undefined = undefined;
-    try {
-      const result = await loadFormulaPixelMap(run.sourceUrl, await this.formulaCookieHeader(),
-        this.formulaColor, formulaDecodeDensity(this.formulaFontSizeVp()),
-        this.getUIContext().vp2px(this.formulaAvailableWidth));
-      pixelMap = result.pixelMap;
-      if (!this.active || this.loadGeneration !== generation) {
-        await pixelMap.release();
-        pixelMap = undefined;
-        return;
-      }
-      const previous = this.pixelMaps.get(run.id);
-      if (previous !== undefined) {
-        await previous.release();
-      }
-      this.pixelMaps.set(run.id, pixelMap);
-      this.formulaExSizes.set(run.id, result.exSize);
-      pixelMap = undefined;
-      this.loadedRunIds = this.loadedRunIds.filter((id: string): boolean => id !== run.id).concat(run.id);
-    } catch (_error) {
-      await pixelMap?.release();
-      if (this.active && this.loadGeneration === generation) {
-        this.failFormula(run.id);
-      }
-    }
-  }
-
-  private async formulaCookieHeader(): Promise<string> {
-    const context = getAbilityContext();
-    if (context === undefined) {
-      return '';
-    }
-    const repository = getAppSessionOwner(context).getRepository();
-    const sessionCookies = repository.getCookies();
-    if (sessionCookies.length > 0) {
-      return toCookieHeader(sessionCookies, Date.now());
-    }
-    return getGuestDeviceCookieManager(context).getCookieHeader();
-  }
-
-  private failFormula(id: string): void {
-    const pixelMap = this.pixelMaps.get(id);
-    this.pixelMaps.delete(id);
-    this.formulaExSizes.delete(id);
-    pixelMap?.release();
-    this.loadedRunIds = this.loadedRunIds.filter((loadedId: string): boolean => loadedId !== id);
-  }
-}
-
-@Component
-struct ContentBlockFormula {
-  item: ReaderBlock = {
-    id: '',
-    kind: ReaderBlockKind.FORMULA,
-    text: '',
-    sourceUrl: '',
-    inlineRuns: []
-  };
-  @State private failed: boolean = false;
-  @State private pixelMap: image.PixelMap | undefined = undefined;
-  /** 公式 SVG 固有尺寸（ex 单位）：显示尺寸按 ex × 字号换算。 */
-  @State private formulaExSize: FormulaDisplaySize = { width: 0, height: 0 };
-  @State @Watch('onFormulaWidthChanged') private formulaAvailableWidth: number = 320;
-  @StorageProp('contentFontSize') private fontSizePercent: number = 100;
-  @StorageProp('contentTypographyPreset') private typographyPreset: string = 'comfortable';
-  @StorageProp('formulaForegroundColor') private formulaColor: string = '#111111';
-  /** 加载失败兜底 Text 的选区状态回调（转发宿主，语义同 NativeContentDocument.onBodySelectionActive）。 */
-  onBodySelectionActive?: (active: boolean) => void;
-  private active: boolean = false;
-  private loadGeneration: number = 0;
-
-  aboutToAppear(): void {
-    this.active = true;
-    this.loadFormula(++this.loadGeneration);
-  }
-
-  private onFormulaWidthChanged(): void {
-    if (this.active && boxedFormulaText(this.item.text) !== undefined) {
-      this.loadFormula(++this.loadGeneration);
-    }
-  }
-
-  aboutToDisappear(): void {
-    this.active = false;
-    this.loadGeneration += 1;
-    this.releasePixelMap();
-  }
-
-  build() {
-    Column() {
-      if (this.pixelMap !== undefined && !this.failed) {
-        Image(this.pixelMap)
-          .id(`content_formula_${this.item.id}`)
-          .width(this.blockDisplaySize().width)
-          .height(this.blockDisplaySize().height)
-          .objectFit(ImageFit.Contain)
-          // 栅格按载入时字号解码，字号调小后 Image 缩小显示：开高质量插值避免锯齿。
-          .interpolation(ImageInterpolation.High)
-          .onError((): void => {
-            this.failed = true;
-            this.releasePixelMap();
-          })
-      } else {
-        Text(this.item.text)
-          .id(`content_formula_fallback_${this.item.id}`)
-          .fontSize($r('app.float.secondary_font_size'))
-          .fontColor($r('app.color.secondary_text'))
-          .copyOption(CopyOptions.LocalDevice)
-          .onTextSelectionChange((start: number, end: number): void => {
-            this.onBodySelectionActive?.(start !== end);
-          })
-          .textAlign(TextAlign.Center)
-          .width('100%')
-      }
-    }
-    .width('100%')
-    .padding($r('app.float.spacing_small'))
-    .backgroundColor($r('app.color.surface_background'))
-    .borderRadius($r('app.float.card_radius'))
-    .onAreaChange((_oldArea: Area, area: Area): void => {
-      const padding = this.getUIContext().getHostContext()?.resourceManager
-        .getNumber($r('app.float.spacing_small').id) ?? 10;
-      this.formulaAvailableWidth = Math.max(1, Number(area.width) - padding * 2);
-    })
-  }
-
-  private blockDisplaySize(): FormulaDisplaySize {
-    return formulaDisplaySize(this.formulaExSize.width, this.formulaExSize.height,
-      this.formulaFontSizeVp(), this.formulaAvailableWidth);
-  }
-
-  private formulaFontSizeVp(): number {
-    const context = this.getUIContext();
-    return context.px2vp(context.fp2px(readerBodyFontSize(this.fontSizePercent, this.typographyPreset)));
-  }
-
-  private async loadFormula(generation: number): Promise<void> {
-    let pixelMap: image.PixelMap | undefined = undefined;
-    try {
-      const result = await loadFormulaPixelMap(this.item.sourceUrl, await this.formulaCookieHeader(),
-        this.formulaColor, formulaDecodeDensity(this.formulaFontSizeVp()),
-        this.getUIContext().vp2px(this.formulaAvailableWidth));
-      pixelMap = result.pixelMap;
-      if (!this.active || this.loadGeneration !== generation) {
-        await pixelMap.release();
-        pixelMap = undefined;
-        return;
-      }
-      if (this.pixelMap !== undefined) {
-        await this.pixelMap.release();
-      }
-      this.formulaExSize = result.exSize;
-      this.pixelMap = pixelMap;
-      pixelMap = undefined;
-      this.failed = false;
-    } catch (_error) {
-      await pixelMap?.release();
-      if (this.active && this.loadGeneration === generation) {
-        this.failed = true;
-      }
-    }
-  }
-
-  private async formulaCookieHeader(): Promise<string> {
-    const context = getAbilityContext();
-    if (context === undefined) {
-      return '';
-    }
-    const repository = getAppSessionOwner(context).getRepository();
-    const sessionCookies = repository.getCookies();
-    if (sessionCookies.length > 0) {
-      return toCookieHeader(sessionCookies, Date.now());
-    }
-    return getGuestDeviceCookieManager(context).getCookieHeader();
-  }
-
-  private releasePixelMap(): void {
-    this.pixelMap?.release();
-    this.pixelMap = undefined;
-  }
-}
-
-@Component
 export struct NativeContentDocument {
+  private readonly bodyTapDetector: DoubleTapDetector = new DoubleTapDetector();
   html: string = '';
   /** 仅真实回答/文章传入；问题列表和相邻回答预览不读写进度。 */
   positionKey: string = '';
@@ -784,24 +411,13 @@ export struct NativeContentDocument {
   linkCardMetaRepository?: LinkCardMetaRepository = undefined;
   /** 正文区域双击回调（各详情页按共享偏好执行动作）。 */
   onBodyDoubleTap?: () => void;
-  /** 正文 Text 的双击识别器：开启选词的 Text 会吞掉手势系统事件，只能靠 onTouch 自行识别。 */
-  private readonly bodyTapDetector: DoubleTapDetector = new DoubleTapDetector();
   /**
    * 正文选区状态回调：active=true 表示存在选区（长按建词/拖选扩展中），宿主据此
    * 挂起回答切换过滑手势——过滑 pan 是 parallelGesture，与 Text 内部拖选并行识别
    * （选词吞手势只影响互斥仲裁路径），页顶拖选会被误判为"贴顶继续过滑"直接切答。
+   * 选区识别在 ReaderBlockView 内完成，经此转发宿主。
    */
   onBodySelectionActive?: (active: boolean) => void;
-  /** 正文当前是否存在选区：onTextSelectionChange 回填去重，仅作信号，不参与渲染。 */
-  private bodySelectionActive: boolean = false;
-  /**
-   * 双击后临时禁选窗口：系统 Text 的"双击选词"在第二击抬起后才判定，且不经过
-   * onGestureJudgeBegin（实测长按路径即使进 judge，REJECT 也拦不住选词），唯一能
-   * 够拦下它的是让 Text 在双击序列内处于 copyOption(None) 不可选状态。双击识别
-   * 命中（第二击按下）即置位，短暂窗口后恢复，长按选词（无前置双击）不受影响。
-   */
-  @State private bodySelectionSuppressed: boolean = false;
-  private bodySelectionRestoreTimerId: number = -1;
   /** 问题详情页在正文末尾追加的 section（回答信息流）；未传入时渲染空。 */
   @BuilderParam documentHeader: () => void = this.emptyFooter;
   @BuilderParam documentBodyFooter: () => void = this.emptyFooter;
@@ -841,11 +457,11 @@ export struct NativeContentDocument {
   /** 惰性列表的块身份随排版/主题变化，重建捕获过旧字号的 Span 与公式组件。 */
   @State private renderRevision: number = 0;
   @State private empty: boolean = true;
-  @State private failedCardCoverIds: Array<string> = [];
-  /** 推荐阅读卡片站内元数据（卡片 url → meta）：aboutToAppear 异步回填，重赋值触发重渲染。 */
+  /** 推荐阅读卡片站内元数据（卡片 url → meta）：串行拉取后回填，重赋值触发重渲染。 */
   @State private linkCardMetas: Map<string, LinkCardMeta> = new Map();
-  /** 卡片元数据请求代际：组件销毁（切换回答/离开页面）后丢弃迟到响应，不再回填状态。 */
-  private linkCardMetaGeneration: number = 0;
+  /** 卡片元数据回填版本（url → 递增次数）：计入 LazyForEach 行键，强制对应卡片行重建。 */
+  @State private linkCardMetaVersions: Map<string, number> = new Map();
+  private linkCardMetaLoader?: LinkCardMetaLoader = undefined;
   /** 正文是否贴在列表底边：onReachEnd 置位；出现任何实际滚动（回滚/内容增高后续滚）即复位。 */
   private atBottomEdge: boolean = false;
   /** 正文是否贴在列表顶边：初始即顶；滚动进正文（yOffset 越过容差）即复位，滚回顶部再置位。 */
@@ -884,22 +500,10 @@ export struct NativeContentDocument {
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   /**
    * 主题切换 tick（EntryAbility 系统深浅色联动 / 设置页切换主题时递增）：
-   * readerBlock 里按其奇偶用 if/else 分支翻转强制重建公式组件。
-   * 公式 PixelMap 的前景色在解码时固化，主题切换必须整体重解码；而公式组件在原实例上
-   * 清空重载（@Watch + 清 pixelMaps/loadedRunIds 再异步回填）在 Text+ForEach+ImageSpan
-   * 子树上不生效（实测重载成功但 UI 永远停在回退分支），因此改为整体销毁重建：
-   * 新实例走 aboutToAppear 首载路径（实测可靠），且创建时直读 AppStorage 当前
-   * formulaForegroundColor，天然免疫"颜色与 tick 两个 @StorageProp 广播时序竞态"。
+   * onAppearanceChanged 据此整体重建正文行（renderRevision 进行键），让捕获过旧主题
+   * 的 Span 与公式组件（ReaderBlockView 及其内部公式宿主）全部销毁重建。
    */
   @StorageProp('appearanceThemeTick') @Watch('onAppearanceChanged') private formulaRecreateTick: number = 0;
-  /**
-   * 字号变化 tick：onTypographyChanged 检测到字号档位变化时递增。公式栅格按载入时
-   * 字号密度解码（见 formulaDecodeDensity），字号调整后需整体销毁重建公式组件才能
-   * 按新密度重新解码；与主题 tick 同用 if/else 翻转分支的强制重建机制（实测可靠）。
-   * 行高/段间距不影响公式栅格，不触发。
-   */
-  @State private formulaDecodeTick: number = 0;
-  private lastDecodedFontSizePercent: number = 100;
   @State private pageTurnGuideVisible: boolean = false;
   /** 正文视口高度（vp）：List 的 onAreaChange 回填，供阅读进度条换算拇指高度。 */
   @State private viewportHeightVp: number = 0;
@@ -935,7 +539,7 @@ export struct NativeContentDocument {
         Column({ space: this.blockSpacing() }) {
           ForEach(this.blocks, (item: ReaderBlock) => {
             this.readerBlock(item)
-          }, (item: ReaderBlock): string => `${item.id}:${this.renderRevision}`)
+          }, (item: ReaderBlock): string => this.blockRowKey(item))
         }
         .width('100%')
         // 按钮保留区（上游 QUESTION_DETAIL_TOGGLE_ZONE 思路）：计入测量高，
@@ -1019,7 +623,6 @@ export struct NativeContentDocument {
   }
 
   aboutToAppear(): void {
-    this.lastDecodedFontSizePercent = this.fontSizePercent;
     const blocks = parseZhihuHtml(this.html);
     this.empty = blocks.length === 0;
     this.blocks = blocks;
@@ -1208,15 +811,19 @@ export struct NativeContentDocument {
 
   /**
    * 推荐阅读卡片元数据拉取：逐个卡片链接（去重）解析站内资源并取赞同/评论计数。
-   * 必须串行：ZhihuHttpClient 是单飞设计（同一实例并发第二请求直接抛 BUSY），
-   * 并行拉取会让除第一张外的所有卡片拿到失败。失败或非站内资源静默跳过，
-   * 卡片保持展示链接地址的回退形态。
+   * 串行与去重由 LinkCardMetaLoader 承担（ZhihuHttpClient 单飞设计，并发即失败）；
+   * 失败或非站内资源静默跳过，卡片保持展示链接地址的回退形态。
    */
   private loadLinkCardMetas(blocks: ReaderBlock[]): void {
     const repository = this.linkCardMetaRepository;
     if (repository === undefined) {
       return;
     }
+    const loader = new LinkCardMetaLoader(repository);
+    loader.onUpdate = (url: string, meta: LinkCardMeta): void => {
+      this.applyLinkCardMeta(url, meta);
+    };
+    this.linkCardMetaLoader = loader;
     const urls: Array<string> = [];
     blocks.forEach((block: ReaderBlock): void => {
       if (block.kind === ReaderBlockKind.LINK_CARD && block.sourceUrl.length > 0 &&
@@ -1224,33 +831,25 @@ export struct NativeContentDocument {
         urls.push(block.sourceUrl);
       }
     });
-    if (urls.length === 0) {
-      return;
+    if (urls.length > 0) {
+      loader.load(urls);
     }
-    void this.loadLinkCardMetasSequentially(urls, repository, this.linkCardMetaGeneration);
   }
 
-  private async loadLinkCardMetasSequentially(urls: Array<string>, repository: LinkCardMetaRepository,
-    generation: number): Promise<void> {
-    for (const url of urls) {
-      if (generation !== this.linkCardMetaGeneration) {
-        return;
-      }
-      try {
-        const meta = await repository.getMeta(url);
-        if (meta === undefined || generation !== this.linkCardMetaGeneration) {
-          continue;
-        }
-        const updated: Map<string, LinkCardMeta> = new Map();
-        this.linkCardMetas.forEach((existing: LinkCardMeta, key: string): void => {
-          updated.set(key, existing);
-        });
-        updated.set(url, meta);
-        this.linkCardMetas = updated;
-      } catch (_error) {
-        // 单卡失败不阻塞后续卡片，保持链接地址回退形态。
-      }
-    }
+  /** 元数据回填：更新 url → meta 状态并递增该 url 的行键版本，强制对应卡片行重建。 */
+  private applyLinkCardMeta(url: string, meta: LinkCardMeta): void {
+    const updated: Map<string, LinkCardMeta> = new Map();
+    this.linkCardMetas.forEach((existing: LinkCardMeta, key: string): void => {
+      updated.set(key, existing);
+    });
+    updated.set(url, meta);
+    this.linkCardMetas = updated;
+    const versions: Map<string, number> = new Map();
+    this.linkCardMetaVersions.forEach((version: number, key: string): void => {
+      versions.set(key, version);
+    });
+    versions.set(url, (versions.get(url) ?? 0) + 1);
+    this.linkCardMetaVersions = versions;
   }
 
   aboutToDisappear(): void {
@@ -1261,15 +860,9 @@ export struct NativeContentDocument {
     if (this.positionSaveTimer >= 0) { clearTimeout(this.positionSaveTimer); }
     this.positionRestoreTimer = -1;
     this.positionSaveTimer = -1;
-    this.linkCardMetaGeneration += 1;
+    this.linkCardMetaLoader?.dispose();
+    this.linkCardMetaLoader = undefined;
     clearFormulaByteCache();
-    if (this.bodySelectionRestoreTimerId >= 0) {
-      clearTimeout(this.bodySelectionRestoreTimerId);
-      this.bodySelectionRestoreTimerId = -1;
-    }
-    // 组件销毁不触发 onTextSelectionChange：切换回答/离开页面时清掉残留的
-    // 选区信号，避免宿主过滑手势被永久挂起。
-    this.setBodySelectionActive(false);
   }
 
   build() {
@@ -1301,7 +894,7 @@ export struct NativeContentDocument {
               .onAreaChange((_oldArea: Area, newArea: Area): void => {
                 this.reportBlockHeight(item.id, newArea);
               })
-            }, (item: ReaderBlock): string => `${item.id}:${this.renderRevision}`)
+            }, (item: ReaderBlock): string => this.blockRowKey(item))
           }
           ListItem() { this.documentBodyFooter() }
             .onAreaChange((_oldArea: Area, newArea: Area): void => {
@@ -1356,7 +949,9 @@ export struct NativeContentDocument {
           this.positionLastIndex = end;
           this.schedulePositionSave();
         })
-        .onScrollStop((): void => this.persistReaderPosition())
+        .onScrollStop((): void => {
+          this.persistReaderPosition();
+        })
         // 触底回调：问题详情页据此加载回答信息流下一页。
         .onReachEnd((): void => {
           this.updateBottomEdge(true);
@@ -1376,6 +971,8 @@ export struct NativeContentDocument {
         // 同时维护底部边界状态：贴底后回滚（y 减小）即离开底边；y 反向增大只可能是
         // 内容增高后继续上滚（onReachEnd 提前触发的残余滚动在 2px 容差内不复位）。
         .onDidScroll((): void => {
+          // 只有真正发生位移才算滚动：轻点不改变偏移，不会刷新滚动静默时刻。
+          this.bodyTapDetector.markScrollActive();
           const yOffset = this.scroller.currentOffset().yOffset;
           if (yOffset < this.lastYOffset - 0.5 || yOffset > this.lastYOffset + 2) {
             this.updateBottomEdge(false);
@@ -1477,9 +1074,17 @@ export struct NativeContentDocument {
     })
   }
 
-  /** 正文字号（fp，`Text.fontSize` 传 number 即 fp）：16 × 字号%，默认 16 == 改造前 16fp。 */
-  private bodyFontSize(): number {
-    return readerBodyFontSize(this.fontSizePercent, this.typographyPreset);
+  /** 段间距/块间距（vp，`List({ space })` 传 number 即 vp）：12 × 段间距%，默认 12 == 改造前。 */
+  private blockSpacing(): number {
+    return readerBlockSpacing(this.blockSpacingPercent, this.typographyPreset);
+  }
+
+  /** 正文行键：renderRevision 随排版/主题整体重建；卡片元数据回填只递增对应 url 版本。 */
+  private blockRowKey(item: ReaderBlock): string {
+    if (item.kind !== ReaderBlockKind.LINK_CARD) {
+      return `${item.id}:${this.renderRevision}`;
+    }
+    return `${item.id}:${this.renderRevision}:${this.linkCardMetaVersions.get(item.sourceUrl) ?? 0}`;
   }
 
   private turnPage(direction: number): void {
@@ -1501,30 +1106,11 @@ export struct NativeContentDocument {
     this.pageTurnGuideVisible = this.showPageTurnGuide;
   }
 
-  /** 正文行高（fp）：行高 160% ↔ 改造前的 30，见 ReaderTypography 的归一说明。 */
-  private bodyLineHeight(): number {
-    return readerBodyLineHeight(this.fontSizePercent, this.lineHeightPercent, this.typographyPreset);
-  }
-
-  /** 段间距/块间距（vp，`List({ space })` 传 number 即 vp）：12 × 段间距%，默认 12 == 改造前。 */
-  private blockSpacing(): number {
-    return readerBlockSpacing(this.blockSpacingPercent, this.typographyPreset);
-  }
-
-  /** 标题字号（fp）：20 × 字号%，默认 20 == 改造前 heading_font_size。 */
-  private headingFontSize(): number {
-    return readerHeadingFontSize(this.fontSizePercent);
-  }
-
   /**
-   * 字号/行高/段间距变化：已实测块高随排版失效，清空重算；列表块自身靠 @StorageProp
-   * 依赖刷新（行内公式子组件同源，无需外部传参）。
+   * 字号/行高/段间距变化：已实测块高随排版失效，清空重算；正文块内字号样式由
+   * ReaderBlockView 自身的 @StorageProp 依赖刷新（公式组件解码密度由其内部处理）。
    */
   private onTypographyChanged(): void {
-    if (this.fontSizePercent !== this.lastDecodedFontSizePercent) {
-      this.lastDecodedFontSizePercent = this.fontSizePercent;
-      this.formulaDecodeTick += 1;
-    }
     this.blockHeights.clear();
     this.measuredBlockHeightSumVp = 0;
     this.measuredBlockCount = 0;
@@ -1659,441 +1245,33 @@ export struct NativeContentDocument {
     }
   }
 
+  /** 正文块渲染委托共享 ReaderBlockView（P1 抽离，单篇与连续阅读页共用同一富文本实现）。 */
   @Builder
   private readerBlock(item: ReaderBlock) {
-    Column() {
-      this.readerBlockContent(item)
-    }
-    .width('100%')
-    .alignItems(HorizontalAlign.Start)
-    .padding({
-      left: (item.quoteDepth ?? 0) > 0 ? 12 : 0
+    ReaderBlockView({
+      item: item,
+      bodyTapDetector: this.bodyTapDetector,
+      previousBlock: this.previousBlocks.get(item.id),
+      segmentInfos: this.segmentInfos,
+      linkCardMeta: this.linkCardMetas.get(item.sourceUrl),
+      onLinkClick: (url: string): void => {
+        this.onLinkClick?.(url);
+      },
+      onReferenceClick: (numero: number): void => this.scrollToReference(numero),
+      onReferenceBack: (numero: number): void => this.scrollBackToReference(numero),
+      onVideoOpen: (videoId: string): void => {
+        this.onVideoOpen?.(videoId);
+      },
+      onSegmentClick: (paragraph: SegmentInfoParagraph, markIndex: number): void => {
+        this.onSegmentClick?.(paragraph, markIndex);
+      },
+      onBodyDoubleTap: (): void => {
+        this.onBodyDoubleTap?.();
+      },
+      onBodySelectionActive: (active: boolean): void => {
+        this.onBodySelectionActive?.(active);
+      }
     })
-    .margin({
-      left: Math.min(Math.max((item.quoteDepth ?? 0) - 1, 0), 4) * 8,
-      top: readerBlockLeadingSpace(item, this.previousBlocks.get(item.id), this.blockSpacing())
-    })
-    .borderWidth({ left: (item.quoteDepth ?? 0) > 0 ? 2 : 0 })
-    .borderColor($r('app.color.reader_quote_border'))
-  }
-
-  @Builder
-  private readerBlockContent(item: ReaderBlock) {
-    if (item.kind === ReaderBlockKind.HEADING) {
-      if (item.inlineRuns.length > 0) {
-        Text() {
-          this.styledSpanChildren(item, true, this.headingFontSize())
-        }
-        .fontSize(this.headingFontSize())
-        .fontWeight(FontWeight.Bold)
-        .copyOption(this.bodySelectionSuppressed ? CopyOptions.None : CopyOptions.LocalDevice)
-        .onTouch((event: TouchEvent): void => {
-          this.onBodyTouch(event);
-        })
-        .onTextSelectionChange((start: number, end: number): void => {
-          this.onBodySelectionChange(start, end);
-        })
-        .width('100%')
-      } else {
-        Text() {
-          ForEach(splitTextByHighlights(item.text, this.blockSegments(item)), (seg: HighlightSegment) => {
-            Span(seg.text)
-              .fontColor($r('app.color.primary_text'))
-              .decoration({
-                type: seg.segmentRef !== undefined ? TextDecorationType.Underline : TextDecorationType.None,
-                style: seg.segmentRef !== undefined ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
-                color: seg.segmentRef !== undefined ? this.resolvedThemeColor : Color.Transparent
-              })
-              .onClick((): void => {
-                if (seg.segmentRef !== undefined && this.onSegmentClick !== undefined) {
-                  this.bodyTapDetector.markForeignClick();
-                  this.onSegmentClick(seg.segmentRef.paragraph, seg.segmentRef.markIndex);
-                }
-              })
-          }, (seg: HighlightSegment): string => `h:${seg.segmentRef !== undefined ? 's' : 'n'}:${seg.text}`)
-        }
-        .fontSize(this.headingFontSize())
-        .fontWeight(FontWeight.Bold)
-        .copyOption(this.bodySelectionSuppressed ? CopyOptions.None : CopyOptions.LocalDevice)
-        .onTouch((event: TouchEvent): void => {
-          this.onBodyTouch(event);
-        })
-        .onTextSelectionChange((start: number, end: number): void => {
-          this.onBodySelectionChange(start, end);
-        })
-        .width('100%')
-      }
-    } else if (item.kind === ReaderBlockKind.DIVIDER) {
-      Divider().margin({ top: 8, bottom: 8 })
-    } else if (item.kind === ReaderBlockKind.REFERENCE) {
-      this.referenceEntryBlock(item)
-    } else if (item.kind === ReaderBlockKind.LINK_CARD) {
-      Row({ space: 12 }) {
-        if ((item.coverUrl ?? '').length > 0 && !this.failedCardCoverIds.includes(item.id)) {
-          Image(item.coverUrl ?? '')
-            .id(`content_link_cover_${item.id}`)
-            .width(64)
-            .height(64)
-            .objectFit(ImageFit.Cover)
-            .borderRadius(6)
-            .clip(true)
-            .accessibilityLevel('no')
-            .onError((): void => {
-              if (!this.failedCardCoverIds.includes(item.id)) {
-                this.failedCardCoverIds = this.failedCardCoverIds.concat(item.id);
-              }
-            })
-        }
-        Column({ space: 6 }) {
-          Text(item.text)
-            .fontSize(this.bodyFontSize())
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.primary_text'))
-            .width('100%')
-          // 站内资源回填元数据后展示 `赞同 X · 评论 Y · 类型`（对齐网页卡片 meta 行）；
-          // 外链/拉取失败回退为展示链接地址。
-          if (this.linkCardMetas.has(item.sourceUrl)) {
-            Text(linkCardMetaLine(this.linkCardMetas.get(item.sourceUrl) as LinkCardMeta))
-              .fontSize(this.referenceFontSize())
-              .fontColor($r('app.color.secondary_text'))
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .width('100%')
-          } else if ((item.displayUrl ?? item.sourceUrl).length > 0 &&
-            (item.displayUrl ?? item.sourceUrl) !== item.text) {
-            Text(item.displayUrl ?? item.sourceUrl)
-              .fontSize(this.referenceFontSize())
-              .fontColor(this.resolvedThemeColor)
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .width('100%')
-          }
-        }
-        .layoutWeight(1)
-      }
-      .id(`content_link_card_${item.id}`)
-      .width('100%')
-      .padding(12)
-      .borderRadius(8)
-      .backgroundColor($r('app.color.surface_background'))
-      .borderWidth(1)
-      .borderColor($r('app.color.secondary_text'))
-      .onClick((): void => {
-        if (item.sourceUrl.length > 0) {
-          this.bodyTapDetector.markForeignClick();
-          this.onLinkClick?.(item.sourceUrl);
-        }
-      })
-    } else if (item.kind === ReaderBlockKind.FORMULA) {
-      // 按主题/字号 tick 奇偶翻转分支强制销毁重建（见 formulaRecreateTick/formulaDecodeTick 注释）。
-      if ((this.formulaRecreateTick + this.formulaDecodeTick) % 2 === 0) {
-        ContentBlockFormula({ item: item, onBodySelectionActive: (active: boolean): void => {
-          this.setBodySelectionActive(active);
-        } })
-      } else {
-        ContentBlockFormula({ item: item, onBodySelectionActive: (active: boolean): void => {
-          this.setBodySelectionActive(active);
-        } })
-      }
-    } else if (item.kind === ReaderBlockKind.IMAGE) {
-      ReaderImageBlock({
-        item: item,
-        captionSpacing: this.blockSpacing() * 0.5,
-        captionFontSize: this.bodyFontSize() * 0.8125,
-        captionLineHeight: readerCaptionLineHeightFp(this.bodyFontSize(), this.bodyLineHeight()),
-        secondaryTextColor: $r('app.color.secondary_text'),
-        onPreview: (url: string): void => {
-          // 全屏查看器由详情页根 Stack 叠层渲染（AppStorage 广播）：正文组件处于列表
-          // 惰性树内，本地渲染全屏层会受标题栏约束，且模态覆盖层树不响应状态更新。
-          AppStorage.setOrCreate('imagePreviewUrl', url);
-        }
-      })
-    } else if (item.kind === ReaderBlockKind.VIDEO) {
-      Stack({ alignContent: Alignment.Center }) {
-        if (item.sourceUrl.length > 0) {
-          Image(item.sourceUrl)
-            .width('100%')
-            .height(200)
-            .objectFit(ImageFit.Cover)
-        } else {
-          Row().width('100%').height(200).backgroundColor('#202124')
-        }
-        Button({ type: ButtonType.Circle, stateEffect: true }) {
-          SymbolGlyph($r('sys.symbol.play_fill'))
-            .fontSize(30)
-            .fontColor([Color.White])
-        }
-          .width(56)
-          .height(56)
-          .padding(0)
-          .backgroundColor('#B3000000')
-          .accessibilityText('播放视频')
-      }
-      .id(`content_video_${item.targetId ?? 'invalid'}`)
-      .width('100%')
-      .height(200)
-      .borderRadius(12)
-      .clip(true)
-      .accessibilityText(item.text.length > 0 ? `播放视频：${item.text}` : '播放视频')
-      .onClick((): void => {
-        if (item.targetId !== undefined) {
-          this.onVideoOpen?.(item.targetId);
-        }
-      })
-    } else if (item.inlineRuns.length > 0) {
-      // 含行内公式的段落走公式宿主；其余 styled runs 走统一样式渲染（划线叠加保留）。
-      if (this.inlineHasFormula(item)) {
-      // 按主题/字号 tick 奇偶翻转分支强制销毁重建（见 formulaRecreateTick/formulaDecodeTick 注释）。
-      if ((this.formulaRecreateTick + this.formulaDecodeTick) % 2 === 0) {
-        ContentInlineFormula({ item: item, onLinkClick: this.onLinkClick,
-          onReferenceClick: (numero: number): void => this.scrollToReference(numero),
-          onBodySelectionActive: (active: boolean): void => {
-            this.setBodySelectionActive(active);
-          } })
-      } else {
-        ContentInlineFormula({ item: item, onLinkClick: this.onLinkClick,
-          onReferenceClick: (numero: number): void => this.scrollToReference(numero),
-          onBodySelectionActive: (active: boolean): void => {
-            this.setBodySelectionActive(active);
-          } })
-      }
-      } else {
-        Text() {
-          this.styledSpanChildren(item, false, this.bodyFontSize())
-        }
-        .fontSize(this.bodyFontSize())
-        .lineHeight(this.bodyLineHeight())
-        .copyOption(this.bodySelectionSuppressed ? CopyOptions.None : CopyOptions.LocalDevice)
-        .onTouch((event: TouchEvent): void => {
-          this.onBodyTouch(event);
-        })
-        .onTextSelectionChange((start: number, end: number): void => {
-          this.onBodySelectionChange(start, end);
-        })
-        .width('100%')
-      }
-    } else {
-      Text() {
-        if (item.kind === ReaderBlockKind.LIST_ITEM) {
-          Span('• ')
-        }
-        ForEach(splitTextByHighlights(item.text, this.blockSegments(item)), (seg: HighlightSegment) => {
-          Span(seg.text)
-            .fontColor($r('app.color.primary_text'))
-            .decoration({
-              type: seg.segmentRef !== undefined ? TextDecorationType.Underline : TextDecorationType.None,
-              style: seg.segmentRef !== undefined ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
-              color: seg.segmentRef !== undefined ? this.resolvedThemeColor : Color.Transparent
-            })
-            .onClick((): void => {
-              if (seg.segmentRef !== undefined && this.onSegmentClick !== undefined) {
-                this.bodyTapDetector.markForeignClick();
-                this.onSegmentClick(seg.segmentRef.paragraph, seg.segmentRef.markIndex);
-              }
-            })
-        }, (seg: HighlightSegment): string => `p:${seg.segmentRef !== undefined ? 's' : 'n'}:${seg.text}`)
-      }
-      .fontSize(this.bodyFontSize())
-      .lineHeight(this.bodyLineHeight())
-      .copyOption(this.bodySelectionSuppressed ? CopyOptions.None : CopyOptions.LocalDevice)
-      .onTouch((event: TouchEvent): void => {
-        this.onBodyTouch(event);
-      })
-      .onTextSelectionChange((start: number, end: number): void => {
-        this.onBodySelectionChange(start, end);
-      })
-      .width('100%')
-    }
-  }
-
-  /** 文末参考条目行（对齐上游脚注定义渲染：[N] + ↩ 返回 + 说明文本 + 可点击链接，脚注字号）。 */
-  @Builder
-  private referenceEntryBlock(item: ReaderBlock) {
-    Row({ space: 8 }) {
-      Text(this.referenceEntryLabel(item))
-        .fontSize(this.referenceFontSize())
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.primary_text'))
-      SymbolGlyph($r('sys.symbol.arrowshape_turn_up_left'))
-        .fontSize(this.referenceFontSize())
-        .fontColor([this.resolvedThemeColor])
-        .onClick((): void => {
-          if (item.reference !== undefined) {
-            this.bodyTapDetector.markForeignClick();
-            this.scrollBackToReference(item.reference.numero);
-          }
-        })
-        .accessibilityText('返回正文引用位置')
-      Column({ space: 4 }) {
-        if (item.text.length > 0) {
-          Text(item.text)
-            .fontSize(this.referenceFontSize())
-            .fontColor($r('app.color.primary_text'))
-            .width('100%')
-        }
-        if (this.referenceEntryUrl(item).length > 0) {
-          Text(this.referenceEntryUrl(item))
-            .fontSize(this.referenceFontSize())
-            .fontColor(this.resolvedThemeColor)
-            .wordBreak(WordBreak.BREAK_ALL)
-            .width('100%')
-            .onClick((): void => {
-              const url = this.referenceEntryUrl(item);
-              if (url.length > 0 && this.onLinkClick !== undefined) {
-                this.onLinkClick(url);
-              }
-            })
-        }
-      }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-    }
-    .alignItems(VerticalAlign.Top)
-    .width('100%')
-  }
-
-  /** 参考条目字号（fp）：脚注样式取正文的 85%。 */
-  private referenceFontSize(): number {
-    return this.bodyFontSize() * 0.85;
-  }
-
-  private referenceEntryLabel(item: ReaderBlock): string {
-    return `[${item.reference?.numero ?? ''}]`;
-  }
-
-  private referenceEntryUrl(item: ReaderBlock): string {
-    return item.reference?.url ?? '';
-  }
-
-  /** 内联 runs 是否含公式 run（决定段落走公式宿主还是统一样式渲染）。 */
-  private inlineHasFormula(item: ReaderBlock): boolean {
-    return item.inlineRuns.some((run: ReaderInlineRun): boolean => run.kind === ReaderInlineKind.FORMULA);
-  }
-
-  /** 选区变化入口：建词/扩展置 active，清除（start==end）复位；去重后转发宿主。 */
-  private onBodySelectionChange(start: number, end: number): void {
-    this.setBodySelectionActive(start !== end);
-  }
-
-  private setBodySelectionActive(active: boolean): void {
-    if (active === this.bodySelectionActive) { return; }
-    this.bodySelectionActive = active;
-    const callback = this.onBodySelectionActive;
-    if (callback !== undefined) {
-      callback(active);
-    }
-  }
-
-  /** 正文 Text 原始触摸入口：喂给双击识别器，识别到双击上报宿主（见 DoubleTapDetector 注释）。 */
-  private onBodyTouch(event: TouchEvent): void {
-    if (this.bodyTapDetector.feed(event)) {
-      this.suppressBodySelection();
-      const callback = this.onBodyDoubleTap;
-      if (callback !== undefined) {
-        callback();
-      }
-    }
-  }
-
-  /** 双击命中即临时关掉正文选择（见 bodySelectionSuppressed 注释）。窗口结束后恢复，
-   * 期间再次双击则顺延；纯长按选词没有前置双击，不受影响。 */
-  private suppressBodySelection(): void {
-    this.bodySelectionSuppressed = true;
-    if (this.bodySelectionRestoreTimerId >= 0) {
-      clearTimeout(this.bodySelectionRestoreTimerId);
-    }
-    this.bodySelectionRestoreTimerId = setTimeout((): void => {
-      this.bodySelectionRestoreTimerId = -1;
-      this.bodySelectionSuppressed = false;
-    }, DOUBLE_TAP_SELECTION_SUPPRESS_MS);
-  }
-
-  /**
-   * 展平内联 runs × 他人划线：划线偏移按段落文本对齐，含公式 run 时偏移无法
-   * 与纯文本逐字对齐，退化为不叠加划线（公式段落原本也不参与划线渲染）。
-   */
-  private styledSegments(item: ReaderBlock): Array<StyledTextSegment> {
-    return flattenStyledTextSegments(item.inlineRuns, item.text,
-      this.inlineHasFormula(item) ? [] : this.blockSegments(item));
-  }
-
-  /** 统一样式渲染的 Span 序列（列表项圆点与纯文本路径一致）。 */
-  @Builder
-  private styledSpanChildren(item: ReaderBlock, baseBold: boolean, fontSizeVp: number) {
-    if (item.kind === ReaderBlockKind.LIST_ITEM) {
-      Span('• ')
-    }
-    ForEach(this.styledSegments(item), (seg: StyledTextSegment, index: number) => {
-      this.styledSpan(seg, baseBold, fontSizeVp)
-    }, (seg: StyledTextSegment, index: number): string => `${index}:${seg.text}`)
-  }
-
-  /**
-   * 单个样式化 Span：加粗/斜体/删除线/行内代码/高亮/上下标/链接 + 他人划线虚线叠加。
-   * code 与其余样式互斥分支（fontFamily 无中性值可传）；链接色跟随主题色。
-   */
-  @Builder
-  private styledSpan(seg: StyledTextSegment, baseBold: boolean, fontSizeVp: number) {
-    if (seg.code) {
-      Span(seg.text)
-        .fontSize(seg.superscript || seg.subscript ? fontSizeVp * 0.75 : fontSizeVp)
-        .fontWeight(seg.bold || baseBold ? FontWeight.Bold : FontWeight.Normal)
-        .fontStyle(seg.italic ? FontStyle.Italic : FontStyle.Normal)
-        .fontFamily('monospace')
-        .fontColor(seg.linkUrl.length > 0 || seg.referenceNumero !== undefined
-          ? this.resolvedThemeColor : $r('app.color.primary_text'))
-        .textBackgroundStyle({ color: '#14808080', radius: 3 })
-        .decoration({
-          type: seg.segmentRef !== undefined ? TextDecorationType.Underline :
-            (seg.strikethrough ? TextDecorationType.LineThrough : TextDecorationType.None),
-          style: seg.segmentRef !== undefined ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
-          color: seg.segmentRef !== undefined ? this.resolvedThemeColor : Color.Transparent
-        })
-        .baselineOffset(seg.superscript ? LengthMetrics.vp(fontSizeVp * 0.35) :
-          (seg.subscript ? LengthMetrics.vp(-fontSizeVp * 0.18) : LengthMetrics.vp(0)))
-        .onClick((): void => {
-          this.handleStyledSpanClick(seg);
-        })
-    } else {
-      Span(seg.text)
-        .fontSize(seg.superscript || seg.subscript ? fontSizeVp * 0.75 : fontSizeVp)
-        .fontWeight(seg.bold || baseBold ? FontWeight.Bold : FontWeight.Normal)
-        .fontStyle(seg.italic ? FontStyle.Italic : FontStyle.Normal)
-        .fontColor(seg.linkUrl.length > 0 || seg.referenceNumero !== undefined
-          ? this.resolvedThemeColor : $r('app.color.primary_text'))
-        .textBackgroundStyle(seg.mark ? { color: '#66FDD835', radius: 3 } : { color: Color.Transparent, radius: 0 })
-        .decoration({
-          type: seg.segmentRef !== undefined ? TextDecorationType.Underline :
-            (seg.strikethrough ? TextDecorationType.LineThrough : TextDecorationType.None),
-          style: seg.segmentRef !== undefined ? TextDecorationStyle.DASHED : TextDecorationStyle.SOLID,
-          color: seg.segmentRef !== undefined ? this.resolvedThemeColor : Color.Transparent
-        })
-        .baselineOffset(seg.superscript ? LengthMetrics.vp(fontSizeVp * 0.35) :
-          (seg.subscript ? LengthMetrics.vp(-fontSizeVp * 0.18) : LengthMetrics.vp(0)))
-        .onClick((): void => {
-          this.handleStyledSpanClick(seg);
-        })
-    }
-  }
-
-  /** 样式片段点击：链接优先于参考跳转，参考标记优先于他人划线面板。 */
-  private handleStyledSpanClick(seg: StyledTextSegment): void {
-    if (seg.linkUrl.length > 0) {
-      this.bodyTapDetector.markForeignClick();
-      if (this.onLinkClick !== undefined) {
-        this.onLinkClick(seg.linkUrl);
-      }
-      return;
-    }
-    if (seg.referenceNumero !== undefined && seg.referenceNumero > 0) {
-      this.bodyTapDetector.markForeignClick();
-      this.scrollToReference(seg.referenceNumero);
-      return;
-    }
-    if (seg.segmentRef !== undefined && this.onSegmentClick !== undefined) {
-      this.bodyTapDetector.markForeignClick();
-      this.onSegmentClick(seg.segmentRef.paragraph, seg.segmentRef.markIndex);
-    }
   }
 
   /**
@@ -2134,21 +1312,4 @@ export struct NativeContentDocument {
     }
   }
 
-  /** 本块对应的他人划线引用（按 data-pid 对齐 segment_infos）。@Builder 体内禁止非 UI 语句，故提为方法。 */
-  private blockSegments(item: ReaderBlock): Array<SegmentHighlightRef> {
-    if (item.pid === undefined || item.pid.length === 0 || this.segmentInfos.length === 0) {
-      return [];
-    }
-    const paragraph = this.segmentInfos.find((p: SegmentInfoParagraph): boolean => p.pid === item.pid);
-    if (paragraph === undefined) {
-      return [];
-    }
-    const refs: Array<SegmentHighlightRef> = [];
-    paragraph.marks.forEach((mark: SegmentInfoMark, index: number): void => {
-      if (effectiveSegmentMeta(mark) !== undefined) {
-        refs.push({ paragraph: paragraph, markIndex: index });
-      }
-    });
-    return refs;
-  }
 }

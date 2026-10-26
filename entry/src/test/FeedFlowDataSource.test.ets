@@ -127,17 +127,19 @@ export default function feedFlowDataSourceTest(): void {
     it('notifiesSingleInsertWhenChromeBannerAppearsAtHead', 0, () => {
       const source = new FeedFlowDataSource();
       const listener = new RecordingListener();
-      source.applyLayout([contentItem('a', 0), contentItem('b', 1)]);
+      const spacer = feedRenderChrome('chrome:spacer', FeedRenderKind.TOP_SPACER);
+      source.applyLayout([spacer, contentItem('a', 0), contentItem('b', 1)]);
       source.registerDataChangeListener(listener);
-      // 更新公告/错误横幅出现在列表头部
-      source.applyLayout([feedRenderChrome('chrome:announcement', FeedRenderKind.UPDATE_ANNOUNCEMENT),
+      // 更新公告/错误横幅在顶部让位条目之后插入，保持让位条目在索引 0。
+      source.applyLayout([spacer, feedRenderChrome('chrome:announcement', FeedRenderKind.UPDATE_ANNOUNCEMENT),
         contentItem('a', 0), contentItem('b', 1)]);
-      expect(listener.events.join(',')).assertEqual('add:0');
-      expect(source.getData(0).key).assertEqual('chrome:announcement');
+      expect(listener.events.join(',')).assertEqual('add:1');
+      expect(source.getData(0).kind).assertEqual(FeedRenderKind.TOP_SPACER);
+      expect(source.getData(1).key).assertEqual('chrome:announcement');
       // 头部横幅消失
-      source.applyLayout([contentItem('a', 0), contentItem('b', 1)]);
-      expect(listener.events.join(',')).assertEqual('add:0,del:0');
-      expect(keysOf(source).join(',')).assertEqual('a,b');
+      source.applyLayout([spacer, contentItem('a', 0), contentItem('b', 1)]);
+      expect(listener.events.join(',')).assertEqual('add:1,del:1');
+      expect(keysOf(source).join(',')).assertEqual('chrome:spacer,a,b');
     });
 
     it('appliesGranularDeleteThenInsertForSmallMiddleChanges', 0, () => {

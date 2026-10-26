@@ -289,6 +289,27 @@ export function feedPullDownIndicator(options: FeedPullDownIndicatorOptions) {
 }
 
 /**
+ * 下拉间隙的空占位（Refresh 的 builder）。
+ *
+ * Refresh 不指定 builder 时会画系统默认的圆形箭头（形似“刷新”图标），任何下拉——包括
+ * 未达刷新阈值、以及拉到顶回弹后再次下滑——都会出现，松手即消失，容易被误认为正在
+ * 刷新但内容没变。所有页面的 Refresh 都接本占位顶掉默认箭头，只在真正越过阈值/刷新时
+ * 由 refreshingContent（主题色圆圈）给出反馈。
+ */
+@Builder
+export function pullDownRefreshPlaceholder() {
+}
+
+/**
+ * 触发下拉刷新所需的下拉距离（vp）：远大于普通回弹的越界量，需明显下拉才会刷新。
+ * 替代已废弃的 Refresh offset（其语义是下拉起点距组件顶部距离，且被钳到 64vp）。
+ */
+export const PULL_REFRESH_TRIGGER_OFFSET_VP: number = 112;
+
+/** 下拉跟手比例：固定 0.8，避免动态衰减让“轻拉也够阈值”。替代已废弃的 friction。 */
+export const PULL_REFRESH_PULL_DOWN_RATIO: number = 0.8;
+
+/**
  * 下拉刷新圆圈的生命周期宿主：持有 ComponentContent，并把“间隙是否展开”同步给它。
  * 展开态有两个来源，缺一不可——onStateChange 覆盖手势下拉（Drag/OverDrag），
  * setRefreshing 覆盖程序化刷新（双击页签、登录重载等不经过手势的路径）。
@@ -312,8 +333,9 @@ export class FeedPullDownIndicatorHost {
   }
 
   onStateChange(status: RefreshStatus): void {
-    this.dragging = status === RefreshStatus.Drag || status === RefreshStatus.OverDrag
-      || status === RefreshStatus.Refresh;
+    // 只有下拉超过触发阈值（OverDrag）或已进入刷新（Refresh）才显示圆圈：
+    // 未达阈值的普通下拉/回弹松手后不会刷新，露出“正在刷新”的圆圈会误导。
+    this.dragging = status === RefreshStatus.OverDrag || status === RefreshStatus.Refresh;
     this.apply();
   }
 

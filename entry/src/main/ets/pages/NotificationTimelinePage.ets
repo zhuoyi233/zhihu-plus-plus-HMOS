@@ -20,7 +20,13 @@ import { EmojiText } from './EmojiText';
 import { contentLinkDestination, timelineItemDestination } from './NotificationLinkResolver';
 import { notificationPlainText } from './PrivateMessageContent';
 import { NotificationTimelineController, NotificationTimelinePhase, NotificationTimelineViewState } from './NotificationTimelineState';
-import { FeedPullDownIndicatorHost, FLOATING_TITLE_BAR_OFFSET } from './AppPageChrome';
+import {
+  FeedPullDownIndicatorHost,
+  FLOATING_TITLE_BAR_OFFSET,
+  PULL_REFRESH_PULL_DOWN_RATIO,
+  PULL_REFRESH_TRIGGER_OFFSET_VP,
+  pullDownRefreshPlaceholder
+} from './AppPageChrome';
 
 function relativeTime(created: number): string {
   if (created <= 0) {
@@ -153,9 +159,8 @@ export struct NotificationTimelinePage {
       } else {
         Refresh({
           refreshing: $$this.refreshing,
-          refreshingContent: this.indicator?.view(),
-          offset: 80,
-          friction: 100
+          builder: pullDownRefreshPlaceholder,
+          refreshingContent: this.indicator?.view()
         }) {
           List({ space: 0 }) {
             if (this.items.length === 0) {
@@ -214,6 +219,8 @@ export struct NotificationTimelinePage {
         .id('notification_timeline_pull_refresh')
         .width('100%')
         .layoutWeight(1)
+        .refreshOffset(PULL_REFRESH_TRIGGER_OFFSET_VP)
+        .pullDownRatio(PULL_REFRESH_PULL_DOWN_RATIO)
         .onRefreshing((): void => { void this.pullRefresh(); })
         .onStateChange((status: RefreshStatus): void => this.indicator?.onStateChange(status))
       }

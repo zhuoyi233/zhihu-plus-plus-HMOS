@@ -6,7 +6,8 @@ export enum FeedRenderKind {
   DATE_HEADING,
   CONTENT,
   DAILY_STORY,
-  LOADING_FOOTER
+  LOADING_FOOTER,
+  TOP_SPACER
 }
 
 /** LazyForEach 渲染条目：内容负载保存对象引用（引用稳定，索引位移不产生旧绑定）。 */

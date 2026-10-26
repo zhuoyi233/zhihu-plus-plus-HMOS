@@ -45,7 +45,8 @@ import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import bundleManager from '@ohos.bundle.bundleManager';
 import { Want } from '@kit.AbilityKit';
 import {
-  SymbolGlyphModifier
+  SymbolGlyphModifier,
+  uiMaterial
 } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { resourceManager } from '@kit.LocalizationKit';
@@ -59,6 +60,7 @@ import {
   NotificationEntryDestination,
   AppDestination,
   PrivateMessageDestination,
+  ContinuousAnswerDestination,
   AppDestinationName,
   shouldReloadAfterAuthentication,
   startupDestinationChannel,
@@ -75,7 +77,8 @@ import {
   topLevelTabForDestination
 } from './TopLevelTabs';
 import { DividerShowType, hdsMaterial, HdsNavDestination, HdsNavigation, HdsNavigationAttribute, HdsNavigationTitleMode, HdsTabsController } from '@kit.UIDesignKit';
-import { getChatTitleBarStyle, getImmersiveTitleBarStyle, getPersistentImmersiveTitleBarStyle, getRootChromeTitleBarStyle } from '../common/style/NavStyles';
+import { ContinuousAnswerTitleState, continuousAnswerRouteId, continuousAnswerTitle } from './ContinuousAnswerRouteState';
+import { getContinuousAnswerTitleBarStyle, getChatTitleBarStyle, getImmersiveTitleBarStyle, getPersistentImmersiveTitleBarStyle, getRootChromeTitleBarStyle } from '../common/style/NavStyles';
 import {
   decodeImmersiveMaterialSupport,
   ImmersiveMaterialSupportState
@@ -94,6 +97,26 @@ import { ChannelFeedInteractionBridge } from './ChannelFeedState';
 import { dailyDateCursor, dailyPickerDate, formatDailyDate } from './DailyFeedDates';
 
 const PROJECT_HOME_URI: string = 'https://github.com/zhuoyi233/zhihu-plus-plus-HMOS';
+
+/**
+ * 顶栏玻璃材质（`uiMaterial`，API 26 专属）。
+ * 兼容线仍是 API 23：低版本返回 undefined，调用点用 `backgroundBlurStyle` 兜底，
+ * 系统材质只在高版本设备上生效。
+ */
+function createTitleBarGlassMaterial(): uiMaterial.Material | undefined {
+  // 系统材质是 API 26 专属：低版本 kit 里没有该模块，构造会抛异常（实测 API 24 模拟器
+  // 抛错但不崩），因此必须按版本门禁并兜底，低版本改用 backgroundBlurStyle。
+  if (!HarmonyOSCapabilities.supportsSystemMaterial()) {
+    return undefined;
+  }
+  try {
+    return new uiMaterial.ImmersiveMaterial({ style: uiMaterial.ImmersiveStyle.ULTRA_THIN });
+  } catch (_error) {
+    return undefined;
+  }
+}
+
+const TITLE_BAR_GLASS_MATERIAL: uiMaterial.Material | undefined = createTitleBarGlassMaterial();
 
 @Component
 export struct AppShell {
@@ -157,6 +180,10 @@ export struct AppShell {
     onScanDesktopLogin: () => void) => void = this.emptyLogin;
   @BuilderParam readerProbeContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam imageProbeContent: (onBack: () => void) => void = this.emptyProbe;
+  @BuilderParam continuousReadingProtoContent: (onBack: () => void) => void = this.emptyProbe;
+  @BuilderParam continuousAnswerContent: (questionId: string, answerId: string | undefined,
+    sort: string | undefined, navigate: (destination: AppDestination) => void,
+    onBack: () => void) => void = this.emptyPage;
   @BuilderParam databaseProbeContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam deepLinkProbeContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam qrScanProbeContent: (onBack: () => void) => void = this.emptyProbe;
@@ -175,6 +202,8 @@ export struct AppShell {
   /** 回答/文章详情页沉浸式阅读中（页面广播）：隐藏 NavDestination 顶栏（对齐上游 topBar={}）。 */
   @StorageProp('detailImmersiveActive') private detailImmersiveActive: boolean = false;
   @StorageProp('detailTitleHiddenByScroll') private detailTitleHiddenByScroll: boolean = false;
+  /** 连续阅读页问题标题（页面加载后广播；空串显示占位标题）。 */
+  @StorageProp('continuousAnswerTitles') private continuousAnswerTitles: Array<ContinuousAnswerTitleState> = [];
   @StorageProp('answerOverscrollActive') private answerOverscrollActive: boolean = false;
   @StorageProp('answerSwitchMode') private answerSwitchMode: string = 'vertical';
   @StorageProp('peopleTitleStates') private peopleTitleStates: PeopleTitleState[] = [];
@@ -320,6 +349,7 @@ export struct AppShell {
     void this.restoreExperiencePreferences();
     void this.restoreImmersiveMaterialLevel();
     void this.restoreDeveloperMode();
+    void this.restoreAnswerReadingMode();
     this.refreshInstalledVersionLabel();
     this.unsubscribeStartupDestination?.();
     const listener: StartupDestinationListener = (destination: AppDestination): void => {
@@ -441,6 +471,58 @@ export struct AppShell {
   @Builder
   emptyProbe(_onBack: () => void) {
     Blank();
+  }
+
+  /** 连续阅读页固定问题标题：点击进入问题页（计划 §2.1）；标题由页面异步广播。 */
+  @Builder
+  continuousAnswerTitleBar(questionId: string, answerId: string, sort: string) {
+    // 与问题详情页一致：返回键与标题在同一 Row 中分配空间，隐藏外层 HDS 默认返回键。
+    Row({ space: 8 }) {
+      // 复用回答详情页的 HDS 玻璃画布；不支持沉浸材质时使用主题中性底色。
+      Stack({ alignContent: Alignment.Center }) {
+        if (this.supportsImmersiveMaterial()) {
+          materialCanvas(52, 52)
+        }
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.chevron_left'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+        .id('continuous_answer_back')
+        .width(40)
+        .height(40)
+        .padding(0)
+        .borderRadius(20)
+        .backgroundColor(this.supportsImmersiveMaterial()
+          ? Color.Transparent : $r('app.color.surface_background'))
+        .accessibilityText('返回')
+        .onClick((): void => { this.pathStack.pop(); })
+      }
+      .width(44)
+      .height(44)
+      .borderRadius(22)
+      .clip(true)
+      Text(continuousAnswerTitle(this.continuousAnswerTitles,
+        continuousAnswerRouteId(questionId, answerId, sort)) || '连续阅读')
+        .id('continuous_answer_title')
+        .fontSize($r('app.float.heading_font_size'))
+        .maxFontScale(1.3)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.primary_text'))
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .layoutWeight(1)
+        .height(40)
+        .clip(true)
+        .onClick((): void => {
+          this.navigate({ name: AppDestinationName.QUESTION, id: questionId });
+        })
+        .accessibilityText('查看问题详情')
+    }
+    .width('100%')
+    .height(48)
+    .alignItems(VerticalAlign.Center)
+    .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding') })
   }
 
   @Builder
@@ -998,6 +1080,71 @@ export struct AppShell {
         content: { title: { mainTitle: '图片诊断' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === AppDestinationName.CONTINUOUS_READING_PROTOTYPE) {
+      HdsNavDestination() {
+        this.continuousReadingProtoContent((): void => {
+          this.pathStack.pop();
+        });
+      }
+      // 原型页自带控制栏与状态行：用不透明标题栏让正文排在标题栏下方（聊天页先例），
+      // 避免沉浸悬浮标题栏压住页顶控件（whats-new 页已踩过同类坑）。
+      .titleBar({ style: getChatTitleBarStyle(),
+        content: { title: { mainTitle: '连续阅读原型' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === AppDestinationName.CONTINUOUS_ANSWER) {
+      HdsNavDestination() {
+        this.continuousAnswerContent(
+          (destination as ContinuousAnswerDestination).questionId,
+          (destination as ContinuousAnswerDestination).answerId,
+          (destination as ContinuousAnswerDestination).sort,
+          (destination: AppDestination): void => this.navigate(destination),
+          (): void => {
+            this.pathStack.pop();
+          }
+        );
+      }
+      // API 26 沿用回答详情页材质，API 23 由页面承载渐变模糊，避免 HDS 背板硬切正文。
+      .titleBar({ style: getContinuousAnswerTitleBarStyle(
+        this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
+        content: {
+          stackBuilder: (): void => this.continuousAnswerTitleBar(
+            (destination as ContinuousAnswerDestination).questionId,
+            (destination as ContinuousAnswerDestination).answerId ?? '',
+            (destination as ContinuousAnswerDestination).sort ?? 'default'),
+          divider: { showType: DividerShowType.OFF }
+        } })
+      .hideBackButton(true)
+      .hideTitleBar(this.imagePreviewUrl.length > 0 || this.detailImmersiveActive)
+      .onShown((): void => {
+        AppStorage.setOrCreate('continuousAnswerActiveRoute', continuousAnswerRouteId(
+          (destination as ContinuousAnswerDestination).questionId,
+          (destination as ContinuousAnswerDestination).answerId ?? '',
+          (destination as ContinuousAnswerDestination).sort ?? 'default'));
+      })
+      .onHidden((): void => {
+        if (AppStorage.get<string>('continuousAnswerActiveRoute') === continuousAnswerRouteId(
+          (destination as ContinuousAnswerDestination).questionId,
+          (destination as ContinuousAnswerDestination).answerId ?? '',
+          (destination as ContinuousAnswerDestination).sort ?? 'default')) {
+          AppStorage.setOrCreate('continuousAnswerActiveRoute', '');
+        }
+      })
+      .onBackPressed((): boolean => {
+        if (this.imagePreviewUrl.length > 0) {
+          AppStorage.setOrCreate('imagePreviewUrl', '');
+          return true;
+        }
+        // 沉浸阅读中先退出沉浸（对齐回答/文章页交互），再次返回才离页。
+        if (this.detailImmersiveActive) {
+          AppStorage.setOrCreate('detailImmersiveExitTick',
+            (AppStorage.get<number>('detailImmersiveExitTick') ?? 0) + 1);
+          return true;
+        }
+        return false;
+      })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.DATABASE_PROBE) {
       HdsNavDestination() {
         this.databaseProbeContent((): void => {
@@ -1075,13 +1222,17 @@ export struct AppShell {
         controller: this.tabsController,
         onTabDoubleTap: (index: number): void => {
           // 双击页签刷新对应 feed（“我的”除外）；跨页面信号经 AppStorage 广播。
+          // 先广播回到顶部、再广播刷新：滑动数据时双击也按“先回顶 → 再刷新”执行。
           const tab = this.tabAtDisplayIndex(index);
           if (tab < TopLevelTab.HOME || tab > TopLevelTab.DAILY) {
             return;
           }
+          AppStorage.setOrCreate('tabScrollTopTabIndex', tab);
+          AppStorage.setOrCreate('tabScrollTopTick', (AppStorage.get<number>('tabScrollTopTick') ?? 0) + 1);
+          // 先写目标页签再自增 tick：@Watch 在 tick 写入时同步触发，顺序反了会读到上一次的目标页签。
+          AppStorage.setOrCreate('tabRefreshTabIndex', tab);
           const nextTick = (AppStorage.get<number>('tabRefreshTick') ?? 0) + 1;
           AppStorage.setOrCreate('tabRefreshTick', nextTick);
-          AppStorage.setOrCreate('tabRefreshTabIndex', tab);
         },
         onCurrentTabTap: (index: number): void => {
           const tab = this.tabAtDisplayIndex(index);
@@ -1356,6 +1507,23 @@ export struct AppShell {
     .hitTestBehavior(HitTestMode.Transparent)
   }
 
+  /** 搜索胶囊内边距：有系统材质时用玻璃胶囊的收窄内边距，低版本保持原有模糊兜底样式。 */
+  private searchPillPadding(): Padding {
+    if (TITLE_BAR_GLASS_MATERIAL !== undefined) {
+      return { left: 14, right: 14 };
+    }
+    return {
+      top: $r('app.float.spacing_small'),
+      bottom: $r('app.float.spacing_small'),
+      left: $r('app.float.spacing_small'),
+      right: $r('app.float.spacing_small')
+    };
+  }
+
+  private searchPillRadius(): Length {
+    return TITLE_BAR_GLASS_MATERIAL !== undefined ? 20 : $r('app.float.card_radius');
+  }
+
   @Builder
   private rootTitleBarContent() {
     Stack({ alignContent: Alignment.Center }) {
@@ -1376,11 +1544,13 @@ export struct AppShell {
         .id('home_titlebar_search')
         .layoutWeight(1)
         .height(40)
-        .padding($r('app.float.spacing_small'))
+        .padding(this.searchPillPadding())
         .backgroundColor(Color.Transparent)
-        // uiMaterial 全家族为 API 26 专属；工程最低兼容 API 23，标题栏玻璃一律走模糊兜底
-        .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
-        .borderRadius($r('app.float.card_radius'))
+        // API 26 起可给任意组件设置系统材质（薄玻璃胶囊）；低版本退回模糊兜底。
+        .backgroundBlurStyle(TITLE_BAR_GLASS_MATERIAL === undefined
+          ? BlurStyle.COMPONENT_ULTRA_THIN : BlurStyle.NONE)
+        .systemMaterial(TITLE_BAR_GLASS_MATERIAL)
+        .borderRadius(this.searchPillRadius())
         .accessibilityText('打开搜索')
         .onClick((): void => this.navigate({ name: AppDestinationName.SEARCH, query: '' }))
 
@@ -1394,7 +1564,10 @@ export struct AppShell {
         .height(40)
         .padding(0)
         .backgroundColor(Color.Transparent)
-        .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
+        // 与搜索胶囊同款沉浸光感材质：圆形薄玻璃底；低版本退回模糊兜底。
+        .backgroundBlurStyle(TITLE_BAR_GLASS_MATERIAL === undefined
+          ? BlurStyle.COMPONENT_ULTRA_THIN : BlurStyle.NONE)
+        .systemMaterial(TITLE_BAR_GLASS_MATERIAL)
         .accessibilityText('打开通知')
         .onClick((): void => this.navigate({ name: AppDestinationName.NOTIFICATION }))
       }
@@ -1429,7 +1602,10 @@ export struct AppShell {
         .height(40)
         .padding(0)
         .backgroundColor(Color.Transparent)
-        .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
+        // 顶栏图标统一沉浸光感材质（圆形薄玻璃底），与搜索/通知一致；低版本退回模糊兜底。
+        .backgroundBlurStyle(TITLE_BAR_GLASS_MATERIAL === undefined
+          ? BlurStyle.COMPONENT_ULTRA_THIN : BlurStyle.NONE)
+        .systemMaterial(TITLE_BAR_GLASS_MATERIAL)
         .accessibilityText('刷新热榜')
         .onClick((): void => {
           this.hotReloadToken += 1;
@@ -1467,7 +1643,10 @@ export struct AppShell {
         .height(40)
         .padding(0)
         .backgroundColor(Color.Transparent)
-        .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
+        // 顶栏图标统一沉浸光感材质（圆形薄玻璃底），与搜索/通知一致；低版本退回模糊兜底。
+        .backgroundBlurStyle(TITLE_BAR_GLASS_MATERIAL === undefined
+          ? BlurStyle.COMPONENT_ULTRA_THIN : BlurStyle.NONE)
+        .systemMaterial(TITLE_BAR_GLASS_MATERIAL)
         .accessibilityText('选择日报日期')
         .onClick((): void => {
           this.openDailyDatePicker();
@@ -2818,6 +2997,20 @@ export struct AppShell {
       this.developerModeEnabled = await new AppPreferencesStore(context).loadDeveloperMode();
     } catch (_error) {
       this.developerModeEnabled = false;
+    }
+  }
+
+  /** 回答阅读模式（连续阅读计划 §2.2）：启动时恢复并广播，问题页/详情菜单按此路由。 */
+  private async restoreAnswerReadingMode(): Promise<void> {
+    const context = getAbilityContext();
+    if (context === undefined) {
+      return;
+    }
+    try {
+      AppStorage.setOrCreate('answerReadingMode',
+        await new AppPreferencesStore(context).loadAnswerReadingMode());
+    } catch (_error) {
+      AppStorage.setOrCreate('answerReadingMode', 'single');
     }
   }
 

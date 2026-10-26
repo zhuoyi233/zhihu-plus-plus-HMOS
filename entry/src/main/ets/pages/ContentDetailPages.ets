@@ -5,7 +5,15 @@ import { publishQuestionTitle } from './QuestionTitleBar';
 import { publishAnswerTitle, AnswerTitleBar } from './AnswerTitleBar';
 import { publishArticleTitle } from './ArticleTitleBar';
 import { FeedContentSummary } from './components/FeedContentSummary';
-import { AppPageStatusKind, AppPageStatusPanel, FeedPullDownIndicatorHost, FLOATING_TITLE_BAR_OFFSET } from './AppPageChrome';
+import {
+  AppPageStatusKind,
+  AppPageStatusPanel,
+  FeedPullDownIndicatorHost,
+  FLOATING_TITLE_BAR_OFFSET,
+  PULL_REFRESH_PULL_DOWN_RATIO,
+  PULL_REFRESH_TRIGGER_OFFSET_VP,
+  pullDownRefreshPlaceholder
+} from './AppPageChrome';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { Want } from '@kit.AbilityKit';
@@ -84,6 +92,7 @@ import {
   FollowViewState
 } from './ContentInteractionState';
 import { CollectionDialogComponent } from './CollectionDialogComponent';
+import { mergeSameRangeMarks } from './ContentAnnotations';
 import { NativeContentDocument } from './NativeContentDocument';
 import { stageVideoPlaybackContext } from './VideoPlaybackHandoff';
 import { stageAnswerEditSeed } from './AnswerEditSeedStore';
@@ -1964,7 +1973,11 @@ struct ContentDetailPage {
 
   @Builder
   private questionDocument(content: LoadedContentDetail) {
-    Refresh({ refreshing: $$this.refreshingAnswers, refreshingContent: this.indicator?.view() }) {
+    Refresh({
+      refreshing: $$this.refreshingAnswers,
+      builder: pullDownRefreshPlaceholder,
+      refreshingContent: this.indicator?.view()
+    }) {
       NativeContentDocument({
         html: contentHtml(content), emptyMessage: contentEmptyMessage(content), collapsible: true,
         linkCardMetaRepository: this.linkCardMetaRepository,
@@ -1988,7 +2001,10 @@ struct ContentDetailPage {
           }
         }
       })
-    }.height('100%').width('100%').onRefreshing((): void => { void this.refreshQuestion(); })
+    }.height('100%').width('100%')
+      .refreshOffset(PULL_REFRESH_TRIGGER_OFFSET_VP)
+      .pullDownRatio(PULL_REFRESH_PULL_DOWN_RATIO)
+      .onRefreshing((): void => { void this.refreshQuestion(); })
       .onStateChange((status: RefreshStatus): void => this.indicator?.onStateChange(status))
   }
 
@@ -2534,6 +2550,13 @@ struct ContentDetailPage {
       .width('100%').padding($r('app.float.card_padding'))
       .borderRadius($r('app.float.card_radius')).backgroundColor($r('app.color.surface_background'))
       .accessibilityText('打开回答').onClick((): void => {
+        // 偏好为连续阅读时直接进连续流（计划 §2.2：继承问题 ID、排序与所点回答）。
+        if (AppStorage.get<string>('answerReadingMode') === 'continuous') {
+          this.navigate({ name: AppDestinationName.CONTINUOUS_ANSWER,
+            questionId: this.activeContentId, answerId: item.feedItem.target.id,
+            sort: this.answersController?.snapshot().sortOrder });
+          return;
+        }
         const repository = this.questionAnswerFeedFactory();
         const seed = this.answersController?.snapshot();
         if (repository !== undefined && seed !== undefined) {
@@ -2919,6 +2942,25 @@ struct ContentDetailPage {
       }
       .width('100%')
       .padding({ top: 8, bottom: 8 })
+
+      if (this.kind === ContentDetailKind.ANSWER) {
+        this.menuSettingRow('切换到连续阅读', $r('sys.symbol.list_bullet'), 'detail_menu_continuous_reading',
+          true, true, (): void => {
+            const content = this.content;
+            if (content === undefined || content.kind !== ContentDetailKind.ANSWER) {
+              return;
+            }
+            this.actionMenuShown = false;
+            const context = getAbilityContext();
+            if (context !== undefined) {
+              void new AppPreferencesStore(context).saveAnswerReadingMode('continuous')
+                .catch((_error: Error): void => {});
+            }
+            AppStorage.setOrCreate('answerReadingMode', 'continuous');
+            this.navigate({ name: AppDestinationName.CONTINUOUS_ANSWER,
+              questionId: content.value.questionId, answerId: content.value.id });
+          })
+      }
 
       this.menuSettingRow('外观与阅读体验', $r('sys.symbol.eye'), 'detail_menu_appearance_settings',
         true, true, (): void => {
@@ -3588,76 +3630,6 @@ export struct ArticleDetailPage {
   }
 }
 
-/**
- * 合并同区间的划线 mark（对齐上游 SegmentHighlightUtils.mergeSameRangeMarks）：
- * 点赞会给同一文本位置创建属于自己的 seg，detail 重载后该段落会有多个同区间 mark。
- * 合并规则：segIds 按 master 优先顺序去重拼接；isLike/isSpan 取任一为真；
- * likeCount/commentCount/myCommentCount 取最大值。
- */
-function mergeSameRangeMarks(paragraphs: SegmentInfoParagraph[]): SegmentInfoParagraph[] {
-  return paragraphs.map((paragraph: SegmentInfoParagraph): SegmentInfoParagraph => {
-    if (paragraph.marks.length <= 1) {
-      return paragraph;
-    }
-    const groups = new Map<string, SegmentInfoMark[]>();
-    paragraph.marks.forEach((mark: SegmentInfoMark): void => {
-      const key = `${mark.startIndex}:${mark.endIndex}`;
-      const bucket = groups.get(key);
-      if (bucket === undefined) {
-        groups.set(key, [mark]);
-      } else {
-        bucket.push(mark);
-      }
-    });
-    const merged: SegmentInfoMark[] = [];
-    groups.forEach((bucket: SegmentInfoMark[]): void => {
-      const ordered: SegmentInfoMark[] = bucket.filter((mark: SegmentInfoMark): boolean => mark.masterSegInfo !== undefined)
-        .concat(bucket.filter((mark: SegmentInfoMark): boolean => mark.masterSegInfo === undefined));
-      const segIds: string[] = [];
-      ordered.forEach((mark: SegmentInfoMark): void => {
-        const meta = effectiveSegmentMeta(mark);
-        if (meta === undefined) {
-          return;
-        }
-        meta.segIds.forEach((segId: string): void => {
-          if (!segIds.includes(segId)) {
-            segIds.push(segId);
-          }
-        });
-      });
-      let likeCount = 0;
-      let commentCount = 0;
-      let myCommentCount = 0;
-      let isLike = false;
-      let isSpan = false;
-      ordered.forEach((mark: SegmentInfoMark): void => {
-        const meta = effectiveSegmentMeta(mark);
-        if (meta === undefined) {
-          return;
-        }
-        likeCount = Math.max(likeCount, meta.likeCount);
-        commentCount = Math.max(commentCount, meta.commentCount);
-        myCommentCount = Math.max(myCommentCount, meta.myCommentCount);
-        isLike = isLike || meta.isLike;
-        isSpan = isSpan || meta.isSpan;
-      });
-      merged.push({
-        startIndex: bucket[0].startIndex,
-        endIndex: bucket[0].endIndex,
-        segInfo: {
-          segIds: segIds,
-          isLike: isLike,
-          likeCount: likeCount,
-          commentCount: commentCount,
-          myCommentCount: myCommentCount,
-          isSpan: isSpan
-        }
-      });
-    });
-    merged.sort((a: SegmentInfoMark, b: SegmentInfoMark): number => a.startIndex - b.startIndex);
-    return { pid: paragraph.pid, text: paragraph.text, marks: merged };
-  });
-}
 
 export function contentTitle(content: LoadedContentDetail): string {
   switch (content.kind) {

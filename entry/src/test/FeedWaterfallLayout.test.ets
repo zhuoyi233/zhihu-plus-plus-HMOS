@@ -68,7 +68,7 @@ export default function feedWaterfallLayoutTest(): void {
       expect(resolveFeedColumnSpec(400, { requestedColumns: 4 }).columns).assertEqual(1);
     });
     it('keepsOddContentAsIndependentItemsBetweenFullWidthChrome', 0, () => {
-      const layout = buildFeedFlowLayout(['a', 'b', 'c'], [], 2, 2, true, 14, 94);
+      const layout = buildFeedFlowLayout(['a', 'b', 'c'], [], 2, 2, true, 14);
       expect(layout.entries.length).assertEqual(3);
       expect(layout.sections.length).assertEqual(3);
       expect(layout.sections[0].crossCount).assertEqual(1);
@@ -80,7 +80,7 @@ export default function feedWaterfallLayoutTest(): void {
       expect(feedFlowItemIndex(layout, 5)).assertEqual(2);
     });
     it('separatesDatesAndMapsHeadingsBackToSourceItems', 0, () => {
-      const layout = buildFeedFlowLayout(['a', 'b', 'c'], ['20261023', '20261023', '20261022'], 2, 1, false, 14, 94);
+      const layout = buildFeedFlowLayout(['a', 'b', 'c'], ['20261023', '20261023', '20261022'], 2, 1, false, 14);
       expect(layout.entries.length).assertEqual(5);
       expect(layout.sections.length).assertEqual(5);
       expect(layout.sections[2].itemsCount).assertEqual(2);
@@ -90,45 +90,58 @@ export default function feedWaterfallLayoutTest(): void {
       expect(feedFlowItemIndex(layout, 5)).assertEqual(2);
     });
     it('keepsStableContentKeysWhenColumnsChangeOrContentIsRemoved', 0, () => {
-      const wide = buildFeedFlowLayout(['a', 'b', 'c'], [], 2, 0, false, 14, 94);
-      const narrow = buildFeedFlowLayout(['a', 'c'], [], 1, 0, false, 0, 94);
+      const wide = buildFeedFlowLayout(['a', 'b', 'c'], [], 2, 0, false, 14);
+      const narrow = buildFeedFlowLayout(['a', 'c'], [], 1, 0, false, 0);
       expect(wide.entries[2].key).assertEqual(narrow.entries[1].key);
       expect(narrow.sections[0].crossCount).assertEqual(1);
       expect(narrow.entries[1].itemIndex).assertEqual(1);
     });
     it('doesNotCreateZeroCountSectionsForEmptyFeeds', 0, () => {
-      const layout = buildFeedFlowLayout([], [], 2, 0, false, 14, 94);
+      const layout = buildFeedFlowLayout([], [], 2, 0, false, 14);
       expect(layout.sections.length).assertEqual(0);
       expect(feedFlowItemIndex(layout, 0)).assertEqual(-1);
     });
+    it('countsTopSpacerInEmptyAndDatedFeedAnchors', 0, () => {
+      const empty = buildFeedFlowLayout([], [], 1, 1, false, 0);
+      expect(empty.sections.length).assertEqual(1);
+      expect(empty.sections[0].itemsCount).assertEqual(1);
+      expect(feedFlowItemIndex(empty, 0)).assertEqual(-1);
+      const dated = buildFeedFlowLayout(['a', 'b'], ['20261023', '20261022'], 4, 2, true, 14);
+      // 顶部让位 + 错误横幅后才是日期标题；加载尾也映射到最后一条内容。
+      expect(feedFlowItemIndex(dated, 0)).assertEqual(-1);
+      expect(feedFlowItemIndex(dated, 1)).assertEqual(-1);
+      expect(feedAnchorFlowIndex(dated, 0)).assertEqual(2);
+      expect(feedAnchorFlowIndex(dated, 1)).assertEqual(4);
+      expect(feedFlowItemIndex(dated, 6)).assertEqual(1);
+    });
     it('skipsSectionSpliceOnlyWhenGroupingIsUnchanged', 0, () => {
-      const first = buildFeedFlowLayout(['a', 'b', 'c'], [], 2, 1, true, 14, 94);
-      const sameGrouping = buildFeedFlowLayout(['a', 'x', 'c'], [], 2, 1, true, 14, 94);
-      const columnsChanged = buildFeedFlowLayout(['a', 'b', 'c'], [], 3, 1, true, 14, 94);
-      const footerGone = buildFeedFlowLayout(['a', 'b', 'c'], [], 2, 1, false, 14, 94);
-      const offsetChanged = buildFeedFlowLayout(['a', 'b', 'c'], [], 2, 1, true, 14, 90);
-      const gapChanged = buildFeedFlowLayout(['a', 'b', 'c'], [], 2, 1, true, 0, 94);
+      const first = buildFeedFlowLayout(['a', 'b', 'c'], [], 2, 1, true, 14);
+      const sameGrouping = buildFeedFlowLayout(['a', 'x', 'c'], [], 2, 1, true, 14);
+      const columnsChanged = buildFeedFlowLayout(['a', 'b', 'c'], [], 3, 1, true, 14);
+      const footerGone = buildFeedFlowLayout(['a', 'b', 'c'], [], 2, 1, false, 14);
+      const bannerAdded = buildFeedFlowLayout(['a', 'b', 'c'], [], 2, 2, true, 14);
+      const gapChanged = buildFeedFlowLayout(['a', 'b', 'c'], [], 2, 1, true, 0);
       expect(feedSectionSignature(sameGrouping)).assertEqual(feedSectionSignature(first));
       expect(feedSectionSignature(columnsChanged) !== feedSectionSignature(first)).assertTrue();
       expect(feedSectionSignature(footerGone) !== feedSectionSignature(first)).assertTrue();
-      expect(feedSectionSignature(offsetChanged) !== feedSectionSignature(first)).assertTrue();
+      expect(feedSectionSignature(bannerAdded) !== feedSectionSignature(first)).assertTrue();
       expect(feedSectionSignature(gapChanged) !== feedSectionSignature(first)).assertTrue();
     });
     it('mapsAnchorContentToFlowIndexAcrossColumnChanges', 0, () => {
-      const wide: FeedFlowLayout = buildFeedFlowLayout(['a', 'b', 'c'], [], 2, 1, false, 14, 94);
+      const wide: FeedFlowLayout = buildFeedFlowLayout(['a', 'b', 'c'], [], 2, 1, false, 14);
       expect(feedAnchorFlowIndex(wide, 0)).assertEqual(1);
       expect(feedAnchorFlowIndex(wide, 2)).assertEqual(3);
       // 日期标题与锚点内容同屏：锚点落在日期通栏项上
       const dated: FeedFlowLayout =
-        buildFeedFlowLayout(['a', 'b', 'c'], ['20261023', '20261023', '20261022'], 2, 0, false, 14, 94);
+        buildFeedFlowLayout(['a', 'b', 'c'], ['20261023', '20261023', '20261022'], 2, 0, false, 14);
       expect(feedAnchorFlowIndex(dated, 2)).assertEqual(3);
       // 锚点被过滤后落在仍存在的相邻内容
-      const filtered: FeedFlowLayout = buildFeedFlowLayout(['a', 'c'], [], 1, 0, false, 0, 94);
+      const filtered: FeedFlowLayout = buildFeedFlowLayout(['a', 'c'], [], 1, 0, false, 0);
       expect(feedAnchorFlowIndex(filtered, 1)).assertEqual(1);
       // 锚点超出末尾时取最后一项，空列表返回 -1
       expect(feedAnchorFlowIndex(wide, 9)).assertEqual(3);
       expect(feedAnchorFlowIndex(wide, -1)).assertEqual(-1);
-      expect(feedAnchorFlowIndex(buildFeedFlowLayout([], [], 2, 0, false, 14, 94), 0)).assertEqual(-1);
+      expect(feedAnchorFlowIndex(buildFeedFlowLayout([], [], 2, 0, false, 14), 0)).assertEqual(-1);
     });
   });
 }

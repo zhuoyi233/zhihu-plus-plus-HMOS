@@ -15,7 +15,7 @@
 | 沉浸光感怎么来的 | 系统级材质 `systemMaterial(uiMaterial.ImmersiveMaterial)`，**不是**普通 `backdropBlur` / `backgroundBlurStyle` 毛玻璃 |
 | 为什么看起来是"两个胶囊" | 两个 `Row` 各自一套圆角 + 各自一套材质，`justifyContent(FlexAlign.SpaceBetween)` 推到左右两端，中间自然断开 |
 | 会挡住底部手势条吗 | 必须手动避让：窗口全屏 + `expandSafeArea` 让正文延伸到底，浮层再按手势条高度加 `padding` |
-| 能不能在本项目直接用 | **当前不能**（见 §7）：`uiMaterial` 是 API 26 专属，本项目最低兼容 API 23，禁止 import |
+| 能不能在本项目直接用 | **可以，但需版本门禁**（见 §7）：`uiMaterial` 是 API 26 专属，本项目最低兼容 API 23，需 `supportsSystemMaterial()` 判定后使用，低版本回落到模糊兜底 |
 
 ---
 
@@ -196,16 +196,19 @@ private onContentScroll(delta: number): void {
 
 ## 7. 落到本项目（zhihu-plus-plus-HMOS）的约束
 
-1. **`uiMaterial` 在本项目禁止 import**：项目最低兼容 API 23（HarmonyOS 6.1.0），而
-   `@ohos.arkui.uiMaterial` 全家族是 API 26 专属，**低版本设备载入即崩**。
-   → 现阶段做同款双胶囊只能用兜底方案：`backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)`
-   + 半透明底色 + 细边框；系统级材质只能走 HDS 组件（自 6.1.0(23) 起可用）。
+1. **`uiMaterial` 必须按版本门禁使用**：项目最低兼容 API 23（HarmonyOS 6.1.0），而
+   `@ohos.arkui.uiMaterial` 全家族是 API 26 专属。实测（API 24 模拟器）静态
+   `import { uiMaterial } from '@kit.ArkUI'` 本身不崩，但 `new uiMaterial.ImmersiveMaterial(...)`
+   会抛异常，因此只能在 `deviceInfo.sdkApiVersion >= 26` 时构造并调用 `.systemMaterial(...)`，
+   且构造包 try/catch；低版本传 `undefined` 并用兜底方案：
+   `backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)` + 半透明底色 + 细边框。
+   系统级材质在 HDS 组件上自 6.1.0(23) 起可用。
 2. **已有可复用基建**（不要重复造）：
    - `EntryAbility`：`setWindowLayoutFullScreen(true)`，并把底部避让高度写入
      AppStorage 键 `bottomRectHeight`（`px / density`，已是 vp）。
    - `P1Shell` 第 956 行已用 `.expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])`。
-3. **若将来要引入沉浸材质**：必须在运行期做能力判断 + 代码隔离（不能静态 import 到公共模块），
-   并保持低版本降级路径可编译可运行。
+3. **若将来要引入沉浸材质**：沿用 `AppShell` 的 `TITLE_BAR_GLASS_MATERIAL` 模式——
+   运行期能力判断（`HarmonyOSCapabilities.supportsSystemMaterial()`）+ 低版本降级路径可编译可运行。
 
 ---
 

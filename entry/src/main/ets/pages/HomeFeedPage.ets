@@ -13,7 +13,7 @@ import {
 } from './FeedWaterfallLayout';
 import { FeedAnchorRestorer } from './FeedColumnAnchorRestore';
 import { feedRenderChrome, FeedFlowDataSource, FeedRenderItem, FeedRenderKind, feedRenderContent } from './FeedFlowDataSource';
-import { AppDestination, AppDestinationName } from 'core';
+import { AppDestination, AppDestinationName, isSafeDecimalContentId } from 'core';
 import {
   onThemeColor,
   ContentRepository,
@@ -44,12 +44,18 @@ import {
   AppPageStatusPanel,
   FeedLoadMoreIndicator,
   FeedPullDownIndicatorHost,
-  floatingTitleBarOffset
+  floatingTitleBarOffset,
+  PULL_REFRESH_PULL_DOWN_RATIO,
+  PULL_REFRESH_TRIGGER_OFFSET_VP,
+  pullDownRefreshPlaceholder
 } from './AppPageChrome';
 import { HomeFeedController, HomeFeedPhase, HomeFeedViewState } from './HomeFeedState';
 import { HomeFeedMenuAction, HomeFeedMenuItem, homeFeedMenuItems, resolveHomeFeedBlockUser, resolveHomeFeedTopics } from './HomeFeedMenuState';
 import { HOME_FEED_SCROLL_KEY, topLevelScrollRegistry } from './TopLevelScrollRegistry';
 import { DraggableRefreshButton } from './components/DraggableRefreshButton';
+
+/** 下拉头回弹/收起后的静默窗口（ms）：期间再往下滑不触发刷新。 */
+const REFRESH_SETTLE_QUIET_MS: number = 500;
 
 @Component
 export struct HomeFeedPage {
@@ -106,6 +112,8 @@ export struct HomeFeedPage {
   private blockingAction?: BlockingActionController;
   private menuRepository?: ContentRepository = undefined;
   private menuRequestId: number = 0;
+  private openRequestId: number = 0;
+  private openRepository: ContentRepository | undefined = undefined;
   /** 本会话已批量上报过曝光（touch）的条目，对齐上游 reportedTouchedItems 去重。 */
   private readonly reportedTouchIdentities: Set<string> = new Set<string>();
   private readonly listScroller: Scroller = new Scroller();
@@ -122,7 +130,7 @@ export struct HomeFeedPage {
   private feedCardWidthVp: number = 0;
   private feedHeightVp: number = 0;
   @State private flowSections: WaterFlowSections = new WaterFlowSections();
-  @State private flowLayout: FeedFlowLayout = buildFeedFlowLayout([], [], 1, 0, false, 0, floatingTitleBarOffset());
+  @State private flowLayout: FeedFlowLayout = buildFeedFlowLayout([], [], 1, 1, false, 0);
   // LazyForEach 数据源：通栏项、内容与加载尾统一协调，通知与 sections 同源
   private readonly flowDataSource: FeedFlowDataSource = new FeedFlowDataSource();
   private lastSectionSignature: string = '';
@@ -131,6 +139,10 @@ export struct HomeFeedPage {
   private fillAttempts: number = 0;
   private fillAttemptSize: number = 0;
   private firstVisibleIndex: number = 0;
+  /** 本次手势按下时列表是否已在顶部：只有顶部起手才算有意下拉刷新。 */
+  private pullGestureFromTop: boolean = true;
+  /** 下拉头最近一次回弹/收起的时刻：此后的短静默期内不响应下拉刷新。 */
+  private lastRefreshSettleTime: number = 0;
 
   aboutToAppear(): void {
     // 登记给根 HdsNavigation 做 bindToScrollable：驱动标题栏滚动模糊。
@@ -159,6 +171,9 @@ export struct HomeFeedPage {
   }
 
   aboutToDisappear(): void {
+    this.openRequestId += 1;
+    this.openRepository?.cancel();
+    this.openRepository = undefined;
     this.indicator?.dispose();
     this.indicator = undefined;
     this.controller?.deactivate();
@@ -204,12 +219,11 @@ export struct HomeFeedPage {
     if (this.tabScrollTopTabIndex !== 0) {
       return;
     }
-    if (this.firstVisibleIndex > 0) {
-      this.firstVisibleIndex = 0;
-      this.listScroller.scrollToIndex(0, true, ScrollAlign.START);
-    } else {
-      this.controller?.refresh();
-    }
+    // 单击只回到顶部，不再在顶部时刷新：刷新改为连续点击两次页签触发（双击路径）。
+    // 必须滚到内容起点（offset 0）而不是 scrollToIndex(0)：首个瀑布流分组带标题栏让位边距，
+    // 按下标对齐会把首行卡片顶到屏幕最上沿、盖住标题栏与下拉刷新圆圈。
+    this.firstVisibleIndex = 0;
+    this.listScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: true });
   }
 
   build() {
@@ -224,9 +238,8 @@ export struct HomeFeedPage {
         } else {
           Refresh({
             refreshing: this.refreshing,
-            refreshingContent: this.indicator?.view(),
-            offset: 80,
-            friction: 100
+            builder: pullDownRefreshPlaceholder,
+            refreshingContent: this.indicator?.view()
           }) {
             WaterFlow({ scroller: this.listScroller, sections: this.flowSections,
               layoutMode: WaterFlowLayoutMode.SLIDING_WINDOW }) {
@@ -256,6 +269,13 @@ export struct HomeFeedPage {
                 AppStorage.setOrCreate('bottomBarHiddenByScroll', offset > 0);
               }
             })
+            // 记录手势起手时是否在顶部：从列表中间回滑到顶部后继续下拉的过冲
+            // 也会被 Refresh 判成下拉刷新，需要据此区分。
+            .onTouch((event: TouchEvent): void => {
+              if (event.type === TouchType.Down) {
+                this.pullGestureFromTop = this.listScroller.currentOffset().yOffset <= 1;
+              }
+            })
             .scrollBar(BarState.Off)
             .height('100%')
             .edgeEffect(EdgeEffect.Spring)
@@ -269,8 +289,35 @@ export struct HomeFeedPage {
           .id('home_pull_refresh')
           .width('100%')
           .layoutWeight(1)
-          .onRefreshing(() => this.controller?.refresh())
-          .onStateChange((status: RefreshStatus): void => this.indicator?.onStateChange(status))
+          // 官方属性（offset/friction 已于 API 11 废弃）：把刷新阈值抬到明显高于普通回弹，
+          // 普通下拉只回弹、不刷新；需要下拉约半屏高才触发。
+          .refreshOffset(PULL_REFRESH_TRIGGER_OFFSET_VP)
+          .pullDownRatio(PULL_REFRESH_PULL_DOWN_RATIO)
+          .onRefreshing(() => {
+            // 程序化刷新（双击页签/登录重载）把 refreshing 置 true 时也会回调本事件：
+            // 此时控制器已在刷新，再调 refresh() 会排队一次重复请求（表现为刷新两轮）。
+            if (this.refreshing) {
+              return;
+            }
+            // 回弹/下拉头收起后的短时间内不响应下拉：拉到顶回弹时再往下滑不应触发刷新。
+            if (Date.now() - this.lastRefreshSettleTime <= REFRESH_SETTLE_QUIET_MS) {
+              this.suppressPullRefresh();
+              return;
+            }
+            // 非顶部起手（回滑到顶后继续下拉的过冲）同样不刷新。
+            if (!this.pullGestureFromTop) {
+              this.suppressPullRefresh();
+              return;
+            }
+            this.controller?.refresh();
+          })
+          .onStateChange((status: RefreshStatus): void => {
+            this.indicator?.onStateChange(status);
+            // 下拉头回到 Inactive、或一次刷新收尾（Done）都算“回弹/收起”，记录时刻用于静默。
+            if (status === RefreshStatus.Inactive || status === RefreshStatus.Done) {
+              this.lastRefreshSettleTime = Date.now();
+            }
+          })
         }
 
         if (this.blockingMessage.length > 0) {
@@ -323,7 +370,12 @@ export struct HomeFeedPage {
 
   @Builder
   private flowRenderItem(renderItem: FeedRenderItem) {
-    if (renderItem.kind === FeedRenderKind.ERROR_BANNER) {
+    if (renderItem.kind === FeedRenderKind.TOP_SPACER) {
+      // 用真实条目让位，系统点状态栏回顶时也能保留悬浮标题栏空间。
+      Row()
+        .width('100%')
+        .height(floatingTitleBarOffset())
+    } else if (renderItem.kind === FeedRenderKind.ERROR_BANNER) {
       this.recoverableErrorBanner()
     } else if (renderItem.kind === FeedRenderKind.UPDATE_ANNOUNCEMENT) {
       this.updateAnnouncementCard()
@@ -487,7 +539,7 @@ export struct HomeFeedPage {
     .accessibilityText((item.target.qualityFilterReason ?? '').length > 0
       ? `已屏蔽：${item.target.qualityFilterReason}`
       : `打开${feedKindLabel(item.target.kind)}：${item.target.title}`)
-    .onClick((): void => this.openFeedItem(item))
+    .onClick((): void => { void this.openFeedItem(item); })
   }
 
   @Builder
@@ -580,15 +632,42 @@ export struct HomeFeedPage {
     .alignItems(VerticalAlign.Center)
   }
 
-  private openFeedItem(item: FeedItem): void {
-    void this.openedContentStore?.upsert({
-      contentKey: `${item.target.kind}:${item.target.id}`,
-      openedAt: Date.now(),
-      contentType: item.target.kind,
-      title: item.target.title
-    }).catch((_error: Error): void => {});
-    this.reportLastReadTouch(item, 'read');
-    this.navigate(homeFeedDestination(item));
+  private async openFeedItem(item: FeedItem): Promise<void> {
+    const requestId = ++this.openRequestId;
+    this.openRepository?.cancel();
+    this.openRepository = undefined;
+    try {
+      // 点击时读取广播值，设置变更后已挂载的首页卡片也立即遵循最新模式。
+      const mode = AppStorage.get<string>('answerReadingMode') ?? 'single';
+      const destination = await resolveHomeFeedDestination(item, mode, async (answerId: string): Promise<string> => {
+        const repository = this.contentRepositoryFactory();
+        if (repository === undefined) {
+          throw new Error('Answer repository unavailable');
+        }
+        this.openRepository = repository;
+        const answer = await repository.getAnswer(answerId);
+        return answer.questionId;
+      });
+      if (requestId !== this.openRequestId) {
+        return;
+      }
+      void this.openedContentStore?.upsert({
+        contentKey: `${item.target.kind}:${item.target.id}`,
+        openedAt: Date.now(),
+        contentType: item.target.kind,
+        title: item.target.title
+      }).catch((_error: Error): void => {});
+      this.reportLastReadTouch(item, 'read');
+      this.navigate(destination);
+    } catch (_error) {
+      if (requestId === this.openRequestId) {
+        this.getUIContext().getPromptAction().showToast({ message: '暂时无法打开回答，请稍后重试' });
+      }
+    } finally {
+      if (requestId === this.openRequestId) {
+        this.openRepository = undefined;
+      }
+    }
   }
 
   /** 对齐上游 lastread/touch：点击上报 read、feed 曝光批量上报 touch，游客态由仓库静默跳过。 */
@@ -881,7 +960,9 @@ export struct HomeFeedPage {
 
   /** 按当前布局快照构建渲染条目并做最小化通知（追加/删除/重载）。 */
   private applyRenderItems(): void {
-    const renderItems: Array<FeedRenderItem> = [];
+    const renderItems: Array<FeedRenderItem> = [
+      feedRenderChrome('chrome:spacer', FeedRenderKind.TOP_SPACER)
+    ];
     if (this.errorMessage.length > 0) {
       renderItems.push(feedRenderChrome('chrome:error', FeedRenderKind.ERROR_BANNER));
     }
@@ -926,18 +1007,27 @@ export struct HomeFeedPage {
       ? feedFlowItemIndex(this.flowLayout, this.firstVisibleIndex) : -1;
     this.feedColumns = spec.columns;
     this.feedCardWidthVp = spec.cardWidth;
-    const leading: number = (this.errorMessage.length > 0 ? 1 : 0) +
+    // +1：真实顶部让位条目也参与懒加载计数与锚点索引。
+    const leading: number = 1 + (this.errorMessage.length > 0 ? 1 : 0) +
       (isUpdateAnnouncementVisible(this.pendingUpdateVersion, this.dismissedUpdateVersion) ? 1 : 0);
     const gap: number = this.usesCardSurface() ? this.flowGapVp() : 0;
     this.flowLayout = buildFeedFlowLayout(
       this.items.map((item: FeedItem): string => feedItemIdentity(item)),
       [],
-      spec.columns, leading, this.loadingMore, gap, floatingTitleBarOffset());
+      spec.columns, leading, this.loadingMore, gap);
     this.spliceSectionsIfNeeded();
     this.applyRenderItems();
     if (anchorItemIndex >= 0) {
       this.scheduleAnchorRestore(anchorItemIndex, spec);
     }
+  }
+
+  /** 忽略本次下拉：Refresh 已自行进入刷新态，短暂置 true 再复位让它收起，不发起请求。 */
+  private suppressPullRefresh(): void {
+    this.refreshing = true;
+    setTimeout((): void => {
+      this.refreshing = false;
+    }, 80);
   }
 
   private applyState(state: HomeFeedViewState): void {
@@ -964,6 +1054,27 @@ function lastReadTouchEntryOf(item: FeedItem, action: string): LastReadTouchEntr
     return undefined;
   }
   return { kind: kind, id: item.target.id, action: action };
+}
+
+/** 首页回答遵循阅读偏好；摘要缺失/无效的问题 ID 只按需查询，不误退回单篇。 */
+export async function resolveHomeFeedDestination(item: FeedItem, readingMode: string,
+  loadQuestionId: (answerId: string) => Promise<string>): Promise<AppDestination> {
+  if (item.target.kind !== FeedTargetKind.ANSWER || readingMode !== 'continuous') {
+    return homeFeedDestination(item);
+  }
+  let questionId = item.target.questionId?.trim() ?? '';
+  if (!isSafeDecimalContentId(questionId)) {
+    questionId = (await loadQuestionId(item.target.id)).trim();
+  }
+  if (!isSafeDecimalContentId(questionId)) {
+    throw new Error('Invalid answer question ID');
+  }
+  const destination: AppDestination = {
+    name: AppDestinationName.CONTINUOUS_ANSWER,
+    questionId: questionId,
+    answerId: item.target.id
+  };
+  return destination;
 }
 
 export function homeFeedDestination(item: FeedItem): AppDestination {

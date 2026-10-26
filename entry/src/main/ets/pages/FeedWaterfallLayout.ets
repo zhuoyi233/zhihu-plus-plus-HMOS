@@ -116,14 +116,13 @@ export interface FeedFlowLayout {
   entries: Array<FeedFlowEntry>;
   sections: Array<SectionOptions>;
   leadingCount: number;
-  /** 分组间距与首组让位，供签名比较使用（sections.margin 是联合类型，不便直接读取）。 */
+  /** 分组间距，供签名比较使用（sections.margin 是联合类型，不便直接读取）。 */
   gap: number;
-  topOffset: number;
 }
 
 /** Full-width chrome and date headings are separate one-column sections. */
 export function buildFeedFlowLayout(keys: Array<string>, dates: Array<string>, columns: number,
-  leadingCount: number, loadingMore: boolean, gap: number, topOffset: number): FeedFlowLayout {
+  leadingCount: number, loadingMore: boolean, gap: number): FeedFlowLayout {
   const entries: Array<FeedFlowEntry> = [];
   const groups: Array<SectionOptions> = [];
   if (leadingCount > 0) {
@@ -150,17 +149,20 @@ export function buildFeedFlowLayout(keys: Array<string>, dates: Array<string>, c
     groups.push({ itemsCount: 1, crossCount: 1 });
   }
   for (let index = 0; index < groups.length; index += 1) {
-    groups[index].margin = { top: index === 0 ? topOffset : gap };
+    // 首组不加顶部 margin：顶部让位改由真实的让位条目（第 0 个 FlowItem）承担，
+    // 否则「按条目对齐」的回顶实现（系统点状态栏回顶、scrollToIndex）会跳过 margin，
+    // 把首行卡片顶到屏幕最上沿、盖住标题栏。
+    groups[index].margin = { top: index === 0 ? 0 : gap };
   }
-  return { entries: entries, sections: groups, leadingCount: leadingCount, gap: gap, topOffset: topOffset };
+  return { entries: entries, sections: groups, leadingCount: leadingCount, gap: gap };
 }
 
 /**
- * sections 变更签名：分组计数、列数、行列间距或间距/让位任一变化才需要 splice；
+ * sections 变更签名：分组计数、列数或行列间距任一变化才需要 splice；
  * 仅宽度变化、布局未变时让框架自然重排，避免重复替换 sections。
  */
 export function feedSectionSignature(layout: FeedFlowLayout): string {
-  let signature: string = `gap:${layout.gap};top:${layout.topOffset};`;
+  let signature: string = `gap:${layout.gap};`;
   for (let index = 0; index < layout.sections.length; index += 1) {
     const section: SectionOptions = layout.sections[index];
     signature += `${section.itemsCount}:${section.crossCount ?? 1}:${section.columnsGap ?? 0}:` +

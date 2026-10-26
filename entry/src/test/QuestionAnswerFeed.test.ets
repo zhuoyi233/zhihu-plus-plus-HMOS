@@ -68,6 +68,25 @@ export default function questionAnswerFeedTest(): void {
       expect(state?.items.length).assertEqual(1);
     });
 
+    it('controllerEmitsInitialLoadingStateBeforeFirstPage', 0, async () => {
+      // 连续页种子同步契约：activate() 会在首拉完成前同步发射 items 为空的 INITIAL_LOADING 态
+      // （canLoadMore=false）。消费方必须按 phase 门控，不能把该空态当作「首拉完成且无更多」，
+      // 否则种子会错误走置顶分支（P5 模拟器验收实测回归）。
+      const repository = new FakeQuestionAnswerRepository([
+        { items: [content('1')], cursor: { isEnd: true, isStart: true, page: 1, total: 1 } }
+      ]);
+      const states: Array<QuestionAnswersViewState> = [];
+      const controller = new QuestionAnswersController(repository, '123', (next): void => { states.push(next); });
+      controller.activate();
+      await new Promise<void>((resolve): void => { setTimeout(resolve, 0); });
+      expect(states.length >= 2).assertTrue();
+      expect(states[0].phase).assertEqual(QuestionAnswersPhase.INITIAL_LOADING);
+      expect(states[0].items.length).assertEqual(0);
+      expect(states[0].canLoadMore).assertFalse();
+      expect(states[states.length - 1].phase).assertEqual(QuestionAnswersPhase.READY);
+      expect(states[states.length - 1].items.length).assertEqual(1);
+    });
+
     it('navigatorLoadsNextPageAndKeepsPreviousItems', 0, async () => {
       const seed: QuestionAnswersViewState = {
         phase: QuestionAnswersPhase.READY, items: [content('1'), content('2')], loadingMore: false,

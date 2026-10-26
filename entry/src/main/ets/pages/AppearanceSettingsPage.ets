@@ -108,6 +108,7 @@ export struct AppearanceSettingsPage {
   @StorageProp('pinAnswerDate') private pinAnswerDate: boolean = false;
   @StorageProp('answerSwitchMode') private answerSwitchMode: string = AnswerSwitchMode.VERTICAL;
   @StorageProp('answerSwitchSensitivity') private answerSwitchSensitivity: number = 1;
+  @StorageProp('answerReadingMode') private answerReadingMode: string = 'single';
   @StorageProp('startDestination') private startDestination: string = 'Home';
   @StorageProp('bottomBarItems') private bottomBarItems: string = 'Home,Following,Hot,Daily,Settings';
   @StorageProp('tapToRefresh') private tapToRefresh: boolean = true;
@@ -226,6 +227,11 @@ export struct AppearanceSettingsPage {
 
         this.sectionTitle('回答页')
         Column() {
+          this.selectSetting('回答阅读模式', '打开回答时的默认阅读方式；连续模式下切答手势不生效（仅单篇）',
+            this.answerReadingMode === 'continuous' ? '连续' : '单篇', this.answerReadingModeOptions(),
+            this.answerReadingMode === 'continuous' ? 1 : 0, 'appearance_answer_reading_mode',
+            (index: number): void => this.updateAnswerReadingMode(index))
+          Divider().color($r('app.color.divider_color'))
           this.switchSetting('自动隐藏回答标题', '滚动时自动隐藏回答标题栏', this.titleAutoHide,
             'appearance_title_auto_hide', (value: boolean): void => this.updateExperienceBoolean('titleAutoHide', value))
           Divider().color($r('app.color.divider_color'))
@@ -302,7 +308,7 @@ export struct AppearanceSettingsPage {
           .width('100%')
           .padding($r('app.float.card_padding'))
           Divider().color($r('app.color.divider_color'))
-          this.switchSetting('点击底部导航栏回到顶部/刷新', '点击当前页签回到顶部，已在顶部时刷新；双击直接刷新', this.tapToRefresh,
+          this.switchSetting('点击底部导航栏回到顶部/刷新', '点击当前页签回到顶部；连续点击两次刷新（滑动中双击会先回到顶部再刷新）', this.tapToRefresh,
             'appearance_tap_to_refresh', (value: boolean): void => this.updateExperienceBoolean('tapToRefresh', value))
           Divider().color($r('app.color.divider_color'))
           this.switchSetting('滚动时自动隐藏底部导航栏', '上划时隐藏，下划时重新显示', this.autoHideBottomBar,
@@ -962,6 +968,23 @@ export struct AppearanceSettingsPage {
     const values: AnswerSwitchMode[] = [AnswerSwitchMode.OFF, AnswerSwitchMode.VERTICAL, AnswerSwitchMode.HORIZONTAL];
     if (index >= 0 && index < values.length) {
       this.updateExperienceString('answerSwitchMode', values[index]);
+    }
+  }
+
+  /** 回答阅读模式（连续阅读计划 §2.2）：独立偏好键，非法值由存储层回退单篇。 */
+  private answerReadingModeOptions(): SelectOption[] {
+    const labels: Array<string> = ['单篇', '连续'];
+    return labels.map((label: string): SelectOption => {
+      return { value: label } as SelectOption;
+    });
+  }
+
+  private updateAnswerReadingMode(index: number): void {
+    const mode = index === 1 ? 'continuous' : 'single';
+    AppStorage.setOrCreate('answerReadingMode', mode);
+    const context = getAbilityContext();
+    if (context !== undefined) {
+      void new AppPreferencesStore(context).saveAnswerReadingMode(mode).catch((_error: Error): void => {});
     }
   }
 
