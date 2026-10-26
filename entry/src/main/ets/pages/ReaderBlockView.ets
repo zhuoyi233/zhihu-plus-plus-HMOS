@@ -861,6 +861,7 @@ export struct ReaderBlockView {
             this.onReferenceBack?.(item.reference.numero);
           }
         })
+        .id(`reader_reference_back_${item.id}`)
         .accessibilityText('返回正文引用位置')
       Column({ space: 4 }) {
         if (item.text.length > 0) {

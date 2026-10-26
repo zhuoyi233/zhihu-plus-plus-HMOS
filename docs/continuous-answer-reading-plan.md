@@ -500,3 +500,28 @@ API 26 连续阅读通过 getContinuousAnswerTitleBarStyle 直接调用与回答
 本轮包：`C:/Users/zhuoyi/.codex/worktrees/e331/zhihu-plus-plus-HMOS/entry/build/default/outputs/default/entry-default-signed.hap`，Debug **0.5.10 / 1000510**，**9,311,516 字节**，SHA-256 `872d0fa529f8f43d2eb0e335a4515b1d29318914224b537f08bb62246565d29b`。临时日志 `.tmp/pr105-fix-compile.log` / `pr105-fix-debug.log`，截图与 dump 为 `.tmp/shots/pr105-fix-*`，账号隔离复现结果为 `.tmp/pr105-fixed-account-result.json`。
 
 本轮未操作真实账号切换、未向真实内容投票；账号切换设备验收、真实慢网和真机性能等 P5 未完成项目仍按 §13.3 保留，不因本轮修复自动视为通过。
+
+## 15. PR #105 脚注专项验收（2026-10-26）
+
+使用用户提供的回答 `1943042322918007481`（问题 `14841937090`，作者“耦荷”），在 `c3f75d20` 的已安装 Debug 包上验证连续阅读脚注。本地签名包 SHA-256 与 §14 相同；本轮未修改产品代码或重新构建。
+
+**结果：未通过，新增合并前需修复项。** API 23（`127.0.0.1:5555`）点击正文 DNA 段落的 `[5]`，能跳到本回答的 “Knot Theory and DNA” 参考条目；API 26（`127.0.0.1:5557`）点击 Hardy 段落的 `[4]`，能跳到对应维基参考条目。但两端点击各自条目的返回箭头后，均错误落在更后面的“有了新的问题领域和恰当的数学语言，第三个契机……”段落及 block-25 图片，原引用段落不再可见；等待后再次 dump 仍相同，不能计为跳转返回通过。
+
+代码线索为 `scrollToReference()` 保存绝对列表 yOffset，`scrollBackToReference()` 直接恢复该值；具体偏移形成机制仍待排查。后续修复需以来源回答、正文块和块内位置恢复，并用该样本双端回归。未打开参考条目的外部网址，未验证全部序号或单篇页脚注。本轮没有提交真实投票、关注或评论。
+
+临时完整记录为 `.tmp/pr105-footnote-acceptance.md`，截图与 dump 为 `.tmp/shots/pr105-footnote-*`。API 23 的前后证据为 `pr105-footnote-api23-scan` / `pr105-footnote-api23-ref5-back-settled`；API 26 为 `pr105-footnote-api26-ref4-before` / `pr105-footnote-api26-ref4-back-settled`。
+
+## 16. 脚注返回定位修复与复验（2026-10-26）
+
+在 `c3f75d20` 上继续修复 §15 的错位，以下记录为提交前的修复与验证结果：
+
+- 连续页脚注改由 `ContinuousReferenceNavigator` 保存来源回答、来源正文块稳定 key、块内比例与视口参考位置；返回时重新解析行索引，等待惰性行布局后分步校准，不再恢复估计的绝对 yOffset。正文引用回调传入实际来源行，跨回答的同序号引用分别保存；没有往返记录时仍回到该回答首个引用段落。
+- 定位期间暂停与目标冲突的活动回答更新、淘汰和通用行高补偿；定位结束再恢复。用户触摸或路由隐藏会取消延迟校准，账号变更/页面销毁清空记录，被屏蔽回答移除时同步移除对应记录。
+- 新增 4 项 Hypium：行索引和块高/视口变化后恢复、跨回答同序号隔离、无记录时的正文回退、取消任务与会话清理。按顺序执行编译/测试及完整 Debug 验证，两轮均 **943/943**；构建、签名和 target 26 / compatible 23 校验通过。
+- 同一用户样本 `1943042322918007481`，API 23（5555）和 API 26（5557）均实际点击正文 `[4]`、`[5]`，跳到对应条目后点击返回箭头。4 次往返均恢复原引用段落，逐项比较点击前后的可见长段落：API 23 每次 5 项、API 26 每次 4 项，全部 bounds 一致，没有再次落到“拓扑异构酶”段落。
+
+本轮签名 Debug 包：`C:/Users/zhuoyi/.codex/worktrees/e331/zhihu-plus-plus-HMOS/entry/build/default/outputs/default/entry-default-signed.hap`，**0.5.10 / 1000510**，**9,339,206 字节**，SHA-256 `3f99e96bd62dff6e59e38197646ededde3323bf788be9f5804547356b2ff3a21`。本轮通过构建进程 PATH 补入 SDK previewer DLL 目录，未修改系统环境。
+
+`devecocli run` 两端均安装并返回启动成功，但 CLI 冒烟随后报进程退出；其关联日志分别为新包安装前 15:29:50 的旧进程 18978 冻结和 9 月 27 日的 0.5.4 历史崩溃，不能作为本修复崩溃的证据。随后显式启动的新进程完成上述 UI 操作；不将 CLI 冒烟本身记为通过。
+
+证据：`.tmp/pr105-footnote-fix-comparison.json`（4 项比较全部通过），`.tmp/shots/pr105-footnote-fix-api{23,26}-ref{4,5}-{before,target,back}.json`；构建日志 `.tmp/pr105-footnote-compile.log` / `pr105-footnote-debug.log`。截图与报告均在 `.tmp/`。本轮只关闭 §15 的连续页样本脚注往返缺陷，其他 P5 缺口仍保留，未验证外部参考网址或宣称单篇页脚注全量通过。

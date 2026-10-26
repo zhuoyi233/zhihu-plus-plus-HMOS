@@ -75,6 +75,7 @@ import { QuestionAnswerSortOrder } from 'data';
 import { ContinuousAnswerRepositories } from './ContinuousAnswerRepositories';
 import { ContinuousAnswerTitleState, continuousAnswerRouteId, updateContinuousAnswerTitle } from './ContinuousAnswerRouteState';
 import { stageAnswerVideoPlayback } from './VideoPlaybackHandoff';
+import { ContinuousReferenceNavigator, ContinuousReferenceRect } from './ContinuousReferenceNavigator';
 import {
   ContinuousRow,
   ContinuousRowKind,
@@ -249,7 +250,7 @@ export struct ContinuousAnswerPage {
   private readonly votes: Map<string, AnswerVoteSnapshot> = new Map();
   private readonly followStates: Map<string, boolean> = new Map();
   private readonly referenceRowKeys: Map<string, Map<number, string>> = new Map();
-  private readonly referenceReturnOffsets: Map<string, number> = new Map();
+  private referenceNavigator?: ContinuousReferenceNavigator;
   private readonly measuredRowHeightVp: Map<string, number> = new Map();
   private readonly measuredBodyHeightVp: Map<string, number> = new Map();
   private readonly materializedPhase: Map<string, string> = new Map();
@@ -327,6 +328,23 @@ export struct ContinuousAnswerPage {
 
   aboutToAppear(): void {
     this.sessionSeedAnswerId = this.seedAnswerId;
+    this.referenceNavigator = new ContinuousReferenceNavigator({
+      indexOf: (key: string): number => this.dataSource.indexOfRowKey(key),
+      rectAt: (index: number): ContinuousReferenceRect => {
+        const rect = this.scroller.getItemRect(index);
+        return { y: rect.y, height: rect.height };
+      },
+      scrollToRow: (index: number): void => this.scroller.scrollToIndex(index, false, ScrollAlign.START),
+      scrollBy: (delta: number): void => this.scroller.scrollBy(0, delta),
+      viewportHeight: (): number => this.viewportHeightVp,
+      readingLine: (): number => this.topInsetVp(),
+      onSettled: (): void => {
+        this.updateActiveAnswer();
+        this.ensureWindow();
+        this.applyEvictionPolicy();
+        this.scheduleDwellConfirm();
+      }
+    });
     const context = getAbilityContext();
     if (context !== undefined) {
       try {
@@ -429,6 +447,7 @@ export struct ContinuousAnswerPage {
 
   aboutToDisappear(): void {
     this.disposed = true;
+    this.referenceNavigator?.clear();
     this.accountGuard.invalidate();
     this.feedController?.deactivate();
     this.scheduler?.dispose();
@@ -777,7 +796,7 @@ export struct ContinuousAnswerPage {
     if (scheduler === undefined || this.activeAnswerIndex < 0) {
       return;
     }
-    if (this.seedLandingKey.length > 0) {
+    if (this.seedLandingKey.length > 0 || this.referenceNavigator?.isNavigating()) {
       // 落定期间视口停在流顶不代表用户位置，且目标回答可能不在窗口内被误释放。
       return;
     }
@@ -804,13 +823,13 @@ export struct ContinuousAnswerPage {
     const touchesViewport = headerIndex >= 0 && headerIndex + 1 <= this.lastVisibleIndex;
     if (touchesViewport) {
       // 同一帧多答物化/淘汰共用变更前锚点；后续回调尚未布局，不能再按旧 rect 捕获新行。
-      if (this.anchorKey.length === 0) {
+      if (this.anchorKey.length === 0 && !this.referenceNavigator?.isNavigating()) {
         this.captureAnchor();
       }
       this.clearRowMeasurements(answerId);
     }
     const startIndex = this.dataSource.replaceBodyRows(answerId, nextRows);
-    if (touchesViewport && startIndex >= 0) {
+    if (touchesViewport && startIndex >= 0 && !this.referenceNavigator?.isNavigating()) {
       this.scheduleAnchorRestore();
     }
   }
@@ -908,6 +927,9 @@ export struct ContinuousAnswerPage {
     if (previous === undefined || Math.abs(newHeight - previous) < 1) {
       return;
     }
+    if (this.referenceNavigator?.isNavigating()) {
+      return;
+    }
     const delta = newHeight - previous;
     const index = this.dataSource.indexOfRowKey(row.key);
     if (index < 0 || this.viewportHeightVp <= 0) {
@@ -924,7 +946,7 @@ export struct ContinuousAnswerPage {
   }
 
   private updateActiveAnswer(): void {
-    if (this.anchorKey.length > 0) {
+    if (this.anchorKey.length > 0 || this.referenceNavigator?.isNavigating()) {
       return;
     }
     if (this.viewportHeightVp <= 0) {
@@ -995,7 +1017,8 @@ export struct ContinuousAnswerPage {
       clearTimeout(this.dwellTimer);
       this.dwellTimer = -1;
     }
-    if (this.activeRoute !== this.routeId() || this.seedLandingKey.length > 0) {
+    if (this.activeRoute !== this.routeId() || this.seedLandingKey.length > 0 ||
+      this.referenceNavigator?.isNavigating()) {
       // 落定期间视口停在流顶（等待上方物化平息），不是用户的阅读位置，不确认已读。
       return;
     }
@@ -1477,6 +1500,7 @@ export struct ContinuousAnswerPage {
       this.ensureWindow();
       this.scheduleDwellConfirm();
     } else {
+      this.referenceNavigator?.cancel();
       this.scheduler?.deactivate();
       this.feedController?.deactivate();
       if (this.dwellTimer >= 0) {
@@ -1680,6 +1704,7 @@ export struct ContinuousAnswerPage {
       this.summaries.delete(answerId);
       this.votes.delete(answerId);
       this.referenceRowKeys.delete(answerId);
+      this.referenceNavigator?.removeAnswer(answerId);
       this.segmentInfosCache.delete(answerId);
       this.clearRowMeasurements(answerId);
     });
@@ -1774,7 +1799,7 @@ export struct ContinuousAnswerPage {
     this.answerBlocks.clear();
     this.segmentInfosCache.clear();
     this.referenceRowKeys.clear();
-    this.referenceReturnOffsets.clear();
+    this.referenceNavigator?.clear();
     this.measuredRowHeightVp.clear();
     this.measuredBodyHeightVp.clear();
     this.materializedPhase.clear();
@@ -1869,6 +1894,7 @@ export struct ContinuousAnswerPage {
         })
         .onTouch((event: TouchEvent): void => {
           if (event.type === TouchType.Down) {
+            this.referenceNavigator?.cancel();
             this.seedLandingTouched = true;
             this.seedLandingKey = '';
             this.anchorKey = '';
@@ -2424,7 +2450,7 @@ export struct ContinuousAnswerPage {
         segmentInfos: this.segmentInfosOf(row.answerId),
         linkCardMeta: this.linkCardMetas.get(row.block.sourceUrl),
         onLinkClick: (url: string): void => this.onContentLinkClick(url),
-        onReferenceClick: (numero: number): void => this.scrollToReference(row.answerId, numero),
+        onReferenceClick: (numero: number): void => this.scrollToReference(row.answerId, numero, row.key),
         onReferenceBack: (numero: number): void => this.scrollBackToReference(row.answerId, numero),
         onVideoOpen: (videoId: string): void => {
           if (videoId.length > 0) {
@@ -2748,25 +2774,16 @@ export struct ContinuousAnswerPage {
     this.toast(`已将双击正文动作设为：${answerDoubleTapActionLabel(action)}`);
   }
 
-  private scrollToReference(answerId: string, numero: number): void {
+  private scrollToReference(answerId: string, numero: number, sourceKey: string): void {
     const mapping = this.referenceRowKeys.get(answerId);
     const rowKey = mapping?.get(numero);
     if (rowKey === undefined) {
       return;
     }
-    this.referenceReturnOffsets.set(`${answerId}:${numero}`, this.scroller.currentOffset().yOffset);
-    const index = this.dataSource.indexOfRowKey(rowKey);
-    if (index >= 0) {
-      this.scroller.scrollToIndex(index, true, ScrollAlign.START);
-    }
+    this.referenceNavigator?.open(answerId, numero, sourceKey, rowKey);
   }
 
   private scrollBackToReference(answerId: string, numero: number): void {
-    const remembered = this.referenceReturnOffsets.get(`${answerId}:${numero}`);
-    if (remembered !== undefined) {
-      this.scroller.scrollTo({ xOffset: 0, yOffset: remembered, animation: true });
-      return;
-    }
     // 未点过标记：回退到正文首个引用该序号的段落（近似定位）。
     const rows: Array<string> = [];
     const total = this.dataSource.totalCount();
@@ -2778,12 +2795,7 @@ export struct ContinuousAnswerPage {
         break;
       }
     }
-    if (rows.length > 0) {
-      const index = this.dataSource.indexOfRowKey(rows[0]);
-      if (index >= 0) {
-        this.scroller.scrollToIndex(index, true, ScrollAlign.START);
-      }
-    }
+    this.referenceNavigator?.back(answerId, numero, rows[0] ?? '');
   }
 
   @Builder
