@@ -1,6 +1,6 @@
 import { pasteboard } from '@kit.BasicServicesKit';
 import { Want } from '@kit.AbilityKit';
-import { AppDestination, AppDestinationName, resolveZhihuLink, toAppDestination } from 'core';
+import { AppDestination, AppDestinationName, LatestOperationGuard, resolveZhihuLink, toAppDestination } from 'core';
 import {
   Answer,
   AnswerDoubleTapAction,
@@ -72,6 +72,9 @@ import { readerBlockSpacing } from './ReaderTypography';
 import { ContinuousFullTextRecord, ContinuousFullTextScheduler, ContinuousFullTextSource } from './ContinuousAnswerState';
 import { QuestionAnswersController, QuestionAnswersPhase, QuestionAnswersViewState } from './QuestionAnswersState';
 import { QuestionAnswerSortOrder } from 'data';
+import { ContinuousAnswerRepositories } from './ContinuousAnswerRepositories';
+import { ContinuousAnswerTitleState, continuousAnswerRouteId, updateContinuousAnswerTitle } from './ContinuousAnswerRouteState';
+import { stageAnswerVideoPlayback } from './VideoPlaybackHandoff';
 import {
   ContinuousRow,
   ContinuousRowKind,
@@ -199,20 +202,27 @@ export struct ContinuousAnswerPage {
   navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {};
   onBack: () => void = (): void => {};
   feedRepository: QuestionAnswerFeedRepository | undefined = undefined;
-  questionRepository: ContentRepository | undefined = undefined;
-  fullTextRepositoryA: ContentRepository | undefined = undefined;
-  fullTextRepositoryB: ContentRepository | undefined = undefined;
-  voteRepository: VoteRepository | undefined = undefined;
-  followRepository: FollowRepository | undefined = undefined;
+  repositoriesFactory: () => ContinuousAnswerRepositories = (): ContinuousAnswerRepositories =>
+    new ContinuousAnswerRepositories();
+  private questionRepository?: ContentRepository = undefined;
+  private fullTextRepositoryA?: ContentRepository = undefined;
+  private fullTextRepositoryB?: ContentRepository = undefined;
+  private voteRepository?: VoteRepository = undefined;
+  private followRepository?: FollowRepository = undefined;
+  private repositories?: ContinuousAnswerRepositories;
+  private readonly accountGuard: LatestOperationGuard = new LatestOperationGuard();
+  private accountGeneration: number = 0;
+  private sessionSeedAnswerId: string = '';
+  private questionTitle: string = '';
   collectionRepository: CollectionRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
   /** 阅读记录（本地 upsert + 云端上报）：停留确认后写入（计划 §4.4），预取不写。 */
   openedContentStore: OpenedContentStore | undefined = undefined;
   historyUploader: ReadHistoryUploadRepository | undefined = undefined;
   /** 他人划线点赞/评论仓库（连续页专属实例，避免与详情页共用单飞 client 互斥）。 */
-  segmentReactionRepository: SegmentReactionRepository | undefined = undefined;
+  private segmentReactionRepository?: SegmentReactionRepository = undefined;
   /** 推荐阅读卡片元数据仓库（连续页专属实例）：串行拉取站内赞同/评论计数。 */
-  linkCardMetaRepository: LinkCardMetaRepository | undefined = undefined;
+  private linkCardMetaRepository?: LinkCardMetaRepository = undefined;
   /** 屏蔽规则/历史网关：逐答屏蔽入口（计划 §4.3，连续页补齐屏蔽兼容）。 */
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
@@ -228,7 +238,7 @@ export struct ContinuousAnswerPage {
   @StorageProp('detailImmersiveActive') private detailImmersiveActive: boolean = false;
   @StorageProp('detailImmersiveExitTick') @Watch('onImmersiveExitTick') private immersiveExitTick: number = 0;
   /** 路由可见性（AppShell onShown/onHidden 广播）：离页停止预取与分页，回页恢复。 */
-  @StorageProp('continuousAnswerRouteVisible') @Watch('onRouteVisibleChanged') private routeVisible: boolean = true;
+  @StorageProp('continuousAnswerActiveRoute') @Watch('onRouteVisibleChanged') private activeRoute: string = '';
 
   private readonly dataSource: ContinuousStreamDataSource = new ContinuousStreamDataSource();
   private readonly scroller: Scroller = new Scroller();
@@ -316,6 +326,7 @@ export struct ContinuousAnswerPage {
   private lastFeedCanLoadMore: boolean = false;
 
   aboutToAppear(): void {
+    this.sessionSeedAnswerId = this.seedAnswerId;
     const context = getAbilityContext();
     if (context !== undefined) {
       try {
@@ -331,13 +342,28 @@ export struct ContinuousAnswerPage {
           }
         }).catch((_error: Error): void => {});
     }
+    this.startReadingSession();
+  }
+
+  private startReadingSession(): void {
+    const generation = this.accountGuard.next();
+    this.accountGeneration = generation;
+    const repositories = this.repositoriesFactory();
+    this.repositories = repositories;
+    this.questionRepository = repositories.question;
+    this.fullTextRepositoryA = repositories.answerA;
+    this.fullTextRepositoryB = repositories.answerB;
+    this.voteRepository = repositories.vote;
+    this.followRepository = repositories.follow;
+    this.segmentReactionRepository = repositories.segment;
+    this.linkCardMetaRepository = repositories.linkCard;
     // 屏蔽控制器：成功 toast + 触发已加载内容重过滤（计划 §4.3）。
     const blockingRules = this.rules;
     const blockingHistory = this.history;
     if (blockingRules !== undefined && blockingHistory !== undefined) {
       this.blockingAction = new BlockingActionController(blockingRules, blockingHistory,
         (state: BlockingActionViewState): void => {
-          if (state.busy || state.message.length === 0) {
+          if (!this.isAccountCurrent(generation) || state.busy || state.message.length === 0) {
             return;
           }
           this.toast(state.message);
@@ -351,7 +377,9 @@ export struct ContinuousAnswerPage {
     if (metaRepository !== undefined) {
       const loader = new LinkCardMetaLoader(metaRepository);
       loader.onUpdate = (url: string, meta: LinkCardMeta): void => {
-        this.applyLinkCardMeta(url, meta);
+        if (this.isAccountCurrent(generation)) {
+          this.applyLinkCardMeta(url, meta);
+        }
       };
       this.linkCardMetaLoader = loader;
     }
@@ -372,9 +400,10 @@ export struct ContinuousAnswerPage {
       };
       this.feedController = new QuestionAnswersController(this.feedRepository, this.questionId,
         (state: QuestionAnswersViewState): void => {
-          this.onFeedState(state);
+          if (this.isAccountCurrent(generation)) {
+            this.onFeedState(state);
+          }
         }, seed);
-      this.feedController.activate();
     }
     const repoA = this.fullTextRepositoryA;
     const repoB = this.fullTextRepositoryB;
@@ -384,22 +413,26 @@ export struct ContinuousAnswerPage {
         rotate = !rotate;
         return new RepositoryFullTextSource(rotate ? repoA : repoB);
       }, 2, (snapshot: Array<ContinuousFullTextRecord>): void => {
-        this.onFullText(snapshot);
+        if (this.isAccountCurrent(generation)) {
+          this.onFullText(snapshot);
+        }
       });
-      this.scheduler.activate();
       // 种子先行：不等回答列表，先拉种子正文（计划 §4.2 第 1 步）。
-      if (this.seedAnswerId.length > 0) {
-        this.scheduler.ensure([this.seedAnswerId]);
+      if (this.sessionSeedAnswerId.length > 0) {
+        this.scheduler.ensure([this.sessionSeedAnswerId]);
       }
     }
     this.buildProvisionalRows();
-    void this.loadQuestionTitle();
+    this.onRouteVisibleChanged();
+    void this.loadQuestionTitle(generation);
   }
 
   aboutToDisappear(): void {
     this.disposed = true;
+    this.accountGuard.invalidate();
     this.feedController?.deactivate();
     this.scheduler?.dispose();
+    this.repositories?.cancel();
     this.linkCardMetaLoader?.dispose();
     this.linkCardMetaLoader = undefined;
     this.pendingUserBlock = undefined;
@@ -419,21 +452,35 @@ export struct ContinuousAnswerPage {
       this.restoreTimer = -1;
     }
     clearFormulaByteCache();
-    if (AppStorage.get<string>('continuousAnswerTitle') !== undefined) {
-      AppStorage.setOrCreate('continuousAnswerTitle', '');
-    }
+    AppStorage.setOrCreate('continuousAnswerTitles', updateContinuousAnswerTitle(
+      AppStorage.get<Array<ContinuousAnswerTitleState>>('continuousAnswerTitles') ?? [], this.routeId()));
   }
 
-  private loadQuestionTitle(): Promise<void> {
+  private routeId(): string {
+    return continuousAnswerRouteId(this.questionId, this.seedAnswerId, this.sortOrder);
+  }
+
+  private isAccountCurrent(generation: number): boolean {
+    return !this.disposed && this.accountGuard.isCurrent(generation);
+  }
+
+  private publishQuestionTitle(): void {
+    AppStorage.setOrCreate('continuousAnswerTitles', updateContinuousAnswerTitle(
+      AppStorage.get<Array<ContinuousAnswerTitleState>>('continuousAnswerTitles') ?? [],
+      this.routeId(), this.questionTitle));
+  }
+
+  private loadQuestionTitle(generation: number): Promise<void> {
     const repository = this.questionRepository;
     if (repository === undefined) {
       return Promise.resolve();
     }
     return repository.getQuestion(this.questionId).then((question: Question): void => {
-      if (this.disposed) {
+      if (!this.isAccountCurrent(generation)) {
         return;
       }
-      AppStorage.setOrCreate('continuousAnswerTitle', question.title);
+      this.questionTitle = question.title;
+      this.publishQuestionTitle();
     }).catch((_error: Error): void => {
       // 标题加载失败保持占位标题，不阻塞正文流。
     });
@@ -443,12 +490,12 @@ export struct ContinuousAnswerPage {
 
   private buildProvisionalRows(): void {
     const rows: Array<ContinuousRow> = [];
-    if (this.seedAnswerId.length > 0) {
-      rows.push(continuousHeaderRow(this.seedAnswerId));
-      rows.push(continuousLoadingBodyRow(this.seedAnswerId));
-      rows.push(continuousDividerRow(this.seedAnswerId));
-      this.materializedPhase.set(this.seedAnswerId, 'loading');
-      this.streamIds = [this.seedAnswerId];
+    if (this.sessionSeedAnswerId.length > 0) {
+      rows.push(continuousHeaderRow(this.sessionSeedAnswerId));
+      rows.push(continuousLoadingBodyRow(this.sessionSeedAnswerId));
+      rows.push(continuousDividerRow(this.sessionSeedAnswerId));
+      this.materializedPhase.set(this.sessionSeedAnswerId, 'loading');
+      this.streamIds = [this.sessionSeedAnswerId];
     }
     this.dataSource.replaceAll(rows);
     this.refreshStatus();
@@ -559,7 +606,7 @@ export struct ContinuousAnswerPage {
   }
 
   private syncStreamSeed(ids: Array<string>, state: QuestionAnswersViewState): void {
-    const seedIndex = ids.indexOf(this.seedAnswerId);
+    const seedIndex = ids.indexOf(this.sessionSeedAnswerId);
     if (seedIndex >= 0) {
       this.buildStream(ids, false);
       return;
@@ -580,12 +627,12 @@ export struct ContinuousAnswerPage {
         ordered.push(answerId);
       }
     };
-    if (seedFirst && this.seedAnswerId.length > 0) {
-      pushUnique(this.seedAnswerId);
+    if (seedFirst && this.sessionSeedAnswerId.length > 0) {
+      pushUnique(this.sessionSeedAnswerId);
     }
     feedIds.forEach(pushUnique);
-    if (!seedFirst && this.seedAnswerId.length > 0 && !ordered.includes(this.seedAnswerId)) {
-      pushUnique(this.seedAnswerId);
+    if (!seedFirst && this.sessionSeedAnswerId.length > 0 && !ordered.includes(this.sessionSeedAnswerId)) {
+      pushUnique(this.sessionSeedAnswerId);
     }
     this.streamIds = ordered;
     const rows: Array<ContinuousRow> = [];
@@ -600,10 +647,11 @@ export struct ContinuousAnswerPage {
     rows.push(continuousStreamEndRow(this.endRowLabel(false)));
     this.dataSource.replaceAll(rows);
     this.streamBuilt = true;
-    const target = this.seedAnswerId.length > 0 ? this.seedAnswerId : (ordered.length > 0 ? ordered[0] : '');
+    const target = this.sessionSeedAnswerId.length > 0 ? this.sessionSeedAnswerId : (ordered.length > 0 ? ordered[0] : '');
     if (target.length > 0) {
+      const generation = this.accountGeneration;
       setTimeout((): void => {
-        if (this.disposed) {
+        if (!this.isAccountCurrent(generation)) {
           return;
         }
         // 登记种子落定目标（含挂起的位置恢复）；实际滚动等上方正文物化平息后执行，
@@ -677,7 +725,7 @@ export struct ContinuousAnswerPage {
       if (materialized === record.phase) {
         return;
       }
-      if (!this.streamBuilt && record.answerId !== this.seedAnswerId) {
+      if (!this.streamBuilt && record.answerId !== this.sessionSeedAnswerId) {
         return;
       }
       this.materializedPhase.set(record.answerId, record.phase);
@@ -693,7 +741,7 @@ export struct ContinuousAnswerPage {
         }
       }
       // 种子答就绪后按共享位置记录恢复段落锚点（单篇→连续交接）。
-      if (record.answerId === this.seedAnswerId && record.phase === 'ready') {
+      if (record.answerId === this.sessionSeedAnswerId && record.phase === 'ready') {
         this.restoreSeedPosition(record.answerId);
       }
     });
@@ -716,8 +764,8 @@ export struct ContinuousAnswerPage {
         windowIds.push(answerId);
       }
     }
-    if (this.seedAnswerId.length > 0 && !windowIds.includes(this.seedAnswerId)) {
-      windowIds.push(this.seedAnswerId);
+    if (this.sessionSeedAnswerId.length > 0 && !windowIds.includes(this.sessionSeedAnswerId)) {
+      windowIds.push(this.sessionSeedAnswerId);
     }
     if (windowIds.length > 0) {
       scheduler.ensure(windowIds, true);
@@ -947,7 +995,7 @@ export struct ContinuousAnswerPage {
       clearTimeout(this.dwellTimer);
       this.dwellTimer = -1;
     }
-    if (this.seedLandingKey.length > 0) {
+    if (this.activeRoute !== this.routeId() || this.seedLandingKey.length > 0) {
       // 落定期间视口停在流顶（等待上方物化平息），不是用户的阅读位置，不确认已读。
       return;
     }
@@ -961,9 +1009,11 @@ export struct ContinuousAnswerPage {
     if (record === undefined || record.phase !== 'ready') {
       return;
     }
+    const generation = this.accountGeneration;
     this.dwellTimer = setTimeout((): void => {
       this.dwellTimer = -1;
-      if (this.disposed || this.dwellAnswerId !== answerId) {
+      if (!this.isAccountCurrent(generation) || this.activeRoute !== this.routeId() ||
+        this.dwellAnswerId !== answerId) {
         return;
       }
       this.confirmAnswerRead(answerId);
@@ -1112,7 +1162,7 @@ export struct ContinuousAnswerPage {
     this.lastAboveBodyMutationAt = Date.now();
     if (this.seedRestorePending) {
       this.seedRestorePending = false;
-      this.restoreSeedPosition(this.seedAnswerId);
+      this.restoreSeedPosition(this.sessionSeedAnswerId);
     }
     this.seedLandingTick(0);
   }
@@ -1130,8 +1180,9 @@ export struct ContinuousAnswerPage {
       this.seedLandingKey = '';
       return;
     }
+    const generation = this.accountGeneration;
     setTimeout((): void => {
-      if (this.disposed || this.seedLandingTouched || this.seedLandingKey.length === 0) {
+      if (!this.isAccountCurrent(generation) || this.seedLandingTouched || this.seedLandingKey.length === 0) {
         return;
       }
       if (!this.seedLandingAboveQuiet()) {
@@ -1231,6 +1282,7 @@ export struct ContinuousAnswerPage {
     if (repository === undefined) {
       return;
     }
+    const generation = this.accountGeneration;
     // 明确的逐答操作立即确认已读（计划 §4.4），不等停留时长。
     this.confirmAnswerRead(answerId);
     const current = this.voteSnapshot(answerId);
@@ -1257,7 +1309,7 @@ export struct ContinuousAnswerPage {
     this.votes.set(answerId, optimistic);
     this.refreshAnswerRows(answerId);
     repository.voteAnswer(answerId, next).then((result: ContentVoteResult): void => {
-      if (this.disposed) {
+      if (!this.isAccountCurrent(generation)) {
         return;
       }
       this.votes.set(answerId, {
@@ -1267,7 +1319,7 @@ export struct ContinuousAnswerPage {
       });
       this.refreshAnswerRows(answerId);
     }).catch((error: Object): void => {
-      if (this.disposed) {
+      if (!this.isAccountCurrent(generation)) {
         return;
       }
       this.votes.set(answerId, current);
@@ -1284,13 +1336,17 @@ export struct ContinuousAnswerPage {
       return;
     }
     const current = this.followStates.get(author.id) ?? author.isFollowing;
+    const generation = this.accountGeneration;
     const next = !current;
     this.followStates.set(author.id, next);
     this.refreshFollowRows(author.id);
     repository.followUser(author.urlToken, next).then((_result: Object): void => {
+      if (!this.isAccountCurrent(generation)) {
+        return;
+      }
       this.toast(next ? `已关注 ${author.name}` : `已取消关注 ${author.name}`);
     }).catch((error: Object): void => {
-      if (this.disposed) {
+      if (!this.isAccountCurrent(generation)) {
         return;
       }
       this.followStates.set(author.id, current);
@@ -1414,9 +1470,11 @@ export struct ContinuousAnswerPage {
       return;
     }
     // 离页（评论/作者页/切后台路由被覆盖）停止预取与分页，回页恢复。
-    if (this.routeVisible) {
+    if (this.activeRoute === this.routeId()) {
+      this.publishQuestionTitle();
       this.scheduler?.activate();
       this.feedController?.activate();
+      this.ensureWindow();
       this.scheduleDwellConfirm();
     } else {
       this.scheduler?.deactivate();
@@ -1438,6 +1496,7 @@ export struct ContinuousAnswerPage {
   }
 
   private async toggleAnswerSpeech(answerId: string): Promise<void> {
+    const generation = this.accountGeneration;
     const service = getSpeechPlaybackService();
     if (this.isAnswerSpeaking(answerId)) {
       service.stop();
@@ -1453,7 +1512,10 @@ export struct ContinuousAnswerPage {
     try {
       const preferences = context === undefined ? defaultSpeechPreferences() :
         await new AppPreferencesStore(context).loadSpeechPreferences();
-      const questionTitle = AppStorage.get<string>('continuousAnswerTitle') ?? '';
+      if (!this.isAccountCurrent(generation)) {
+        return;
+      }
+      const questionTitle = this.questionTitle;
       const parts: Array<string> = [];
       if (questionTitle.length > 0) {
         parts.push(questionTitle);
@@ -1473,10 +1535,15 @@ export struct ContinuousAnswerPage {
       }
       await service.speak(answerId, questionTitle.length > 0 ? questionTitle : '连续阅读',
         parts.join('。\n'), preferences);
+      if (!this.isAccountCurrent(generation)) {
+        return;
+      }
       const snapshot = service.getSnapshot();
       this.toast(snapshot.status === SpeechPlaybackStatus.ERROR ? snapshot.message : '已开始朗读');
     } catch (_error) {
-      this.toast('朗读启动失败，请稍后重试');
+      if (this.isAccountCurrent(generation)) {
+        this.toast('朗读启动失败，请稍后重试');
+      }
     }
   }
 
@@ -1513,7 +1580,7 @@ export struct ContinuousAnswerPage {
   }
 
   private blockContext(): BlockingActionContext {
-    const questionTitle = AppStorage.get<string>('continuousAnswerTitle') ?? '';
+    const questionTitle = this.questionTitle;
     return {
       contentTitle: questionTitle.length > 0 ? questionTitle : '连续阅读',
       contentKind: 'answer',
@@ -1526,6 +1593,7 @@ export struct ContinuousAnswerPage {
    * 经共享屏蔽会话逐个判定（对齐分页仓库 filterBlockedItems 的摘要语义）。
    */
   private async refilterLoadedAnswers(): Promise<void> {
+    const generation = this.accountGeneration;
     const matcher = this.blockingMatcher;
     if (matcher === undefined || this.streamIds.length === 0) {
       return;
@@ -1536,7 +1604,10 @@ export struct ContinuousAnswerPage {
     } catch (_error) {
       return;
     }
-    const questionTitle = AppStorage.get<string>('continuousAnswerTitle') ?? '';
+    if (!this.isAccountCurrent(generation)) {
+      return;
+    }
+    const questionTitle = this.questionTitle;
     const removed: Array<string> = [];
     this.streamIds.forEach((answerId: string): void => {
       const answer = this.scheduler?.record(answerId)?.answer;
@@ -1566,7 +1637,7 @@ export struct ContinuousAnswerPage {
       }
     });
     await session.flush?.();
-    if (removed.length === 0 || this.disposed) {
+    if (removed.length === 0 || !this.isAccountCurrent(generation)) {
       return;
     }
     this.removeAnswers(removed);
@@ -1662,22 +1733,77 @@ export struct ContinuousAnswerPage {
     if (this.disposed) {
       return;
     }
+    const currentAnswerId = this.streamIds[this.activeAnswerIndex] ?? this.sessionSeedAnswerId;
+    this.saveAnswerPosition(currentAnswerId, true);
+    this.accountGuard.invalidate();
+    this.feedController?.deactivate();
+    this.feedController = undefined;
+    this.scheduler?.dispose();
+    this.scheduler = undefined;
+    this.repositories?.cancel();
+    this.linkCardMetaLoader?.dispose();
+    this.linkCardMetaLoader = undefined;
+    this.blockingAction = undefined;
+    if (this.isAnswerSpeaking(currentAnswerId)) {
+      getSpeechPlaybackService().stop();
+    }
+    if (this.dwellTimer >= 0) {
+      clearTimeout(this.dwellTimer);
+      this.dwellTimer = -1;
+    }
+    if (this.restoreTimer >= 0) {
+      clearTimeout(this.restoreTimer);
+      this.restoreTimer = -1;
+    }
     this.collectionAnswerId = '';
     this.segmentSheetShown = false;
     this.segmentSheetAnswerId = '';
     this.segmentSheetPid = '';
     this.segmentSheetMarkIndex = -1;
+    this.segmentSheetInfos = [];
+    this.segmentLikeBusy = false;
     this.doubleTapAskSheetShown = false;
+    this.doubleTapAskAnswerId = '';
     this.pendingUserBlock = undefined;
     this.keywordBlockVisible = false;
     this.keywordBlockInput = '';
     this.votes.clear();
     this.followStates.clear();
     this.recordedAnswers.clear();
-    this.streamIds.forEach((answerId: string): void => {
-      this.refreshAnswerRow(continuousHeaderRowKey(answerId));
-      this.refreshAnswerRow(`${answerId}:actions`);
-    });
+    this.summaries.clear();
+    this.answerBlocks.clear();
+    this.segmentInfosCache.clear();
+    this.referenceRowKeys.clear();
+    this.referenceReturnOffsets.clear();
+    this.measuredRowHeightVp.clear();
+    this.measuredBodyHeightVp.clear();
+    this.materializedPhase.clear();
+    this.failedAvatarIds.clear();
+    this.blockedAnswerIds.clear();
+    this.linkCardMetas = new Map();
+    this.streamIds = [];
+    this.streamBuilt = false;
+    this.activeAnswerIndex = -1;
+    this.firstVisibleIndex = 0;
+    this.lastVisibleIndex = 0;
+    this.seedSearchPages = 0;
+    this.seedRestored = false;
+    this.seedRestorePending = false;
+    this.seedLandingTouched = false;
+    this.seedLandingKey = '';
+    this.seedLandingStarted = false;
+    this.seedLandingStable = 0;
+    this.seedLandingScrolled = false;
+    this.seedLandingSeedIndex = -1;
+    this.seedLandingFraction = -1;
+    this.anchorKey = '';
+    this.anchorFraction = 0;
+    this.dwellAnswerId = '';
+    this.lastFeedCanLoadMore = false;
+    this.feedErrorLine = '';
+    this.sessionSeedAnswerId = currentAnswerId;
+    this.dataSource.replaceAll([]);
+    this.startReadingSession();
   }
 
   // ---------- 渲染 ----------
@@ -2302,6 +2428,7 @@ export struct ContinuousAnswerPage {
         onReferenceBack: (numero: number): void => this.scrollBackToReference(row.answerId, numero),
         onVideoOpen: (videoId: string): void => {
           if (videoId.length > 0) {
+            stageAnswerVideoPlayback(row.answerId, videoId);
             this.navigate({ name: AppDestinationName.VIDEO, id: videoId });
           }
         },
@@ -2473,6 +2600,7 @@ export struct ContinuousAnswerPage {
       this.session === undefined || this.segmentSheetMarkIndex < 0) {
       return;
     }
+    const generation = this.accountGeneration;
     const answerId = this.segmentSheetAnswerId;
     const pid = this.segmentSheetPid;
     const markIndex = this.segmentSheetMarkIndex;
@@ -2498,8 +2626,14 @@ export struct ContinuousAnswerPage {
       this.applySegmentMeta(answerId, pid, markIndex, optimistic);
       const result = await this.segmentReactionRepository
         .toggleSegmentLike('answer', answerId, paragraph, markIndex);
+      if (!this.isAccountCurrent(generation)) {
+        return;
+      }
       this.applySegmentMeta(answerId, pid, markIndex, result);
     } catch (_error) {
+      if (!this.isAccountCurrent(generation)) {
+        return;
+      }
       this.applySegmentMeta(answerId, pid, markIndex, before);
       try {
         this.toast('操作失败，请稍后重试');
@@ -2507,7 +2641,9 @@ export struct ContinuousAnswerPage {
         // toast 抛错不得吞掉回滚与 busy 释放（已先行完成）。
       }
     } finally {
-      this.segmentLikeBusy = false;
+      if (this.isAccountCurrent(generation)) {
+        this.segmentLikeBusy = false;
+      }
     }
   }
 

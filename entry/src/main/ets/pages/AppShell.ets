@@ -76,6 +76,7 @@ import {
   topLevelTabForDestination
 } from './TopLevelTabs';
 import { DividerShowType, hdsMaterial, HdsNavDestination, HdsNavigation, HdsNavigationAttribute, HdsNavigationTitleMode, HdsTabsController } from '@kit.UIDesignKit';
+import { ContinuousAnswerTitleState, continuousAnswerRouteId, continuousAnswerTitle } from './ContinuousAnswerRouteState';
 import { getContinuousAnswerTitleBarStyle, getChatTitleBarStyle, getImmersiveTitleBarStyle, getPersistentImmersiveTitleBarStyle, getRootChromeTitleBarStyle } from '../common/style/NavStyles';
 import {
   decodeImmersiveMaterialSupport,
@@ -181,7 +182,7 @@ export struct AppShell {
   @StorageProp('detailImmersiveActive') private detailImmersiveActive: boolean = false;
   @StorageProp('detailTitleHiddenByScroll') private detailTitleHiddenByScroll: boolean = false;
   /** 连续阅读页问题标题（页面加载后广播；空串显示占位标题）。 */
-  @StorageProp('continuousAnswerTitle') private continuousAnswerTitle: string = '';
+  @StorageProp('continuousAnswerTitles') private continuousAnswerTitles: Array<ContinuousAnswerTitleState> = [];
   @StorageProp('answerOverscrollActive') private answerOverscrollActive: boolean = false;
   @StorageProp('answerSwitchMode') private answerSwitchMode: string = 'vertical';
   @StorageProp('peopleTitleStates') private peopleTitleStates: PeopleTitleState[] = [];
@@ -453,7 +454,7 @@ export struct AppShell {
 
   /** 连续阅读页固定问题标题：点击进入问题页（计划 §2.1）；标题由页面异步广播。 */
   @Builder
-  continuousAnswerTitleBar(questionId: string) {
+  continuousAnswerTitleBar(questionId: string, answerId: string, sort: string) {
     // 与问题详情页一致：返回键与标题在同一 Row 中分配空间，隐藏外层 HDS 默认返回键。
     Row({ space: 8 }) {
       // 复用回答详情页的 HDS 玻璃画布；不支持沉浸材质时使用主题中性底色。
@@ -480,7 +481,8 @@ export struct AppShell {
       .height(44)
       .borderRadius(22)
       .clip(true)
-      Text(this.continuousAnswerTitle.length > 0 ? this.continuousAnswerTitle : '连续阅读')
+      Text(continuousAnswerTitle(this.continuousAnswerTitles,
+        continuousAnswerRouteId(questionId, answerId, sort)) || '连续阅读')
         .id('continuous_answer_title')
         .fontSize($r('app.float.heading_font_size'))
         .maxFontScale(1.3)
@@ -1086,16 +1088,26 @@ export struct AppShell {
         this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: {
           stackBuilder: (): void => this.continuousAnswerTitleBar(
-            (destination as ContinuousAnswerDestination).questionId),
+            (destination as ContinuousAnswerDestination).questionId,
+            (destination as ContinuousAnswerDestination).answerId ?? '',
+            (destination as ContinuousAnswerDestination).sort ?? 'default'),
           divider: { showType: DividerShowType.OFF }
         } })
       .hideBackButton(true)
       .hideTitleBar(this.imagePreviewUrl.length > 0 || this.detailImmersiveActive)
       .onShown((): void => {
-        AppStorage.setOrCreate('continuousAnswerRouteVisible', true);
+        AppStorage.setOrCreate('continuousAnswerActiveRoute', continuousAnswerRouteId(
+          (destination as ContinuousAnswerDestination).questionId,
+          (destination as ContinuousAnswerDestination).answerId ?? '',
+          (destination as ContinuousAnswerDestination).sort ?? 'default'));
       })
       .onHidden((): void => {
-        AppStorage.setOrCreate('continuousAnswerRouteVisible', false);
+        if (AppStorage.get<string>('continuousAnswerActiveRoute') === continuousAnswerRouteId(
+          (destination as ContinuousAnswerDestination).questionId,
+          (destination as ContinuousAnswerDestination).answerId ?? '',
+          (destination as ContinuousAnswerDestination).sort ?? 'default')) {
+          AppStorage.setOrCreate('continuousAnswerActiveRoute', '');
+        }
       })
       .onBackPressed((): boolean => {
         if (this.imagePreviewUrl.length > 0) {

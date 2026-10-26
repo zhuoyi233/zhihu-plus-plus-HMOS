@@ -85,6 +85,7 @@ import { ReaderProbe } from './ReaderProbe';
 import { ImageProbe } from './ImageProbe';
 import { ContinuousReadingPrototype } from './ContinuousReadingPrototype';
 import { ContinuousAnswerPage } from './ContinuousAnswerPage';
+import { ContinuousAnswerRepositories } from './ContinuousAnswerRepositories';
 import { TechnicalLabPage } from './TechnicalLabPage';
 import { HomeFeedPage } from './HomeFeedPage';
 import { SearchPage } from './SearchPage';
@@ -146,13 +147,8 @@ struct Index {
   private questionAnswerFeedFactory: () => QuestionAnswerFeedRepository | undefined = () => undefined;
   @State private answerRepository?: ContentRepository = undefined;
   @State private articleRepository?: ContentRepository = undefined;
-  /** 连续阅读专用仓库：全文双槽位 + 问题标题各持独立 HTTP client，规避单飞互斥（计划 §4.2）。 */
-  @State private continuousAnswerRepositoryA?: ContentRepository = undefined;
-  @State private continuousAnswerRepositoryB?: ContentRepository = undefined;
-  @State private continuousQuestionRepository?: ContentRepository = undefined;
-  /** 连续页专属划线点赞与卡片元数据仓库：与详情页实例隔离，避免单飞 client 互斥。 */
-  @State private continuousSegmentReactionRepository?: SegmentReactionRepository = undefined;
-  @State private continuousLinkCardMetaRepository?: LinkCardMetaRepository = undefined;
+  private continuousRepositoriesFactory: () => ContinuousAnswerRepositories = (): ContinuousAnswerRepositories =>
+    new ContinuousAnswerRepositories();
   /** 内容屏蔽匹配器（RULES_ONLY）：连续页屏蔽后对已加载回答重过滤。 */
   @State private contentBlockingMatcher?: ContentBlockingMatcher = undefined;
   @State private peopleRepository?: PeopleDetailRepository = undefined;
@@ -239,11 +235,7 @@ struct Index {
         new DefaultQuestionAnswerFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.answerRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
       this.articleRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
-      this.continuousAnswerRepositoryA = new DefaultContentRepository(new ZhihuHttpClient(session));
-      this.continuousAnswerRepositoryB = new DefaultContentRepository(new ZhihuHttpClient(session));
-      this.continuousQuestionRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
-      this.continuousSegmentReactionRepository = new DefaultSegmentReactionRepository(new ZhihuHttpClient(session));
-      this.continuousLinkCardMetaRepository = new DefaultLinkCardMetaRepository(new ZhihuHttpClient(session));
+      this.continuousRepositoriesFactory = (): ContinuousAnswerRepositories => new ContinuousAnswerRepositories(session);
       this.peopleRepository = new DefaultPeopleRepository(new ZhihuHttpClient(session));
       this.peopleContentRepository = new DefaultPeopleContentRepository(new ZhihuHttpClient(session));
       this.pinRepository = new DefaultPinRepository(new ZhihuHttpClient(session));
@@ -795,17 +787,11 @@ struct Index {
       navigate: navigate,
       onBack: onBack,
       feedRepository: this.questionAnswerFeedFactory(),
-      questionRepository: this.continuousQuestionRepository,
-      fullTextRepositoryA: this.continuousAnswerRepositoryA,
-      fullTextRepositoryB: this.continuousAnswerRepositoryB,
-      voteRepository: this.voteRepository,
-      followRepository: this.followRepository,
+      repositoriesFactory: this.continuousRepositoriesFactory,
       collectionRepository: this.collectionRepository,
       session: this.session,
       openedContentStore: this.openedContentStore,
       historyUploader: this.readHistoryUploader,
-      segmentReactionRepository: this.continuousSegmentReactionRepository,
-      linkCardMetaRepository: this.continuousLinkCardMetaRepository,
       rules: this.blockingRuleStore,
       history: this.blockedFeedHistoryStore,
       blockingMatcher: this.contentBlockingMatcher

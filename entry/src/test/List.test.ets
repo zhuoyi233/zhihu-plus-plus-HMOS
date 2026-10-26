@@ -1,4 +1,5 @@
 import feedWaterfallLayoutTest from './FeedWaterfallLayout.test';
+import continuousAnswerLifecycleTest from './ContinuousAnswerLifecycle.test';
 import homeFeedMenuStateTest from './HomeFeedMenuState.test';
 import adaptiveOverlayLayoutTest from './AdaptiveOverlayLayout.test';
 import apiLevelTest from './ApiLevel.test';
@@ -201,5 +202,6 @@ export default function testsuite(): void {
   segmentReactionRepositoryTest();
   continuousStreamDataSourceTest();
   continuousAnswerStateTest();
+  continuousAnswerLifecycleTest();
   linkCardMetaLoaderTest();
 }
