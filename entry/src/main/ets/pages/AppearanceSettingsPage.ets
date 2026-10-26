@@ -213,7 +213,7 @@ export struct AppearanceSettingsPage {
               this.updateAppearance(this.fabOpacity, this.showFeedThumbnail, value, this.feedCardStyleValue(), this.feedColumnModeValue());
             })
           Divider().color($r('app.color.divider_color'))
-          this.selectSetting('信息流样式', '卡片样式使用圆角卡片展示，分割线样式使用细线分隔条目。',
+          this.selectSetting('信息流样式', '卡片使用圆角卡片展示，分割线使用细线分隔条目。',
             this.feedCardStyleLabel(), this.feedCardStyleOptions(), this.feedCardStyleIndex(),
             'appearance_feed_style', (index: number): void => this.updateFeedCardStyle(index))
           Divider().color($r('app.color.divider_color'))
@@ -873,7 +873,7 @@ export struct AppearanceSettingsPage {
   }
 
   private feedCardStyleOptions(): SelectOption[] {
-    return [{ value: '卡片样式' }, { value: '分割线样式' }];
+    return [{ value: '卡片' }, { value: '分割线' }];
   }
 
   private feedColumnModeOptions(): SelectOption[] {
@@ -907,7 +907,7 @@ export struct AppearanceSettingsPage {
   }
 
   private feedCardStyleLabel(): string {
-    return this.feedCardStyleValue() === FeedCardStyle.CARD ? '卡片样式' : '分割线样式';
+    return this.feedCardStyleValue() === FeedCardStyle.CARD ? '卡片' : '分割线';
   }
 
   private updateFeedCardStyle(index: number): void {

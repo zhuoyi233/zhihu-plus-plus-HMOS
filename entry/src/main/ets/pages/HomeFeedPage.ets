@@ -878,7 +878,7 @@ export struct HomeFeedPage {
   }
 
   private usesCardSurface(): boolean {
-    return this.feedColumns > 1 || this.feedCardStyle === 'card';
+    return this.feedCardStyle === 'card';
   }
 
   private flowGapVp(): number {
@@ -1010,7 +1010,8 @@ export struct HomeFeedPage {
     // +1：真实顶部让位条目也参与懒加载计数与锚点索引。
     const leading: number = 1 + (this.errorMessage.length > 0 ? 1 : 0) +
       (isUpdateAnnouncementVisible(this.pendingUpdateVersion, this.dismissedUpdateVersion) ? 1 : 0);
-    const gap: number = this.usesCardSurface() ? this.flowGapVp() : 0;
+    // 多列始终保留列间距，卡片表面只由用户选择的样式决定。
+    const gap: number = this.feedColumns > 1 || this.usesCardSurface() ? this.flowGapVp() : 0;
     this.flowLayout = buildFeedFlowLayout(
       this.items.map((item: FeedItem): string => feedItemIdentity(item)),
       [],
