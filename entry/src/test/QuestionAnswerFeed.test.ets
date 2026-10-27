@@ -168,6 +168,28 @@ export default function questionAnswerFeedTest(): void {
         true, false, false, true)).assertEqual(0);
     });
 
+    it('navigatorPeekIdDoesNotLoadPagesOrMove', 0, async () => {
+      // 手势期间预取只允许读已加载列表：peekId 不得触发分页，也不得推进当前回答。
+      const seed: QuestionAnswersViewState = {
+        phase: QuestionAnswersPhase.READY, items: [content('1'), content('2'), content('3')], loadingMore: false,
+        canLoadMore: true, sortOrder: QuestionAnswerSortOrder.DEFAULT, errorMessage: '', requiresLogin: false,
+        nextCursor: 'next'
+      };
+      const repository = new FakeQuestionAnswerRepository([
+        { items: [content('4')], cursor: { isEnd: true, isStart: false, page: 2, total: 4 } }
+      ]);
+      const navigator = new QuestionAnswerNavigator('123', '3', seed, repository);
+      expect(navigator.peekId(-1)).assertEqual('2');
+      // 列表末尾但仍有下一页：peek 不预拉分页，返回 undefined 由松手后的 prepareMove 补齐。
+      expect(navigator.peekId(1)).assertUndefined();
+      expect(repository.calls).assertEqual(0);
+      expect(navigator.currentId()).assertEqual('3');
+      expect(await navigator.move(1)).assertEqual('4');
+      expect(repository.calls).assertEqual(1);
+      expect(navigator.peekId(-1)).assertEqual('3');
+      navigator.dispose();
+    });
+
     it('navigatorSeedlessFallsBackToFirstWhenCurrentAbsent', 0, async () => {
       // 当前回答不在列表里（如被过滤）：首个非当前回答作为下一答。
       const repository = new FakeQuestionAnswerRepository([

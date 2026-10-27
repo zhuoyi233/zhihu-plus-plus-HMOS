@@ -88,6 +88,8 @@ export class ContentDetailController {
   private errorMessage?: string;
   private requiresLogin: boolean = false;
   private openedRecordPhase: OpenedRecordPhase = OpenedRecordPhase.NOT_CONFIGURED;
+  /** 已准备但尚未提交的候选回答 id：防止过期候选借新代次提交。 */
+  private preparedAnswerId: string = '';
 
   constructor(repository: ContentRepository, openedContentStore?: OpenedContentStore,
     observer: ContentDetailStateObserver = (_state: ContentDetailViewState): void => {
@@ -135,6 +137,7 @@ export class ContentDetailController {
     }
     const generation = ++this.generation;
     this.kind = kind;
+    this.preparedAnswerId = '';
     this.content = undefined;
     this.errorMessage = undefined;
     this.requiresLogin = false;
@@ -175,6 +178,7 @@ export class ContentDetailController {
     if (!this.active || this.phase !== ContentDetailPhase.READY) { return undefined; }
     const generation = ++this.generation;
     this.errorMessage = undefined;
+    this.preparedAnswerId = id;
     try {
       const loaded = await this.fetch(ContentDetailKind.ANSWER, id, generation);
       return this.isCurrent(generation) ? loaded : undefined;
@@ -186,13 +190,29 @@ export class ContentDetailController {
     }
   }
 
+  /**
+   * 登记预取/手势期间已取得的候选详情：分配本次加载代次并标记为准备态。
+   * 不替换当前显示内容、不写阅读记录；返回的对象必须同时用于挂载候选正文实例与提交，
+   * 否则正文实例键会变化导致重建。
+   */
+  admitAnswer(answer: Answer): LoadedContentDetail | undefined {
+    if (!this.active || this.phase !== ContentDetailPhase.READY || answer.id.length === 0) {
+      return undefined;
+    }
+    this.errorMessage = undefined;
+    this.preparedAnswerId = answer.id;
+    return { kind: ContentDetailKind.ANSWER, loadGeneration: ++this.generation, value: answer };
+  }
+
   preparedAnswerError(): string { return this.errorMessage ?? ''; }
 
   commitPreparedAnswer(content: LoadedContentDetail): boolean {
     if (content.kind !== ContentDetailKind.ANSWER || content.loadGeneration === undefined ||
+      this.preparedAnswerId !== content.value.id ||
       !this.isCurrent(content.loadGeneration) || this.content?.loadGeneration === content.loadGeneration) {
       return false;
     }
+    this.preparedAnswerId = '';
     this.kind = ContentDetailKind.ANSWER;
     this.content = content;
     this.errorMessage = undefined;

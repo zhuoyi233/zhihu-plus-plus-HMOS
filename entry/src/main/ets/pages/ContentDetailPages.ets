@@ -105,6 +105,7 @@ import { hdsMaterial } from '@kit.UIDesignKit';
 import { GlassCapsule } from './components/MaterialCanvas';
 import { getSpeechPlaybackService, SpeechPlaybackStatus } from '../platform/SpeechPlaybackService';
 import { accumulateAnswerSwitchDrag } from './AnswerSwitchGesture';
+import { AnswerDetailPrefetcher } from './AnswerSwitchPrefetch';
 import { readerBottomInsetVp, readerCompactActions, readerHorizontalPaddingVp } from './ReaderViewportLayout';
 import { SegmentPill } from './components/SegmentPill';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -118,7 +119,7 @@ struct ContentDetailPage {
   @State @Watch('syncAnswerRefreshIndicator') private refreshingAnswers: boolean = false;
   @State private navigatorBusy: boolean = false;
   private answerSwitchEpoch: number = 0;
-  @State private navigatorRevision: number = 0;
+  @State @Watch('onNavigatorRevisionChanged') private navigatorRevision: number = 0;
   /** 回答页过滑切换：纵向模式沿 Y 轴、横向模式沿 X 轴平移。 */
   @State private answerOverscrollOffset: number = 0;
   /** 回答页可视宽度（vp）：横向相邻回答从左右整页之外随手势滑入。 */
@@ -178,6 +179,8 @@ struct ContentDetailPage {
   private answerPaneTitleHeights: Map<string, number> = new Map();
   private pageActive: boolean = false;
   repository: ContentRepository | undefined = undefined;
+  /** 相邻答全文预取仓库工厂（Index 注入独立 client）：与前台详情仓库分开，避免单飞互相取消。 */
+  answerPrefetchRepositoryFactory: () => ContentRepository | undefined = () => undefined;
   /** 推荐阅读卡片站内元数据仓库：赞同/评论计数与资源类型（正文 link-card 展示）。 */
   linkCardMetaRepository: LinkCardMetaRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
@@ -199,9 +202,16 @@ struct ContentDetailPage {
   };
   @State private phase: ContentDetailPhase = ContentDetailPhase.IDLE;
   @State private content: LoadedContentDetail | undefined = undefined;
+  /** 已挂载的正文实例：当前答 +（可选）一个候选答，键随回答 id/加载代次变化。 */
   @State private answerPanes: LoadedContentDetail[] = [];
+  /** 候选正文相对当前答的方向：1=下一答，-1=上一答，0=无候选。 */
+  @State private candidateDirection: number = 0;
+  /** 已回报视口就绪的正文实例键（含预挂载候选），避免重复等待。 */
+  private preparedAnswerPanes: Set<string> = new Set();
   private answerPaneWaiter?: (ready: boolean) => void;
   private answerPaneTimer: number = -1;
+  /** 相邻答全文预取（独立 client，无阅读副作用）：驱动真实候选页跟手与快速提交。 */
+  private answerPrefetcher?: AnswerDetailPrefetcher;
   @State private errorMessage: string = '';
   @State private requiresLogin: boolean = false;
   @State private openedRecordPhase: OpenedRecordPhase = OpenedRecordPhase.NOT_CONFIGURED;
@@ -307,6 +317,7 @@ struct ContentDetailPage {
       this.answerNavigator = takeQuestionAnswerNavigator(this.activeContentId);
     }
     this.answerNavigator?.resume();
+    this.ensureAnswerPrefetcher();
     // 恢复"下一个回答"悬浮按钮上次拖放位（仅回答页；aboutToAppear 重入只加载一次）。
     if (this.kind === ContentDetailKind.ANSWER && !this.answerFabPositionLoaded) {
       this.loadAnswerFabPosition();
@@ -366,6 +377,8 @@ struct ContentDetailPage {
   private onLoginChanged(): void {
     this.answerSwitchEpoch += 1;
     this.finishAnswerPaneWait(false);
+    this.unmountAnswerCandidate();
+    this.resetAnswerPrefetcher();
     this.authenticated = this.session?.getState().status === SessionStatus.AUTHENTICATED;
     if (!this.pageActive) { return; }
     this.answersController?.deactivate();
@@ -380,6 +393,8 @@ struct ContentDetailPage {
   aboutToDisappear(): void {
     this.answerSwitchEpoch += 1;
     this.finishAnswerPaneWait(false);
+    this.answerPrefetcher?.dispose();
+    this.answerPrefetcher = undefined;
     this.pageActive = false;
     this.unsubscribeHoldingHand();
     this.indicator?.dispose();
@@ -698,8 +713,9 @@ struct ContentDetailPage {
                 ForEach(this.answerPanes, (item: LoadedContentDetail) => {
                   Stack() { this.loadedContent(item) }
                     .width('100%').height('100%')
-                    .opacity(item.value.id === this.activeContentId ? 1 : 0)
+                    .opacity(this.answerPaneOpacity(item))
                     .zIndex(item.value.id === this.activeContentId ? 1 : 0)
+                    .translate(this.answerPaneTranslate(item))
                     .hitTestBehavior(item.value.id === this.activeContentId ? HitTestMode.Default : HitTestMode.None)
                 }, (item: LoadedContentDetail): string => `${item.value.id}:${item.loadGeneration ?? 0}`)
                 }.width('100%').height('100%')
@@ -730,25 +746,29 @@ struct ContentDetailPage {
       if (this.kind === ContentDetailKind.ANSWER && this.content !== undefined &&
         this.phase === ContentDetailPhase.READY) {
         if (this.answerSwitchMode === 'horizontal') {
-          if (this.answerOverscrollOffset > 0 && this.navigatorHasPrevious()) {
-            Stack({ alignContent: Alignment.Center }) {
-              this.horizontalAnswerLoading(true)
+          // 真实候选已挂载时由正文实例本身跟手（见 answerPaneTranslate）；仅在候选尚未就绪的
+          // 露出区域显示明确的局部占位，不伪装成完整详情（计划 §5.2 拖动阶段）。
+          if (this.candidatePane() === undefined) {
+            if (this.answerOverscrollOffset > 0 && this.navigatorHasPrevious()) {
+              Stack({ alignContent: Alignment.Center }) {
+                this.horizontalAnswerLoading(true)
+              }
+              .width('100%')
+              .height('100%')
+              .backgroundColor($r('app.color.page_background'))
+              .translate({ x: this.answerOverscrollOffset - this.answerViewportWidthVp })
+              .hitTestBehavior(HitTestMode.None)
             }
-            .width('100%')
-            .height('100%')
-            .backgroundColor($r('app.color.page_background'))
-            .translate({ x: this.answerOverscrollOffset - this.answerViewportWidthVp })
-            .hitTestBehavior(HitTestMode.None)
-          }
-          if (this.answerOverscrollOffset < 0 && this.navigatorHasNext()) {
-            Stack({ alignContent: Alignment.Center }) {
-              this.horizontalAnswerLoading(false)
+            if (this.answerOverscrollOffset < 0 && this.navigatorHasNext()) {
+              Stack({ alignContent: Alignment.Center }) {
+                this.horizontalAnswerLoading(false)
+              }
+              .width('100%')
+              .height('100%')
+              .backgroundColor($r('app.color.page_background'))
+              .translate({ x: this.answerOverscrollOffset + this.answerViewportWidthVp })
+              .hitTestBehavior(HitTestMode.None)
             }
-            .width('100%')
-            .height('100%')
-            .backgroundColor($r('app.color.page_background'))
-            .translate({ x: this.answerOverscrollOffset + this.answerViewportWidthVp })
-            .hitTestBehavior(HitTestMode.None)
           }
         } else {
           // 顶部"上一个回答"预览卡：固定整页顶端，状态栏下方（对齐上游 systemBars 顶边距）。
@@ -789,8 +809,10 @@ struct ContentDetailPage {
         .hitTestBehavior(this.kind === ContentDetailKind.ANSWER &&
           (this.navigatorBusy || this.answerOverscrollOffset !== 0 || this.answerOverscrollProgress() >= 1)
           ? HitTestMode.None : HitTestMode.Transparent)
+        // 横向模式只保留一个稳定容器：等待与滑动期间禁用回答相关操作，提交时一次性绑定新回答的
+        // 统计与状态（计划 §5.1）。纵向模式仍随过滑平移让位给预览卡。
         .translate({
-          x: this.answerSwitchMode === 'horizontal' ? this.answerOverscrollOffset : 0,
+          x: 0,
           y: this.answerSwitchMode === 'horizontal' ? 0 : this.answerOverscrollOffset
         })
       }
@@ -1015,6 +1037,7 @@ struct ContentDetailPage {
           positionKey: readerPositionKey(content.kind, content.value.id),
           positionOwnerKey: readerPositionKey(this.kind, this.contentId),
           answerDocumentKey: content.kind === ContentDetailKind.ANSWER ? this.answerDocumentKey(content) : '',
+          candidatePane: content.value.id !== this.activeContentId,
           onViewportPrepared: (): void => { this.onAnswerPanePrepared(content); },
           topInsetVp: this.immersiveReading ? 0 : FLOATING_TITLE_BAR_OFFSET,
           bottomInsetVp: readerBottomInsetVp(this.bottomActionBarHeightVp, this.immersiveReading),
@@ -1063,10 +1086,8 @@ struct ContentDetailPage {
       }
       .width('100%')
       .height('100%')
-      .translate({
-        x: this.answerSwitchMode === 'horizontal' ? this.answerOverscrollOffset : 0,
-        y: this.answerSwitchMode === 'horizontal' ? 0 : this.answerOverscrollOffset
-      })
+      // 过滑位移由外层正文实例容器统一施加（当前答与候选答各自计算，见 answerPaneTranslate），
+      // 此处不能再重复平移，否则双实例会叠加两倍偏移。
     }
     .width('100%')
     .height('100%')
@@ -2461,9 +2482,15 @@ struct ContentDetailPage {
     this.answersController?.setSortOrder(order);
   }
 
+  /** 分页列表到达或切换提交后补一次相邻答预取（候选 id 只在列表就绪后可知）。 */
+  private onNavigatorRevisionChanged(): void {
+    this.scheduleAnswerPrefetch();
+  }
+
   private navigatorHasPrevious(): boolean {
     return this.navigatorRevision >= 0 && (this.answerNavigator?.hasPrevious() ?? false);
   }
+
   private navigatorHasNext(): boolean {
     return this.navigatorRevision >= 0 && (this.answerNavigator?.hasNext() ?? false);
   }
@@ -2566,6 +2593,159 @@ struct ContentDetailPage {
     return `${this.contentId}:${content.value.id}:${content.loadGeneration ?? 0}`;
   }
 
+  /** 已挂载的候选正文（非当前答）；未挂载候选时返回 undefined。 */
+  private candidatePane(): LoadedContentDetail | undefined {
+    if (this.answerPanes.length < 2) {
+      return undefined;
+    }
+    return this.answerPanes.find((pane: LoadedContentDetail): boolean =>
+      pane.value.id !== this.activeContentId);
+  }
+
+  /** 候选正文相对当前答的位移：横向滚动时与当前答同轴，从相邻整页位置滑入。 */
+  private answerPaneTranslate(item: LoadedContentDetail): TranslateOptions {
+    const offset = this.answerOverscrollOffset;
+    if (this.answerSwitchMode !== 'horizontal') {
+      return { x: 0, y: offset };
+    }
+    if (item.value.id === this.activeContentId) {
+      return { x: offset, y: 0 };
+    }
+    const direction = this.candidateDirection === 0 ? 1 : this.candidateDirection;
+    return { x: offset + direction * Math.max(this.answerViewportWidthVp, 0), y: 0 };
+  }
+
+  /** 候选正文只在横向模式下参与视觉交接；纵向模式仍由整页预览卡承担露出。 */
+  private answerPaneOpacity(item: LoadedContentDetail): number {
+    if (item.value.id === this.activeContentId) {
+      return 1;
+    }
+    return this.answerSwitchMode === 'horizontal' ? 1 : 0;
+  }
+
+  private ensureAnswerPrefetcher(): void {
+    if (this.kind !== ContentDetailKind.ANSWER || this.answerPrefetcher !== undefined) {
+      return;
+    }
+    const repository = this.answerPrefetchRepositoryFactory();
+    if (repository === undefined) {
+      return;
+    }
+    this.answerPrefetcher = new AnswerDetailPrefetcher(repository);
+  }
+
+  private resetAnswerPrefetcher(): void {
+    this.answerPrefetcher?.dispose();
+    this.answerPrefetcher = undefined;
+    this.ensureAnswerPrefetcher();
+  }
+
+  /** 挂载候选正文实例（隐藏于相邻整页外），使其在可见前完成解析与视口布局。 */
+  private mountAnswerCandidate(content: LoadedContentDetail, direction: number): void {
+    const current = this.content;
+    if (current === undefined || content.value.id === this.activeContentId) {
+      return;
+    }
+    const existing = this.candidatePane();
+    if (existing !== undefined && this.answerDocumentKey(existing) === this.answerDocumentKey(content) &&
+      this.candidateDirection === direction) {
+      return;
+    }
+    this.answerPanes = [current, content];
+    this.candidateDirection = direction;
+    this.traceAnswerSwitch('mount', `candidate=${content.value.id} dir=${direction} offset=${this.answerOverscrollOffset}`);
+    // 被替换掉的候选实例已销毁：其就绪标记不得留给后续实例复用。
+    const keep = this.answerDocumentKey(content);
+    const stale: string[] = Array.from(this.preparedAnswerPanes);
+    for (let index = 0; index < stale.length; index++) {
+      if (stale[index] !== keep) { this.preparedAnswerPanes.delete(stale[index]); }
+    }
+  }
+
+  private unmountAnswerCandidate(): void {
+    const current = this.content;
+    if (current === undefined) {
+      this.candidateDirection = 0;
+      return;
+    }
+    if (this.answerPanes.length > 1) {
+      this.answerPanes = [current];
+    }
+    this.candidateDirection = 0;
+    this.preparedAnswerPanes.clear();
+  }
+
+  /** 拖动中按方向准备真实候选页：已预取则立即挂载，未命中则以前台优先级补一次请求。 */
+  private ensureAnswerDragCandidate(): void {
+    if (this.kind !== ContentDetailKind.ANSWER || this.answerSwitchMode !== 'horizontal') { return; }
+    const offset = this.answerOverscrollOffset;
+    if (offset === 0 || this.navigatorBusy) { return; }
+    const direction = offset < 0 ? 1 : -1;
+    if (this.candidateDirection !== 0 && this.candidateDirection !== direction) {
+      this.unmountAnswerCandidate();
+    }
+    if (this.candidatePane() !== undefined) { return; }
+    const id = this.answerNavigator?.peekId(direction);
+    if (id === undefined) { return; }
+    const prefetcher = this.answerPrefetcher;
+    if (prefetcher === undefined) { return; }
+    const cached = prefetcher.peek(id);
+    if (cached !== undefined) {
+      this.admitAnswerCandidate(cached, direction);
+      return;
+    }
+    const epoch = this.answerSwitchEpoch;
+    void prefetcher.request(id, true).then((answer: Answer | undefined): void => {
+      if (answer === undefined || !this.pageActive || epoch !== this.answerSwitchEpoch ||
+        this.navigatorBusy || this.answerViewportWidthVp <= 0) {
+        return;
+      }
+      if ((this.answerOverscrollOffset < 0 ? 1 : -1) !== direction || this.answerOverscrollOffset === 0) {
+        return;
+      }
+      if (this.candidatePane() !== undefined) { return; }
+      this.admitAnswerCandidate(answer, direction);
+    });
+  }
+
+  /**
+   * 当前答稳定后预取相邻全文（计划 §5.4）：预取只取详情，不写阅读记录/进度；
+   * 结果就绪且页面空闲时提前挂载候选实例，把解析与布局挪到用户拖动之前。
+   */
+  private scheduleAnswerPrefetch(): void {
+    if (!this.pageActive || this.kind !== ContentDetailKind.ANSWER ||
+      this.phase !== ContentDetailPhase.READY || this.answerSwitchMode !== 'horizontal') {
+      return;
+    }
+    const navigator = this.answerNavigator;
+    const prefetcher = this.answerPrefetcher;
+    if (navigator === undefined || prefetcher === undefined) { return; }
+    const epoch = this.answerSwitchEpoch;
+    // 下一答优先（最常见的切换方向），再补上一答；并发 1 由预取层保证。
+    this.warmAnswerCandidate(navigator.peekId(1), 1, epoch);
+    this.warmAnswerCandidate(navigator.peekId(-1), -1, epoch);
+  }
+
+  private warmAnswerCandidate(id: string | undefined, direction: number, epoch: number): void {
+    if (id === undefined || id.length === 0 || id === this.activeContentId) { return; }
+    const prefetcher = this.answerPrefetcher;
+    if (prefetcher === undefined) { return; }
+    const mountIfIdle = (answer: Answer | undefined): void => {
+      if (answer === undefined || !this.pageActive || epoch !== this.answerSwitchEpoch ||
+        this.navigatorBusy || this.answerSwitchMode !== 'horizontal' || this.answerOverscrollOffset !== 0) {
+        return;
+      }
+      if (this.candidatePane() !== undefined) { return; }
+      this.admitAnswerCandidate(answer, direction);
+    };
+    const cached = prefetcher.peek(id);
+    if (cached !== undefined) {
+      mountIfIdle(cached);
+      return;
+    }
+    void prefetcher.request(id, false).then(mountIfIdle);
+  }
+
   private finishAnswerPaneWait(ready: boolean): void {
     if (this.answerPaneTimer >= 0) { clearTimeout(this.answerPaneTimer); }
     this.answerPaneTimer = -1;
@@ -2575,27 +2755,51 @@ struct ContentDetailPage {
   }
 
   private onAnswerPanePrepared(content: LoadedContentDetail): void {
+    const key = this.answerDocumentKey(content);
+    this.preparedAnswerPanes.add(key);
     if (content.value.id !== this.activeContentId && this.answerPanes.some((pane: LoadedContentDetail): boolean =>
-      this.answerDocumentKey(pane) === this.answerDocumentKey(content))) {
+      this.answerDocumentKey(pane) === key)) {
       this.finishAnswerPaneWait(true);
     }
   }
 
-  private waitForAnswerPane(content: LoadedContentDetail): Promise<boolean> {
+  private waitForAnswerPane(content: LoadedContentDetail, direction: number): Promise<boolean> {
+    const key = this.answerDocumentKey(content);
+    const mounted = this.candidatePane();
+    if (this.preparedAnswerPanes.has(key) && mounted !== undefined &&
+      this.answerDocumentKey(mounted) === key) {
+      return Promise.resolve(true);
+    }
     return new Promise<boolean>((resolve: (ready: boolean) => void): void => {
       this.answerPaneWaiter = resolve;
       this.answerPaneTimer = setTimeout((): void => this.finishAnswerPaneWait(false), 8000);
-      const current = this.content;
-      if (current === undefined) { this.finishAnswerPaneWait(false); return; }
-      this.answerPanes = [current, content];
+      if (this.content === undefined) { this.finishAnswerPaneWait(false); return; }
+      this.mountAnswerCandidate(content, direction);
     });
   }
 
+  /**
+   * 切换事务诊断（计划 §7.2）：只记录回答 ID、就绪来源与阶段，不输出 Cookie 或正文。
+   * 五个时间点：意图 → 候选确定 → 详情返回 → 正文准备 → 提交，供同设备前后对比。
+   */
+  private traceAnswerSwitch(stage: string, detail: string): void {
+    hilog.info(0xD001, 'AnswerSwitch', `${stage} ${detail} @${Date.now()}`);
+  }
+
+  /**
+   * 单篇回答切换事务（计划 §5.2）：准备（导航目标＋全文＋候选视口）与提交分离。
+   * 准备期间及失败时保留当前正文与导航位置；只有全部就绪后才原子提交。
+   */
   private async moveAnswer(direction: number): Promise<void> {
-    if (this.navigatorBusy) { return; }
+    if (this.navigatorBusy || this.kind !== ContentDetailKind.ANSWER) { return; }
     const epoch = this.answerSwitchEpoch;
     this.navigatorBusy = true;
-    this.resetAnswerOverscroll(false);
+    this.overscrollRawDrag = 0;
+    const startedAt = Date.now();
+    this.traceAnswerSwitch('intent', `dir=${direction} mode=${this.answerSwitchMode} from=${this.activeContentId}`);
+    // 纵向模式沿用"立即回位 + 整页加载提示"的既有观感；横向模式保留拖动位移，
+    // 待候选就绪后从当前偏移继续滑到目标位置（真实候选跟手落地）。
+    if (this.answerSwitchMode !== 'horizontal') { this.resetAnswerOverscroll(false); }
     try {
       const navigator = this.answerNavigator;
       const controller = this.controller;
@@ -2603,54 +2807,149 @@ struct ContentDetailPage {
       this.navigatorRevision += 1;
       if (!this.pageActive || epoch !== this.answerSwitchEpoch) { return; }
       if (id === undefined) {
+        this.resetAnswerOverscroll(true);
         const message = this.answerNavigator?.errorMessage() ?? '';
         this.getUIContext().getPromptAction()
           .showToast({ message: message.length > 0 ? message : '暂时无法切换回答' });
         return;
       }
-      const prepared = await controller?.prepareAnswer(id);
+      const prepared = await this.prepareSwitchAnswer(id, direction);
       if (!this.pageActive || epoch !== this.answerSwitchEpoch) { return; }
+      this.traceAnswerSwitch('detail', `target=${id} cost=${Date.now() - startedAt}ms mounted=${this.candidateDirection}`);
       if (prepared === undefined) {
+        this.resetAnswerOverscroll(true);
         const message = controller?.preparedAnswerError() ?? '';
         this.getUIContext().getPromptAction()
           .showToast({ message: message.length > 0 ? message : '暂时无法切换回答' });
         return;
       }
-      const ready = await this.waitForAnswerPane(prepared);
+      const ready = await this.waitForAnswerPane(prepared, direction);
       if (!this.pageActive || epoch !== this.answerSwitchEpoch) { return; }
       if (!ready) {
+        this.resetAnswerOverscroll(true);
         this.getUIContext().getPromptAction().showToast({ message: '回答准备超时，请重试' });
         return;
       }
-      if (navigator === undefined || !navigator.commitMove(id)) { return; }
-      // 详情成功后才切换交互身份，等待和失败期间保留当前正文。
-      // 新内容从顶部渲染：边界状态归位，避免沿用上一答的贴底状态误触发底部过滑。
-      this.contentAtBottom = false;
-      this.contentAtTop = true;
-      this.contentTitleHeightVp = this.answerPaneTitleHeights.get(this.answerDocumentKey(prepared)) ?? 0;
-      // 顶栏折叠态随新答复位：新内容从顶部渲染，问题标题回到视口内。
-      this.answerQuestionScrolled = false;
-      // 折叠的标题栏/底部操作栏随新答复位回显（对齐上游：切回答 = 新建 ScrollState，
-      // currentScroll == 0 时 offset.snapTo(0) 强制回显；本页组件复用 @State，需手动复位）。
-      this.chromeHiddenByScroll = false;
-      this.lastContentScrollOffset = 0;
-      AppStorage.setOrCreate('detailTitleHiddenByScroll', false);
-      this.voteController?.deactivate();
-      this.voteController = undefined;
-      this.favoriteDialogShown = false;
-      this.contentFavorited = false;
-      this.activeContentId = id;
-      AppStorage.setOrCreate('readerActiveAnswerDocument', this.answerDocumentKey(prepared));
-      controller?.commitPreparedAnswer(prepared);
+      this.traceAnswerSwitch('pane', `target=${id} ready=${ready} cost=${Date.now() - startedAt}ms`);
+      await this.settleAnswerSwitch(prepared, direction, epoch);
     } finally {
       this.finishAnswerPaneWait(false);
-      if (this.content !== undefined) { this.answerPanes = [this.content]; }
       const activeKey = this.content === undefined ? '' : this.answerDocumentKey(this.content);
+      const candidate = this.candidatePane();
+      const candidateKey = candidate === undefined ? '' : this.answerDocumentKey(candidate);
       this.answerPaneTitleHeights.forEach((_height: number, key: string): void => {
-        if (key !== activeKey) { this.answerPaneTitleHeights.delete(key); }
+        if (key !== activeKey && key !== candidateKey) { this.answerPaneTitleHeights.delete(key); }
       });
       this.navigatorBusy = false;
+      this.scheduleAnswerPrefetch();
     }
+  }
+
+  /**
+   * 准备候选详情：优先复用已挂载/已预取的结果，避免现场请求造成的等待；
+   * 都未命中才回落到前台详情仓库（与首次加载同一语义）。
+   */
+  private async prepareSwitchAnswer(id: string, direction: number): Promise<LoadedContentDetail | undefined> {
+    const mounted = this.candidatePane();
+    if (mounted !== undefined && mounted.value.id === id) {
+      return mounted;
+    }
+    const prefetcher = this.answerPrefetcher;
+    const cached = prefetcher?.peek(id);
+    if (cached !== undefined) {
+      const admitted = this.admitAnswerCandidate(cached, direction);
+      if (admitted !== undefined) { return admitted; }
+    }
+    const fetched = await prefetcher?.request(id, true);
+    const mountedAfterWait = this.candidatePane();
+    if (mountedAfterWait !== undefined && mountedAfterWait.value.id === id) {
+      return mountedAfterWait;
+    }
+    if (fetched !== undefined) {
+      const admitted = this.admitAnswerCandidate(fetched, direction);
+      if (admitted !== undefined) { return admitted; }
+    }
+    return this.controller?.prepareAnswer(id);
+  }
+
+  /** 把预取结果登记为候选正文并挂载：提交时复用的必须是同一对象，否则实例键变化会重建。 */
+  private admitAnswerCandidate(answer: Answer, direction: number): LoadedContentDetail | undefined {
+    const admitted = this.controller?.admitAnswer(answer);
+    if (admitted === undefined) { return undefined; }
+    this.mountAnswerCandidate(admitted, direction);
+    return admitted;
+  }
+
+  /** 候选就绪后从当前偏移滑到目标位置，动画结束再原子提交；纵向模式直接提交。 */
+  private async settleAnswerSwitch(target: LoadedContentDetail, direction: number, epoch: number): Promise<void> {
+    if (this.answerSwitchMode === 'horizontal') {
+      const to = -direction * Math.max(this.answerViewportWidthVp, 1);
+      if (Math.abs(to - this.answerOverscrollOffset) > 0.5) {
+        await this.animateAnswerOverscroll(to, ANSWER_SWITCH_SETTLE_DURATION);
+      }
+      if (!this.pageActive || epoch !== this.answerSwitchEpoch) { return; }
+    }
+    this.commitAnswerSwitch(target);
+  }
+
+  /** 位移动画：正常结束与超时兜底任一触发即返回，避免动画被中断后事务永久挂起。 */
+  private animateAnswerOverscroll(to: number, duration: number): Promise<void> {
+    return new Promise<void>((resolve: () => void): void => {
+      let settled = false;
+      let timer: number = -1;
+      const finish = (): void => {
+        if (settled) { return; }
+        settled = true;
+        if (timer >= 0) { clearTimeout(timer); }
+        timer = -1;
+        resolve();
+      };
+      timer = setTimeout(finish, duration + 150);
+      this.getUIContext().animateTo({
+        duration: duration,
+        curve: Curve.FastOutSlowIn,
+        onFinish: finish
+      }, (): void => {
+        this.applyOverscrollOffset(to);
+      });
+    });
+  }
+
+  /** 原子提交：正文实例、导航索引、作者与操作栏身份在同一帧切换，再移除旧实例。 */
+  private commitAnswerSwitch(target: LoadedContentDetail): void {
+    const id = target.value.id;
+    const navigator = this.answerNavigator;
+    const controller = this.controller;
+    if (navigator === undefined || controller === undefined || !navigator.commitMove(id)) {
+      this.unmountAnswerCandidate();
+      this.resetAnswerOverscroll(true);
+      return;
+    }
+    // 详情成功后才切换交互身份，等待和失败期间保留当前正文。
+    // 新内容从顶部或自身阅读位置渲染：边界状态归位，避免沿用上一答的贴底状态误触发底部过滑。
+    this.contentAtBottom = false;
+    this.contentAtTop = true;
+    this.contentTitleHeightVp = this.answerPaneTitleHeights.get(this.answerDocumentKey(target)) ?? 0;
+    // 顶栏折叠态随新答复位：新内容从视口顶部渲染，问题标题回到视口内。
+    this.answerQuestionScrolled = false;
+    // 折叠的标题栏/底部操作栏随新答复位回显（对齐上游：切回答 = 新建 ScrollState，
+    // currentScroll == 0 时 offset.snapTo(0) 强制回显；本页组件复用 @State，需手动复位）。
+    this.chromeHiddenByScroll = false;
+    this.lastContentScrollOffset = 0;
+    AppStorage.setOrCreate('detailTitleHiddenByScroll', false);
+    this.voteController?.deactivate();
+    this.voteController = undefined;
+    this.favoriteDialogShown = false;
+    this.contentFavorited = false;
+    // 以下三项必须同帧写入：候选实例已在目标位置，位移归零与新身份切换分开会出现一次跳帧。
+    this.activeContentId = id;
+    this.answerPanes = [target];
+    this.candidateDirection = 0;
+    this.applyOverscrollOffset(0);
+    AppStorage.setOrCreate('readerActiveAnswerDocument', this.answerDocumentKey(target));
+    this.answerPrefetcher?.forget(id);
+    controller.commitPreparedAnswer(target);
+    this.traceAnswerSwitch('commit', `target=${id}`);
   }
 
   /** 按 tanh 阻尼转为过滑偏移：横向模式不依赖正文纵向边界，纵向模式仍要求贴顶/贴底。 */
@@ -2676,6 +2975,8 @@ struct ContentDetailPage {
     this.applyOverscrollOffset(dampedOverscrollOffset(this.overscrollRawDrag,
       this.answerSwitchMode === 'horizontal' ? ANSWER_HORIZONTAL_OVERSCROLL_MAX_OFFSET : ANSWER_OVERSCROLL_MAX_OFFSET,
       ANSWER_OVERSCROLL_DAMPING_FACTOR));
+    // 露出区域优先显示真实候选正文；未就绪时保留局部占位（计划 §5.2 拖动阶段）。
+    this.ensureAnswerDragCandidate();
   }
 
   /** 统一写入 overscroll 偏移：纵向广播标题栏淡出，横向广播同轴位移。 */
@@ -2685,24 +2986,38 @@ struct ContentDetailPage {
     AppStorage.setOrCreate('answerOverscrollOffset', this.answerSwitchMode === 'horizontal' ? value : 0);
   }
 
-  /** 松手：达到阈值切换回答（顶部过滑切上一答、底部过滑切下一答，无回弹）；否则弹簧回位。 */
+  /** 松手：达到阈值切换回答（顶部过滑切上一答、底部过滑切下一答）；否则弹簧回位。 */
   private onAnswerOverscrollPanEnd(): void {
     if (this.kind !== ContentDetailKind.ANSWER || this.answerOverscrollOffset === 0) {
       this.overscrollRawDrag = 0;
       return;
     }
     const previous = this.answerOverscrollOffset > 0;
+    const direction = previous ? -1 : 1;
     const triggered = this.answerOverscrollTriggered() && !this.navigatorBusy &&
       (previous ? this.navigatorHasPrevious() : this.navigatorHasNext());
     this.overscrollRawDrag = 0;
     if (triggered) {
-      this.resetAnswerOverscroll(false);
-      void this.moveAnswer(previous ? -1 : 1);
+      if (this.answerCandidateReady(direction)) {
+        // 真实候选已就绪：保留当前偏移，由事务从当前位置继续滑到目标位置后交接。
+        void this.moveAnswer(direction);
+        return;
+      }
+      // 候选未就绪：先平滑回到稳定位置，等待期间旧正文可见（不长期半页悬停）。
+      this.resetAnswerOverscroll(true);
+      void this.moveAnswer(direction);
       return;
     }
-    this.getUIContext().animateTo({ curve: curves.springMotion(0.32, 0.78) }, (): void => {
-      this.applyOverscrollOffset(0);
-    });
+    this.resetAnswerOverscroll(true);
+  }
+
+  /** 可否从当前偏移直接落位：候选实例已挂载，或预取已有该方向全文。 */
+  private answerCandidateReady(direction: number): boolean {
+    if (this.answerSwitchMode !== 'horizontal') { return false; }
+    const mounted = this.candidatePane();
+    if (mounted !== undefined && this.candidateDirection === direction) { return true; }
+    const id = this.answerNavigator?.peekId(direction);
+    return id !== undefined && this.answerPrefetcher?.peek(id) !== undefined;
   }
 
   /** 过滑手势被系统中断：不判定阈值、不触发切换，直接弹簧回位并清零原始拖动量。 */
@@ -3315,6 +3630,8 @@ struct ContentDetailPage {
       if (!this.answerPanes.some((pane: LoadedContentDetail): boolean =>
         this.answerDocumentKey(pane) === this.answerDocumentKey(current))) {
         this.answerPanes = [current];
+        this.candidateDirection = 0;
+        this.preparedAnswerPanes.clear();
       }
       AppStorage.setOrCreate('readerActiveAnswerDocument', this.answerDocumentKey(current));
     }
@@ -3351,6 +3668,7 @@ struct ContentDetailPage {
       if (state.content.kind === ContentDetailKind.ANSWER && this.answerNavigator === undefined) {
         this.ensureAnswerNavigator(state.content.value.questionId);
       }
+      this.scheduleAnswerPrefetch();
     }
   }
 
@@ -3472,6 +3790,8 @@ export struct AnswerDetailPage {
   questionAnswerFeedFactory: () => QuestionAnswerFeedRepository | undefined = () => undefined;
   contentId: string = '';
   repository: ContentRepository | undefined = undefined;
+  /** 相邻答全文预取仓库工厂：独立 client，避免与前台详情仓库单飞互相取消。 */
+  answerPrefetchRepositoryFactory: () => ContentRepository | undefined = () => undefined;
   /** 推荐阅读卡片站内元数据仓库：赞同/评论计数与资源类型（正文 link-card 展示）。 */
   linkCardMetaRepository: LinkCardMetaRepository | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
@@ -3497,6 +3817,7 @@ export struct AnswerDetailPage {
       questionAnswerFeedFactory: this.questionAnswerFeedFactory,
       contentId: this.contentId,
       repository: this.repository,
+      answerPrefetchRepositoryFactory: this.answerPrefetchRepositoryFactory,
       linkCardMetaRepository: this.linkCardMetaRepository,
       openedContentStore: this.openedContentStore,
       historyUploader: this.historyUploader,
@@ -3829,6 +4150,8 @@ const ANSWER_HORIZONTAL_TRIGGER_THRESHOLD: number = 46;
 const ANSWER_OVERSCROLL_TRIGGER_THRESHOLD: number = 80;
 /** 回答下滑切换：阻尼系数，对齐上游 DAMPING_FACTOR。 */
 const ANSWER_OVERSCROLL_DAMPING_FACTOR: number = 1.2;
+/** 横向切换落位动画时长（ms）：候选已就绪时从拖动位置滑到目标整页。 */
+const ANSWER_SWITCH_SETTLE_DURATION: number = 180;
 
 /** tanh 阻尼（对齐上游 dampedOverscrollOffset）：位移趋近上限时增益渐减。 */
 function dampedOverscrollOffset(rawDelta: number, maxOverscroll: number, dampingFactor: number): number {

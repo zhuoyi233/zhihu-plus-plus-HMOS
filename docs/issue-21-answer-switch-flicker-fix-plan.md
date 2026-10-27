@@ -2,7 +2,7 @@
 
 制定日期：2026-10-27。状态：**已开始实施，完整修复尚未完成**。
 
-实施进度：已将单篇切换改为先准备导航目标和详情、成功后再提交；等待或失败时保留当前正文和导航位置，过期结果及重复提交被拒绝。横向模式固定问题标题，并将仿制摘要改为局部占位。已接入双正文原型：候选按真实尺寸挂载，视口与信息头布局就绪后提交，候选成为当前正文时按同一键保留实例（尚未用生命周期日志确认）；隔离阅读位置、音量键及公式缓存清理。API 26 模拟器验证了 A→B→A 的内容、作者和已有阅读位置，但未采集过渡帧，也未验证弱网和设备矩阵。图片横滑切答与普通点击预览各验证一次。拖动时仍是占位，真实候选跟手动画和有限预取尚未实现，当前不能判定 Issue 已完整修复。
+实施进度：已将单篇切换改为先准备导航目标和详情、成功后再提交；等待或失败时保留当前正文和导航位置，过期结果及重复提交被拒绝。横向模式固定问题标题，并将仿制摘要改为局部占位。已接入双正文实例：候选按真实尺寸挂载，视口与信息头布局就绪后提交，候选成为当前正文时按同一键保留实例；隔离阅读位置、音量键及公式缓存清理。本轮补上**相邻答全文预取**与**真实候选跟手落位**：候选在空闲时预挂载、拖动时随手指从相邻整页位置滑入，达到阈值后从当前偏移继续滑到目标位置再原子提交，提交帧不再出现整页加载空档。API 26 模拟器以事务日志核对：预取命中时「详情返回 0–1 ms、正文就绪 0–1 ms、意图到提交 223 ms（含 180 ms 落位动画）」，冷路径（未命中，1.07 s 网络）同样保持旧正文可见并在就绪后交接；连续两次甩动只提交一次。Hypium 969/969 通过。仍未采集可逐帧复核的过渡画面（模拟器单帧截图约 0.7 s，抓不到 180 ms 落位段，改以事务日志与「切换期间 content 永不清空」的代码约束为证），未做弱网/401/403 注入，未在 API 23 设备与纵向模式上复验，因此仍不宣称 Issue 已完整关闭。
 
 - 问题来源：[#21「[Bug] 切换回答」](https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/issues/21)，是 Issue，不是 PR。
 - 源码核对基线：`cae992165d50970ef338684b5d0d17dff0684460`；工作区版本 `0.5.10`。
@@ -197,12 +197,19 @@ Issue 原报告环境是 nova14、hos7、`0.5.3`。本次没有在该真机或�
 
 ### 7.3 构建验证顺序
 
-本次仅文档研究，**未运行编译、Hypium、Debug 或 Release 构建**，不宣称修复测试通过。将来实现后按仓库要求使用 pwsh 7 依次执行：
+文档研究阶段未运行编译与测试。实现落地后按仓库要求使用 pwsh 7 依次执行：
 
 ```powershell
 pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall -SkipBuild
 pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall
 ```
+
+本轮实际执行（会话内 pwsh 不可直接调用，改用同一套 hvigor 参数等价执行 `assembleHap` 与 `test`，
+并在本地临时写入签名配置以安装模拟器；该配置为 skip-worktree 内容，验证后已还原、未提交）：
+
+- `assembleHap`（debug，API 26）：BUILD SUCCESSFUL，签名包安装至 `127.0.0.1:5555`。
+- `test`（`-p module=entry@default -p product=default`）：`Tests run: 969, Failure: 0, Error: 0, Pass: 969`
+  （本轮新增 9 例：预取去重/并发/优先级/淘汰/失效 6 例、候选登记与提交校验 2 例、`peekId` 1 例）。
 
 涉及发行交付时再执行仓库规定的 Release 验证流程；测试总数以脚本动态解析结果为准。本次 API 26 复现不能替代最低兼容 API 23 验收。
 
@@ -211,3 +218,50 @@ pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall
 完整修复应同时满足：**旧正文不被提前清空、固定问题标题稳定、真实候选页无需再次重建、失败不推进导航、所有操作与阅读副作用绑定已提交回答**。只减少加载时间、只保留背景或者只让标题不闪，都不能单独作为关闭 #21 的依据。
 
 参考既有工作：[同一问题下回答连续阅读计划](continuous-answer-reading-plan.md)。可复用其底层全文调度与渲染经验，但本方案针对保留的单篇模式，需独立验收。
+
+## 9. 第二轮实施记录（2026-10-27）
+
+### 9.1 本轮落地内容
+
+| 计划条目 | 实现 |
+| --- | --- |
+| §5.2 准备/提交分离 | `moveAnswer()` 拆成「意图 → 候选确定 → 详情 → 正文就绪 → 落位 → 提交」，任一步失败只回位不推进；连续手势在 `navigatorBusy` 期间直接丢弃 |
+| §5.3 双实例键与就绪 | 正文实例键改为 `<routeId>:<answerId>:<loadGeneration>`；候选由 `ContentDetailController.admitAnswer()` 分配代次后**同一对象**用于挂载与提交，避免代次变化导致实例重建 |
+| §5.3 候选位置 | `NativeContentDocument` 新增 `candidatePane`：候选按**自己**保存的位置预排版（`positionRestorable()`），但仍不写进度、不响应翻页、不抢选区 |
+| §5.2 拖动阶段 | `ensureAnswerDragCandidate()` 在拖动中按方向准备候选：命中预取立即挂载真实正文并随手指滑入；未命中才回落到「局部占位 + 前景请求」。候选与当前答由 `answerPaneTranslate()` 统一计算位移（当前答 `offset`、候选 `offset ± 视口宽`） |
+| §5.2 落位 | 达到阈值且候选就绪时，从**当前偏移**继续滑到目标整页（180 ms，`Curve.FastOutSlowIn`），动画结束同帧写入 `activeContentId`＋`answerPanes`＋`offset=0` 再销毁旧实例；动画带 150 ms 超时兜底，防止中断后事务挂起 |
+| §5.1 底栏 | 横向模式取消底栏与正文同轴平移，改为单一稳定容器：滑动与等待期间关闭命中，提交时一次性绑定新答统计 |
+| §5.4 预取与缓存 | 新增 `AnswerSwitchPrefetch.ets`（`AnswerDetailPrefetcher`）：独立 `ContentRepository`（独立 `ZhihuHttpClient`，避免单飞互斥）、并发 1、前台插队、同答去重、LRU 3 份、`reset()` 作废在途与缓存；只取详情，不写阅读记录/进度 |
+| §5.4 触发点 | 当前答 READY 后按「下一答优先、再上一答」预取；结果就绪且页面空闲（`offset=0`、非切换中）时提前挂载候选；提交后立刻为新的相邻答预热 |
+| §7.2 观测 | 新增 `AnswerSwitch` 事务日志（`traceAnswerSwitch`），记录 意图/候选/详情/正文/提交 五个点，仅含回答 ID、方向、耗时 |
+
+新增/调整文件：`entry/src/main/ets/pages/AnswerSwitchPrefetch.ets`（新）、`AnswerSwitchPrefetch.test.ets`（新）、
+`ContentDetailPages.ets`、`ContentDetailState.ets`、`NativeContentDocument.ets`、`QuestionAnswerNavigator.ets`（`peekId`）、
+`Index.ets`（预取仓库工厂）、`ContentDetailState.test.ets`、`QuestionAnswerFeed.test.ets`、`List.test.ets`。
+
+与原方案的差异：§5.2 建议的 `AnswerSwitchState.ets` 未单独建状态机类，事务仍由页面承载（改动面更小、可直接复用现有
+`ContentDetailController`），预取层单独成文件；「候选未就绪时保持有限预览」按首期建议改为**平滑回到稳定位置**再完成一次交接。
+
+### 9.2 设备实测（API 26 模拟器 `127.0.0.1:5555`，1320×2856，浅色）
+
+| 用例 | 结果 |
+| --- | --- |
+| 预挂载 | 打开回答页后空闲期出现 `mount candidate=… dir=1 offset=0`，候选在用户手势前已完成解析与布局 |
+| 预取命中切下一答 | `intent dir=1` → `detail cost=1ms mounted=1` → `pane ready cost=1ms` → `commit`（意图到提交 223 ms，含 180 ms 落位动画），全程无加载态 |
+| 预取命中切上一答 | 同上，`cost=0ms mounted=-1`，提交后立刻为新的下一答 `mount … offset=0` |
+| 冷路径（未命中，网络 1.07 s） | 等待期间旧正文保持可见（无整页加载提示），候选返回后挂载并提交，`pane cost=1106ms` |
+| 连续两次甩动 | 第二次在手势进行中被丢弃，只提交一次，无延迟连跳 |
+| 切换后画面 | 提交后截图即为新答完整正文（标题栏作者、正文、统计同步更新），无空白或「正在加载内容…」 |
+
+观测限制：模拟器 `snapshot_display` 单帧约 0.7 s，且 `uitest uiInput drag` 的中间位移无法稳定截取（多次连拍只得到
+手势前后两态），因此**没有**可逐帧复核的过渡画面；本轮以事务日志与「`content` 在切换期间从不清空」的代码约束作为
+等价证据。另需注意：在本机模拟器上慢速拖动落在正文文字上会触发选词（`bodyTextSelectionActive`）而让过滑失效，
+验证时须从页面左右内边距（如 x≈40 或 x≈1290）起手。
+
+### 9.3 仍未完成
+
+- API 23 最低兼容线、平板/横屏、深色主题、跟随系统切换下的回归。
+- 弱网、断网、401/403、目标删除等失败注入，以及失败后索引不前移的手工复核（目前仅单测覆盖）。
+- 纵向模式（上下滑动）本轮未在设备上复验。
+- 过渡画面的逐帧证据、P50/P95 对比表、100 次连续切换后的内存与实例数曲线。
+- 分页边界（相邻答仍在未加载分页）时拖动只能显示局部占位，需松手后由 `prepareMove` 补页；`peekId` 不预拉分页是刻意取舍。

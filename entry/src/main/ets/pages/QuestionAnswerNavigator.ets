@@ -116,6 +116,19 @@ export class QuestionAnswerNavigator {
     this.controller.activate();
   }
 
+  /**
+   * 不触发分页的相邻答查询：用于手势期间预取/预挂载真实候选页。
+   * 目标仍在未加载分页时返回 undefined（此时只能等松手后由 prepareMove 补齐分页）。
+   */
+  peekId(direction: number): string | undefined {
+    if (!this.active || this.index < 0 || (direction !== -1 && direction !== 1)) { return undefined; }
+    const index = this.index + direction;
+    const state = this.controller.snapshot();
+    if (index < 0 || index >= state.items.length) { return undefined; }
+    const id = state.items[index].feedItem.target.id;
+    return id.length > 0 ? id : undefined;
+  }
+
   async prepareMove(direction: number): Promise<string | undefined> {
     if (!this.active || this.busy || (direction !== -1 && direction !== 1)) {
       return undefined;

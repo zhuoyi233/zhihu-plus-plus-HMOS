@@ -398,6 +398,8 @@ export struct NativeContentDocument {
   positionOwnerKey: string = '';
   /** 单篇回答双实例共存时，只有已提交实例可写进度和响应翻页。 */
   answerDocumentKey: string = '';
+  /** 候选正文（已预挂载、尚未提交）：按自己保存的位置预排版，但不写进度、不响应翻页、不广播折叠标题。 */
+  candidatePane: boolean = false;
   @StorageProp('readerActiveAnswerDocument') @Watch('onPositionActiveChanged') private activeAnswerDocument: string = '';
   onViewportPrepared?: () => void;
   private viewportPreparedReported: boolean = false;
@@ -682,6 +684,11 @@ export struct NativeContentDocument {
       (this.answerDocumentKey.length === 0 || this.activeAnswerDocument === this.answerDocumentKey);
   }
 
+  /** 可执行位置恢复的主体：当前正文，或尚未提交但已预挂载的候选正文（不写回进度）。 */
+  private positionRestorable(): boolean {
+    return this.positionIsActive() || (this.candidatePane && this.positionOwnerKey.length > 0);
+  }
+
   private reportViewportPrepared(): void {
     if (!this.viewportPreparedReported && this.positionMounted && this.headerHasLayout &&
       this.viewportWidthVp > 0 && this.viewportHeightVp > 0) {
@@ -692,7 +699,8 @@ export struct NativeContentDocument {
 
   private schedulePositionRestore(layoutChanged: boolean = false): void {
     if (layoutChanged) { this.positionLayoutChanged = Date.now(); }
-    if (!this.positionMounted || !this.positionIsActive() || this.pendingPosition === undefined || this.viewportHeightVp <= 0 ||
+    if (!this.positionMounted || !this.positionRestorable() || this.pendingPosition === undefined ||
+      this.viewportHeightVp <= 0 ||
       this.viewportWidthVp <= 0 || this.positionRestoreTimer >= 0) { return; }
     this.positionRestoreTimer = setTimeout((): void => {
       this.positionRestoreTimer = -1;
@@ -702,7 +710,7 @@ export struct NativeContentDocument {
 
   private adjustReaderPosition(): void {
     const saved = this.pendingPosition;
-    if (!this.positionMounted || !this.positionIsActive() || saved === undefined) { return; }
+    if (!this.positionMounted || !this.positionRestorable() || saved === undefined) { return; }
     const now = Date.now();
     if (this.positionRestoreStarted === 0) { this.positionRestoreStarted = now; }
     const expired = now - this.positionRestoreStarted >= 8000;
