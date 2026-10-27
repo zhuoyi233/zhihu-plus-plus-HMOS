@@ -384,6 +384,7 @@ export struct AppearanceSettingsPage {
         bottom: $r('app.float.page_padding')
       })
     }
+    .align(Alignment.TopStart)
     .id('appearance_settings_page')
     .width('100%')
     .height('100%')

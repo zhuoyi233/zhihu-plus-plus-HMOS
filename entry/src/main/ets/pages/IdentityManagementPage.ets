@@ -102,6 +102,7 @@ export struct IdentityManagementPage {
         .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
           top: 16, bottom: 40 })
       }
+      .align(Alignment.TopStart)
       .id('identity_scroll')
       .width('100%').height('100%').scrollBar(BarState.Off)
       .backgroundColor($r('app.color.page_background'))
