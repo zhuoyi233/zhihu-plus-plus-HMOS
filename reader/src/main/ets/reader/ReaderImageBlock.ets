@@ -48,6 +48,23 @@ export struct ReaderImageBlock {
   private naturalPixelSize: ImageDisplaySize = { width: 0, height: 0 };
   /** 正文容器可用宽度（vp）：显示宽度上限，避免超出排版宽度溢出。 */
   private availableWidthVp: number = 0;
+  private imageTouchX: number = 0;
+  private imageTouchY: number = 0;
+  private imageTouchMoved: boolean = false;
+
+  private trackImageTouch(event: TouchEvent): void {
+    const touch = event.touches[0];
+    if (event.type === TouchType.Down && touch !== undefined) {
+      this.imageTouchX = touch.windowX;
+      this.imageTouchY = touch.windowY;
+      this.imageTouchMoved = false;
+    } else if (event.type === TouchType.Move && touch !== undefined &&
+      (Math.abs(touch.windowX - this.imageTouchX) > 8 || Math.abs(touch.windowY - this.imageTouchY) > 8)) {
+      this.imageTouchMoved = true;
+    } else if (event.type === TouchType.Cancel) {
+      this.imageTouchMoved = true;
+    }
+  }
 
   private imageSource(): string {
     if (this.retryRevision === 0) {
@@ -100,10 +117,12 @@ export struct ReaderImageBlock {
         .onError(() => {
           this.failed = true;
         })
+        .onTouch((event: TouchEvent): void => { this.trackImageTouch(event); })
         .onClick(() => {
-          if (!this.failed) {
+          if (!this.failed && !this.imageTouchMoved) {
             this.onPreview(this.item.sourceUrl);
           }
+          this.imageTouchMoved = false;
         })
 
       if (this.item.text.length > 0) {
