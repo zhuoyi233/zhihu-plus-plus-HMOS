@@ -88,14 +88,14 @@ const SETTINGS_SEARCH_ENTRIES: Array<SettingsSearchEntry> = [
     id: SettingsEntryId.BLOCKING_RULES,
     title: '内容屏蔽',
     path: '推荐系统与内容过滤',
-    keywords: '屏蔽 作者 关键词 黑名单',
+    keywords: '屏蔽 作者 关键词 黑名单 话题 正则 大小写 阈值 导入 导出 备份 清空',
     visibility: SettingsEntryVisibility.ALWAYS
   },
   {
     id: SettingsEntryId.BLOCKED_HISTORY,
     title: '屏蔽记录',
     path: '推荐系统与内容过滤',
-    keywords: '屏蔽 隐藏 记录',
+    keywords: '屏蔽 隐藏 记录 清空 删除记录',
     visibility: SettingsEntryVisibility.ALWAYS
   },
   {
@@ -151,7 +151,7 @@ const SETTINGS_SEARCH_ENTRIES: Array<SettingsSearchEntry> = [
     id: SettingsEntryId.DEVELOPER,
     title: '开发者选项',
     path: '开发者选项',
-    keywords: 'Cookie 网络 调试 技术实验室',
+    keywords: 'Cookie 网络 调试 技术实验室 会话 探针 存储 诊断 二维码',
     visibility: SettingsEntryVisibility.DEVELOPER_ONLY
   }
 ];

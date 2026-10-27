@@ -3,7 +3,8 @@ import {
   onThemeColor,
   BlockedFeedHistoryGateway,
   BlockedFeedRecord,
-  DEFAULT_THEME_COLOR
+  DEFAULT_THEME_COLOR,
+  FeedCardStyle
 } from 'data';
 import {
   BlockedFeedHistoryController,
@@ -12,11 +13,20 @@ import {
   blockedFeedHistoryItemLabel
 } from './BlockedFeedHistoryState';
 import { adaptiveOverlayWidth, isWideOverlayContainer, ADAPTIVE_OVERLAY_MENU_WIDTH_VP } from '../common/style/AdaptiveOverlayLayout';
+import { settingsGroupBackground, settingsGroupRadius } from './AccountSettingsLayout';
 
+/**
+ * 屏蔽记录：说明、状态与记录共用一个主列表，嵌入设置右栏时由宿主画标题并提供“更多”。
+ */
 @Component
 export struct BlockedFeedHistoryPage {
   history: BlockedFeedHistoryGateway | undefined = undefined;
   onBack: () => void = (): void => {};
+  /** 嵌入设置容器：不画自带标题、不叠加覆盖式让位，动作交给宿主标题栏。 */
+  @Prop embedded: boolean = false;
+  /** 宿主动作槽登记：嵌入时把“更多”菜单交给宿主标题栏渲染。 */
+  onRegisterHeaderActions: (handler: () => void) => void = (_handler: () => void): void => {};
+  onReleaseHeaderActions: () => void = (): void => {};
   @State private viewState: BlockedFeedHistoryViewState = {
     phase: BlockedFeedHistoryPhase.LOADING,
     records: [],
@@ -28,6 +38,7 @@ export struct BlockedFeedHistoryPage {
   @State private overlayWidthVp: number = 0;
   @StorageProp('statusBarHeight') private statusBarHeightVp: number = 0;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  @StorageProp('feedCardStyle') private feedCardStyle: string = FeedCardStyle.DIVIDER;
   private controller?: BlockedFeedHistoryController;
 
   private clearDialog: CustomDialogController = new CustomDialogController({
@@ -48,6 +59,11 @@ export struct BlockedFeedHistoryPage {
   }
 
   aboutToAppear(): void {
+    if (this.embedded) {
+      this.onRegisterHeaderActions((): void => {
+        this.historyActionsSheetShown = true;
+      });
+    }
     // P3-7：返回栈重显（页面实例与状态保留）时 aboutToAppear 可能再次触发；
     // 控制器仍存活时直接复用，避免重建控制器并重载记录导致滚动位置丢失。
     if (this.controller !== undefined) {
@@ -71,33 +87,85 @@ export struct BlockedFeedHistoryPage {
   }
 
   aboutToDisappear(): void {
+    if (this.embedded) {
+      this.onReleaseHeaderActions();
+    }
     this.controller?.deactivate();
     this.controller = undefined;
     this.confirmClear = false;
     this.historyActionsSheetShown = false;
   }
 
+  private isCardStyle(): boolean {
+    return this.feedCardStyle === FeedCardStyle.CARD;
+  }
+
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
-      Column({ space: $r('app.float.spacing_medium') }) {
-        Text('只保存在本机；记录你屏蔽过的作者、关键词和话题，不保存正文或账号信息。')
+      this.historyList()
+
+      if (!this.embedded) {
+        Column() {
+          this.pageHeader()
+        }
+        .width('100%')
+        .padding({ left: 12, right: 12, top: 8 })
+        .position({ x: 0, y: Math.max(this.statusBarHeightVp, 0) })
+        .zIndex(2)
+      } else if (this.historyActionsSheetShown) {
+        // 嵌入时不用全屏 sheet：动作限定在右栏内的覆盖容器，背景设置目录同时被遮罩阻断。
+        this.embeddedActionsOverlay()
+      }
+    }
+    .id('blocked_feed_history_page')
+    .width('100%')
+    .height('100%')
+    .onAreaChange((_oldArea: Area, newArea: Area): void => {
+      const width = Number(newArea.width);
+      if (width > 0) {
+        this.overlayWidthVp = width;
+      }
+    })
+    .backgroundColor($r('app.color.page_background'))
+  }
+
+  @Builder
+  private historyList() {
+    List({ space: this.isCardStyle() ? 10 : 0 }) {
+      ListItem() {
+        Text('只保存在本机；记录你屏蔽过的作者、关键词和话题，不保存正文或账号信息。删除记录不会解除屏蔽规则。')
           .id('blocked_feed_history_privacy')
           .fontSize($r('app.float.caption_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .width('100%')
+          .padding({ top: 4, bottom: 4 })
+      }
+
+      ListItem() {
         Text(this.viewState.message)
           .id('blocked_feed_history_status')
           .fontSize($r('app.float.body_font_size'))
           .fontColor(this.viewState.phase === BlockedFeedHistoryPhase.ERROR ?
             $r('app.color.error_text') : $r('app.color.secondary_text'))
           .width('100%')
-        if (this.viewState.phase === BlockedFeedHistoryPhase.LOADING && this.viewState.records.length === 0) {
-          LoadingProgress()
-            .id('blocked_feed_history_loading')
-            .width(40)
-            .height(40)
-            .color(this.resolvedThemeColor)
-        } else if (this.viewState.records.length === 0) {
+          .padding({ top: 4, bottom: 4 })
+      }
+
+      if (this.viewState.phase === BlockedFeedHistoryPhase.LOADING && this.viewState.records.length === 0) {
+        ListItem() {
+          Row() {
+            LoadingProgress()
+              .id('blocked_feed_history_loading')
+              .width(40)
+              .height(40)
+              .color(this.resolvedThemeColor)
+          }
+          .width('100%')
+          .justifyContent(FlexAlign.Center)
+          .padding({ top: 48, bottom: 48 })
+        }
+      } else if (this.viewState.records.length === 0) {
+        ListItem() {
           Column({ space: $r('app.float.spacing_medium') }) {
             Text(this.viewState.phase === BlockedFeedHistoryPhase.EMPTY ? '暂无屏蔽记录' : this.viewState.message)
               .fontSize($r('app.float.body_font_size'))
@@ -116,47 +184,28 @@ export struct BlockedFeedHistoryPage {
             }
           }
           .justifyContent(FlexAlign.Center)
-          .layoutWeight(1)
           .width('100%')
-        } else {
-          List({ space: 10 }) {
-            ForEach(this.viewState.records, (record: BlockedFeedRecord) => {
-              ListItem() {
-                this.historyRow(record)
-              }
-            }, (record: BlockedFeedRecord): string => `${record.id}`)
-          }
-          .id('blocked_feed_history_list')
-          .layoutWeight(1)
-          .width('100%')
-          .scrollBar(BarState.Off)
+          .padding({ top: 48, bottom: 48 })
         }
+      } else {
+        ForEach(this.viewState.records, (record: BlockedFeedRecord) => {
+          ListItem() {
+            this.historyRow(record)
+          }
+        }, (record: BlockedFeedRecord): string => `${record.id}`)
       }
-      .width('100%')
-      .height('100%')
-      .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
-        top: 94, bottom: $r('app.float.page_padding') })
-      .backgroundColor($r('app.color.page_background'))
-
-      Column() {
-        this.pageHeader()
-      }
-      .width('100%')
-      .padding({ left: 12, right: 12, top: 8 })
-      .position({ x: 0, y: Math.max(this.statusBarHeightVp, 0) })
-      .zIndex(2)
-
     }
-    .id('blocked_feed_history_page')
+    .id('blocked_feed_history_list')
     .width('100%')
     .height('100%')
-    .onAreaChange((_oldArea: Area, newArea: Area): void => {
-      const width = Number(newArea.width);
-      if (width > 0) {
-        this.overlayWidthVp = width;
-      }
+    .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring)
+    .padding({
+      left: $r('app.float.page_padding'),
+      right: $r('app.float.page_padding'),
+      top: this.embedded ? 4 : 94,
+      bottom: $r('app.float.page_padding')
     })
-    .backgroundColor($r('app.color.page_background'))
   }
 
   @Builder
@@ -210,6 +259,31 @@ export struct BlockedFeedHistoryPage {
       })
     }
     .width('100%')
+  }
+
+  @Builder
+  private embeddedActionsOverlay() {
+    Stack({ alignContent: Alignment.Center }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor('#99000000')
+        .onClick((): void => {
+          this.historyActionsSheetShown = false;
+        })
+      Column() {
+        this.historyActionsSheet()
+      }
+      .width('88%')
+      .constraintSize({ maxWidth: 420 })
+      .backgroundColor(settingsGroupBackground(FeedCardStyle.CARD))
+      .borderRadius(settingsGroupRadius(FeedCardStyle.CARD))
+      .shadow({ radius: 24, color: '#33000000', offsetY: 8 })
+    }
+    .id('blocked_feed_history_actions_overlay')
+    .width('100%')
+    .height('100%')
+    .zIndex(3)
   }
 
   @Builder
@@ -274,9 +348,10 @@ export struct BlockedFeedHistoryPage {
           .width('100%')
       }
       .layoutWeight(1)
-      Button('删除')
+      Button('删除记录')
         .backgroundColor($r('app.color.control_background'))
         .fontColor($r('app.color.primary_text'))
+        .fontSize($r('app.float.secondary_font_size'))
         .id(`blocked_feed_history_delete_${record.id}`)
         .enabled(!this.viewState.busy)
         .onClick((): void => {
@@ -284,9 +359,9 @@ export struct BlockedFeedHistoryPage {
         })
     }
     .width('100%')
-    .padding($r('app.float.spacing_medium'))
-    .backgroundColor($r('app.color.card_background'))
-    .borderRadius($r('app.float.card_radius'))
+    .padding(this.isCardStyle() ? 14 : 12)
+    .backgroundColor(this.isCardStyle() ? $r('app.color.card_background') : Color.Transparent)
+    .borderRadius(this.isCardStyle() ? $r('app.float.card_radius') : 0)
   }
 
   @Builder
@@ -297,8 +372,9 @@ export struct BlockedFeedHistoryPage {
         .fontWeight(FontWeight.Bold)
         .fontColor($r('app.color.primary_text'))
         .width('100%')
-      Text('确认清空全部屏蔽记录？此操作无法撤销。')
+      Text('确认清空全部屏蔽记录？仅清空记录，屏蔽规则继续生效；此操作无法撤销。')
         .fontSize($r('app.float.body_font_size'))
+        .fontColor($r('app.color.primary_text'))
         .width('100%')
       Row({ space: $r('app.float.spacing_small') }) {
         Button('取消')

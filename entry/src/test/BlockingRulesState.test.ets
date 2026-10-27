@@ -124,6 +124,20 @@ export default function blockingRulesStateTest(): void {
       expect(rules.clearCount).assertEqual(1);
     });
 
+    it('clearsTargetKindWithoutTouchingOtherKinds', 0, async () => {
+      const rules = new FakeBlockingRules();
+      rules.snapshot.keywords = [{ id: 1, keyword: '广告', caseSensitive: false, isRegex: false, createdAt: 1 }];
+      rules.snapshot.users = [{ userId: 'user-1', userName: '用户一', createdAt: 1 }];
+      const controller = new BlockingRulesController(rules, new FakeBlockingPreferences());
+      controller.activate();
+      await controller.reload();
+      // 清空确认绑定打开时的分类：即使当前分类不是用户，也只清用户规则。
+      await controller.clearKind(BlockingRuleKind.USER);
+      expect(controller.snapshot().users.length).assertEqual(0);
+      expect(controller.snapshot().keywords.length).assertEqual(1);
+      expect(rules.clearCount).assertEqual(1);
+    });
+
     it('persistsSwitchesAndTopicThresholdTogether', 0, async () => {
       const preferences = new FakeBlockingPreferences();
       const controller = new BlockingRulesController(new FakeBlockingRules(), preferences);
