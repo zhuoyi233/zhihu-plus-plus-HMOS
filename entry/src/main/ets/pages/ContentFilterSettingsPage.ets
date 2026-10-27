@@ -237,6 +237,7 @@ export struct ContentFilterSettingsPage {
       .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
         top: this.embedded ? 12 : 94, bottom: $r('app.float.page_padding') })
     }
+    .align(Alignment.TopStart)
     .id('content_filter_settings_page')
     .width('100%')
     .height('100%')

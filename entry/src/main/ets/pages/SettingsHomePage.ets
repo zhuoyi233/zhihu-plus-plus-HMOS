@@ -252,6 +252,8 @@ export struct SettingsHomePage {
       }
       .width('100%')
       .layoutWeight(1)
+      // 设置搜索结果往往不足一屏，Scroll 默认居中会让标题下空出大段；固定从顶部开始排。
+      .align(Alignment.TopStart)
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring)
     }

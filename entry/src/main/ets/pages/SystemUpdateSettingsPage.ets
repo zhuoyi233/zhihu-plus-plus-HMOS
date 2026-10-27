@@ -382,6 +382,7 @@ export struct SystemUpdateSettingsPage {
       .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
         top: this.embedded ? 12 : 81, bottom: 40 })
     }
+    .align(Alignment.TopStart)
     .id('system_update_scroll').width('100%').height('100%').scrollBar(BarState.Off)
     .backgroundColor($r('app.color.page_background'))
     .bindPopup(this.selectedSource !== undefined, {

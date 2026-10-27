@@ -97,6 +97,8 @@ export struct AccountPage {
     .id('account_page_scroll')
     .width('100%')
     .height('100%')
+    // 内容不足一屏时 Scroll 默认居中，会让标题下出现大段空白；固定从顶部开始排。
+    .align(Alignment.TopStart)
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring)
     .contentStartOffset(floatingTitleBarOffset())

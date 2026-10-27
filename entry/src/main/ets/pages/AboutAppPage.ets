@@ -13,6 +13,8 @@ import {
 export struct AboutAppPage {
   @Prop installedVersionLabel: string = '';
   @Prop developerModeEnabled: boolean = false;
+  /** 嵌入设置右栏时为 true：标题与顶部让位由宿主标题行承担，本页不再预留悬浮标题栏高度。 */
+  @Prop embedded: boolean = false;
   onVersionRowClick: () => void = (): void => {};
   onOpenProject: () => void = (): void => {};
   onOpenProjectLicense: () => void = (): void => {};
@@ -122,12 +124,13 @@ export struct AboutAppPage {
       .width('100%')
       .alignItems(HorizontalAlign.Center)
     }
+    .align(Alignment.TopStart)
     .id('about_app_scroll')
     .width('100%')
     .height('100%')
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring)
-    .contentStartOffset(floatingTitleBarOffset())
+    .contentStartOffset(this.embedded ? 0 : floatingTitleBarOffset())
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
     .backgroundColor($r('app.color.page_background'))
   }

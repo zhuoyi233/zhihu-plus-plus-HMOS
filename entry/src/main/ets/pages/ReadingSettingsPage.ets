@@ -109,6 +109,7 @@ export struct ReadingSettingsPage {
       .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
         top: this.embedded ? 12 : FLOATING_TITLE_BAR_OFFSET, bottom: 40 })
     }
+    .align(Alignment.TopStart)
     .id('reading_settings_scroll')
     .width('100%')
     .height('100%')

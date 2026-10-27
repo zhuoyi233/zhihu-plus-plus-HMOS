@@ -169,6 +169,7 @@ export struct ThemeColorSettingsPage {
         bottom: $r('app.float.page_padding')
       })
     }
+    .align(Alignment.TopStart)
     .id('themecolor_settings_page')
     .width('100%')
     .height('100%')

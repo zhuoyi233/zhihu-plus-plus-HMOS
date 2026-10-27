@@ -584,7 +584,7 @@ export struct AppShell {
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.ABOUT_APP) {
       HdsNavDestination() {
-        this.aboutAppPageContent();
+        this.aboutAppPageContent(false);
       }
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '关于应用' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
@@ -1891,7 +1891,7 @@ export struct AppShell {
         this.systemUpdateSettingsContent(true);
       },
       aboutContent: (): void => {
-        this.aboutAppPageContent();
+        this.aboutAppPageContent(true);
       }
     })
   }
@@ -1917,9 +1917,11 @@ export struct AppShell {
   }
 
   @Builder
-  private aboutAppPageContent() {    AboutAppPage({
+  private aboutAppPageContent(embedded: boolean) {
+    AboutAppPage({
       installedVersionLabel: this.installedVersionLabel,
       developerModeEnabled: this.developerModeEnabled,
+      embedded: embedded,
       onVersionRowClick: (): void => this.onVersionRowClicked(),
       onOpenProject: (): void => this.openProjectHome(),
       onOpenProjectLicense: (): void => {
