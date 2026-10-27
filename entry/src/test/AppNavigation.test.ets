@@ -60,6 +60,8 @@ export default function appNavigationTest(): void {
         AppDestinationName.PRIVATE_MESSAGE,
         AppDestinationName.LOGIN,
         AppDestinationName.SETTINGS,
+        AppDestinationName.SETTINGS_HOME,
+        AppDestinationName.ABOUT_APP,
         AppDestinationName.APPEARANCE_SETTINGS,
         AppDestinationName.IDENTITY_MANAGEMENT,
         AppDestinationName.READING_SETTINGS,
@@ -164,6 +166,27 @@ export default function appNavigationTest(): void {
       expect(isTopLevelTabIndex(TopLevelTab.COLLECTIONS)).assertTrue();
       expect(isTopLevelTabIndex(7)).assertFalse();
       expect(isTopLevelTabIndex(1.5)).assertFalse();
+    });
+
+    it('decodesSettingsHomeAndAboutAsStackPages', 0, () => {
+      const settingsHomeParam: TestDestinationParam = { name: AppDestinationName.SETTINGS_HOME };
+      const aboutParam: TestDestinationParam = { name: AppDestinationName.ABOUT_APP };
+      const unexpectedParam: TestDestinationParam = {
+        name: AppDestinationName.SETTINGS_HOME,
+        unexpected: 'x'
+      };
+
+      const settingsHome = decodeAppDestination(AppDestinationName.SETTINGS_HOME, settingsHomeParam);
+      const about = decodeAppDestination(AppDestinationName.ABOUT_APP, aboutParam);
+      expect(settingsHome?.name).assertEqual(AppDestinationName.SETTINGS_HOME);
+      expect(about?.name).assertEqual(AppDestinationName.ABOUT_APP);
+      expect(decodeAppDestination(AppDestinationName.SETTINGS_HOME, unexpectedParam)).assertUndefined();
+
+      // 旧 Settings 仍映射“我的”；新设置首页与关于页只走导航栈，不进底栏。
+      expect(topLevelTabForDestination({ name: AppDestinationName.SETTINGS }))
+        .assertEqual(TopLevelTab.ACCOUNT);
+      expect(topLevelTabForDestination({ name: AppDestinationName.SETTINGS_HOME })).assertUndefined();
+      expect(topLevelTabForDestination({ name: AppDestinationName.ABOUT_APP })).assertUndefined();
     });
 
     it('decodesOnlyMatchingRuntimeDestinations', 0, () => {

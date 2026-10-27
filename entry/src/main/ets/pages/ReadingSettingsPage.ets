@@ -4,12 +4,14 @@ import {
   AppPreferencesStore,
   DEFAULT_THEME_COLOR,
   defaultSpeechPreferences,
+  FeedCardStyle,
   normalizeSpeechPreferences,
   SpeechPreferences
 } from 'data';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { getSpeechPlaybackService, SpeechPlaybackStatus } from '../platform/SpeechPlaybackService';
 import { AppNavigationRow, FLOATING_TITLE_BAR_OFFSET } from './AppPageChrome';
+import { settingsGroupBackground, settingsGroupRadius } from './AccountSettingsLayout';
 
 interface SpeechVoiceChoice {
   language: string;
@@ -22,6 +24,8 @@ interface SpeechVoiceChoice {
 
 @Component
 export struct ReadingSettingsPage {
+  /** 嵌入设置双栏右栏时为 true：顶部让位交给宿主标题栏。 */
+  @Prop embedded: boolean = false;
   @State private preferences: SpeechPreferences = defaultSpeechPreferences();
   @State private loaded: boolean = false;
   @State private statusMessage: string = '';
@@ -29,6 +33,7 @@ export struct ReadingSettingsPage {
   @State private voiceChoices: Array<SpeechVoiceChoice> = [];
   @StorageProp('speechPlaybackTick') private playbackTick: number = 0;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  @StorageProp('feedCardStyle') private feedCardStyle: string = FeedCardStyle.DIVIDER;
   private store: AppPreferencesStore | undefined = undefined;
   private voiceRequestSequence: number = 0;
 
@@ -68,8 +73,8 @@ export struct ReadingSettingsPage {
             this.voiceSetting()
           }
           .width('100%')
-          .borderRadius($r('app.float.card_radius'))
-          .backgroundColor($r('app.color.surface_background'))
+          .borderRadius(settingsGroupRadius(this.feedCardStyle))
+          .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
           this.sectionTitle('播放')
           Column() {
@@ -86,8 +91,8 @@ export struct ReadingSettingsPage {
             })
           }
           .width('100%')
-          .borderRadius($r('app.float.card_radius'))
-          .backgroundColor($r('app.color.surface_background'))
+          .borderRadius(settingsGroupRadius(this.feedCardStyle))
+          .backgroundColor(settingsGroupBackground(this.feedCardStyle))
         } else {
           LoadingProgress().width(40).height(40).color(this.resolvedThemeColor)
         }
@@ -102,7 +107,7 @@ export struct ReadingSettingsPage {
       }
       .width('100%')
       .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
-        top: FLOATING_TITLE_BAR_OFFSET, bottom: 40 })
+        top: this.embedded ? 12 : FLOATING_TITLE_BAR_OFFSET, bottom: 40 })
     }
     .id('reading_settings_scroll')
     .width('100%')

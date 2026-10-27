@@ -103,6 +103,8 @@ import segmentReactionRepositoryTest from './SegmentReactionRepository.test';
 import continuousStreamDataSourceTest from './ContinuousStreamDataSource.test';
 import linkCardMetaLoaderTest from './LinkCardMetaLoader.test';
 import continuousAnswerStateTest from './ContinuousAnswerState.test';
+import accountSettingsLayoutTest from './AccountSettingsLayout.test';
+import settingsSearchIndexTest from './SettingsSearchIndex.test';
 
 export default function testsuite(): void {
   feedWaterfallLayoutTest();
@@ -210,4 +212,6 @@ export default function testsuite(): void {
   continuousAnswerLifecycleTest();
   continuousReferenceNavigatorTest();
   linkCardMetaLoaderTest();
+  accountSettingsLayoutTest();
+  settingsSearchIndexTest();
 }
