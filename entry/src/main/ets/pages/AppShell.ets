@@ -1281,6 +1281,8 @@ export struct AppShell {
               })
               .titleMode(HdsNavigationTitleMode.MINI)
               .hideBackButton(true)
+              // “我的”页不再使用顶部标题栏：设置入口移入页面内容（“扫码登录电脑端”下方）。
+              .hideTitleBar((tab as TopLevelTab) === TopLevelTab.ACCOUNT)
               .mode(NavigationMode.Stack)
               .monopolizeEvents(false)
               // 只绑定本页签自己的滚动容器（未挂载时为空，容器 onAppear 登记后补上）。
@@ -1651,47 +1653,6 @@ export struct AppShell {
       .width('100%')
       .padding({ left: 12, right: 12 })
       .hitTestBehavior(HitTestMode.Transparent)
-    } else if (this.activeTopLevelTab() === TopLevelTab.ACCOUNT) {
-      Row() {
-        Text('我的')
-          .fontSize($r('app.float.heading_font_size'))
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.primary_text'))
-          .maxLines(1)
-          .layoutWeight(1)
-        Stack({ alignContent: Alignment.TopEnd }) {
-          Button({ type: ButtonType.Circle, stateEffect: true }) {
-            SymbolGlyph($r('sys.symbol.gearshape'))
-              .fontSize(20)
-              .fontColor([$r('app.color.primary_text')])
-          }
-          .id('account_open_settings')
-          .width(44)
-          .height(44)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          // 与首页顶栏图标一致的沉浸光感材质，低版本退回模糊兜底。
-          .backgroundBlurStyle(TITLE_BAR_GLASS_MATERIAL === undefined
-            ? BlurStyle.COMPONENT_ULTRA_THIN : BlurStyle.NONE)
-          .systemMaterial(TITLE_BAR_GLASS_MATERIAL)
-          .accessibilityText(this.pendingUpdateRelease !== undefined
-            ? '打开设置，有新版本' : '打开设置')
-          .onClick((): void => this.navigate({ name: AppDestinationName.SETTINGS_HOME }))
-          if (this.pendingUpdateRelease !== undefined) {
-            Circle()
-              .width(8)
-              .height(8)
-              .margin({ top: 7, right: 7 })
-              .backgroundColor(this.resolvedThemeColor)
-          }
-        }
-        .width(44)
-        .height(44)
-      }
-      .width('100%')
-      .padding({ left: $r('app.float.page_padding'), right: 12 })
-      .alignItems(VerticalAlign.Center)
-      .hitTestBehavior(HitTestMode.Transparent)
     } else if (this.activeTopLevelTab() === TopLevelTab.HISTORY) {
       // #48：历史配置为底栏页时，“我的”入口也复用此页，必须保留本地历史菜单。
       HistoryTitleBar({ reserveBackButtonSpace: false })
@@ -1838,6 +1799,7 @@ export struct AppShell {
       accountTitle: this.accountTitle(),
       avatarLetter: this.accountAvatarLetter(),
       avatarUrl: this.accountAvatarUrl(),
+      hasPendingUpdate: this.pendingUpdateRelease !== undefined,
       scroller: this.settingsScroller,
       onOpenProfile: (): void => this.openCurrentProfile(),
       onOpenLogin: (): void => this.navigate({ name: AppDestinationName.LOGIN }),
@@ -1846,7 +1808,8 @@ export struct AppShell {
       onOpenMessages: (): void => this.navigate({ name: AppDestinationName.NOTIFICATION }),
       onOpenPinPublish: (): void => this.openPinComposer(),
       onOpenPinDrafts: (): void => this.navigate({ name: AppDestinationName.PIN_DRAFTS }),
-      onOpenScan: (): void => this.navigate({ name: AppDestinationName.QR_DESKTOP_LOGIN_SCAN })
+      onOpenScan: (): void => this.navigate({ name: AppDestinationName.QR_DESKTOP_LOGIN_SCAN }),
+      onOpenSettings: (): void => this.navigate({ name: AppDestinationName.SETTINGS_HOME })
     })
   }
 
