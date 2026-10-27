@@ -1,14 +1,30 @@
 import {
-  onThemeColor,
-  DEFAULT_THEME_COLOR,
+  canRequestPhoneDigits,
+  canSignInWithPhone,
   defaultPhoneLoginDeviceInfo,
+  defaultPhoneLoginRegion,
+  defaultPhoneNumberFormatPort,
+  DEFAULT_PHONE_LOGIN_REGION_ID,
+  DEFAULT_THEME_COLOR,
+  findPhoneLoginRegion,
+  onThemeColor,
+  PHONE_CODE_LENGTH,
+  PHONE_RESEND_COOLDOWN_SECONDS,
+  PhoneDigitsGuard,
   PhoneDigitsResultKind,
+  phoneCooldownRemainingSeconds,
   PhoneLoginError,
+  phoneLoginIdentityKey,
+  PhoneLoginRegion,
+  PhoneLoginRequestGeneration,
+  PhoneNumberIssue,
+  PhoneSignInGuard,
+  regionEntryLabel,
+  resolvePhoneNumber,
   SessionCookie,
   ZhihuPhoneLoginClient
 } from 'data';
-
-const RESEND_COUNTDOWN_SECONDS = 60;
+import { PhoneCountryCodeSheet } from './PhoneCountryCodeSheet';
 
 /** 服务端英文参数级报错（如 miss arg grant_type，实测为风控/网关层拒绝）直译无指导意义，
  * 转译为可行动提示并括注原文。协议层已与上游逐字节对齐，此类报错不是客户端参数缺失。 */
@@ -24,35 +40,49 @@ function friendlyPhoneLoginMessage(raw: string, fallback: string): string {
 
 /**
  * P3-10：手机号登录卡片（对齐上游 PhoneLoginPane）。
- * 流程：手机号 → 发送短信验证码（可能要求图形验证码）→ 输入验证码登录。
- * 布局对齐上游：验证码输入框在左、发送/倒计时按钮在右（60s 倒计时），
- * 下方为整行可点按的协议勾选行；登录按钮需勾选协议 + 手机号 11 位 + 验证码 6 位。
- * 登录成功后通过 onCookiesCaptured 把会话 cookie 交给登录页控制器验证。
+ * 流程：选择国家/地区 + 手机号 → 发送短信验证码（可能要求图形验证码）→ 输入验证码登录。
+ *
+ * 与大陆专用版本的差异（见 docs/phone-login-country-code-plan.md）：
+ * - 号码规范化统一走 PhoneLoginNumberPolicy，UI 按钮、发码、登录三处使用同一结果；
+ * - 已发码身份 = 地区 + 完整 username，切换地区（含 US→CA 这类同码切换）都会失效旧验证码；
+ * - 冷却按到期时间计算，切换地区或号码不清零；
+ * - 所有异步回调带请求代次，页面退出或身份变更后的迟到结果直接丢弃。
  */
 @Component
 export struct PhoneLoginPage {
   onCookiesCaptured: (cookies: Array<SessionCookie>) => void = (): void => {
   };
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  @State private regionId: string = DEFAULT_PHONE_LOGIN_REGION_ID;
+  @State private regionSheetShown: boolean = false;
   @State private phone: string = '';
+  @State private numberValid: boolean = false;
+  @State private numberHint: string = '';
   @State private digits: string = '';
   @State private captchaInput: string = '';
   @State private captchaImageBase64: string = '';
   @State private captchaRequired: boolean = false;
   @State private agreementChecked: boolean = false;
-  @State private hasRequestedDigits: boolean = false;
   @State private isSendingDigits: boolean = false;
   @State private isLoggingIn: boolean = false;
   @State private resendSeconds: number = 0;
   @State private message: string = '';
+  private sentIdentity: string = '';
+  private username: string = '';
+  private cooldownDeadlineMs: number = 0;
+  private generation: PhoneLoginRequestGeneration = new PhoneLoginRequestGeneration();
+  private disposed: boolean = false;
   private client?: ZhihuPhoneLoginClient;
   private resendTimerId: number = -1;
 
   aboutToAppear(): void {
     this.client = new ZhihuPhoneLoginClient([], defaultPhoneLoginDeviceInfo());
+    this.applyNumberValidation();
   }
 
   aboutToDisappear(): void {
+    this.disposed = true;
+    this.generation.invalidate();
     this.stopResendCountdown();
     this.client?.destroy();
     this.client = undefined;
@@ -69,21 +99,26 @@ export struct PhoneLoginPage {
         .fontColor($r('app.color.secondary_text'))
 
       Row({ space: $r('app.float.spacing_small') }) {
-        Text('+86')
-          .fontSize($r('app.float.body_font_size'))
-          .fontColor($r('app.color.secondary_text'))
-        TextInput({ text: this.phone, placeholder: '请输入手机号' })
+        this.regionEntry()
+        TextInput({ text: this.phone, placeholder: this.phonePlaceholder() })
           .id('phone_input')
           .type(InputType.PhoneNumber)
           .layoutWeight(1)
-          .maxLength(11)
-          .enabled(!this.isSendingDigits && !this.isLoggingIn)
+          .maxLength(64)
+          .enabled(this.editable())
           .onChange((value: string): void => {
             this.onPhoneChanged(value);
           })
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
+
+      if (this.numberHint.length > 0) {
+        Text(this.numberHint)
+          .id('phone_number_hint')
+          .fontSize($r('app.float.secondary_font_size'))
+          .fontColor($r('app.color.error_text'))
+      }
 
       if (this.captchaRequired) {
         Column({ space: $r('app.float.spacing_small') }) {
@@ -135,10 +170,10 @@ export struct PhoneLoginPage {
           .id('phone_digits_input')
           .type(InputType.Number)
           .layoutWeight(1)
-          .maxLength(6)
-          .enabled(!this.isSendingDigits && !this.isLoggingIn)
+          .maxLength(PHONE_CODE_LENGTH)
+          .enabled(this.editable())
           .onChange((value: string): void => {
-            this.digits = value.replace(/\D/g, '').substring(0, 6);
+            this.digits = value.replace(/\D/g, '').substring(0, PHONE_CODE_LENGTH);
           })
         Button() {
           if (this.isSendingDigits) {
@@ -207,31 +242,135 @@ export struct PhoneLoginPage {
     }
     .alignItems(HorizontalAlign.Start)
     .width('100%')
+    .bindSheet(this.regionSheetShown, this.countrySheet(), {
+      preferType: SheetType.BOTTOM,
+      height: SheetSize.LARGE,
+      dragBar: true,
+      showClose: false,
+      maskColor: '#66000000',
+      backgroundColor: $r('app.color.surface_background'),
+      onDisappear: (): void => {
+        if (this.regionSheetShown) {
+          this.regionSheetShown = false;
+        }
+      }
+    })
   }
 
-  private onPhoneChanged(value: string): void {
-    const next = value.replace(/\D/g, '').substring(0, 11);
-    if (this.phone === next) {
-      return;
+  @Builder
+  private regionEntry() {
+    Button({ type: ButtonType.Normal, stateEffect: true }) {
+      Row({ space: 2 }) {
+        Text(regionEntryLabel(this.currentRegion()))
+          .fontSize($r('app.float.body_font_size'))
+          .fontColor($r('app.color.primary_text'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        SymbolGlyph($r('sys.symbol.chevron_down'))
+          .fontSize(12)
+          .fontColor([$r('app.color.secondary_text')])
+      }
     }
-    // 对齐上游：手机号变更后重置验证码/图形验证码状态，需重新发送
-    this.phone = next;
+    .id('phone_region_entry')
+    .constraintSize({ maxWidth: 132, minHeight: 40 })
+    .padding({ left: 10, right: 8 })
+    .backgroundColor($r('app.color.control_background'))
+    .borderRadius($r('app.float.card_radius'))
+    .enabled(this.editable())
+    .accessibilityText(`选择国家/地区，当前${this.currentRegion().displayName}，` +
+      `区号加${this.currentRegion().dialPrefix}`)
+    .onClick((): void => {
+      this.regionSheetShown = true;
+    })
+  }
+
+  @Builder
+  private countrySheet() {
+    PhoneCountryCodeSheet({
+      selectedRegionId: this.regionId,
+      onSelect: (region: PhoneLoginRegion): void => {
+        this.applyRegion(region);
+      },
+      onClose: (): void => {
+        this.regionSheetShown = false;
+      }
+    })
+  }
+
+  private currentRegion(): PhoneLoginRegion {
+    return findPhoneLoginRegion(this.regionId) ?? defaultPhoneLoginRegion();
+  }
+
+  private editable(): boolean {
+    return !this.isSendingDigits && !this.isLoggingIn;
+  }
+
+  private phonePlaceholder(): string {
+    return this.regionId === DEFAULT_PHONE_LOGIN_REGION_ID ? '请输入手机号' : '请输入本地手机号';
+  }
+
+  /** 当前输入的规范化结果；发送与登录都使用同一次解析得到的 username。 */
+  private applyNumberValidation(): boolean {
+    const resolution = resolvePhoneNumber(this.phone, this.currentRegion(), defaultPhoneNumberFormatPort());
+    this.numberValid = resolution.valid;
+    this.username = resolution.username;
+    this.numberHint = resolution.issue === PhoneNumberIssue.EMPTY || resolution.valid
+      ? '' : resolution.message;
+    return resolution.valid;
+  }
+
+  /** 身份（地区 + 号码）变更：清空短信码、图形验证码、已发码身份与旧提示，但保留冷却。 */
+  private invalidateDigits(): void {
+    this.generation.invalidate();
     this.digits = '';
-    this.hasRequestedDigits = false;
     this.captchaRequired = false;
     this.captchaImageBase64 = '';
     this.captchaInput = '';
+    this.sentIdentity = '';
+    this.message = '';
   }
 
-  /** 对齐上游 sendDigits 按钮可用条件：已同意协议 + 手机号 11 位 + 不在倒计时 + 不在请求中。 */
+  private onPhoneChanged(value: string): void {
+    if (this.phone === value) {
+      return;
+    }
+    // 不做静默截断：超长、非法字符由统一策略给出明确提示（输入长度上限由 maxLength 兜底）。
+    this.phone = value;
+    this.applyNumberValidation();
+    this.invalidateDigits();
+  }
+
+  private applyRegion(region: PhoneLoginRegion): void {
+    this.regionSheetShown = false;
+    if (region.id === this.regionId) {
+      return;
+    }
+    this.regionId = region.id;
+    this.applyNumberValidation();
+    this.invalidateDigits();
+  }
+
+  /** 对齐上游 sendDigits 按钮可用条件：已同意协议 + 号码可用 + 不在倒计时 + 不在请求中。 */
   private canSendDigits(): boolean {
-    return this.agreementChecked && this.phone.length === 11 &&
-      this.resendSeconds === 0 && !this.isSendingDigits && !this.isLoggingIn;
+    const guard: PhoneDigitsGuard = {
+      agreementChecked: this.agreementChecked,
+      numberValid: this.numberValid,
+      cooldownSeconds: this.resendSeconds,
+      busy: !this.editable()
+    };
+    return canRequestPhoneDigits(guard);
   }
 
   private canSignIn(): boolean {
-    return this.agreementChecked && this.hasRequestedDigits && this.phone.length === 11 &&
-      this.digits.length === 6 && !this.isSendingDigits && !this.isLoggingIn;
+    const identity: string = phoneLoginIdentityKey(this.regionId, this.username);
+    const guard: PhoneSignInGuard = {
+      agreementChecked: this.agreementChecked,
+      numberValid: this.numberValid,
+      codeLength: this.digits.length,
+      requestedIdentityMatches: this.sentIdentity.length > 0 && identity === this.sentIdentity,
+      busy: !this.editable()
+    };
+    return canSignInWithPhone(guard);
   }
 
   private captchaDataUri(): string {
@@ -244,12 +383,12 @@ export struct PhoneLoginPage {
 
   private startResendCountdown(): void {
     this.stopResendCountdown();
-    this.resendSeconds = RESEND_COUNTDOWN_SECONDS;
+    this.cooldownDeadlineMs = Date.now() + PHONE_RESEND_COOLDOWN_SECONDS * 1000;
+    this.resendSeconds = phoneCooldownRemainingSeconds(this.cooldownDeadlineMs, Date.now());
     this.resendTimerId = setInterval((): void => {
-      if (this.resendSeconds > 0) {
-        this.resendSeconds -= 1;
-      }
-      if (this.resendSeconds === 0) {
+      const remaining: number = phoneCooldownRemainingSeconds(this.cooldownDeadlineMs, Date.now());
+      this.resendSeconds = remaining;
+      if (remaining <= 0) {
         this.stopResendCountdown();
       }
     }, 1000);
@@ -262,36 +401,56 @@ export struct PhoneLoginPage {
     }
   }
 
+  /** 迟到结果（页面已退出或代次已过期）一律丢弃，不修改状态也不触发登录成功回调。 */
+  private isStale(token: number): boolean {
+    return this.disposed || !this.generation.isCurrent(token);
+  }
+
   private async sendDigits(): Promise<void> {
     const client = this.client;
-    if (client === undefined || this.isSendingDigits || this.phone.length !== 11) {
+    if (client === undefined || !this.canSendDigits()) {
       return;
     }
     this.isSendingDigits = true;
     this.message = '';
+    const token: number = this.generation.begin();
     try {
-      const result = await client.requestDigits(this.phone);
-      if (result.kind === PhoneDigitsResultKind.SENT) {
-        this.hasRequestedDigits = true;
-        this.captchaRequired = false;
-        this.captchaImageBase64 = '';
-        this.captchaInput = '';
-        this.startResendCountdown();
-        this.message = '短信验证码已发送，请注意查收';
-      } else if (result.kind === PhoneDigitsResultKind.CAPTCHA_REQUIRED) {
-        this.captchaRequired = true;
-        this.captchaImageBase64 = result.captchaImageBase64 ?? '';
-        this.captchaInput = '';
-        this.message = this.captchaImageBase64.length === 0 ? '服务器未返回图形验证码，请换一张重试' : '请先完成图形验证码';
-      } else {
-        this.message = friendlyPhoneLoginMessage(result.errorMessage ?? '', '验证码发送失败，请重试');
-      }
+      await this.requestDigitsInternal(client, token);
     } catch (error) {
-      this.message = error instanceof PhoneLoginError
-        ? friendlyPhoneLoginMessage(error.message, '网络错误，请稍后重试')
-        : '网络错误，请稍后重试';
+      if (!this.isStale(token)) {
+        this.message = error instanceof PhoneLoginError
+          ? friendlyPhoneLoginMessage(error.message, '网络错误，请稍后重试')
+          : '网络错误，请稍后重试';
+      }
     } finally {
       this.isSendingDigits = false;
+    }
+  }
+
+  /** 实际发码请求：不含忙状态守卫，供图形验证码校验通过后复用（修复验证码后未真正发码的问题）。 */
+  private async requestDigitsInternal(client: ZhihuPhoneLoginClient, token: number): Promise<void> {
+    const region: PhoneLoginRegion = this.currentRegion();
+    const username: string = this.username;
+    const identity: string = phoneLoginIdentityKey(region.id, username);
+    const result = await client.requestDigits(username, region.id);
+    if (this.isStale(token)) {
+      return;
+    }
+    if (result.kind === PhoneDigitsResultKind.SENT) {
+      this.sentIdentity = identity;
+      this.captchaRequired = false;
+      this.captchaImageBase64 = '';
+      this.captchaInput = '';
+      this.startResendCountdown();
+      this.message = '短信验证码已发送，请注意查收';
+    } else if (result.kind === PhoneDigitsResultKind.CAPTCHA_REQUIRED) {
+      this.captchaRequired = true;
+      this.captchaImageBase64 = result.captchaImageBase64 ?? '';
+      this.captchaInput = '';
+      this.message = this.captchaImageBase64.length === 0
+        ? '服务器未返回图形验证码，请换一张重试' : '请先完成图形验证码';
+    } else {
+      this.message = friendlyPhoneLoginMessage(result.errorMessage ?? '', '验证码发送失败，请重试');
     }
   }
 
@@ -301,34 +460,54 @@ export struct PhoneLoginPage {
       return;
     }
     this.message = '';
+    const token: number = this.generation.begin();
     try {
-      this.captchaImageBase64 = await client.refreshCaptcha();
+      const image: string = await client.refreshCaptcha();
+      if (this.isStale(token)) {
+        return;
+      }
+      this.captchaImageBase64 = image;
       if (this.captchaImageBase64.length === 0) {
         this.message = '服务器未返回图形验证码，请稍后重试';
       }
     } catch (error) {
-      this.message = error instanceof PhoneLoginError ? error.message : '刷新图形验证码失败';
+      if (!this.isStale(token)) {
+        this.message = error instanceof PhoneLoginError ? error.message : '刷新图形验证码失败';
+      }
     }
   }
 
   private async verifyCaptchaAndSend(): Promise<void> {
     const client = this.client;
-    if (client === undefined || this.isSendingDigits) {
+    if (client === undefined || !this.editable()) {
+      return;
+    }
+    if (this.captchaInput.trim().length === 0) {
       return;
     }
     this.isSendingDigits = true;
     this.message = '';
+    const token: number = this.generation.begin();
     try {
-      const verified = await client.verifyCaptcha(this.captchaInput);
+      const verified: boolean = await client.verifyCaptcha(this.captchaInput);
+      if (this.isStale(token)) {
+        return;
+      }
       if (!verified) {
         this.message = '图形验证码不正确';
         return;
       }
-      await this.sendDigits();
+      this.captchaRequired = false;
+      this.captchaImageBase64 = '';
+      this.captchaInput = '';
+      // 复用同一个代次直接发码：不再走 sendDigits()，避免被 isSendingDigits 守卫提前返回。
+      await this.requestDigitsInternal(client, token);
     } catch (error) {
-      this.message = error instanceof PhoneLoginError
-        ? friendlyPhoneLoginMessage(error.message, '验证图形验证码失败')
-        : '验证图形验证码失败';
+      if (!this.isStale(token)) {
+        this.message = error instanceof PhoneLoginError
+          ? friendlyPhoneLoginMessage(error.message, '验证图形验证码失败')
+          : '验证图形验证码失败';
+      }
     } finally {
       this.isSendingDigits = false;
     }
@@ -336,18 +515,27 @@ export struct PhoneLoginPage {
 
   private async signIn(): Promise<void> {
     const client = this.client;
-    if (client === undefined || this.isLoggingIn || !this.canSignIn()) {
+    if (client === undefined || !this.canSignIn()) {
       return;
     }
+    const region: PhoneLoginRegion = this.currentRegion();
+    const username: string = this.username;
+    const digits: string = this.digits;
     this.isLoggingIn = true;
     this.message = '';
+    const token: number = this.generation.begin();
     try {
-      const token = await client.signIn(this.phone, this.digits);
-      this.onCookiesCaptured(token.cookies);
+      const result = await client.signIn(username, digits, region.id);
+      if (this.isStale(token)) {
+        return;
+      }
+      this.onCookiesCaptured(result.cookies);
     } catch (error) {
-      this.message = error instanceof PhoneLoginError
-        ? friendlyPhoneLoginMessage(error.message, '登录失败，请稍后重试')
-        : '登录失败，请稍后重试';
+      if (!this.isStale(token)) {
+        this.message = error instanceof PhoneLoginError
+          ? friendlyPhoneLoginMessage(error.message, '登录失败，请稍后重试')
+          : '登录失败，请稍后重试';
+      }
     } finally {
       this.isLoggingIn = false;
     }

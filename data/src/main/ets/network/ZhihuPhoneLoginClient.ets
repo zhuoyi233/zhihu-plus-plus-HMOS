@@ -7,6 +7,9 @@
  * 3. refreshCaptcha / verifyCaptcha：图形验证码获取与校验（/captcha）
  * 4. signIn：短信验证码登录（/api/account/prod/sign_in）
  *
+ * username 一律是 “+ 国家/地区码 + 号码” 的规范化结果，由 PhoneLoginNumberPolicy 统一生成；
+ * 地区参数默认 CN，保持旧调用的大陆行为。国际 username 能否被 Android 端接受仍需真实联调。
+ *
  * 请求体用 ZhihuMessageBodyEncryptor 加密（form urlencoded → 自定义分组密码 → base64）。
  */
 
@@ -17,6 +20,14 @@ import {
 } from '../session/CookieSession';
 import { encryptZhihuMessageBody } from './ZhihuMessageBodyEncryptor';
 import { hmacSha1Hex } from './ZhihuHmacSha1';
+import {
+  DEFAULT_PHONE_LOGIN_REGION_ID,
+  defaultPhoneLoginRegion,
+  findPhoneLoginRegion,
+  PhoneLoginRegion
+} from './PhoneLoginRegions';
+import { resolvePhoneNumber } from './PhoneLoginNumberPolicy';
+import { defaultPhoneNumberFormatPort } from './PhoneNumberFormatAdapter';
 
 const PHONE_LOGIN_API_BASE_URL = 'https://api.zhihu.com';
 const DEVICE_GUEST_INIT_PATH = '/api/account/prod/init/udid_guest';
@@ -211,8 +222,9 @@ export class ZhihuPhoneLoginClient {
   }
 
   /** 发送短信验证码；需要图形验证码时返回 CAPTCHA_REQUIRED。 */
-  async requestDigits(phoneNumber: string): Promise<PhoneDigitsResult> {
-    const username = normalizePhoneNumber(phoneNumber);
+  async requestDigits(phoneNumber: string,
+    regionId: string = DEFAULT_PHONE_LOGIN_REGION_ID): Promise<PhoneDigitsResult> {
+    const username = normalizePhoneNumber(phoneNumber, regionId);
     await this.ensureGuestToken();
 
     const captchaState = await this.requestCaptchaState();
@@ -297,8 +309,9 @@ export class ZhihuPhoneLoginClient {
     }
   }
 
-  async signIn(phoneNumber: string, digits: string): Promise<PhoneLoginToken> {
-    const username = normalizePhoneNumber(phoneNumber);
+  async signIn(phoneNumber: string, digits: string,
+    regionId: string = DEFAULT_PHONE_LOGIN_REGION_ID): Promise<PhoneLoginToken> {
+    const username = normalizePhoneNumber(phoneNumber, regionId);
     if (digits.trim().length === 0) {
       throw new PhoneLoginError('短信验证码不能为空');
     }
@@ -554,18 +567,17 @@ export class ZhihuPhoneLoginClient {
   }
 }
 
-function normalizePhoneNumber(phoneNumber: string): string {
-  const compact = phoneNumber.trim().replace(/ /g, '').replace(/-/g, '');
-  let local = compact;
-  if (compact.startsWith('+86')) {
-    local = compact.substring(3);
-  } else if (compact.startsWith('86') && compact.length === 13) {
-    local = compact.substring(2);
+/**
+ * 归一化为 “+ 地区码 号码”。地区由调用方显式传入（默认 CN）；
+ * 具体规则（中国大陆 11 位、其他地区交给 i18n 格式化）统一在 PhoneLoginNumberPolicy 中实现。
+ */
+function normalizePhoneNumber(phoneNumber: string, regionId: string): string {
+  const region: PhoneLoginRegion = findPhoneLoginRegion(regionId) ?? defaultPhoneLoginRegion();
+  const resolution = resolvePhoneNumber(phoneNumber, region, defaultPhoneNumberFormatPort());
+  if (!resolution.valid) {
+    throw new PhoneLoginError(resolution.message.length > 0 ? resolution.message : '手机号格式不正确');
   }
-  if (!/^1\d{10}$/.test(local)) {
-    throw new PhoneLoginError('请输入正确的中国大陆手机号');
-  }
-  return `+86${local}`;
+  return resolution.username;
 }
 
 function cookieValue(cookies: Array<SessionCookie>, name: string): string | undefined {
