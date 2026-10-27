@@ -5,7 +5,7 @@
  * 列数按实际容器宽度与字体缩放判定，不读取设备型号。
  */
 import { DEFAULT_THEME_COLOR, FeedCardStyle, themeColorContainerColor } from 'data';
-import { AppNavigationRow, floatingTitleBarOffset } from './AppPageChrome';
+import { AppNavigationRow } from './AppPageChrome';
 import {
   AccountLayoutMode,
   AccountLayoutSpec,
@@ -21,6 +21,8 @@ export struct AccountPage {
   @Prop accountTitle: string = '登录知乎';
   @Prop avatarLetter: string = '';
   @Prop avatarUrl: string = '';
+  /** 有新版本时在设置入口上提示（原顶部标题栏的红点语义）。 */
+  @Prop hasPendingUpdate: boolean = false;
   scroller: Scroller = new Scroller();
   onOpenProfile: () => void = (): void => {};
   onOpenLogin: () => void = (): void => {};
@@ -30,10 +32,13 @@ export struct AccountPage {
   onOpenPinPublish: () => void = (): void => {};
   onOpenPinDrafts: () => void = (): void => {};
   onOpenScan: () => void = (): void => {};
+  /** 设置入口：原顶部标题栏的齿轮按钮，现移入页面内容。 */
+  onOpenSettings: () => void = (): void => {};
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   @StorageProp('feedCardStyle') private feedCardStyle: string = FeedCardStyle.DIVIDER;
   @StorageProp('systemFontSizeScale') private systemFontSizeScale: number = 1;
   @StorageProp('bottomRectHeight') private bottomRectHeightVp: number = 0;
+  @StorageProp('statusBarHeight') private statusBarHeightVp: number = 0;
   @State private containerWidth: number = 0;
 
   private layout(): AccountLayoutSpec {
@@ -82,6 +87,18 @@ export struct AccountPage {
               this.toolsSection()
             }
           }
+          // 已登录时设置入口并入“工具”分组（紧跟“扫码登录电脑端”）；未登录时单独成组。
+          if (!this.authenticated) {
+            this.settingsSection()
+          }
+          // 页脚免责声明：与设置-关于应用同源，放在内容末尾、底栏留白之上。
+          Text('本软件仅供学习交流使用，应用内内容由知乎网站提供，著作权归其对应作者所有。')
+            .id('account_footer_disclaimer')
+            .fontSize($r('app.float.caption_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .textAlign(TextAlign.Start)
+            .width('100%')
+            .padding({ left: $r('app.float.spacing_xsmall'), right: $r('app.float.spacing_xsmall') })
         }
         .width('100%')
         .constraintSize({ maxWidth: ACCOUNT_MAX_CONTENT_WIDTH_VP })
@@ -101,7 +118,9 @@ export struct AccountPage {
     .align(Alignment.TopStart)
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring)
-    .contentStartOffset(floatingTitleBarOffset())
+    // 本页已隐藏顶部标题栏，内容从屏幕顶端开始绘制：让出状态栏后再留 24vp 呼吸空间，
+    // 避免头像资料区贴着状态栏（原来 8vp 仍然偏挤）。
+    .contentStartOffset(this.statusBarHeightVp + 24)
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
     .backgroundColor($r('app.color.page_background'))
     .onAreaChange((_oldArea: Area, newArea: Area): void => {
@@ -272,6 +291,17 @@ export struct AccountPage {
           rowAccessibilityText: '扫描电脑端登录二维码',
           onRowClick: (): void => this.onOpenScan()
         });
+        Divider().color($r('app.color.divider_color'))
+        // 原顶部标题栏的齿轮按钮移到这里：紧跟“扫码登录电脑端”，不再占用顶部空间。
+        AppNavigationRow({
+          title: '设置',
+          description: this.settingsDescription(),
+          testId: 'account_open_settings',
+          grouped: true,
+          showLeadingIcon: true,
+          leadingIcon: $r('sys.symbol.gearshape'),
+          onRowClick: (): void => this.onOpenSettings()
+        });
       }
       .width('100%')
       .backgroundColor(settingsGroupBackground(this.feedCardStyle))
@@ -280,6 +310,30 @@ export struct AccountPage {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
+  }
+
+  /** 未登录时工具分组不渲染，设置入口单独成组，保证未登录也能进入设置。 */
+  @Builder
+  private settingsSection() {
+    Column() {
+      AppNavigationRow({
+        title: '设置',
+        description: this.settingsDescription(),
+        testId: 'account_open_settings',
+        grouped: true,
+        showLeadingIcon: true,
+        leadingIcon: $r('sys.symbol.gearshape'),
+        onRowClick: (): void => this.onOpenSettings()
+      });
+    }
+    .width('100%')
+    .backgroundColor(settingsGroupBackground(this.feedCardStyle))
+    .borderRadius(settingsGroupRadius(this.feedCardStyle))
+    .clip(this.isCardStyle())
+  }
+
+  private settingsDescription(): string {
+    return this.hasPendingUpdate ? '有新版本，前往设置查看' : '账户、外观、隐私';
   }
 
   @Builder
