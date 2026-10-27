@@ -1,5 +1,6 @@
 import {
   DEFAULT_THEME_COLOR,
+  FeedCardStyle,
   NotificationKind,
   NotificationPreferences,
   NotificationSettingsGateway,
@@ -10,10 +11,13 @@ import {
 import { common } from '@kit.AbilityKit';
 import { deviceInfo } from '@kit.BasicServicesKit';
 import notificationManager from '@ohos.notificationManager';
+import { settingsGroupBackground, settingsGroupRadius } from './AccountSettingsLayout';
 
 @Component
 export struct NotificationSettingsPage {
   settings: NotificationSettingsGateway | undefined = undefined;
+  /** 嵌入设置双栏右栏时为 true：顶部让位交给宿主标题栏，不再预留整页标题栏高度。 */
+  @Prop embedded: boolean = false;
   @State private preferences: NotificationPreferences = {
     likeAnswerDisplay: true,
     likeCommentDisplay: true,
@@ -27,6 +31,7 @@ export struct NotificationSettingsPage {
   @State private systemNotificationStatus: string = '正在读取系统通知状态…';
   @State private systemNotificationSettingsOpening: boolean = false;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  @StorageProp('feedCardStyle') private feedCardStyle: string = FeedCardStyle.DIVIDER;
 
   aboutToAppear(): void {
     this.refreshSystemNotificationStatus();
@@ -83,8 +88,8 @@ export struct NotificationSettingsPage {
         .alignItems(HorizontalAlign.Start)
         .width('100%')
         .padding($r('app.float.card_padding'))
-        .borderRadius($r('app.float.card_radius'))
-        .backgroundColor($r('app.color.surface_background'))
+        .borderRadius(settingsGroupRadius(this.feedCardStyle))
+        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         Column({ space: $r('app.float.spacing_small') }) {
           Text('系统通知')
@@ -114,8 +119,8 @@ export struct NotificationSettingsPage {
         .alignItems(HorizontalAlign.Start)
         .width('100%')
         .padding($r('app.float.card_padding'))
-        .borderRadius($r('app.float.card_radius'))
-        .backgroundColor($r('app.color.surface_background'))
+        .borderRadius(settingsGroupRadius(this.feedCardStyle))
+        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         Column({ space: $r('app.float.spacing_small') }) {
           Text('应用内显示')
@@ -141,12 +146,12 @@ export struct NotificationSettingsPage {
         .alignItems(HorizontalAlign.Start)
         .width('100%')
         .padding($r('app.float.card_padding'))
-        .borderRadius($r('app.float.card_radius'))
-        .backgroundColor($r('app.color.surface_background'))
+        .borderRadius(settingsGroupRadius(this.feedCardStyle))
+        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
       }
       .width('100%')
       .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
-        top: 94, bottom: $r('app.float.page_padding') })
+        top: this.embedded ? 12 : 94, bottom: $r('app.float.page_padding') })
     }
     .id('notifications_settings_page')
     .width('100%')

@@ -323,8 +323,8 @@ struct Index {
             this.notificationEntryContent(entryName, title, navigate),
           privateMessageContent: (peerId: string, peerName: string, avatarUrl: string, navigate: (destination: AppDestination) => void): void =>
             this.privateMessageContent(peerId, peerName, avatarUrl, navigate),
-          notificationSettingsContent: (navigate: (destination: AppDestination) => void): void =>
-            this.notificationSettingsContent(navigate),
+          notificationSettingsContent: (navigate: (destination: AppDestination) => void,
+            embedded: boolean): void => this.notificationSettingsContent(navigate, embedded),
           blockingRulesContent: (onBack: () => void): void => this.blockingRulesContent(onBack),
           blockedFeedHistoryContent: (onBack: () => void): void => this.blockedFeedHistoryContent(onBack),
           readHistoryContent: (navigate: (destination: AppDestination) => void, onBack: () => void): void =>
@@ -644,9 +644,10 @@ struct Index {
   }
 
   @Builder
-  notificationSettingsContent(_navigate: (destination: AppDestination) => void) {
+  notificationSettingsContent(_navigate: (destination: AppDestination) => void, embedded: boolean) {
     NotificationSettingsPage({
-      settings: this.notificationSettings
+      settings: this.notificationSettings,
+      embedded: embedded
     });
   }
   @Builder

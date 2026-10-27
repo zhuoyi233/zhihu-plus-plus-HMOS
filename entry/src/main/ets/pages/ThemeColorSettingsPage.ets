@@ -1,6 +1,7 @@
 import {
   AppPreferencesStore,
   DEFAULT_THEME_COLOR,
+  FeedCardStyle,
   hexToRgb,
   HsvColor,
   hsvToRgb,
@@ -12,6 +13,7 @@ import {
   RgbColor
 } from 'data';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
+import { settingsGroupBackground, settingsGroupRadius } from './AccountSettingsLayout';
 
 /**
  * 主题颜色配置页：13 个预设色（2 排 × 7 列）+ 自定义取色（色盘 + 亮度条）。
@@ -69,10 +71,13 @@ const CUSTOM_SWATCH_COLORS: [ResourceColor, number][] = [
 
 @Component
 export struct ThemeColorSettingsPage {
+  /** 嵌入设置双栏右栏时为 true：顶部让位交给宿主标题栏。 */
+  @Prop embedded: boolean = false;
   /** 用户所选 seed 色（#RRGGBB），全局唯一真相。 */
   @StorageProp('themeColor') private storedThemeColor: string = DEFAULT_THEME_COLOR;
   /** 当前生效主色（深浅色已解析），用于本页强调元素即时预览。 */
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  @StorageProp('feedCardStyle') private feedCardStyle: string = FeedCardStyle.DIVIDER;
   @State private hue: number = 221;
   @State private saturation: number = 1;
   @State private colorValue: number = 1;
@@ -132,8 +137,8 @@ export struct ThemeColorSettingsPage {
           .padding($r('app.float.card_padding'))
         }
         .width('100%')
-        .borderRadius($r('app.float.card_radius'))
-        .backgroundColor($r('app.color.surface_background'))
+        .borderRadius(settingsGroupRadius(this.feedCardStyle))
+        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.hexRgbCard()
 
@@ -153,14 +158,14 @@ export struct ThemeColorSettingsPage {
         .alignItems(HorizontalAlign.Start)
         .width('100%')
         .padding($r('app.float.card_padding'))
-        .borderRadius($r('app.float.card_radius'))
-        .backgroundColor($r('app.color.surface_background'))
+        .borderRadius(settingsGroupRadius(this.feedCardStyle))
+        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
       }
       .width('100%')
       .padding({
         left: $r('app.float.page_padding'),
         right: $r('app.float.page_padding'),
-        top: 94,
+        top: this.embedded ? 12 : 94,
         bottom: $r('app.float.page_padding')
       })
     }

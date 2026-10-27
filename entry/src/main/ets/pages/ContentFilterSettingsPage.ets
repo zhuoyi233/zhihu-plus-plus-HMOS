@@ -7,6 +7,7 @@ import {
   DEFAULT_THEME_COLOR,
   defaultBlockingPreferences,
   defaultRecommendationFilterPreferences,
+  FeedCardStyle,
   normalizeRecommendationFilterPreferences,
   QualityFilterMode,
   qualityFilterModeLabel,
@@ -14,6 +15,7 @@ import {
   RecommendationMode,
   recommendationModeLabel
 } from 'data';
+import { settingsGroupBackground, settingsGroupRadius } from './AccountSettingsLayout';
 
 type FilterBooleanKey = 'loginForRecommendation' | 'autoRefreshHomeOnStartup' | 'enableContentFilter' |
   'filterFollowedUserContent' | 'blockZhihuAdPlatform' | 'blockZhihuSchool' |
@@ -51,6 +53,8 @@ function copyFilter(value: RecommendationFilterPreferences): RecommendationFilte
 
 @Component
 export struct ContentFilterSettingsPage {
+  /** 嵌入设置双栏右栏时为 true：顶部让位交给宿主标题栏。 */
+  @Prop embedded: boolean = false;
   preferences: AppPreferencesStore | undefined = undefined;
   runtime: ContentFilterRuntimeGateway | undefined = undefined;
   onOpenBlocklist: () => void = (): void => {};
@@ -69,6 +73,7 @@ export struct ContentFilterSettingsPage {
   @State private advancedThresholdsExpanded: boolean = false;
   @State private stats: ContentFilterStats = { totalSeen: 0, totalFiltered: 0, filterRate: 0, lastFilteredAt: 0 };
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  @StorageProp('feedCardStyle') private feedCardStyle: string = FeedCardStyle.DIVIDER;
 
   aboutToAppear(): void {
     void this.restore();
@@ -105,8 +110,8 @@ export struct ContentFilterSettingsPage {
               this.updateFilterBoolean('autoRefreshHomeOnStartup', value))
         }
         .width('100%')
-        .borderRadius($r('app.float.card_radius'))
-        .backgroundColor($r('app.color.surface_background'))
+        .borderRadius(settingsGroupRadius(this.feedCardStyle))
+        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.sectionTitle('内容质量')
         Column() {
@@ -145,8 +150,8 @@ export struct ContentFilterSettingsPage {
           }
         }
         .width('100%')
-        .borderRadius($r('app.float.card_radius'))
-        .backgroundColor($r('app.color.surface_background'))
+        .borderRadius(settingsGroupRadius(this.feedCardStyle))
+        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.sectionTitle('智能与规则过滤')
         Column() {
@@ -180,8 +185,8 @@ export struct ContentFilterSettingsPage {
           }
         }
         .width('100%')
-        .borderRadius($r('app.float.card_radius'))
-        .backgroundColor($r('app.color.surface_background'))
+        .borderRadius(settingsGroupRadius(this.feedCardStyle))
+        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.sectionTitle('推广与付费内容')
         Column() {
@@ -206,8 +211,8 @@ export struct ContentFilterSettingsPage {
               this.updateFilterBoolean('reverseBlock', value))
         }
         .width('100%')
-        .borderRadius($r('app.float.card_radius'))
-        .backgroundColor($r('app.color.surface_background'))
+        .borderRadius(settingsGroupRadius(this.feedCardStyle))
+        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.sectionTitle('管理与统计')
         Column() {
@@ -224,13 +229,13 @@ export struct ContentFilterSettingsPage {
           }
         }
         .width('100%')
-        .borderRadius($r('app.float.card_radius'))
-        .backgroundColor($r('app.color.surface_background'))
+        .borderRadius(settingsGroupRadius(this.feedCardStyle))
+        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
         }
       }
       .width('100%')
-      .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'), top: 94,
-        bottom: $r('app.float.page_padding') })
+      .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
+        top: this.embedded ? 12 : 94, bottom: $r('app.float.page_padding') })
     }
     .id('content_filter_settings_page')
     .width('100%')

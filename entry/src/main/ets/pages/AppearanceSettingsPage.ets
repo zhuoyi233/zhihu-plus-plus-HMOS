@@ -37,6 +37,7 @@ import {
 } from '../common/style/ImmersiveMaterialStyles';
 import { display } from '@kit.ArkUI';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
+import { settingsGroupBackground, settingsGroupRadius } from './AccountSettingsLayout';
 
 /**
  * “外观与阅读体验”设置页。保留上游跨平台设置语义，但移除 Material You、
@@ -76,6 +77,8 @@ function feedColumnModeLabelOf(mode: FeedColumnMode): string {
 
 @Component
 export struct AppearanceSettingsPage {
+  /** 嵌入设置双栏右栏时为 true：顶部让位交给宿主标题栏。 */
+  @Prop embedded: boolean = false;
   @Prop themeMode: AppThemeMode = AppThemeMode.SYSTEM;
   onThemeModeChange: (mode: AppThemeMode) => void = (_mode: AppThemeMode): void => {};
   onOpenThemeColorSettings: () => void = (): void => {};
@@ -168,8 +171,8 @@ export struct AppearanceSettingsPage {
           })
         }
         .width('100%')
-        .borderRadius($r('app.float.card_radius'))
-        .backgroundColor($r('app.color.surface_background'))
+        .borderRadius(settingsGroupRadius(this.feedCardStyle))
+        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.sectionTitle('阅读')
         Column() {
@@ -198,8 +201,8 @@ export struct AppearanceSettingsPage {
           })
         }
         .width('100%')
-        .borderRadius($r('app.float.card_radius'))
-        .backgroundColor($r('app.color.surface_background'))
+        .borderRadius(settingsGroupRadius(this.feedCardStyle))
+        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.sectionTitle('信息流')
         Column() {
@@ -213,7 +216,7 @@ export struct AppearanceSettingsPage {
               this.updateAppearance(this.fabOpacity, this.showFeedThumbnail, value, this.feedCardStyleValue(), this.feedColumnModeValue());
             })
           Divider().color($r('app.color.divider_color'))
-          this.selectSetting('信息流样式', '卡片使用圆角卡片展示，分割线使用细线分隔条目。',
+          this.selectSetting('列表样式', '应用于信息流、“我的”与设置列表；卡片使用圆角表面，分割线使用细线分隔条目。',
             this.feedCardStyleLabel(), this.feedCardStyleOptions(), this.feedCardStyleIndex(),
             'appearance_feed_style', (index: number): void => this.updateFeedCardStyle(index))
           Divider().color($r('app.color.divider_color'))
@@ -222,8 +225,8 @@ export struct AppearanceSettingsPage {
             'appearance_feed_columns', (index: number): void => this.updateFeedColumnMode(index))
         }
         .width('100%')
-        .borderRadius($r('app.float.card_radius'))
-        .backgroundColor($r('app.color.surface_background'))
+        .borderRadius(settingsGroupRadius(this.feedCardStyle))
+        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.sectionTitle('回答页')
         Column() {
@@ -281,8 +284,8 @@ export struct AppearanceSettingsPage {
             })
         }
         .width('100%')
-        .borderRadius($r('app.float.card_radius'))
-        .backgroundColor($r('app.color.surface_background'))
+        .borderRadius(settingsGroupRadius(this.feedCardStyle))
+        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.sectionTitle('底部导航栏')
         Column() {
@@ -315,8 +318,8 @@ export struct AppearanceSettingsPage {
             'appearance_nav_auto_hide', (value: boolean): void => this.updateExperienceBoolean('autoHideBottomBar', value))
         }
         .width('100%')
-        .borderRadius($r('app.float.card_radius'))
-        .backgroundColor($r('app.color.surface_background'))
+        .borderRadius(settingsGroupRadius(this.feedCardStyle))
+        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.sectionTitle('电纸书翻页')
         Text('在内容列表、正文、评论区和设置等可滚动页面生效，私聊除外。')
@@ -348,8 +351,8 @@ export struct AppearanceSettingsPage {
             'appearance_content_end_marker', (value: boolean): void => this.updateExperienceBoolean('showContentEndMarker', value))
         }
         .width('100%')
-        .borderRadius($r('app.float.card_radius'))
-        .backgroundColor($r('app.color.surface_background'))
+        .borderRadius(settingsGroupRadius(this.feedCardStyle))
+        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.sectionTitle('交互')
         Column() {
@@ -358,8 +361,8 @@ export struct AppearanceSettingsPage {
             (index: number): void => this.updateShareActionMode(index))
         }
         .width('100%')
-        .borderRadius($r('app.float.card_radius'))
-        .backgroundColor($r('app.color.surface_background'))
+        .borderRadius(settingsGroupRadius(this.feedCardStyle))
+        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.sectionTitle('搜索')
         Column() {
@@ -370,14 +373,14 @@ export struct AppearanceSettingsPage {
             'appearance_search_history', (value: boolean): void => this.updateExperienceBoolean('showSearchHistory', value))
         }
         .width('100%')
-        .borderRadius($r('app.float.card_radius'))
-        .backgroundColor($r('app.color.surface_background'))
+        .borderRadius(settingsGroupRadius(this.feedCardStyle))
+        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
       }
       .width('100%')
       .padding({
         left: $r('app.float.page_padding'),
         right: $r('app.float.page_padding'),
-        top: 94,
+        top: this.embedded ? 12 : 94,
         bottom: $r('app.float.page_padding')
       })
     }

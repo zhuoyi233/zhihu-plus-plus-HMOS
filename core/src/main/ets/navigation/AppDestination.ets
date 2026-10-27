@@ -21,7 +21,12 @@ export enum AppDestinationName {
   NOTIFICATION_SETTINGS = 'NotificationSettings',
   PRIVATE_MESSAGE = 'PrivateMessage',
   LOGIN = 'Login',
+  /** 兼容旧底栏与启动目标的历史语义：仍映射到“我的”一级页。 */
   SETTINGS = 'Settings',
+  /** 独立设置首页（普通栈内页面，不加入底栏映射）。 */
+  SETTINGS_HOME = 'SettingsHome',
+  /** 关于应用（普通栈内页面）。 */
+  ABOUT_APP = 'AboutApp',
   APPEARANCE_SETTINGS = 'AppearanceSettings',
   THEME_COLOR_SETTINGS = 'ThemeColorSettings',
   IDENTITY_MANAGEMENT = 'IdentityManagement',
@@ -57,7 +62,9 @@ export interface StatelessDestination {
 /** WHATS_NEW 不在本联合内：它有独立接口 WhatsNewDestination（带可选 version 参数），
  * isInfrastructureDestination 对其单独返回 true。 */
 export interface InfrastructureDestination {
-  readonly name: AppDestinationName.LOGIN | AppDestinationName.SETTINGS | AppDestinationName.APPEARANCE_SETTINGS |
+  readonly name: AppDestinationName.LOGIN | AppDestinationName.SETTINGS | AppDestinationName.SETTINGS_HOME |
+    AppDestinationName.ABOUT_APP |
+    AppDestinationName.APPEARANCE_SETTINGS |
     AppDestinationName.THEME_COLOR_SETTINGS |
     AppDestinationName.IDENTITY_MANAGEMENT | AppDestinationName.READING_SETTINGS |
     AppDestinationName.SYSTEM_UPDATE_SETTINGS |
@@ -199,6 +206,8 @@ export function isAppDestinationName(name: string): boolean {
     case AppDestinationName.PRIVATE_MESSAGE:
     case AppDestinationName.LOGIN:
     case AppDestinationName.SETTINGS:
+    case AppDestinationName.SETTINGS_HOME:
+    case AppDestinationName.ABOUT_APP:
     case AppDestinationName.APPEARANCE_SETTINGS:
     case AppDestinationName.THEME_COLOR_SETTINGS:
     case AppDestinationName.IDENTITY_MANAGEMENT:
@@ -286,6 +295,10 @@ export function decodeAppDestination(name: string, param: Object): AppDestinatio
       return hasNoParameters(wire) ? { name: AppDestinationName.LOGIN } : undefined;
     case AppDestinationName.SETTINGS:
       return hasNoParameters(wire) ? { name: AppDestinationName.SETTINGS } : undefined;
+    case AppDestinationName.SETTINGS_HOME:
+      return hasNoParameters(wire) ? { name: AppDestinationName.SETTINGS_HOME } : undefined;
+    case AppDestinationName.ABOUT_APP:
+      return hasNoParameters(wire) ? { name: AppDestinationName.ABOUT_APP } : undefined;
     case AppDestinationName.BLOCKING_RULES:
       return hasNoParameters(wire) ? { name: AppDestinationName.BLOCKING_RULES } : undefined;
     case AppDestinationName.BLOCKED_FEED_HISTORY:
@@ -397,6 +410,8 @@ export function isInfrastructureDestination(destination: AppDestination): boolea
   switch (destination.name) {
     case AppDestinationName.LOGIN:
     case AppDestinationName.SETTINGS:
+    case AppDestinationName.SETTINGS_HOME:
+    case AppDestinationName.ABOUT_APP:
     case AppDestinationName.APPEARANCE_SETTINGS:
     case AppDestinationName.THEME_COLOR_SETTINGS:
     case AppDestinationName.IDENTITY_MANAGEMENT:

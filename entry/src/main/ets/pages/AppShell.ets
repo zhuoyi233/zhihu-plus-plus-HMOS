@@ -86,6 +86,9 @@ import {
 import { HarmonyOSCapabilities } from '../common/platform/HarmonyOSCapabilities';
 import { ZhihuHdsTabs } from './components/ZhihuHdsTabs';
 import { AppearanceSettingsPage } from './AppearanceSettingsPage';
+import { AccountPage } from './AccountPage';
+import { SettingsHomePage } from './SettingsHomePage';
+import { AboutAppPage } from './AboutAppPage';
 import { ThemeColorSettingsPage } from './ThemeColorSettingsPage';
 import { ContentFilterSettingsPage } from './ContentFilterSettingsPage';
 import { IdentityManagementPage } from './IdentityManagementPage';
@@ -169,7 +172,8 @@ export struct AppShell {
     this.emptyNotificationEntry;
   @BuilderParam privateMessageContent: (peerId: string, peerName: string, avatarUrl: string, navigate: (destination: AppDestination) => void) => void =
     this.emptyPrivateMessage;
-  @BuilderParam notificationSettingsContent: (navigate: (destination: AppDestination) => void) => void = this.emptyHome;
+  @BuilderParam notificationSettingsContent: (navigate: (destination: AppDestination) => void,
+    embedded: boolean) => void = this.emptyNotificationSettings;
   @BuilderParam blockingRulesContent: (onBack: () => void) => void = this.emptyProbe;
   @BuilderParam blockedFeedHistoryContent: (onBack: () => void) => void = this.emptyPage;
   @BuilderParam readHistoryContent: (navigate: (destination: AppDestination) => void, onBack: () => void) => void =
@@ -227,7 +231,6 @@ export struct AppShell {
   @State private openSourceLicensesSheetShown: boolean = false;
   @State private projectHomeHelpShown: boolean = false;
   @State private projectHomeLaunchStatus: string = '';
-  @State private settingsSearchQuery: string = '';
   @State private accountLogoutBusy: boolean = false;
   @State private homeReloadToken: number = 0;
   @State private followingReloadToken: number = 0;
@@ -340,6 +343,8 @@ export struct AppShell {
     AppStorage.setOrCreate('immersiveMaterialSupport', HarmonyOSCapabilities.immersiveMaterialSupportState());
     AppStorage.setOrCreate('immersiveMaterialNotice', '');
     AppStorage.setOrCreate('immersiveMaterialPreferencesReady', false);
+    // 开发者选项可见性经 AppStorage 广播，设置首页/搜索索引在页面挂载后也能同步。
+    AppStorage.setOrCreate('developerModeEnabled', false);
     this.sessionSnapshot = this.session?.getState();
     this.restoreThemeMode();
     void this.restoreThemeColor();
@@ -376,6 +381,11 @@ export struct AppShell {
 
   @Builder
   emptyHome(_navigate: (destination: AppDestination) => void) {
+    Blank();
+  }
+
+  @Builder
+  emptyNotificationSettings(_navigate: (destination: AppDestination) => void, _embedded: boolean) {
     Blank();
   }
 
@@ -546,23 +556,30 @@ export struct AppShell {
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.SETTINGS) {
       HdsNavDestination() {
-        this.settingsPage();
+        this.accountPageContent();
       }
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '我的' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === AppDestinationName.SETTINGS_HOME) {
+      HdsNavDestination() {
+        this.settingsHomePageContent();
+      }
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '设置' }, divider: { showType: DividerShowType.OFF } } })
+      .onBackPressed((): boolean => this.handleSettingsHomeBack())
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
+    } else if (destination.name === AppDestinationName.ABOUT_APP) {
+      HdsNavDestination() {
+        this.aboutAppPageContent();
+      }
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '关于应用' }, divider: { showType: DividerShowType.OFF } } })
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
+      .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.APPEARANCE_SETTINGS) {
       HdsNavDestination() {
-        AppearanceSettingsPage({
-          themeMode: this.themeMode,
-          onThemeModeChange: (mode: AppThemeMode): void => {
-            void this.selectThemeMode(mode);
-          },
-          onOpenThemeColorSettings: (): void => this.navigate({ name: AppDestinationName.THEME_COLOR_SETTINGS }),
-          onImmersiveMaterialChange: (mode: ImmersiveMaterialMode): void => {
-            this.selectImmersiveMaterialLevel(mode);
-          }
-        });
+        this.appearanceSettingsContent(false,
+          (): void => this.navigate({ name: AppDestinationName.THEME_COLOR_SETTINGS }));
       }
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '外观与阅读体验' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
@@ -584,7 +601,7 @@ export struct AppShell {
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.READING_SETTINGS) {
       HdsNavDestination() {
-        ReadingSettingsPage();
+        this.readingSettingsContent(false);
       }
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: { title: { mainTitle: '朗读与播放' }, divider: { showType: DividerShowType.OFF } } })
@@ -592,20 +609,7 @@ export struct AppShell {
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.SYSTEM_UPDATE_SETTINGS) {
       HdsNavDestination() {
-        SystemUpdateSettingsPage({
-          installedVersionLabel: this.installedVersionLabel,
-          updateCheckBusy: this.updateCheckBusy,
-          updateCheckMessage: this.updateCheckMessage,
-          availableVersion: this.pendingUpdateRelease?.versionName ?? '',
-          latestVersion: this.latestUpdateRelease?.versionName ?? '',
-          latestAssetUrl: this.latestUpdateRelease?.assetUrl ?? '',
-          latestAssetSha256: this.latestUpdateRelease?.assetSha256 ?? '',
-          onCheckUpdate: (): void => { void this.runUpdateCheck(true); },
-          onOpenDownload: (url: string): void => this.openExternalUrl(url, '无法打开下载链接'),
-          onOpenProject: (): void => this.openProjectHome(),
-          onOpenWhatsNew: (): void => this.navigate({ name: AppDestinationName.WHATS_NEW }),
-          onOpenUpdateWhatsNew: (): void => this.openUpdateWhatsNew()
-        });
+        this.systemUpdateSettingsContent(false);
       }
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: { title: { mainTitle: '系统与更新' }, divider: { showType: DividerShowType.OFF } } })
@@ -629,12 +633,9 @@ export struct AppShell {
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.RECOMMENDATION_FILTER_SETTINGS) {
       HdsNavDestination() {
-        ContentFilterSettingsPage({
-          preferences: this.createPreferencesStore(),
-          runtime: this.createFilterRuntimeStore(),
-          onOpenBlocklist: (): void => this.navigate({ name: AppDestinationName.BLOCKING_RULES }),
-          onOpenBlockedHistory: (): void => this.navigate({ name: AppDestinationName.BLOCKED_FEED_HISTORY })
-        });
+        this.filterSettingsContent(false,
+          (): void => this.navigate({ name: AppDestinationName.BLOCKING_RULES }),
+          (): void => this.navigate({ name: AppDestinationName.BLOCKED_FEED_HISTORY }));
       }
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: { title: { mainTitle: '推荐系统与内容过滤' }, divider: { showType: DividerShowType.OFF } } })
@@ -1055,7 +1056,7 @@ export struct AppShell {
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.NOTIFICATION_SETTINGS) {
       HdsNavDestination() {
-        this.notificationSettingsContent((destination: AppDestination): void => this.navigate(destination));
+        this.notificationSettingsContent((destination: AppDestination): void => this.navigate(destination), false);
       }
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '通知设置' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
@@ -1216,80 +1217,143 @@ export struct AppShell {
   }
 
   build() {
-    HdsNavigation(this.pathStack) {
-      ZhihuHdsTabs({
-        currentIndex: $topLevelTabIndex,
-        controller: this.tabsController,
-        onTabDoubleTap: (index: number): void => {
-          // 双击页签刷新对应 feed（“我的”除外）；跨页面信号经 AppStorage 广播。
-          // 先广播回到顶部、再广播刷新：滑动数据时双击也按“先回顶 → 再刷新”执行。
-          const tab = this.tabAtDisplayIndex(index);
-          if (tab < TopLevelTab.HOME || tab > TopLevelTab.DAILY) {
-            return;
-          }
-          AppStorage.setOrCreate('tabScrollTopTabIndex', tab);
-          AppStorage.setOrCreate('tabScrollTopTick', (AppStorage.get<number>('tabScrollTopTick') ?? 0) + 1);
-          // 先写目标页签再自增 tick：@Watch 在 tick 写入时同步触发，顺序反了会读到上一次的目标页签。
-          AppStorage.setOrCreate('tabRefreshTabIndex', tab);
-          const nextTick = (AppStorage.get<number>('tabRefreshTick') ?? 0) + 1;
-          AppStorage.setOrCreate('tabRefreshTick', nextTick);
-        },
-        onCurrentTabTap: (index: number): void => {
-          const tab = this.tabAtDisplayIndex(index);
-          if (!this.tapToRefresh || tab < TopLevelTab.HOME || tab > TopLevelTab.DAILY) {
-            return;
-          }
-          AppStorage.setOrCreate('tabScrollTopTabIndex', tab);
-          AppStorage.setOrCreate('tabScrollTopTick', (AppStorage.get<number>('tabScrollTopTick') ?? 0) + 1);
-        }
-      }) {
-        // 页签必须经 ForEach（key=tab 值）生成：@Builder 按值传参在 HdsTabs 的
-        // TabContent 构建树下不会触发已挂载子组件更新，写死槽位会让“底部栏项目与顺序”
-        // 实时变更后 TabContent 属性（id/tabBar）刷新但内容仍是旧顺序的页面。
-        ForEach(this.bottomBarOrder, (tab: number): void => {
-          TabContent() {
-            // 每个页签一套独立 HdsNavigation 顶栏：滚动模糊状态跟着自己的容器走，
-            // 互不继承（对齐华为原生应用的分页表现）。
-            HdsNavigation() {
-              this.topLevelTabPage(tab as TopLevelTab)
+    Stack() {
+      HdsNavigation(this.pathStack) {
+        ZhihuHdsTabs({
+          currentIndex: $topLevelTabIndex,
+          controller: this.tabsController,
+          onTabDoubleTap: (index: number): void => {
+            // 双击页签刷新对应 feed（“我的”除外）；跨页面信号经 AppStorage 广播。
+            // 先广播回到顶部、再广播刷新：滑动数据时双击也按“先回顶 → 再刷新”执行。
+            const tab = this.tabAtDisplayIndex(index);
+            if (tab < TopLevelTab.HOME || tab > TopLevelTab.DAILY) {
+              return;
             }
-            .titleBar({
-              // 对齐华为原生应用的沉浸光感标题栏：支持 IMMERSIVE 材质的设备走材质 + 渐变模糊，
-              // 不支持的设备（含模拟器）降级为均匀模糊 + 半透明底；两条路径让位一致。
-              style: getRootChromeTitleBarStyle(this.immersiveMaterialMode(),
-                this.immersiveMaterialSupportState()),
-              avoidLayoutSafeArea: true,
-              content: {
-                stackBuilder: (): void => this.rootTitleBarContent(),
-                divider: { showType: DividerShowType.OFF }
-              }
-            })
-            .titleMode(HdsNavigationTitleMode.MINI)
-            .hideBackButton(true)
-            .mode(NavigationMode.Stack)
-            .monopolizeEvents(false)
-            // 只绑定本页签自己的滚动容器（未挂载时为空，容器 onAppear 登记后补上）。
-            .bindToScrollable(this.tabScrollerBinding(tab))
-            .backgroundColor($r('app.color.page_background'))
-            .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-            // 顶栏透明后模糊层只跟随标题栏自身区域；TOP 也纳入 ignoreLayoutSafeArea 后，
-            // 模糊才继续铺到状态栏区域（官方问答口径），否则状态栏那段内容不模糊。
-            .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM],
-              [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+            AppStorage.setOrCreate('tabScrollTopTabIndex', tab);
+            AppStorage.setOrCreate('tabScrollTopTick', (AppStorage.get<number>('tabScrollTopTick') ?? 0) + 1);
+            // 先写目标页签再自增 tick：@Watch 在 tick 写入时同步触发，顺序反了会读到上一次的目标页签。
+            AppStorage.setOrCreate('tabRefreshTabIndex', tab);
+            const nextTick = (AppStorage.get<number>('tabRefreshTick') ?? 0) + 1;
+            AppStorage.setOrCreate('tabRefreshTick', nextTick);
+          },
+          onCurrentTabTap: (index: number): void => {
+            const tab = this.tabAtDisplayIndex(index);
+            if (!this.tapToRefresh || tab < TopLevelTab.HOME || tab > TopLevelTab.DAILY) {
+              return;
+            }
+            AppStorage.setOrCreate('tabScrollTopTabIndex', tab);
+            AppStorage.setOrCreate('tabScrollTopTick', (AppStorage.get<number>('tabScrollTopTick') ?? 0) + 1);
           }
-          .id(`top_level_${this.tabKey(tab as TopLevelTab)}_content`)
-          .tabBar(this.topLevelTabBarStyle(tab as TopLevelTab))
-        }, (tab: number): string => `${tab}`)
+        }) {
+          // 页签必须经 ForEach（key=tab 值）生成：@Builder 按值传参在 HdsTabs 的
+          // TabContent 构建树下不会触发已挂载子组件更新，写死槽位会让“底部栏项目与顺序”
+          // 实时变更后 TabContent 属性（id/tabBar）刷新但内容仍是旧顺序的页面。
+          ForEach(this.bottomBarOrder, (tab: number): void => {
+            TabContent() {
+              // 每个页签一套独立 HdsNavigation 顶栏：滚动模糊状态跟着自己的容器走，
+              // 互不继承（对齐华为原生应用的分页表现）。
+              HdsNavigation() {
+                this.topLevelTabPage(tab as TopLevelTab)
+              }
+              .titleBar({
+                // 对齐华为原生应用的沉浸光感标题栏：支持 IMMERSIVE 材质的设备走材质 + 渐变模糊，
+                // 不支持的设备（含模拟器）降级为均匀模糊 + 半透明底；两条路径让位一致。
+                style: getRootChromeTitleBarStyle(this.immersiveMaterialMode(),
+                  this.immersiveMaterialSupportState()),
+                avoidLayoutSafeArea: true,
+                content: {
+                  stackBuilder: (): void => this.rootTitleBarContent(),
+                  divider: { showType: DividerShowType.OFF }
+                }
+              })
+              .titleMode(HdsNavigationTitleMode.MINI)
+              .hideBackButton(true)
+              .mode(NavigationMode.Stack)
+              .monopolizeEvents(false)
+              // 只绑定本页签自己的滚动容器（未挂载时为空，容器 onAppear 登记后补上）。
+              .bindToScrollable(this.tabScrollerBinding(tab))
+              .backgroundColor($r('app.color.page_background'))
+              .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+              // 顶栏透明后模糊层只跟随标题栏自身区域；TOP 也纳入 ignoreLayoutSafeArea 后，
+              // 模糊才继续铺到状态栏区域（官方问答口径），否则状态栏那段内容不模糊。
+              .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM],
+                [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+            }
+            .id(`top_level_${this.tabKey(tab as TopLevelTab)}_content`)
+            .tabBar(this.topLevelTabBarStyle(tab as TopLevelTab))
+          }, (tab: number): string => `${tab}`)
+        }
       }
+      .titleMode(HdsNavigationTitleMode.MINI)
+      .hideBackButton(true)
+      .mode(NavigationMode.Stack)
+      .monopolizeEvents(false)
+      .navDestination(this.destinationBuilder)
+      .backgroundColor($r('app.color.page_background'))
+      .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
+      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+
+      // 弹层统一挂在根壳上，任何页面触发版本/许可/项目主页说明都能弹出，
+      // 不依赖“我的”页或某一个 NavDestination 是否仍在前台。
+      Column()
+        .bindSheet(this.aboutVersionSheetShown, this.aboutVersionSheet(), {
+          preferType: SheetType.CENTER,
+          height: SheetSize.FIT_CONTENT,
+          dragBar: false,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.aboutVersionSheetShown) {
+              this.aboutVersionSheetShown = false;
+            }
+          }
+        })
+      Column()
+        .bindSheet(this.projectLicenseSheetShown, this.projectLicenseSheet(), {
+          preferType: SheetType.CENTER,
+          height: SheetSize.FIT_CONTENT,
+          dragBar: false,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.projectLicenseSheetShown) {
+              this.projectLicenseSheetShown = false;
+            }
+          }
+        })
+      Column()
+        .bindSheet(this.openSourceLicensesSheetShown, this.openSourceLicensesSheet(), {
+          preferType: SheetType.CENTER,
+          height: SheetSize.FIT_CONTENT,
+          dragBar: false,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.openSourceLicensesSheetShown) {
+              this.openSourceLicensesSheetShown = false;
+            }
+          }
+        })
+      Column()
+        .bindSheet(this.projectHomeHelpShown, this.projectHomeHelpSheet(), {
+          preferType: SheetType.CENTER,
+          height: SheetSize.FIT_CONTENT,
+          dragBar: false,
+          showClose: false,
+          maskColor: '#66000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.projectHomeHelpShown) {
+              this.projectHomeHelpShown = false;
+            }
+          }
+        })
     }
-    .titleMode(HdsNavigationTitleMode.MINI)
-    .hideBackButton(true)
-    .mode(NavigationMode.Stack)
-    .monopolizeEvents(false)
-    .navDestination(this.destinationBuilder)
-    .backgroundColor($r('app.color.page_background'))
-    .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
-    .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+    .width('100%')
+    .height('100%')
   }
 
   @Builder
@@ -1309,7 +1373,7 @@ export struct AppShell {
     } else if (tab === TopLevelTab.COLLECTIONS) {
       this.topLevelCollectionsPage()
     } else {
-      this.settingsPage()
+      this.accountPageContent()
     }
   }
 
@@ -1574,6 +1638,47 @@ export struct AppShell {
       .width('100%')
       .padding({ left: 12, right: 12 })
       .hitTestBehavior(HitTestMode.Transparent)
+    } else if (this.activeTopLevelTab() === TopLevelTab.ACCOUNT) {
+      Row() {
+        Text('我的')
+          .fontSize($r('app.float.heading_font_size'))
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.primary_text'))
+          .maxLines(1)
+          .layoutWeight(1)
+        Stack({ alignContent: Alignment.TopEnd }) {
+          Button({ type: ButtonType.Circle, stateEffect: true }) {
+            SymbolGlyph($r('sys.symbol.gearshape'))
+              .fontSize(20)
+              .fontColor([$r('app.color.primary_text')])
+          }
+          .id('account_open_settings')
+          .width(44)
+          .height(44)
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          // 与首页顶栏图标一致的沉浸光感材质，低版本退回模糊兜底。
+          .backgroundBlurStyle(TITLE_BAR_GLASS_MATERIAL === undefined
+            ? BlurStyle.COMPONENT_ULTRA_THIN : BlurStyle.NONE)
+          .systemMaterial(TITLE_BAR_GLASS_MATERIAL)
+          .accessibilityText(this.pendingUpdateRelease !== undefined
+            ? '打开设置，有新版本' : '打开设置')
+          .onClick((): void => this.navigate({ name: AppDestinationName.SETTINGS_HOME }))
+          if (this.pendingUpdateRelease !== undefined) {
+            Circle()
+              .width(8)
+              .height(8)
+              .margin({ top: 7, right: 7 })
+              .backgroundColor(this.resolvedThemeColor)
+          }
+        }
+        .width(44)
+        .height(44)
+      }
+      .width('100%')
+      .padding({ left: $r('app.float.page_padding'), right: 12 })
+      .alignItems(VerticalAlign.Center)
+      .hitTestBehavior(HitTestMode.Transparent)
     } else if (this.activeTopLevelTab() === TopLevelTab.HISTORY) {
       // #48：历史配置为底栏页时，“我的”入口也复用此页，必须保留本地历史菜单。
       HistoryTitleBar({ reserveBackButtonSpace: false })
@@ -1714,491 +1819,127 @@ export struct AppShell {
   }
 
   @Builder
-  settingsPage() {
-    Stack({ alignContent: Alignment.TopStart }) {
-      Scroll(this.settingsScroller) {
-        Column({ space: $r('app.float.spacing_large') }) {
-          this.accountOverview()
-          this.accountQuickActions()
-
-          Text('创作')
-            .fontSize($r('app.float.secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .width('100%')
-          Column() {
-            AppNavigationRow({ title: '发布想法', description: '创建一条新的想法', testId: 'open_pin_publish', grouped: true,
-              showLeadingIcon: true, leadingIcon: $r('sys.symbol.square_and_pencil'),
-              onRowClick: (): void => this.openPinComposer() });
-            Divider().color($r('app.color.divider_color'))
-            AppNavigationRow({ title: '想法草稿', description: '继续编辑本地保存的草稿', testId: 'open_pin_drafts', grouped: true,
-              showLeadingIcon: true, leadingIcon: $r('sys.symbol.doc_text'),
-              onRowClick: (): void => this.navigate({ name: AppDestinationName.PIN_DRAFTS }) });
-          }
-          .width('100%')
-          .borderRadius($r('app.float.card_radius'))
-          .backgroundColor($r('app.color.surface_background'))
-
-          TextInput({ text: this.settingsSearchQuery, placeholder: '搜索设置' })
-            .id('settings_search')
-            .width('100%')
-            .onChange((value: string): void => {
-              this.settingsSearchQuery = value;
-            })
-
-          if (this.hasSettingsSearchQuery()) {
-            this.settingsSearchResults()
-          } else {
-          Text('设置')
-            .fontSize($r('app.float.secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .width('100%')
-          Column({ space: $r('app.float.spacing_small') }) {
-            if (this.sessionSnapshot?.status === SessionStatus.AUTHENTICATED) {
-              AppNavigationRow({ title: '身份管理', description: '创建马甲号或切换当前身份',
-                testId: 'open_identity_management', grouped: true,
-                showLeadingIcon: true, leadingIcon: $r('sys.symbol.person_2'),
-                onRowClick: (): void => this.navigate({ name: AppDestinationName.IDENTITY_MANAGEMENT }) });
-              Divider().color($r('app.color.divider_color'))
-            }
-            AppNavigationRow({ title: '外观与阅读体验', description: '主题、阅读排版与信息流显示',
-              testId: 'open_appearance_settings', grouped: true,
-              showLeadingIcon: true, leadingIcon: $r('sys.symbol.eye'),
-              onRowClick: (): void => this.navigate({ name: AppDestinationName.APPEARANCE_SETTINGS }) });
-            Divider().color($r('app.color.divider_color'))
-            AppNavigationRow({ title: '朗读与播放', description: '语音、语速与当前播放控制',
-              testId: 'open_reading_settings', grouped: true,
-              showLeadingIcon: true, leadingIcon: $r('sys.symbol.mic'),
-              onRowClick: (): void => this.navigate({ name: AppDestinationName.READING_SETTINGS }) });
-            Divider().color($r('app.color.divider_color'))
-            AppNavigationRow({ title: '推荐系统与内容过滤', description: '推荐来源、质量规则与内容屏蔽',
-              testId: 'open_recommendation_filter_settings', grouped: true,
-              showLeadingIcon: true, leadingIcon: $r('sys.symbol.eye_slash'),
-              onRowClick: (): void => this.navigate({ name: AppDestinationName.RECOMMENDATION_FILTER_SETTINGS }) });
-            Divider().color($r('app.color.divider_color'))
-            AppNavigationRow({ title: '通知设置', description: '设置提醒和推送偏好', testId: 'open_notification_settings', grouped: true,
-              showLeadingIcon: true, leadingIcon: $r('sys.symbol.bell_badge_gearshape'),
-              onRowClick: (): void => this.navigate({ name: AppDestinationName.NOTIFICATION_SETTINGS }) });
-            Divider().color($r('app.color.divider_color'))
-            AppNavigationRow({ title: '系统与更新', description: '版本信息、检查更新与问题反馈',
-              testId: 'open_system_update_settings', grouped: true,
-              showLeadingIcon: true, leadingIcon: $r('sys.symbol.arrow_clockwise'),
-              onRowClick: (): void => this.navigate({ name: AppDestinationName.SYSTEM_UPDATE_SETTINGS }) });
-          }
-          .width('100%')
-          .borderRadius($r('app.float.card_radius'))
-          .backgroundColor($r('app.color.surface_background'))
-
-          Text('关于与诊断')
-            .fontSize($r('app.float.secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .width('100%')
-          Column() {
-            if (this.pendingUpdateRelease !== undefined) {
-              AppNavigationRow({ title: this.pendingUpdateTitle(),
-                description: '点击前往 GitHub 下载新版 HAP', testId: 'open_update_download', grouped: true,
-                showLeadingIcon: true, leadingIcon: $r('sys.symbol.arrow_clockwise'),
-                onRowClick: (): void => {
-                  const release = this.pendingUpdateRelease;
-                  const url = release !== undefined && release.htmlUrl.length > 0
-                    ? release.htmlUrl
-                    : PROJECT_HOME_URI + '/releases/latest';
-                  this.openExternalUrl(url, '无法打开发布页');
-                } });
-              Divider().color($r('app.color.divider_color'))
-            }
-            AppNavigationRow({ title: '应用与版本', description: this.installedVersionLabel,
-              testId: 'open_about_version', grouped: true,
-              showLeadingIcon: true, leadingIcon: $r('sys.symbol.info_circle'),
-              onRowClick: (): void => {
-                this.onVersionRowClicked();
-              } });
-            Divider().color($r('app.color.divider_color'))
-            AppNavigationRow({ title: 'GitHub', description: '查看项目主页', testId: 'open_project_home', grouped: true,
-              showLeadingIcon: true, leadingIcon: $r('app.media.github_mark'), leadingIconIsMedia: true,
-              onRowClick: (): void => this.openProjectHome() });
-            Divider().color($r('app.color.divider_color'))
-            AppNavigationRow({ title: '项目协议', description: 'GNU AGPL v3.0',
-              testId: 'open_project_license', grouped: true,
-              showLeadingIcon: true, leadingIcon: $r('sys.symbol.checkmark_square'),
-              onRowClick: (): void => {
-                this.projectLicenseSheetShown = true;
-              } });
-            Divider().color($r('app.color.divider_color'))
-            AppNavigationRow({ title: '开源许可', description: '3 个本地 HAR 模块 · GNU AGPL v3.0',
-              testId: 'open_open_source_licenses', grouped: true,
-              showLeadingIcon: true, leadingIcon: $r('sys.symbol.doc_text'),
-              onRowClick: (): void => {
-                this.openSourceLicensesSheetShown = true;
-              } });
-            if (this.developerModeEnabled) {
-              Divider().color($r('app.color.divider_color'))
-              AppNavigationRow({ title: '开发者选项', description: 'Cookie、网络与调试工具',
-                testId: 'open_developer_options', grouped: true,
-                showLeadingIcon: true, leadingIcon: $r('sys.symbol.gearshape'),
-                onRowClick: (): void => this.navigate({ name: AppDestinationName.TECHNICAL_LAB }) });
-            }
-          }
-          .width('100%')
-          .borderRadius($r('app.float.card_radius'))
-          .backgroundColor($r('app.color.surface_background'))
-
-          Text('本软件仅供学习交流使用，应用内内容由知乎网站提供，著作权归其对应作者所有。')
-            .id('account_disclaimer')
-            .fontSize($r('app.float.caption_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .width('100%')
-            .padding({ left: $r('app.float.spacing_medium'), right: $r('app.float.spacing_medium') })
-        }
-        }
-      }
-      .scrollBar(BarState.Off)
-      .width('100%')
-      .padding({
-        left: $r('app.float.page_padding'),
-        right: $r('app.float.page_padding'),
-        // 与信息流一致：状态栏 + HDS 标题栏自身高度。
-        top: floatingTitleBarOffset(),
-        // HdsTabs 的悬浮底栏会覆盖滚动区末端；为最后一个设置项预留可点击空间。
-        bottom: 96
-      })
-      .id('settings_scroll')
-      .width('100%')
-      .height('100%')
-      .align(Alignment.TopStart)
-      .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
-      .backgroundColor($r('app.color.page_background'))
-      Column()
-        .bindSheet(this.aboutVersionSheetShown, this.aboutVersionSheet(), {
-          preferType: SheetType.CENTER,
-          height: SheetSize.FIT_CONTENT,
-          dragBar: false,
-          showClose: false,
-          maskColor: '#66000000',
-          backgroundColor: $r('app.color.surface_background'),
-          onDisappear: (): void => {
-            if (this.aboutVersionSheetShown) {
-              this.aboutVersionSheetShown = false;
-            }
-          }
-        })
-      Column()
-        .bindSheet(this.projectLicenseSheetShown, this.projectLicenseSheet(), {
-          preferType: SheetType.CENTER,
-          height: SheetSize.FIT_CONTENT,
-          dragBar: false,
-          showClose: false,
-          maskColor: '#66000000',
-          backgroundColor: $r('app.color.surface_background'),
-          onDisappear: (): void => {
-            if (this.projectLicenseSheetShown) {
-              this.projectLicenseSheetShown = false;
-            }
-          }
-        })
-      Column()
-        .bindSheet(this.openSourceLicensesSheetShown, this.openSourceLicensesSheet(), {
-          preferType: SheetType.CENTER,
-          height: SheetSize.FIT_CONTENT,
-          dragBar: false,
-          showClose: false,
-          maskColor: '#66000000',
-          backgroundColor: $r('app.color.surface_background'),
-          onDisappear: (): void => {
-            if (this.openSourceLicensesSheetShown) {
-              this.openSourceLicensesSheetShown = false;
-            }
-          }
-        })
-      Column()
-        .bindSheet(this.projectHomeHelpShown, this.projectHomeHelpSheet(), {
-          preferType: SheetType.CENTER,
-          height: SheetSize.FIT_CONTENT,
-          dragBar: false,
-          showClose: false,
-          maskColor: '#66000000',
-          backgroundColor: $r('app.color.surface_background'),
-          onDisappear: (): void => {
-            if (this.projectHomeHelpShown) {
-              this.projectHomeHelpShown = false;
-            }
-          }
-        })
-    }
-    .id('settings_top_start_container')
-    .width('100%')
-    .height('100%')
-    .alignContent(Alignment.TopStart)
-    .backgroundColor($r('app.color.page_background'))
+  private accountPageContent() {
+    AccountPage({
+      authenticated: this.accountSessionState()?.status === SessionStatus.AUTHENTICATED,
+      accountTitle: this.accountTitle(),
+      avatarLetter: this.accountAvatarLetter(),
+      avatarUrl: this.accountAvatarUrl(),
+      scroller: this.settingsScroller,
+      onOpenProfile: (): void => this.openCurrentProfile(),
+      onOpenLogin: (): void => this.navigate({ name: AppDestinationName.LOGIN }),
+      onOpenCollections: (): void => this.openMyCollections(),
+      onOpenHistory: (): void => this.navigate({ name: AppDestinationName.READ_HISTORY }),
+      onOpenMessages: (): void => this.navigate({ name: AppDestinationName.NOTIFICATION }),
+      onOpenPinPublish: (): void => this.openPinComposer(),
+      onOpenPinDrafts: (): void => this.navigate({ name: AppDestinationName.PIN_DRAFTS }),
+      onOpenScan: (): void => this.navigate({ name: AppDestinationName.QR_DESKTOP_LOGIN_SCAN })
+    })
   }
 
   @Builder
-  private accountOverview() {
-    if (this.accountSessionState()?.status === SessionStatus.AUTHENTICATED) {
-      Row({ space: $r('app.float.spacing_small') }) {
-        Button({ type: ButtonType.Normal, stateEffect: true }) {
-          Row({ space: $r('app.float.spacing_small') }) {
-            Stack({ alignContent: Alignment.Center }) {
-              Text(this.accountAvatarLetter())
-                .width(56)
-                .height(56)
-                .borderRadius(28)
-                .backgroundColor(themeColorContainerColor(this.resolvedThemeColor))
-                .fontSize($r('app.float.heading_font_size'))
-                .fontWeight(FontWeight.Medium)
-                .fontColor(this.resolvedThemeColor)
-                .textAlign(TextAlign.Center)
-              // 有头像地址时叠加真实头像；加载失败露出首字占位。
-              if (this.accountAvatarUrl().length > 0) {
-                Image(this.accountAvatarUrl())
-                  .id('account_overview_avatar')
-                  .width(56)
-                  .height(56)
-                  .borderRadius(28)
-                  .objectFit(ImageFit.Cover)
-              }
-            }
-            .id('account_overview_avatar_box')
-            Text(this.accountTitle())
-              .id('account_overview_title')
-              .fontSize($r('app.float.heading_font_size'))
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.primary_text'))
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .layoutWeight(1)
-          }
-          .width('100%')
-          .alignItems(VerticalAlign.Center)
-        }
-        .layoutWeight(1)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .accessibilityText('打开个人主页')
-        .onClick((): void => this.openCurrentProfile())
-
-        Button({ type: ButtonType.Circle, stateEffect: true }) {
-          SymbolGlyph($r('sys.symbol.barcode_viewfinder'))
-            .fontSize(22)
-            .fontColor([this.resolvedThemeColor])
-        }
-          .id('account_scan_desktop_login')
-          .width(44)
-          .height(44)
-          .padding(0)
-          .backgroundColor(themeColorContainerColor(this.resolvedThemeColor))
-          .accessibilityText('扫描电脑端登录二维码')
-          .onClick((): void => this.navigate({ name: AppDestinationName.QR_DESKTOP_LOGIN_SCAN }))
-
-        Button({ type: ButtonType.Circle, stateEffect: true }) {
-          SymbolGlyph($r('sys.symbol.arrow_right_and_square'))
-            .fontSize(22)
-            .fontColor([$r('app.color.error_text')])
-        }
-          .id('account_logout')
-          .width(44)
-          .height(44)
-          .padding(0)
-          .backgroundColor($r('app.color.control_background'))
-          .enabled(!this.accountLogoutBusy)
-          .accessibilityText('退出登录')
-          .onClick((): void => this.confirmAccountLogout())
+  private settingsHomePageContent() {
+    SettingsHomePage({
+      authenticated: this.accountSessionState()?.status === SessionStatus.AUTHENTICATED,
+      logoutBusy: this.accountLogoutBusy,
+      updateLabel: this.pendingUpdateRelease !== undefined ? '有新版本' : '',
+      navigate: (destination: AppDestination): void => this.navigate(destination),
+      onLogout: (): void => this.confirmAccountLogout(),
+      identityContent: (): void => {
+        this.identityManagementContent();
+      },
+      appearanceContent: (onOpenThemeColor: () => void): void => {
+        this.appearanceSettingsContent(true, onOpenThemeColor);
+      },
+      readingContent: (): void => {
+        this.readingSettingsContent(true);
+      },
+      filterContent: (onOpenBlocklist: () => void, onOpenBlockedHistory: () => void): void => {
+        this.filterSettingsContent(true, onOpenBlocklist, onOpenBlockedHistory);
+      },
+      notificationContent: (): void => {
+        this.notificationSettingsContent((destination: AppDestination): void => this.navigate(destination), true);
+      },
+      updateContent: (): void => {
+        this.systemUpdateSettingsContent(true);
+      },
+      aboutContent: (): void => {
+        this.aboutAppPageContent();
       }
-      .id('account_overview')
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
-    } else {
-      AppNavigationRow({ title: '登录知乎', description: '管理当前知乎账号的登录状态', testId: 'open_login',
-        grouped: false, showLeadingIcon: true, leadingIcon: $r('sys.symbol.person'),
-        onRowClick: (): void => this.navigate({ name: AppDestinationName.LOGIN }) })
-    }
+    })
   }
 
   @Builder
-  private accountQuickActions() {
-    Row({ space: $r('app.float.spacing_small') }) {
-      Button({ type: ButtonType.Normal, stateEffect: true }) {
-        Column({ space: $r('app.float.spacing_xsmall') }) {
-          SymbolGlyph($r('sys.symbol.bookmark'))
-            .fontSize(20)
-            .fontColor([this.resolvedThemeColor])
-          Text('收藏夹')
-            .fontSize($r('app.float.secondary_font_size'))
-            .fontColor($r('app.color.primary_text'))
-        }
-        .width('100%')
-        .alignItems(HorizontalAlign.Center)
+  private aboutAppPageContent() {
+    AboutAppPage({
+      installedVersionLabel: this.installedVersionLabel,
+      developerModeEnabled: this.developerModeEnabled,
+      onVersionRowClick: (): void => this.onVersionRowClicked(),
+      onOpenProject: (): void => this.openProjectHome(),
+      onOpenProjectLicense: (): void => {
+        this.projectLicenseSheetShown = true;
+      },
+      onOpenOpenSourceLicenses: (): void => {
+        this.openSourceLicensesSheetShown = true;
       }
-      .id('open_my_collections')
-      .layoutWeight(1)
-      .height(72)
-      .backgroundColor($r('app.color.surface_background'))
-      .borderRadius($r('app.float.card_radius'))
-      .accessibilityText('打开我的收藏夹')
-      .onClick((): void => this.openMyCollections())
-
-      Button({ type: ButtonType.Normal, stateEffect: true }) {
-        Column({ space: $r('app.float.spacing_xsmall') }) {
-          SymbolGlyph($r('sys.symbol.arrow_counterclockwise_clock'))
-            .fontSize(20)
-            .fontColor([this.resolvedThemeColor])
-          Text('历史')
-            .fontSize($r('app.float.secondary_font_size'))
-            .fontColor($r('app.color.primary_text'))
-        }
-        .width('100%')
-        .alignItems(HorizontalAlign.Center)
-      }
-      .id('account_quick_history')
-      .layoutWeight(1)
-      .height(72)
-      .backgroundColor($r('app.color.surface_background'))
-      .borderRadius($r('app.float.card_radius'))
-      .accessibilityText('打开历史')
-      .onClick((): void => this.navigate({ name: AppDestinationName.READ_HISTORY }))
-
-      Button({ type: ButtonType.Normal, stateEffect: true }) {
-        Column({ space: $r('app.float.spacing_xsmall') }) {
-          SymbolGlyph($r('sys.symbol.bell'))
-            .fontSize(20)
-            .fontColor([this.resolvedThemeColor])
-          Text('通知')
-            .fontSize($r('app.float.secondary_font_size'))
-            .fontColor($r('app.color.primary_text'))
-        }
-        .width('100%')
-        .alignItems(HorizontalAlign.Center)
-      }
-      .id('account_quick_notifications')
-      .layoutWeight(1)
-      .height(72)
-      .backgroundColor($r('app.color.surface_background'))
-      .borderRadius($r('app.float.card_radius'))
-      .accessibilityText('打开通知')
-      .onClick((): void => this.navigate({ name: AppDestinationName.NOTIFICATION }))
-    }
-    .id('account_quick_actions')
-    .width('100%')
+    })
   }
 
   @Builder
-  private settingsSearchResults() {
-    Column({ space: $r('app.float.spacing_small') }) {
-      Text('搜索结果')
-        .id('settings_search_result_title')
-        .fontSize($r('app.float.secondary_font_size'))
-        .fontColor($r('app.color.secondary_text'))
-        .width('100%')
-      if (this.settingsSearchMatches('账号与登录', this.accountSummary())) {
-        AppNavigationRow({ title: '账号与登录', description: this.accountSummary(), testId: 'settings_search_open_login',
-          showLeadingIcon: true, leadingIcon: $r('sys.symbol.person'),
-          onRowClick: (): void => this.navigate({ name: AppDestinationName.LOGIN }) });
+  private identityManagementContent() {
+    IdentityManagementPage();
+  }
+
+  @Builder
+  private appearanceSettingsContent(embedded: boolean, onOpenThemeColor: () => void) {
+    AppearanceSettingsPage({
+      themeMode: this.themeMode,
+      embedded: embedded,
+      onThemeModeChange: (mode: AppThemeMode): void => {
+        void this.selectThemeMode(mode);
+      },
+      onOpenThemeColorSettings: (): void => onOpenThemeColor(),
+      onImmersiveMaterialChange: (mode: ImmersiveMaterialMode): void => {
+        this.selectImmersiveMaterialLevel(mode);
       }
-      if (this.settingsSearchMatches('发布想法', '创建一条新的想法')) {
-        AppNavigationRow({ title: '发布想法', description: '创建一条新的想法', testId: 'settings_search_open_pin_publish',
-          showLeadingIcon: true, leadingIcon: $r('sys.symbol.square_and_pencil'),
-          onRowClick: (): void => this.openPinComposer() });
-      }
-      if (this.settingsSearchMatches('想法草稿', '继续编辑本地保存的草稿')) {
-        AppNavigationRow({ title: '想法草稿', description: '继续编辑本地保存的草稿', testId: 'settings_search_open_pin_drafts',
-          showLeadingIcon: true, leadingIcon: $r('sys.symbol.doc_text'),
-          onRowClick: (): void => this.navigate({ name: AppDestinationName.PIN_DRAFTS }) });
-      }
-      if (this.settingsSearchMatches('我的收藏夹', '查看自己的知乎收藏夹')) {
-        AppNavigationRow({ title: '我的收藏夹', description: '查看自己的知乎收藏夹', testId: 'settings_search_open_my_collections',
-          showLeadingIcon: true, leadingIcon: $r('sys.symbol.bookmark'),
-          onRowClick: (): void => this.openMyCollections() });
-      }
-      if (this.settingsSearchMatches('内容屏蔽', '管理作者与关键词屏蔽规则')) {
-        AppNavigationRow({ title: '内容屏蔽', description: '管理作者与关键词屏蔽规则', testId: 'settings_search_open_blocking_rules',
-          showLeadingIcon: true, leadingIcon: $r('sys.symbol.eye_slash'),
-          onRowClick: (): void => this.navigate({ name: AppDestinationName.BLOCKING_RULES }) });
-      }
-      if (this.settingsSearchMatches('屏蔽记录', '查看最近隐藏的内容')) {
-        AppNavigationRow({ title: '屏蔽记录', description: '查看最近隐藏的内容', testId: 'settings_search_open_blocked_feed_history',
-          showLeadingIcon: true, leadingIcon: $r('sys.symbol.arrow_counterclockwise_clock'),
-          onRowClick: (): void => this.navigate({ name: AppDestinationName.BLOCKED_FEED_HISTORY }) });
-      }
-      if (this.settingsSearchMatches('通知设置', '设置提醒和推送偏好')) {
-        AppNavigationRow({ title: '通知设置', description: '设置提醒和推送偏好', testId: 'settings_search_open_notification_settings',
-          showLeadingIcon: true, leadingIcon: $r('sys.symbol.bell_badge_gearshape'),
-          onRowClick: (): void => this.navigate({ name: AppDestinationName.NOTIFICATION_SETTINGS }) });
-      }
-      if (this.settingsSearchMatches('外观与阅读体验', '主题 沉浸 光感 材质 自适应 精美 轻柔 流畅 阅读排版 信息流 字号 行高 段间距')) {
-        AppNavigationRow({ title: '外观与阅读体验', description: '主题、阅读排版与信息流显示',
-          testId: 'settings_search_search_open_appearance_settings',
-          showLeadingIcon: true, leadingIcon: $r('sys.symbol.eye'),
-          onRowClick: (): void => this.navigate({ name: AppDestinationName.APPEARANCE_SETTINGS }) });
-      }
-      if (this.sessionSnapshot?.status === SessionStatus.AUTHENTICATED &&
-        this.settingsSearchMatches('身份管理', '创建马甲号 切换当前身份')) {
-        AppNavigationRow({ title: '身份管理', description: '创建马甲号或切换当前身份',
-          testId: 'settings_search_open_identity_management',
-          showLeadingIcon: true, leadingIcon: $r('sys.symbol.person_2'),
-          onRowClick: (): void => this.navigate({ name: AppDestinationName.IDENTITY_MANAGEMENT }) });
-      }
-      if (this.settingsSearchMatches('朗读与播放', '语音 语速 音调 播放')) {
-        AppNavigationRow({ title: '朗读与播放', description: '语音、语速与当前播放控制',
-          testId: 'settings_search_open_reading_settings',
-          showLeadingIcon: true, leadingIcon: $r('sys.symbol.mic'),
-          onRowClick: (): void => this.navigate({ name: AppDestinationName.READING_SETTINGS }) });
-      }
-      if (this.settingsSearchMatches('推荐系统与内容过滤', '推荐算法 质量过滤 智能过滤 关键词 用户 主题 广告 盐选')) {
-        AppNavigationRow({ title: '推荐系统与内容过滤', description: '推荐来源、质量规则与内容屏蔽',
-          testId: 'settings_search_search_open_recommendation_filter_settings',
-          showLeadingIcon: true, leadingIcon: $r('sys.symbol.eye_slash'),
-          onRowClick: (): void => this.navigate({ name: AppDestinationName.RECOMMENDATION_FILTER_SETTINGS }) });
-      }
-      if (this.settingsSearchMatches('系统与更新', '版本信息 检查更新 问题反馈')) {
-        AppNavigationRow({ title: '系统与更新', description: '版本信息、检查更新与问题反馈',
-          testId: 'settings_search_open_system_update_settings',
-          showLeadingIcon: true, leadingIcon: $r('sys.symbol.arrow_clockwise'),
-          onRowClick: (): void => this.navigate({ name: AppDestinationName.SYSTEM_UPDATE_SETTINGS }) });
-      }
-      if (this.settingsSearchMatches('应用与版本', this.installedVersionLabel)) {
-        AppNavigationRow({ title: '应用与版本', description: this.installedVersionLabel,
-          testId: 'settings_search_open_about_version', showLeadingIcon: true, leadingIcon: $r('sys.symbol.info_circle'),
-          onRowClick: (): void => {
-            this.onVersionRowClicked();
-          } });
-      }
-      if (this.settingsSearchMatches('GitHub', '查看项目主页')) {
-        AppNavigationRow({ title: 'GitHub', description: '查看项目主页', testId: 'settings_search_open_project_home',
-          showLeadingIcon: true, leadingIcon: $r('app.media.github_mark'), leadingIconIsMedia: true,
-          onRowClick: (): void => this.openProjectHome() });
-      }
-      if (this.settingsSearchMatches('项目协议', 'GNU AGPL v3.0')) {
-        AppNavigationRow({ title: '项目协议', description: 'GNU AGPL v3.0',
-          testId: 'settings_search_open_project_license', showLeadingIcon: true,
-          leadingIcon: $r('sys.symbol.checkmark_square'), onRowClick: (): void => {
-            this.projectLicenseSheetShown = true;
-          } });
-      }
-      if (this.settingsSearchMatches('开源许可', '3 个本地 HAR 模块 GNU AGPL v3.0')) {
-        AppNavigationRow({ title: '开源许可', description: '3 个本地 HAR 模块 · GNU AGPL v3.0',
-          testId: 'settings_search_open_open_source_licenses', showLeadingIcon: true,
-          leadingIcon: $r('sys.symbol.doc_text'), onRowClick: (): void => {
-            this.openSourceLicensesSheetShown = true;
-          } });
-      }
-      if (this.developerModeEnabled &&
-        this.settingsSearchMatches('开发者选项', 'Cookie 网络 调试工具 技术实验室')) {
-        AppNavigationRow({ title: '开发者选项', description: 'Cookie、网络与调试工具', testId: 'settings_search_open_developer_options',
-          showLeadingIcon: true, leadingIcon: $r('sys.symbol.gearshape'),
-          onRowClick: (): void => this.navigate({ name: AppDestinationName.TECHNICAL_LAB }) });
-      }
-      if (!this.hasSettingsSearchResults()) {
-        Text('没有匹配的设置项')
-          .id('settings_search_empty')
-          .fontSize($r('app.float.body_font_size'))
-          .fontColor($r('app.color.secondary_text'))
-          .width('100%')
-          .padding($r('app.float.card_padding'))
-          .borderRadius($r('app.float.card_radius'))
-          .backgroundColor($r('app.color.surface_background'))
-      }
-    }
-    .id('settings_search_results')
-    .width('100%')
+    })
+  }
+
+  @Builder
+  private readingSettingsContent(embedded: boolean) {
+    ReadingSettingsPage({ embedded: embedded })
+  }
+
+  @Builder
+  private filterSettingsContent(embedded: boolean, onOpenBlocklist: () => void, onOpenBlockedHistory: () => void) {
+    ContentFilterSettingsPage({
+      preferences: this.createPreferencesStore(),
+      runtime: this.createFilterRuntimeStore(),
+      embedded: embedded,
+      onOpenBlocklist: (): void => onOpenBlocklist(),
+      onOpenBlockedHistory: (): void => onOpenBlockedHistory()
+    })
+  }
+
+  @Builder
+  private systemUpdateSettingsContent(embedded: boolean) {
+    SystemUpdateSettingsPage({
+      installedVersionLabel: this.installedVersionLabel,
+      updateCheckBusy: this.updateCheckBusy,
+      updateCheckMessage: this.updateCheckMessage,
+      availableVersion: this.pendingUpdateRelease?.versionName ?? '',
+      latestVersion: this.latestUpdateRelease?.versionName ?? '',
+      latestAssetUrl: this.latestUpdateRelease?.assetUrl ?? '',
+      latestAssetSha256: this.latestUpdateRelease?.assetSha256 ?? '',
+      embedded: embedded,
+      onCheckUpdate: (): void => {
+        void this.runUpdateCheck(true);
+      },
+      onOpenDownload: (url: string): void => this.openExternalUrl(url, '无法打开下载链接'),
+      onOpenProject: (): void => this.openProjectHome(),
+      onOpenWhatsNew: (): void => this.navigate({ name: AppDestinationName.WHATS_NEW }),
+      onOpenUpdateWhatsNew: (): void => this.openUpdateWhatsNew()
+    })
   }
 
   @Builder
@@ -2544,21 +2285,6 @@ export struct AppShell {
     AppStorage.setOrCreate('homeUpdateAnnouncementVersion', version);
   }
 
-  private releaseDownloadUrl(release: AppUpdateRelease): string {
-    return release.htmlUrl.length > 0 ? release.htmlUrl : PROJECT_HOME_URI + '/releases/latest';
-  }
-
-  private pendingUpdateTitle(): string {
-    const release = this.pendingUpdateRelease;
-    return release !== undefined ? `发现新版本 ${release.versionName}` : '';
-  }
-
-  private openPendingUpdate(): void {
-    const release = this.pendingUpdateRelease;
-    const url = release !== undefined ? this.releaseDownloadUrl(release) : PROJECT_HOME_URI + '/releases/latest';
-    this.openExternalUrl(url, '无法打开发布页');
-  }
-
   private onVersionTapped(): void {
     if (this.developerModeEnabled) {
       this.getUIContext().getPromptAction().showToast({ message: '开发者选项已开启' });
@@ -2572,6 +2298,7 @@ export struct AppShell {
     }
     this.versionTapCount = 0;
     this.developerModeEnabled = true;
+    AppStorage.setOrCreate('developerModeEnabled', true);
     const context = getAbilityContext();
     if (context !== undefined) {
       void new AppPreferencesStore(context).saveDeveloperMode(true);
@@ -2591,6 +2318,7 @@ export struct AppShell {
   private disableDeveloperMode(): void {
     this.developerModeEnabled = false;
     this.versionTapCount = 0;
+    AppStorage.setOrCreate('developerModeEnabled', false);
     const context = getAbilityContext();
     if (context !== undefined) {
       void new AppPreferencesStore(context).saveDeveloperMode(false);
@@ -2599,35 +2327,14 @@ export struct AppShell {
     this.getUIContext().getPromptAction().showToast({ message: '开发者选项已关闭' });
   }
 
-  private hasSettingsSearchQuery(): boolean {
-    return this.settingsSearchQuery.trim().length > 0;
-  }
-
-  private settingsSearchMatches(title: string, description: string): boolean {
-    const query = this.settingsSearchQuery.trim().toLowerCase();
-    return query.length > 0 && `${title} ${description}`.toLowerCase().includes(query);
-  }
-
-  private hasSettingsSearchResults(): boolean {
-    return this.settingsSearchMatches('账号与登录', this.accountSummary()) ||
-      this.settingsSearchMatches('发布想法', '创建一条新的想法') ||
-      this.settingsSearchMatches('想法草稿', '继续编辑本地保存的草稿') ||
-      this.settingsSearchMatches('我的收藏夹', '查看自己的知乎收藏夹') ||
-      this.settingsSearchMatches('内容屏蔽', '管理作者与关键词屏蔽规则') ||
-      this.settingsSearchMatches('屏蔽记录', '查看最近隐藏的内容') ||
-      this.settingsSearchMatches('通知设置', '设置提醒和推送偏好') ||
-      (this.sessionSnapshot?.status === SessionStatus.AUTHENTICATED &&
-        this.settingsSearchMatches('身份管理', '创建马甲号 切换当前身份')) ||
-      this.settingsSearchMatches('外观与阅读体验', '主题 沉浸 光感 材质 自适应 精美 轻柔 流畅 阅读排版 信息流 字号 行高 段间距') ||
-      this.settingsSearchMatches('朗读与播放', '语音 语速 音调 播放') ||
-      this.settingsSearchMatches('推荐系统与内容过滤', '推荐算法 质量过滤 智能过滤 关键词 用户 主题 广告 盐选') ||
-      this.settingsSearchMatches('系统与更新', '版本信息 检查更新 问题反馈') ||
-      this.settingsSearchMatches('应用与版本', this.installedVersionLabel) ||
-      this.settingsSearchMatches('GitHub', '查看项目主页') ||
-      this.settingsSearchMatches('项目协议', 'GNU AGPL v3.0') ||
-      this.settingsSearchMatches('开源许可', '3 个本地 HAR 模块 GNU AGPL v3.0') ||
-      (this.developerModeEnabled &&
-        this.settingsSearchMatches('开发者选项', 'Cookie 网络 调试工具 技术实验室'));
+  /** 窄容器设置详情优先回目录；双栏或目录根页交回导航栈退出设置。 */
+  private handleSettingsHomeBack(): boolean {
+    if (AppStorage.get<boolean>('settingsHomeDetailBackActive') === true) {
+      AppStorage.setOrCreate('settingsHomeBackTick',
+        (AppStorage.get<number>('settingsHomeBackTick') ?? 0) + 1);
+      return true;
+    }
+    return false;
   }
 
   private openExternalUrl(url: string, fallbackPrefix: string): void {
@@ -2665,15 +2372,6 @@ export struct AppShell {
 
   private accountSessionState(): SessionState | undefined {
     return this.sessionSnapshot ?? this.session?.getState();
-  }
-
-  private accountSummary(): string {
-    const state = this.accountSessionState();
-    if (state?.status !== SessionStatus.AUTHENTICATED) {
-      return '管理当前知乎账号的登录状态';
-    }
-    const profileName = state.profile?.name.trim() ?? '';
-    return profileName.length > 0 ? `已登录：${profileName}` : '已登录';
   }
 
   private accountTitle(): string {
@@ -2995,8 +2693,10 @@ export struct AppShell {
     }
     try {
       this.developerModeEnabled = await new AppPreferencesStore(context).loadDeveloperMode();
+      AppStorage.setOrCreate('developerModeEnabled', this.developerModeEnabled);
     } catch (_error) {
       this.developerModeEnabled = false;
+      AppStorage.setOrCreate('developerModeEnabled', false);
     }
   }
 
