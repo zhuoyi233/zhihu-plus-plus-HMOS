@@ -60,8 +60,10 @@ export struct AnswerTitleBar {
   }
 
   private scrolled(): boolean {
-    return (this.answerSwitchMode === 'horizontal' && (this.state()?.questionTitle ?? '').length > 0) ||
-      (this.state()?.scrolled ?? false);
+    // 折叠只看正文信息头是否真的滚出视口：横向模式曾被强制折叠成问题标题，
+    // 导致未下滑时正文与顶栏同时出现问题标题/答主，形成信息冗余。
+    // 横向切换期间不再每次重置折叠态（提交时按新正文实际位置继承），标题同样稳定。
+    return this.state()?.scrolled ?? false;
   }
 
   build() {

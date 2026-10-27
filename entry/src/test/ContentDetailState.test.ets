@@ -27,6 +27,7 @@ import {
   contentStatistics,
   contentTitle,
   contentUpdatedAtText,
+  answerTitleFoldThreshold,
   formatContentDateTime
 } from '../main/ets/pages/ContentDetailPages';
 import { parseZhihuHtml, ReaderBlockKind, ReaderInlineKind } from 'reader';
@@ -182,6 +183,15 @@ export default function contentDetailStateTest(): void {
       expect(controller.commitPreparedAnswer(admittedOther)).assertTrue();
       expect(controller.snapshot().content?.value.id).assertEqual('4');
       controller.deactivate();
+    });
+    it('foldsAnswerTitleBarOnlyAfterHeaderIdentityScrollsOut', 0, () => {
+      // 折叠阈值必须覆盖「问题标题 + 答主行」：只按标题判定会让答主信息在正文仍可见时
+      // 就出现在顶栏，形成信息冗余（横向模式曾强制折叠，问题标题同样冗余）。
+      expect(answerTitleFoldThreshold(60, 0)).assertEqual(68);
+      expect(answerTitleFoldThreshold(60, 40)).assertEqual(60 + 18 + 40 + 8);
+      // 答主行未测得时退化到仅按标题判定；标题也未测得时用兜底阈值。
+      expect(answerTitleFoldThreshold(0, 40)).assertEqual(64);
+      expect(answerTitleFoldThreshold(0, 0)).assertEqual(64);
     });
     it('acceptsNewDocumentEdgesWhileRejectingDepartedDocumentEvents', 0, () => {
       const oldDetail: LoadedAnswerDetail = { kind: ContentDetailKind.ANSWER, value: answerFixture(), loadGeneration: 1 };

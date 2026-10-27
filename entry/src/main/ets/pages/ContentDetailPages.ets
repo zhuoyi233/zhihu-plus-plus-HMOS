@@ -176,7 +176,10 @@ struct ContentDetailPage {
   private articleTitleScrolled: boolean = false;
   /** 详情页滚动信息头中主标题实测高度（vp）：折叠阈值的动态基准；未测得前按单行估算。 */
   private contentTitleHeightVp: number = 0;
+  /** 正文信息头中答主行实测高度（vp）：与标题共同构成顶栏折叠阈值，避免标题还在视口内就先折叠。 */
+  private contentAuthorRowHeightVp: number = 0;
   private answerPaneTitleHeights: Map<string, number> = new Map();
+  private answerPaneAuthorHeights: Map<string, number> = new Map();
   private pageActive: boolean = false;
   repository: ContentRepository | undefined = undefined;
   /** 相邻答全文预取仓库工厂（Index 注入独立 client）：与前台详情仓库分开，避免单飞互相取消。 */
@@ -206,6 +209,8 @@ struct ContentDetailPage {
   @State private answerPanes: LoadedContentDetail[] = [];
   /** 候选正文相对当前答的方向：1=下一答，-1=上一答，0=无候选。 */
   @State private candidateDirection: number = 0;
+  /** 候选正文当前滚动偏移（vp）：提交时据此继承折叠态，避免落位瞬间顶栏回弹。 */
+  private candidateScrollOffset: number = 0;
   /** 已回报视口就绪的正文实例键（含预挂载候选），避免重复等待。 */
   private preparedAnswerPanes: Set<string> = new Set();
   private answerPaneWaiter?: (ready: boolean) => void;
@@ -1049,9 +1054,13 @@ struct ContentDetailPage {
           documentHeader: (): void => { this.contentHeader(content) },
           documentFooter: (): void => { this.contentDateFooter(content) },
           onScrollOffset: (offset: number): void => {
+            if (!this.pageActive) { return; }
             // 按正文实例过滤旧 List 的残余事件；新正文 READY 时可能仍在写阅读记录，
             // 不能用 navigatorBusy 丢弃其初始滚动/边界通知。
-            if (!this.pageActive || !acceptsContentDocumentEvent(this.phase, this.content, content)) { return; }
+            if (!acceptsContentDocumentEvent(this.phase, this.content, content)) {
+              this.trackCandidateScrollOffset(content, offset);
+              return;
+            }
             this.updateChromeHiddenByScroll(offset);
             if (this.kind === ContentDetailKind.ANSWER) {
               this.updateAnswerTitleScrolled(content, offset);
@@ -1517,7 +1526,10 @@ struct ContentDetailPage {
               const height = Number(newArea.height);
               if (content.kind === ContentDetailKind.ANSWER && height > 0) {
                 this.answerPaneTitleHeights.set(this.answerDocumentKey(content), height);
-                if (!acceptsContentDocumentEvent(this.phase, this.content, content)) { return; }
+                // 只认当前正文：候选实例的高度只进 map，提交时按目标键取用。
+                // 不能用 acceptsContentDocumentEvent——首帧布局时控制器可能还没进入 READY，
+                // 该判定会丢弃唯一一次实测结果，折叠阈值退回兜底值。
+                if (content.value.id !== this.activeContentId) { return; }
               }
               if (height > 0 && Math.abs(height - this.contentTitleHeightVp) > 1) {
                 this.contentTitleHeightVp = height;
@@ -1772,6 +1784,19 @@ struct ContentDetailPage {
       }
       .id(`${content.kind}_detail_header_author_row`)
       .width('100%')
+      .onAreaChange((_oldArea: Area, newArea: Area): void => {
+        const height = Number(newArea.height);
+        if (content.kind !== ContentDetailKind.ANSWER || height <= 0) {
+          return;
+        }
+        // 答主行高度参与顶栏折叠阈值：标题与答主都滚出视口后才折叠，避免同一份信息
+        // 同时出现在正文信息头和顶栏。只认当前正文，候选实例的高度只进 map。
+        this.answerPaneAuthorHeights.set(this.answerDocumentKey(content), height);
+        if (content.value.id !== this.activeContentId) { return; }
+        if (Math.abs(height - this.contentAuthorRowHeightVp) > 1) {
+          this.contentAuthorRowHeightVp = height;
+        }
+      })
       .onClick((): void => {
         const author = content.value.author;
         if (author !== undefined && author.id.trim().length > 0) {
@@ -1782,18 +1807,35 @@ struct ContentDetailPage {
     }
   }
 
-  /** 回答页顶栏折叠联动：正文滚过问题标题（高度经 onAreaChange 实测，未测得前用 64vp 兜底）
-   * 即折叠，滚回复原；经 AppStorage 广播给 HDS 标题栏（同问题页 160px 阈值模式）。
+  /**
+   * 顶栏折叠阈值：正文信息头里「问题标题 + 答主行」整体滚出视口后才折叠。
+   * 只按标题高度判定会让答主信息在正文仍可见时就出现在顶栏（信息冗余）。
+   */
+  private answerIdentityThreshold(titleHeight: number, authorHeight: number): number {
+    return answerTitleFoldThreshold(titleHeight, authorHeight);
+  }
+
+  /** 正文列表的顶部内缩（vp）：与 NativeContentDocument 的 contentStartOffset 一致。 */
+  private answerTopScrollInsetVp(): number {
+    return this.immersiveReading ? 0 : FLOATING_TITLE_BAR_OFFSET;
+  }
+
+  /**
+   * 回答页顶栏折叠联动：正文信息头（问题标题 + 答主）滚出视口即折叠，滚回复原；
+   * 经 AppStorage 广播给 HDS 标题栏（同问题页 160px 阈值模式）。
    * 通道键固定用路由 contentId（标题栏按 destination.id 查找，过滑切换回答不改路由，
    * activeContentId 会随切换漂移导致顶栏读到陈旧条目）；闭包捕获的 content 是构造时
    * 的克隆（@Builder 传值不更新已挂载子组件属性，且控制器每次 emit 都换新克隆），
-   * 陈旧判定只能按内容 id 比较——id 不同才说明是切换期间的陈旧回调，直接丢弃。 */
+   * 陈旧判定只能按内容 id 比较——id 不同才说明是切换期间的陈旧回调，直接丢弃。
+   */
   private updateAnswerTitleScrolled(content: LoadedContentDetail, offset: number): void {
     if (content.kind !== ContentDetailKind.ANSWER || content.value.id !== this.content?.value.id) {
       return;
     }
-    const threshold = this.contentTitleHeightVp > 0 ? this.contentTitleHeightVp + 8 : 64;
-    const scrolled = offset > threshold;
+    // 覆盖式顶栏用 contentStartOffset 把正文下移 topInset，静止时 yOffset 为负值；
+    // 折叠判定必须换算成「相对正文起点的滚动距离」，否则会多滚 topInset 才折叠。
+    const scrolled = offset + this.answerTopScrollInsetVp() >
+      this.answerIdentityThreshold(this.contentTitleHeightVp, this.contentAuthorRowHeightVp);
     if (scrolled !== this.answerQuestionScrolled) {
       this.answerQuestionScrolled = scrolled;
       this.getUIContext().animateTo({ duration: 220, curve: Curve.EaseInOut }, (): void => {
@@ -2593,6 +2635,15 @@ struct ContentDetailPage {
     return `${this.contentId}:${content.value.id}:${content.loadGeneration ?? 0}`;
   }
 
+  /** 记录候选正文的滚动偏移：候选不参与页面 chrome，但提交时需要继承它的折叠态。 */
+  private trackCandidateScrollOffset(content: LoadedContentDetail, offset: number): void {
+    const candidate = this.candidatePane();
+    if (candidate === undefined || this.answerDocumentKey(candidate) !== this.answerDocumentKey(content)) {
+      return;
+    }
+    this.candidateScrollOffset = offset;
+  }
+
   /** 已挂载的候选正文（非当前答）；未挂载候选时返回 undefined。 */
   private candidatePane(): LoadedContentDetail | undefined {
     if (this.answerPanes.length < 2) {
@@ -2653,6 +2704,7 @@ struct ContentDetailPage {
     }
     this.answerPanes = [current, content];
     this.candidateDirection = direction;
+    this.candidateScrollOffset = 0;
     this.traceAnswerSwitch('mount', `candidate=${content.value.id} dir=${direction} offset=${this.answerOverscrollOffset}`);
     // 被替换掉的候选实例已销毁：其就绪标记不得留给后续实例复用。
     const keep = this.answerDocumentKey(content);
@@ -2672,6 +2724,7 @@ struct ContentDetailPage {
       this.answerPanes = [current];
     }
     this.candidateDirection = 0;
+    this.candidateScrollOffset = 0;
     this.preparedAnswerPanes.clear();
   }
 
@@ -2840,6 +2893,9 @@ struct ContentDetailPage {
       this.answerPaneTitleHeights.forEach((_height: number, key: string): void => {
         if (key !== activeKey && key !== candidateKey) { this.answerPaneTitleHeights.delete(key); }
       });
+      this.answerPaneAuthorHeights.forEach((_height: number, key: string): void => {
+        if (key !== activeKey && key !== candidateKey) { this.answerPaneAuthorHeights.delete(key); }
+      });
       this.navigatorBusy = false;
       this.scheduleAnswerPrefetch();
     }
@@ -2930,8 +2986,11 @@ struct ContentDetailPage {
     this.contentAtBottom = false;
     this.contentAtTop = true;
     this.contentTitleHeightVp = this.answerPaneTitleHeights.get(this.answerDocumentKey(target)) ?? 0;
-    // 顶栏折叠态随新答复位：新内容从视口顶部渲染，问题标题回到视口内。
-    this.answerQuestionScrolled = false;
+    this.contentAuthorRowHeightVp = this.answerPaneAuthorHeights.get(this.answerDocumentKey(target)) ?? 0;
+    // 折叠态继承候选正文自己的滚动位置：新答仍停在顶部时顶栏必须保持展开，
+    // 否则正文还在显示问题标题/答主，顶栏同时再显示一份。
+    this.answerQuestionScrolled = this.candidateScrollOffset >
+      this.answerIdentityThreshold(this.contentTitleHeightVp, this.contentAuthorRowHeightVp);
     // 折叠的标题栏/底部操作栏随新答复位回显（对齐上游：切回答 = 新建 ScrollState，
     // currentScroll == 0 时 offset.snapTo(0) 强制回显；本页组件复用 @State，需手动复位）。
     this.chromeHiddenByScroll = false;
@@ -4152,6 +4211,24 @@ const ANSWER_OVERSCROLL_TRIGGER_THRESHOLD: number = 80;
 const ANSWER_OVERSCROLL_DAMPING_FACTOR: number = 1.2;
 /** 横向切换落位动画时长（ms）：候选已就绪时从拖动位置滑到目标整页。 */
 const ANSWER_SWITCH_SETTLE_DURATION: number = 180;
+/** 信息头内问题标题与答主行间距（vp）：标题 8vp 下边距 + 外层 10vp 段间距。 */
+const ANSWER_TITLE_AUTHOR_GAP: number = 18;
+/** 折叠判定余量（vp）：信息头整体滚出视口后再折叠，避免边界抖动。 */
+const ANSWER_TITLE_FOLD_MARGIN: number = 8;
+/** 标题高度尚未测得时的折叠阈值兜底（vp）。 */
+const ANSWER_TITLE_FOLD_FALLBACK_THRESHOLD: number = 64;
+
+/**
+ * 回答页顶栏折叠阈值（vp）：信息头中问题标题与答主行都滚出视口后才折叠。
+ * authorHeight 为 0（无答主行或尚未测得）时退化为仅按标题判定。
+ */
+export function answerTitleFoldThreshold(titleHeight: number, authorHeight: number): number {
+  if (titleHeight <= 0) {
+    return ANSWER_TITLE_FOLD_FALLBACK_THRESHOLD;
+  }
+  const author = authorHeight > 0 ? ANSWER_TITLE_AUTHOR_GAP + authorHeight : 0;
+  return titleHeight + author + ANSWER_TITLE_FOLD_MARGIN;
+}
 
 /** tanh 阻尼（对齐上游 dampedOverscrollOffset）：位移趋近上限时增益渐减。 */
 function dampedOverscrollOffset(rawDelta: number, maxOverscroll: number, dampingFactor: number): number {
