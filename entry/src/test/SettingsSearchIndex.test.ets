@@ -59,6 +59,22 @@ export default function settingsSearchIndexTest(): void {
         .assertTrue();
     });
 
+    it('findsBlockingRuleSubFeatures', 0, () => {
+      const entries: Array<SettingsSearchEntry> = visibleSettingsSearchEntries(authenticatedOptions(false));
+
+      const topicResults: Array<SettingsSearchEntry> = matchSettingsSearchEntries(entries, '话题');
+      expect(topicResults.some((entry: SettingsSearchEntry): boolean => entry.id === SettingsEntryId.BLOCKING_RULES))
+        .assertTrue();
+
+      const regexResults: Array<SettingsSearchEntry> = matchSettingsSearchEntries(entries, '正则');
+      expect(regexResults.some((entry: SettingsSearchEntry): boolean => entry.id === SettingsEntryId.BLOCKING_RULES))
+        .assertTrue();
+
+      const backupResults: Array<SettingsSearchEntry> = matchSettingsSearchEntries(entries, '导入');
+      expect(backupResults.some((entry: SettingsSearchEntry): boolean => entry.id === SettingsEntryId.BLOCKING_RULES))
+        .assertTrue();
+    });
+
     it('returnsEmptyForBlankOrUnknownQueries', 0, () => {
       const entries: Array<SettingsSearchEntry> = visibleSettingsSearchEntries(authenticatedOptions(true));
       expect(matchSettingsSearchEntries(entries, '   ').length).assertEqual(0);

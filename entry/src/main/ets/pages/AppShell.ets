@@ -136,7 +136,7 @@ export struct AppShell {
   @BuilderParam dailyStoryContent: (id: string, navigate: (destination: AppDestination) => void) => void =
     this.emptyContent;
   @BuilderParam technicalLabContent: (navigate: (destination: AppDestination) => void,
-    onDeveloperModeDisabled: () => void) => void =
+    onDeveloperModeDisabled: () => void, embedded: boolean) => void =
     this.emptyTechnicalLab;
   @BuilderParam searchContent: (query: string, navigate: (destination: AppDestination) => void,
     onBack: () => void) => void =
@@ -174,8 +174,11 @@ export struct AppShell {
     this.emptyPrivateMessage;
   @BuilderParam notificationSettingsContent: (navigate: (destination: AppDestination) => void,
     embedded: boolean) => void = this.emptyNotificationSettings;
-  @BuilderParam blockingRulesContent: (onBack: () => void) => void = this.emptyProbe;
-  @BuilderParam blockedFeedHistoryContent: (onBack: () => void) => void = this.emptyPage;
+  /** 屏蔽规则／屏蔽记录：根路由与设置右栏复用同一 Builder，embedded 决定标题与让位归属。 */
+  @BuilderParam blockingRulesContent: (onBack: () => void, embedded: boolean,
+    registerActions: (handler: () => void) => void, releaseActions: () => void) => void = this.emptyEmbeddedPage;
+  @BuilderParam blockedFeedHistoryContent: (onBack: () => void, embedded: boolean,
+    registerActions: (handler: () => void) => void, releaseActions: () => void) => void = this.emptyEmbeddedPage;
   @BuilderParam readHistoryContent: (navigate: (destination: AppDestination) => void, onBack: () => void) => void =
     this.emptyHome;
   @BuilderParam localHistoryContent: (navigate: (destination: AppDestination) => void, onBack: () => void) => void =
@@ -412,7 +415,14 @@ export struct AppShell {
   }
 
   @Builder
-  emptyTechnicalLab(_navigate: (destination: AppDestination) => void, _onDeveloperModeDisabled: () => void) {
+  emptyTechnicalLab(_navigate: (destination: AppDestination) => void, _onDeveloperModeDisabled: () => void,
+    _embedded: boolean) {
+    Blank();
+  }
+
+  @Builder
+  emptyEmbeddedPage(_onBack: () => void, _embedded: boolean,
+    _registerActions: (handler: () => void) => void, _releaseActions: () => void) {
     Blank();
   }
 
@@ -565,7 +575,10 @@ export struct AppShell {
       HdsNavDestination() {
         this.settingsHomePageContent();
       }
+      // 标题与返回统一由设置宿主绘制（目录/详情共用同一行）；HDS 悬浮标题栏若同时存在，
+      // 二级页会出现“设置”与详情标题两条标题、两个返回键，因此这里隐藏系统标题栏。
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '设置' }, divider: { showType: DividerShowType.OFF } } })
+      .hideTitleBar(true)
       .onBackPressed((): boolean => this.handleSettingsHomeBack())
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
@@ -645,7 +658,7 @@ export struct AppShell {
       HdsNavDestination() {
         this.blockingRulesContent((): void => {
           this.pathStack.pop();
-        });
+        }, false, (): void => {}, (): void => {});
       }
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '内容屏蔽' }, divider: { showType: DividerShowType.OFF } } })
       .hideTitleBar(true)
@@ -655,7 +668,7 @@ export struct AppShell {
       HdsNavDestination() {
         this.blockedFeedHistoryContent((): void => {
           this.pathStack.pop();
-        });
+        }, false, (): void => {}, (): void => {});
       }
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '屏蔽记录' }, divider: { showType: DividerShowType.OFF } } })
       .hideTitleBar(true)
@@ -693,7 +706,7 @@ export struct AppShell {
       HdsNavDestination() {
         this.technicalLabContent((destination: AppDestination): void => this.navigate(destination), (): void => {
           this.disableDeveloperMode();
-        });
+        }, false);
       }
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '开发者选项' }, divider: { showType: DividerShowType.OFF } } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
@@ -1845,6 +1858,9 @@ export struct AppShell {
       updateLabel: this.pendingUpdateRelease !== undefined ? '有新版本' : '',
       navigate: (destination: AppDestination): void => this.navigate(destination),
       onLogout: (): void => this.confirmAccountLogout(),
+      closeSettings: (): void => {
+        this.pathStack.pop();
+      },
       identityContent: (): void => {
         this.identityManagementContent();
       },
@@ -1856,6 +1872,17 @@ export struct AppShell {
       },
       filterContent: (onOpenBlocklist: () => void, onOpenBlockedHistory: () => void): void => {
         this.filterSettingsContent(true, onOpenBlocklist, onOpenBlockedHistory);
+      },
+      blockingRulesContent: (registerActions: (handler: () => void) => void,
+        releaseActions: () => void): void => {
+        this.blockingRulesEmbeddedContent(registerActions, releaseActions);
+      },
+      blockedHistoryContent: (registerActions: (handler: () => void) => void,
+        releaseActions: () => void): void => {
+        this.blockedFeedHistoryEmbeddedContent(registerActions, releaseActions);
+      },
+      developerContent: (): void => {
+        this.technicalLabEmbeddedContent();
       },
       notificationContent: (): void => {
         this.notificationSettingsContent((destination: AppDestination): void => this.navigate(destination), true);
@@ -1869,9 +1896,28 @@ export struct AppShell {
     })
   }
 
+  /** 嵌入设置右栏的内容屏蔽：标题、返回与“更多”都由宿主提供，页面只登记动作。 */
   @Builder
-  private aboutAppPageContent() {
-    AboutAppPage({
+  private blockingRulesEmbeddedContent(registerActions: (handler: () => void) => void, releaseActions: () => void) {
+    this.blockingRulesContent((): void => {}, true, registerActions, releaseActions);
+  }
+
+  /** 嵌入设置右栏的屏蔽记录。 */
+  @Builder
+  private blockedFeedHistoryEmbeddedContent(registerActions: (handler: () => void) => void,
+    releaseActions: () => void) {
+    this.blockedFeedHistoryContent((): void => {}, true, registerActions, releaseActions);
+  }
+
+  /** 嵌入设置右栏的开发者选项：关闭模式只持久化，导航由设置宿主按入口来源处理。 */
+  @Builder
+  private technicalLabEmbeddedContent() {
+    this.technicalLabContent((destination: AppDestination): void => this.navigate(destination),
+      (): void => this.onEmbeddedDeveloperModeDisabled(), true);
+  }
+
+  @Builder
+  private aboutAppPageContent() {    AboutAppPage({
       installedVersionLabel: this.installedVersionLabel,
       developerModeEnabled: this.developerModeEnabled,
       onVersionRowClick: (): void => this.onVersionRowClicked(),
@@ -2315,14 +2361,31 @@ export struct AppShell {
     this.onVersionTapped();
   }
 
-  private disableDeveloperMode(): void {
-    this.developerModeEnabled = false;
-    this.versionTapCount = 0;
-    AppStorage.setOrCreate('developerModeEnabled', false);
+  /**
+   * 只做持久化与全局广播，不发导航：嵌入设置右栏时由设置宿主回到目录，
+   * 独立入口由 disableDeveloperMode() 负责退出当前页（§11.1 拆分要求）。
+   */
+  private setDeveloperModeEnabled(enabled: boolean): void {
+    this.developerModeEnabled = enabled;
+    if (!enabled) {
+      this.versionTapCount = 0;
+    }
+    AppStorage.setOrCreate('developerModeEnabled', enabled);
     const context = getAbilityContext();
     if (context !== undefined) {
-      void new AppPreferencesStore(context).saveDeveloperMode(false);
+      void new AppPreferencesStore(context).saveDeveloperMode(enabled);
     }
+  }
+
+  /** 嵌入设置宿主时的关闭动作：仅持久化并提示，导航由宿主按入口来源处理。 */
+  private onEmbeddedDeveloperModeDisabled(): void {
+    this.setDeveloperModeEnabled(false);
+    this.getUIContext().getPromptAction().showToast({ message: '开发者选项已关闭' });
+  }
+
+  /** 独立开发者页关闭模式：持久化后退出该页。 */
+  private disableDeveloperMode(): void {
+    this.setDeveloperModeEnabled(false);
     this.pathStack.pop();
     this.getUIContext().getPromptAction().showToast({ message: '开发者选项已关闭' });
   }

@@ -7,8 +7,10 @@ import {
   BlockingPreferencesGateway,
   BlockingRuleGateway,
   BlockingRuleKind,
+  BlocklistBackupImportSummary,
   DEFAULT_THEME_COLOR,
   defaultBlockingPreferences,
+  FeedCardStyle,
   MAX_BLOCKING_ID_LENGTH,
   MAX_BLOCKING_KEYWORD_LENGTH,
   MAX_BLOCKING_NAME_LENGTH,
@@ -20,12 +22,23 @@ import {
   BlockingRulesViewState
 } from './BlockingRulesState';
 import { adaptiveOverlayWidth, isWideOverlayContainer, ADAPTIVE_OVERLAY_MENU_WIDTH_VP } from '../common/style/AdaptiveOverlayLayout';
+import { settingsGroupBackground, settingsGroupRadius } from './AccountSettingsLayout';
 
+/**
+ * 内容屏蔽：开关组、分类、计数与规则行共用一个主滚动，嵌入设置右栏时由宿主画标题。
+ *
+ * 新增入口从右下角悬浮加号改为计数行的按钮：不再遮挡最后一条规则，也不会在键盘弹出时
+ * 盖住表单。弹层在嵌入模式下限定在承载栏内的覆盖容器，避免全屏 sheet 遮住整个设置。
+ */
 @Component
 export struct BlockingRulesPage {
   rules: BlockingRuleGateway | undefined = undefined;
   preferences: BlockingPreferencesGateway | undefined = undefined;
   onBack: () => void = (): void => {};
+  /** 嵌入设置容器：不画自带标题、不叠加覆盖式让位，动作交给宿主标题栏。 */
+  @Prop embedded: boolean = false;
+  onRegisterHeaderActions: (handler: () => void) => void = (_handler: () => void): void => {};
+  onReleaseHeaderActions: () => void = (): void => {};
   @State private viewState: BlockingRulesViewState = {
     phase: BlockingRulesPhase.LOADING,
     selectedKind: BlockingRuleKind.KEYWORD,
@@ -42,6 +55,9 @@ export struct BlockingRulesPage {
   @State private identifierInput: string = '';
   @State private nameInput: string = '';
   @State @Watch('clearDialogChanged') private confirmClear: boolean = false;
+  /** 清空确认绑定打开时的分类，后台切换分类不会清错类别。 */
+  @State private pendingClearKind: BlockingRuleKind = BlockingRuleKind.KEYWORD;
+  @State private pendingClearCount: number = 0;
   @State private actionsSheetShown: boolean = false;
   @State private addRuleSheetShown: boolean = false;
   @State private backupSheetShown: boolean = false;
@@ -52,6 +68,7 @@ export struct BlockingRulesPage {
   @State private overlayWidthVp: number = 0;
   @StorageProp('statusBarHeight') private statusBarHeightVp: number = 0;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  @StorageProp('feedCardStyle') private feedCardStyle: string = FeedCardStyle.DIVIDER;
   private controller?: BlockingRulesController;
 
   private clearDialog: CustomDialogController = new CustomDialogController({
@@ -72,6 +89,11 @@ export struct BlockingRulesPage {
   }
 
   aboutToAppear(): void {
+    if (this.embedded) {
+      this.onRegisterHeaderActions((): void => {
+        this.actionsSheetShown = true;
+      });
+    }
     const rules = this.rules;
     const preferences = this.preferences;
     if (rules === undefined || preferences === undefined) {
@@ -87,6 +109,10 @@ export struct BlockingRulesPage {
       };
       return;
     }
+    if (this.controller !== undefined) {
+      this.controller.activate();
+      return;
+    }
     this.controller = new BlockingRulesController(rules, preferences,
       (state: BlockingRulesViewState): void => {
         this.viewState = state;
@@ -95,6 +121,9 @@ export struct BlockingRulesPage {
   }
 
   aboutToDisappear(): void {
+    if (this.embedded) {
+      this.onReleaseHeaderActions();
+    }
     this.controller?.deactivate();
     this.controller = undefined;
     this.keywordInput = '';
@@ -110,105 +139,97 @@ export struct BlockingRulesPage {
     this.backupStatus = '';
   }
 
-  build() {
-    Stack({ alignContent: Alignment.BottomEnd }) {
-      Column({ space: $r('app.float.spacing_medium') }) {
-        this.preferencesPanel()
-        this.tabBar()
-        if (this.viewState.phase === BlockingRulesPhase.LOADING && this.currentRuleCount() === 0) {
-          LoadingProgress()
-            .id('blocking_rules_loading')
-            .width(40)
-            .height(40)
-            .color(this.resolvedThemeColor)
-        } else {
-          Text(this.viewState.message)
-            .id('blocking_rules_status')
-            .fontSize($r('app.float.caption_font_size'))
-            .fontColor(this.viewState.phase === BlockingRulesPhase.ERROR ?
-              $r('app.color.error_text') : $r('app.color.secondary_text'))
-            .width('100%')
-          this.ruleList()
-        }
-      }
-      .alignItems(HorizontalAlign.Start)
-      .width('100%')
-      .height('100%')
-      .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
-        top: 94, bottom: $r('app.float.page_padding') })
-      .backgroundColor($r('app.color.page_background'))
+  private isCardStyle(): boolean {
+    return this.feedCardStyle === FeedCardStyle.CARD;
+  }
 
-      Button({ type: ButtonType.Normal, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.plus'))
-          .fontSize(24)
-          .fontColor([Color.White])
-      }
-        .id('blocking_add_rule')
-        .width(56)
-        .height(56)
-        .padding(0)
-        .borderRadius(28)
-        .backgroundColor(this.resolvedThemeColor)
-        .margin({
+  private anyOverlayShown(): boolean {
+    return this.actionsSheetShown || this.addRuleSheetShown || this.backupSheetShown || this.exportSheetShown;
+  }
+
+  build() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      Scroll() {
+        Column({ space: $r('app.float.spacing_medium') }) {
+          this.preferencesPanel()
+          this.tabBar()
+          this.countRow()
+          this.statusRow()
+          this.ruleRows()
+        }
+        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+        .padding({
+          left: $r('app.float.page_padding'),
           right: $r('app.float.page_padding'),
+          top: this.embedded ? 4 : 94,
           bottom: $r('app.float.page_padding')
         })
-        .accessibilityText('新增屏蔽规则')
-        .enabled(!this.viewState.busy)
-        .onClick((): void => {
-          this.addRuleSheetShown = true;
-        })
-
-      Column() {
-        this.pageHeader()
       }
+      .id('blocking_rules_scroll')
       .width('100%')
-      .padding({ left: 12, right: 12, top: 8 })
-      .position({ x: 0, y: Math.max(this.statusBarHeightVp, 0) })
-      .zIndex(2)
+      .height('100%')
+      // 内容不足一屏时 Scroll 默认居中，会让标题下出现大段空白；固定从顶部开始排。
+      .align(Alignment.TopStart)
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring)
+      .backgroundColor($r('app.color.page_background'))
 
-      Column()
-        .bindSheet(this.addRuleSheetShown, this.addRuleSheet(), {
-          preferType: SheetType.CENTER,
-          height: SheetSize.LARGE,
-          dragBar: false,
-          showClose: false,
-          maskColor: '#66000000',
-          backgroundColor: $r('app.color.surface_background'),
-          onDisappear: (): void => {
-            if (this.addRuleSheetShown) {
-              this.addRuleSheetShown = false;
+      if (!this.embedded) {
+        Column() {
+          this.pageHeader()
+        }
+        .width('100%')
+        .padding({ left: 12, right: 12, top: 8 })
+        .position({ x: 0, y: Math.max(this.statusBarHeightVp, 0) })
+        .zIndex(2)
+
+        // 独立路由沿用系统 sheet；嵌入模式改在右栏内做覆盖容器（见下）。
+        Column()
+          .bindSheet(this.addRuleSheetShown, this.addRuleSheet(), {
+            preferType: SheetType.CENTER,
+            height: SheetSize.LARGE,
+            dragBar: false,
+            showClose: false,
+            maskColor: '#66000000',
+            backgroundColor: $r('app.color.surface_background'),
+            onDisappear: (): void => {
+              if (this.addRuleSheetShown) {
+                this.addRuleSheetShown = false;
+              }
             }
-          }
-        })
-      Column()
-        .bindSheet(this.backupSheetShown, this.backupSheet(), {
-          preferType: SheetType.CENTER,
-          height: SheetSize.LARGE,
-          dragBar: false,
-          showClose: false,
-          maskColor: '#66000000',
-          backgroundColor: $r('app.color.surface_background'),
-          onDisappear: (): void => {
-            if (this.backupSheetShown) {
-              this.backupSheetShown = false;
+          })
+        Column()
+          .bindSheet(this.backupSheetShown, this.backupSheet(), {
+            preferType: SheetType.CENTER,
+            height: SheetSize.LARGE,
+            dragBar: false,
+            showClose: false,
+            maskColor: '#66000000',
+            backgroundColor: $r('app.color.surface_background'),
+            onDisappear: (): void => {
+              if (this.backupSheetShown) {
+                this.backupSheetShown = false;
+              }
             }
-          }
-        })
-      Column()
-        .bindSheet(this.exportSheetShown, this.exportDialog(), {
-          preferType: SheetType.CENTER,
-          height: SheetSize.LARGE,
-          dragBar: false,
-          showClose: false,
-          maskColor: '#66000000',
-          backgroundColor: $r('app.color.surface_background'),
-          onDisappear: (): void => {
-            if (this.exportSheetShown) {
-              this.exportSheetShown = false;
+          })
+        Column()
+          .bindSheet(this.exportSheetShown, this.exportDialog(), {
+            preferType: SheetType.CENTER,
+            height: SheetSize.LARGE,
+            dragBar: false,
+            showClose: false,
+            maskColor: '#66000000',
+            backgroundColor: $r('app.color.surface_background'),
+            onDisappear: (): void => {
+              if (this.exportSheetShown) {
+                this.exportSheetShown = false;
+              }
             }
-          }
-        })
+          })
+      } else if (this.anyOverlayShown()) {
+        this.embeddedOverlay()
+      }
     }
     .id('blocking_rules_page')
     .width('100%')
@@ -220,6 +241,59 @@ export struct BlockingRulesPage {
       }
     })
     .backgroundColor($r('app.color.page_background'))
+  }
+
+  @Builder
+  private embeddedOverlay() {
+    Stack({ alignContent: Alignment.Center }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor('#66000000')
+        .onClick((): void => {
+          this.closeAllOverlays();
+        })
+      Column() {
+        Scroll() {
+          Column() {
+            this.modalBody()
+          }
+          .width('100%')
+        }
+        .scrollBar(BarState.Off)
+        .constraintSize({ maxHeight: '85%' })
+      }
+      .width('92%')
+      .constraintSize({ maxWidth: 560 })
+      .backgroundColor(settingsGroupBackground(FeedCardStyle.CARD))
+      .borderRadius(settingsGroupRadius(FeedCardStyle.CARD))
+      .clip(true)
+      .shadow({ radius: 24, color: '#33000000', offsetY: 8 })
+    }
+    .id('blocking_rules_overlay')
+    .width('100%')
+    .height('100%')
+    .zIndex(3)
+  }
+
+  @Builder
+  private modalBody() {
+    if (this.addRuleSheetShown) {
+      this.addRuleSheet()
+    } else if (this.backupSheetShown) {
+      this.backupSheet()
+    } else if (this.exportSheetShown) {
+      this.exportDialog()
+    } else {
+      this.actionsSheet()
+    }
+  }
+
+  private closeAllOverlays(): void {
+    this.actionsSheetShown = false;
+    this.addRuleSheetShown = false;
+    this.backupSheetShown = false;
+    this.exportSheetShown = false;
   }
 
   @Builder
@@ -320,7 +394,7 @@ export struct BlockingRulesPage {
         .enabled(!this.viewState.busy && this.currentRuleCount() > 0)
         .onClick((): void => {
           this.actionsSheetShown = false;
-          this.confirmClear = true;
+          this.openClearConfirmation();
         })
     }
     .width('100%')
@@ -393,8 +467,8 @@ export struct BlockingRulesPage {
   private preferencesPanel() {
     Column({ space: $r('app.float.spacing_small') }) {
       Text('屏蔽开关')
-        .fontSize($r('app.float.body_font_size'))
-        .fontWeight(FontWeight.Medium)
+        .fontSize($r('app.float.caption_font_size'))
+        .fontColor($r('app.color.secondary_text'))
         .width('100%')
       this.preferenceSwitch('关键词屏蔽', this.viewState.preferences.keywordBlockingEnabled,
         'blocking_keyword_switch', (enabled: boolean): void => {
@@ -405,6 +479,7 @@ export struct BlockingRulesPage {
             topicBlockingThreshold: this.viewState.preferences.topicBlockingThreshold
           });
         })
+      Divider().color($r('app.color.divider_color'))
       this.preferenceSwitch('用户屏蔽', this.viewState.preferences.userBlockingEnabled,
         'blocking_user_switch', (enabled: boolean): void => {
           this.controller?.savePreferences({
@@ -414,6 +489,7 @@ export struct BlockingRulesPage {
             topicBlockingThreshold: this.viewState.preferences.topicBlockingThreshold
           });
         })
+      Divider().color($r('app.color.divider_color'))
       this.preferenceSwitch('话题屏蔽', this.viewState.preferences.topicBlockingEnabled,
         'blocking_topic_switch', (enabled: boolean): void => {
           this.controller?.savePreferences({
@@ -424,9 +500,11 @@ export struct BlockingRulesPage {
           });
         })
       if (this.viewState.preferences.topicBlockingEnabled) {
+        Divider().color($r('app.color.divider_color'))
         Row({ space: $r('app.float.spacing_small') }) {
           Text('命中话题数量达到')
             .fontSize($r('app.float.body_font_size'))
+            .fontColor($r('app.color.primary_text'))
             .layoutWeight(1)
           Button('−')
             .backgroundColor($r('app.color.control_background'))
@@ -449,8 +527,8 @@ export struct BlockingRulesPage {
     }
     .width('100%')
     .padding($r('app.float.spacing_medium'))
-    .backgroundColor($r('app.color.card_background'))
-    .borderRadius($r('app.float.card_radius'))
+    .backgroundColor(settingsGroupBackground(this.feedCardStyle))
+    .borderRadius(settingsGroupRadius(this.feedCardStyle))
   }
 
   @Builder
@@ -458,6 +536,7 @@ export struct BlockingRulesPage {
     Row() {
       Text(label)
         .fontSize($r('app.float.body_font_size'))
+        .fontColor($r('app.color.primary_text'))
         .layoutWeight(1)
       Toggle({ type: ToggleType.Switch, isOn: enabled })
         .id(id)
@@ -466,6 +545,7 @@ export struct BlockingRulesPage {
         .onChange(onChange)
     }
     .width('100%')
+    .height(44)
     .alignItems(VerticalAlign.Center)
   }
 
@@ -484,14 +564,105 @@ export struct BlockingRulesPage {
     Button(label)
       .id(id)
       .layoutWeight(1)
+      .height(40)
+      .fontSize($r('app.float.body_font_size'))
       .enabled(!this.viewState.busy)
       .backgroundColor(this.viewState.selectedKind === kind ?
-        this.resolvedThemeColor : $r('app.color.card_background'))
-      .fontColor(this.viewState.selectedKind === kind ? Color.White : $r('app.color.primary_text'))
+        this.resolvedThemeColor : $r('app.color.control_background'))
+      .fontColor(this.viewState.selectedKind === kind ?
+        onThemeColor(this.resolvedThemeColor) : $r('app.color.primary_text'))
       .onClick((): void => {
         this.confirmClear = false;
         this.controller?.selectKind(kind);
       })
+  }
+
+  @Builder
+  private countRow() {
+    Row({ space: $r('app.float.spacing_small') }) {
+      Text(`当前 ${this.currentRuleCount()} 条`)
+        .fontSize($r('app.float.caption_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .layoutWeight(1)
+      Button('新增规则')
+        .id('blocking_add_rule')
+        .height(36)
+        .fontSize($r('app.float.secondary_font_size'))
+        .fontColor(onThemeColor(this.resolvedThemeColor))
+        .backgroundColor(this.resolvedThemeColor)
+        .enabled(!this.viewState.busy)
+        .accessibilityText(`新增${this.selectedKindLabel()}屏蔽规则`)
+        .onClick((): void => {
+          this.addRuleSheetShown = true;
+        })
+    }
+    .width('100%')
+    .alignItems(VerticalAlign.Center)
+  }
+
+  @Builder
+  private statusRow() {
+    if (this.viewState.message.length > 0) {
+      Text(this.viewState.message)
+        .id('blocking_rules_status')
+        .fontSize($r('app.float.caption_font_size'))
+        .fontColor(this.viewState.phase === BlockingRulesPhase.ERROR ?
+          $r('app.color.error_text') : $r('app.color.secondary_text'))
+        .width('100%')
+    }
+  }
+
+  @Builder
+  private ruleRows() {
+    if (this.viewState.phase === BlockingRulesPhase.LOADING && this.currentRuleCount() === 0) {
+      Row() {
+        LoadingProgress()
+          .id('blocking_rules_loading')
+          .width(40)
+          .height(40)
+          .color(this.resolvedThemeColor)
+      }
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
+      .padding({ top: 32, bottom: 32 })
+    } else if (this.currentRuleCount() === 0) {
+      Text('当前分类暂无规则')
+        .id('blocking_empty')
+        .fontSize($r('app.float.body_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .textAlign(TextAlign.Center)
+        .width('100%')
+        .padding($r('app.float.spacing_large'))
+    } else if (this.viewState.selectedKind === BlockingRuleKind.KEYWORD) {
+      Column({ space: this.isCardStyle() ? 10 : 0 }) {
+        ForEach(this.viewState.keywords, (rule: BlockedKeywordRule) => {
+          this.keywordRow(rule)
+        }, (rule: BlockedKeywordRule): string => `${rule.id}`)
+      }
+      .id('blocking_keyword_list')
+      .width('100%')
+    } else if (this.viewState.selectedKind === BlockingRuleKind.USER) {
+      Column({ space: this.isCardStyle() ? 10 : 0 }) {
+        ForEach(this.viewState.users, (rule: BlockedUserRule) => {
+          this.namedRuleRow(rule.questionAuthorOnly === true ? `提问者：${rule.userName}` : rule.userName, rule.userId,
+            (): void => {
+              this.controller?.deleteUser(rule.userId);
+            })
+        }, (rule: BlockedUserRule): string => rule.userId)
+      }
+      .id('blocking_user_list')
+      .width('100%')
+    } else {
+      Column({ space: this.isCardStyle() ? 10 : 0 }) {
+        ForEach(this.viewState.topics, (rule: BlockedTopicRule) => {
+          this.namedRuleRow(rule.topicName, rule.topicId, (): void => {
+            this.controller?.deleteTopic(rule.topicId);
+          })
+        }, (rule: BlockedTopicRule): string => rule.topicId)
+      }
+      .id('blocking_topic_list')
+      .width('100%')
+    }
   }
 
   @Builder
@@ -505,14 +676,18 @@ export struct BlockingRulesPage {
             this.keywordInput = value;
           })
         Row() {
-          Text('区分大小写').layoutWeight(1)
+          Text('区分大小写')
+            .fontSize($r('app.float.body_font_size'))
+            .layoutWeight(1)
           Toggle({ type: ToggleType.Switch, isOn: this.caseSensitive })
             .id('blocking_case_sensitive')
             .selectedColor(this.resolvedThemeColor)
             .onChange((value: boolean): void => {
               this.caseSensitive = value;
             })
-          Text('正则').margin({ left: $r('app.float.spacing_medium') })
+          Text('正则')
+            .fontSize($r('app.float.body_font_size'))
+            .margin({ left: $r('app.float.spacing_medium') })
           Toggle({ type: ToggleType.Switch, isOn: this.regex })
             .id('blocking_regex')
             .selectedColor(this.resolvedThemeColor)
@@ -521,6 +696,7 @@ export struct BlockingRulesPage {
             })
         }
         .width('100%')
+        .alignItems(VerticalAlign.Center)
         Button('添加关键词规则')
           .id('blocking_add_keyword')
           .enabled(!this.viewState.busy && this.keywordInput.trim().length > 0)
@@ -528,9 +704,7 @@ export struct BlockingRulesPage {
           .fontColor(onThemeColor(this.resolvedThemeColor))
           .backgroundColor(this.resolvedThemeColor)
           .onClick((): void => {
-            const keyword = this.keywordInput;
-            this.keywordInput = '';
-            this.controller?.addKeyword(keyword, this.caseSensitive, this.regex);
+            void this.submitKeyword();
           })
       } else {
         TextInput({ text: this.identifierInput,
@@ -554,71 +728,15 @@ export struct BlockingRulesPage {
           .width('100%')
           .fontColor(onThemeColor(this.resolvedThemeColor))
           .backgroundColor(this.resolvedThemeColor)
-          .onClick((): void => this.addNamedRule())
+          .onClick((): void => {
+            void this.submitNamedRule();
+          })
       }
     }
     .width('100%')
     .padding($r('app.float.spacing_medium'))
-    .backgroundColor($r('app.color.card_background'))
-    .borderRadius($r('app.float.card_radius'))
-  }
-
-  @Builder
-  private ruleList() {
-    Column({ space: $r('app.float.spacing_small') }) {
-      Text(`当前 ${this.currentRuleCount()} 条`)
-        .fontSize($r('app.float.caption_font_size'))
-        .fontColor($r('app.color.secondary_text'))
-        .width('100%')
-      if (this.currentRuleCount() === 0) {
-        Text('当前分类暂无规则')
-          .id('blocking_empty')
-          .fontSize($r('app.float.body_font_size'))
-          .fontColor($r('app.color.secondary_text'))
-          .textAlign(TextAlign.Center)
-          .width('100%')
-          .padding($r('app.float.spacing_large'))
-      } else if (this.viewState.selectedKind === BlockingRuleKind.KEYWORD) {
-        List({ space: 10 }) {
-          ForEach(this.viewState.keywords, (rule: BlockedKeywordRule) => {
-            ListItem() {
-              this.keywordRow(rule)
-            }
-          }, (rule: BlockedKeywordRule): string => `${rule.id}`)
-        }
-        .id('blocking_keyword_list')
-        .layoutWeight(1)
-        .scrollBar(BarState.Off)
-      } else if (this.viewState.selectedKind === BlockingRuleKind.USER) {
-        List({ space: 10 }) {
-          ForEach(this.viewState.users, (rule: BlockedUserRule) => {
-            ListItem() {
-              this.namedRuleRow(rule.questionAuthorOnly === true ? `提问者：${rule.userName}` : rule.userName, rule.userId, (): void => {
-                this.controller?.deleteUser(rule.userId);
-              })
-            }
-          }, (rule: BlockedUserRule): string => rule.userId)
-        }
-        .id('blocking_user_list')
-        .layoutWeight(1)
-        .scrollBar(BarState.Off)
-      } else {
-        List({ space: 10 }) {
-          ForEach(this.viewState.topics, (rule: BlockedTopicRule) => {
-            ListItem() {
-              this.namedRuleRow(rule.topicName, rule.topicId, (): void => {
-                this.controller?.deleteTopic(rule.topicId);
-              })
-            }
-          }, (rule: BlockedTopicRule): string => rule.topicId)
-        }
-        .id('blocking_topic_list')
-        .layoutWeight(1)
-        .scrollBar(BarState.Off)
-      }
-    }
-    .width('100%')
-    .layoutWeight(1)
+    .backgroundColor(settingsGroupBackground(this.feedCardStyle))
+    .borderRadius(settingsGroupRadius(this.feedCardStyle))
   }
 
   @Builder
@@ -627,6 +745,7 @@ export struct BlockingRulesPage {
       Column({ space: 2 }) {
         Text(rule.keyword)
           .fontSize($r('app.float.body_font_size'))
+          .fontColor($r('app.color.primary_text'))
           .width('100%')
         Text(`${rule.caseSensitive ? '区分大小写' : '忽略大小写'}${rule.isRegex ? ' · 安全正则' : ''}`)
           .fontSize($r('app.float.caption_font_size'))
@@ -637,22 +756,27 @@ export struct BlockingRulesPage {
       Button('删除')
         .backgroundColor($r('app.color.control_background'))
         .fontColor($r('app.color.primary_text'))
+        .fontSize($r('app.float.secondary_font_size'))
         .enabled(!this.viewState.busy)
+        .accessibilityText(`删除关键词规则 ${rule.keyword}`)
         .onClick((): void => {
           this.controller?.deleteKeyword(rule.id);
         })
     }
     .width('100%')
-    .padding($r('app.float.spacing_medium'))
-    .backgroundColor($r('app.color.card_background'))
-    .borderRadius($r('app.float.card_radius'))
+    .padding(this.isCardStyle() ? 14 : 12)
+    .backgroundColor(this.isCardStyle() ? $r('app.color.card_background') : Color.Transparent)
+    .borderRadius(this.isCardStyle() ? $r('app.float.card_radius') : 0)
   }
 
   @Builder
   private namedRuleRow(name: string, id: string, onDelete: () => void) {
     Row({ space: $r('app.float.spacing_small') }) {
       Column({ space: 2 }) {
-        Text(name).fontSize($r('app.float.body_font_size')).width('100%')
+        Text(name)
+          .fontSize($r('app.float.body_font_size'))
+          .fontColor($r('app.color.primary_text'))
+          .width('100%')
         Text(id)
           .fontSize($r('app.float.caption_font_size'))
           .fontColor($r('app.color.secondary_text'))
@@ -662,20 +786,28 @@ export struct BlockingRulesPage {
       Button('删除')
         .backgroundColor($r('app.color.control_background'))
         .fontColor($r('app.color.primary_text'))
+        .fontSize($r('app.float.secondary_font_size'))
         .enabled(!this.viewState.busy)
+        .accessibilityText(`删除${this.selectedKindLabel()}规则 ${name}`)
         .onClick(onDelete)
     }
     .width('100%')
-    .padding($r('app.float.spacing_medium'))
-    .backgroundColor($r('app.color.card_background'))
-    .borderRadius($r('app.float.card_radius'))
+    .padding(this.isCardStyle() ? 14 : 12)
+    .backgroundColor(this.isCardStyle() ? $r('app.color.card_background') : Color.Transparent)
+    .borderRadius(this.isCardStyle() ? $r('app.float.card_radius') : 0)
   }
 
   @Builder
   private clearConfirmation() {
     Column({ space: $r('app.float.spacing_small') }) {
-      Text('确认清空当前分类？此操作无法撤销。')
+      Text(`确认清空${this.kindLabel(this.pendingClearKind)}屏蔽规则？`)
         .fontSize($r('app.float.body_font_size'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.primary_text'))
+        .width('100%')
+      Text(`打开确认时该分类有 ${this.pendingClearCount} 条规则；只清空这一分类，其他分类与屏蔽记录不受影响。此操作无法撤销。`)
+        .fontSize($r('app.float.caption_font_size'))
+        .fontColor($r('app.color.secondary_text'))
         .width('100%')
       Row({ space: $r('app.float.spacing_small') }) {
         Button('取消')
@@ -693,7 +825,10 @@ export struct BlockingRulesPage {
           .enabled(!this.viewState.busy)
           .onClick((): void => {
             this.confirmClear = false;
-            this.controller?.clearSelected();
+            if (this.pendingClearKind !== this.viewState.selectedKind) {
+              this.controller?.selectKind(this.pendingClearKind);
+            }
+            this.controller?.clearKind(this.pendingClearKind);
           })
       }
       .width('100%')
@@ -745,8 +880,8 @@ export struct BlockingRulesPage {
     }
     .width('100%')
     .padding($r('app.float.spacing_medium'))
-    .backgroundColor($r('app.color.card_background'))
-    .borderRadius($r('app.float.card_radius'))
+    .backgroundColor(settingsGroupBackground(this.feedCardStyle))
+    .borderRadius(settingsGroupRadius(this.feedCardStyle))
   }
 
   @Builder
@@ -755,10 +890,18 @@ export struct BlockingRulesPage {
       Text('导出的屏蔽词文本')
         .fontSize($r('app.float.body_font_size'))
         .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.primary_text'))
         .width('100%')
       TextArea({ text: this.exportedText })
         .id('blocking_export_text')
         .height(160)
+      if (this.backupStatus.length > 0) {
+        Text(this.backupStatus)
+          .id('blocking_export_status')
+          .fontSize($r('app.float.caption_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .width('100%')
+      }
       Row({ space: $r('app.float.spacing_small') }) {
         Button('关闭')
           .backgroundColor($r('app.color.control_background'))
@@ -766,6 +909,7 @@ export struct BlockingRulesPage {
           .layoutWeight(1)
           .onClick((): void => {
             this.exportedText = '';
+            this.backupStatus = '';
             this.exportSheetShown = false;
           })
         Button('复制到剪贴板')
@@ -779,8 +923,45 @@ export struct BlockingRulesPage {
     }
     .width('100%')
     .padding($r('app.float.spacing_medium'))
-    .backgroundColor($r('app.color.card_background'))
-    .borderRadius($r('app.float.card_radius'))
+    .backgroundColor(settingsGroupBackground(this.feedCardStyle))
+    .borderRadius(settingsGroupRadius(this.feedCardStyle))
+  }
+
+  private openClearConfirmation(): void {
+    this.pendingClearKind = this.viewState.selectedKind;
+    this.pendingClearCount = this.currentRuleCount();
+    this.confirmClear = true;
+  }
+
+  private async submitKeyword(): Promise<void> {
+    const keyword = this.keywordInput;
+    if (keyword.trim().length === 0 || this.viewState.busy) {
+      return;
+    }
+    await this.controller?.addKeyword(keyword, this.caseSensitive, this.regex);
+    // 只有真正保存成功（phase 回到 READY）才清空并关闭表单，失败保留输入供重试。
+    if (this.viewState.phase === BlockingRulesPhase.READY) {
+      this.keywordInput = '';
+      this.addRuleSheetShown = false;
+    }
+  }
+
+  private async submitNamedRule(): Promise<void> {
+    const identifier = this.identifierInput;
+    const name = this.nameInput;
+    if (identifier.trim().length === 0 || name.trim().length === 0 || this.viewState.busy) {
+      return;
+    }
+    if (this.viewState.selectedKind === BlockingRuleKind.USER) {
+      await this.controller?.addUser(identifier, name);
+    } else {
+      await this.controller?.addTopic(identifier, name);
+    }
+    if (this.viewState.phase === BlockingRulesPhase.READY) {
+      this.identifierInput = '';
+      this.nameInput = '';
+      this.addRuleSheetShown = false;
+    }
   }
 
   private exportBackup(): void {
@@ -810,9 +991,16 @@ export struct BlockingRulesPage {
 
   private importBackup(): void {
     const text = this.backupInput;
-    this.backupInput = '';
+    if (text.trim().length === 0) {
+      return;
+    }
     this.backupStatus = '';
-    this.controller?.importBackup(text);
+    this.controller?.importBackup(text).then((summary: BlocklistBackupImportSummary | undefined): void => {
+      if (summary !== undefined && this.viewState.phase === BlockingRulesPhase.READY) {
+        // 导入成功才清空输入；失败保留文本，允许直接重试。
+        this.backupInput = '';
+      }
+    });
   }
 
   private currentRuleCount(): number {
@@ -826,25 +1014,17 @@ export struct BlockingRulesPage {
   }
 
   private selectedKindLabel(): string {
-    if (this.viewState.selectedKind === BlockingRuleKind.KEYWORD) {
+    return this.kindLabel(this.viewState.selectedKind);
+  }
+
+  private kindLabel(kind: BlockingRuleKind): string {
+    if (kind === BlockingRuleKind.KEYWORD) {
       return '关键词';
     }
-    if (this.viewState.selectedKind === BlockingRuleKind.USER) {
+    if (kind === BlockingRuleKind.USER) {
       return '用户';
     }
     return '话题';
-  }
-
-  private addNamedRule(): void {
-    const identifier = this.identifierInput;
-    const name = this.nameInput;
-    this.identifierInput = '';
-    this.nameInput = '';
-    if (this.viewState.selectedKind === BlockingRuleKind.USER) {
-      this.controller?.addUser(identifier, name);
-    } else {
-      this.controller?.addTopic(identifier, name);
-    }
   }
 
   private changeTopicThreshold(delta: number): void {

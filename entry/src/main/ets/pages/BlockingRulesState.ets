@@ -142,6 +142,15 @@ export class BlockingRulesController {
     return this.mutate((): Promise<void> => this.rules.clear(kind), '当前分类已清空', '清空失败，请重试');
   }
 
+  /**
+   * 按打开确认时记录的分类清空：确认框停留期间后台切换分类也不会清错类别。
+   * 清空作用域始终是单个分类，不联动其他分类与屏蔽记录。
+   */
+  clearKind(kind: BlockingRuleKind): Promise<void> {
+    return this.mutate((): Promise<void> => this.rules.clear(kind),
+      `${blockingRuleKindLabel(kind)}规则已清空`, '清空失败，请重试');
+  }
+
   savePreferences(value: BlockingPreferences): Promise<void> {
     const normalized = normalizeBlockingPreferences(value);
     return this.mutate((): Promise<void> => this.preferences.saveBlockingPreferences(normalized),
@@ -321,6 +330,17 @@ export class BlockingRulesController {
     this.state = copyBlockingRulesState(state);
     this.observer(this.snapshot());
   }
+}
+
+/** 分类的中文标签：清空确认文案与结果提示共用，避免各页面各写一套。 */
+export function blockingRuleKindLabel(kind: BlockingRuleKind): string {
+  if (kind === BlockingRuleKind.KEYWORD) {
+    return '关键词';
+  }
+  if (kind === BlockingRuleKind.USER) {
+    return '用户';
+  }
+  return '话题';
 }
 
 function copyBlockingRulesState(state: BlockingRulesViewState): BlockingRulesViewState {

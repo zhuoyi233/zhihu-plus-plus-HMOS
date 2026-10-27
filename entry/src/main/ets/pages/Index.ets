@@ -325,8 +325,12 @@ struct Index {
             this.privateMessageContent(peerId, peerName, avatarUrl, navigate),
           notificationSettingsContent: (navigate: (destination: AppDestination) => void,
             embedded: boolean): void => this.notificationSettingsContent(navigate, embedded),
-          blockingRulesContent: (onBack: () => void): void => this.blockingRulesContent(onBack),
-          blockedFeedHistoryContent: (onBack: () => void): void => this.blockedFeedHistoryContent(onBack),
+          blockingRulesContent: (onBack: () => void, embedded: boolean,
+            registerActions: (handler: () => void) => void, releaseActions: () => void): void =>
+            this.blockingRulesContent(onBack, embedded, registerActions, releaseActions),
+          blockedFeedHistoryContent: (onBack: () => void, embedded: boolean,
+            registerActions: (handler: () => void) => void, releaseActions: () => void): void =>
+            this.blockedFeedHistoryContent(onBack, embedded, registerActions, releaseActions),
           readHistoryContent: (navigate: (destination: AppDestination) => void, onBack: () => void): void =>
             this.readHistoryContent(navigate, onBack),
           localHistoryContent: (navigate: (destination: AppDestination) => void, onBack: () => void): void =>
@@ -334,8 +338,8 @@ struct Index {
           loginContent: (onBack: () => void, onAuthenticated: () => void, onScanDesktopLogin: () => void): void =>
             this.loginContent(onBack, onAuthenticated, onScanDesktopLogin),
           technicalLabContent: (navigate: (destination: AppDestination) => void,
-            onDeveloperModeDisabled: () => void): void =>
-            this.technicalLabContent(navigate, onDeveloperModeDisabled),
+            onDeveloperModeDisabled: () => void, embedded: boolean): void =>
+            this.technicalLabContent(navigate, onDeveloperModeDisabled, embedded),
           readerProbeContent: (onBack: () => void): void => this.readerProbeContent(onBack),
           imageProbeContent: (onBack: () => void): void => this.imageProbeContent(onBack),
           databaseProbeContent: (onBack: () => void): void => this.databaseProbeContent(onBack),
@@ -674,13 +678,28 @@ struct Index {
   }
 
   @Builder
-  blockingRulesContent(onBack: () => void) {
-    BlockingRulesPage({ rules: this.blockingRuleStore, preferences: this.preferencesStore, onBack: onBack });
+  blockingRulesContent(onBack: () => void, embedded: boolean,
+    registerActions: (handler: () => void) => void, releaseActions: () => void) {
+    BlockingRulesPage({
+      rules: this.blockingRuleStore,
+      preferences: this.preferencesStore,
+      onBack: onBack,
+      embedded: embedded,
+      onRegisterHeaderActions: registerActions,
+      onReleaseHeaderActions: releaseActions
+    });
   }
 
   @Builder
-  blockedFeedHistoryContent(onBack: () => void) {
-    BlockedFeedHistoryPage({ history: this.blockedFeedHistoryStore, onBack: onBack });
+  blockedFeedHistoryContent(onBack: () => void, embedded: boolean,
+    registerActions: (handler: () => void) => void, releaseActions: () => void) {
+    BlockedFeedHistoryPage({
+      history: this.blockedFeedHistoryStore,
+      onBack: onBack,
+      embedded: embedded,
+      onRegisterHeaderActions: registerActions,
+      onReleaseHeaderActions: releaseActions
+    });
   }
 
   @Builder
@@ -734,8 +753,13 @@ struct Index {
   }
 
   @Builder
-  technicalLabContent(navigate: (destination: AppDestination) => void, onDeveloperModeDisabled: () => void) {
-    TechnicalLabPage({ navigate: navigate, onDeveloperModeDisabled: onDeveloperModeDisabled });
+  technicalLabContent(navigate: (destination: AppDestination) => void, onDeveloperModeDisabled: () => void,
+    embedded: boolean) {
+    TechnicalLabPage({
+      navigate: navigate,
+      onDeveloperModeDisabled: onDeveloperModeDisabled,
+      embedded: embedded
+    });
   }
 
   @Builder
