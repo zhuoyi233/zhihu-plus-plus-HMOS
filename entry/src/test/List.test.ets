@@ -34,6 +34,7 @@ import searchStateTest from './SearchState.test';
 import contentDetailRepositoryTest from './ContentDetailRepository.test';
 import questionAnswerFeedTest from './QuestionAnswerFeed.test';
 import contentDetailStateTest from './ContentDetailState.test';
+import answerSwitchPrefetchTest from './AnswerSwitchPrefetch.test';
 import loginControllerTest from './LoginController.test';
 import channelFeedRepositoryTest from './ChannelFeedRepository.test';
 import channelFeedStateTest from './ChannelFeedState.test';
@@ -139,6 +140,7 @@ export default function testsuite(): void {
   contentDetailRepositoryTest();
   questionAnswerFeedTest();
   contentDetailStateTest();
+  answerSwitchPrefetchTest();
   loginControllerTest();
   channelFeedRepositoryTest();
   channelFeedStateTest();
