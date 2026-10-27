@@ -175,6 +175,7 @@ struct ContentDetailPage {
   private articleTitleScrolled: boolean = false;
   /** 详情页滚动信息头中主标题实测高度（vp）：折叠阈值的动态基准；未测得前按单行估算。 */
   private contentTitleHeightVp: number = 0;
+  private answerPaneTitleHeights: Map<string, number> = new Map();
   private pageActive: boolean = false;
   repository: ContentRepository | undefined = undefined;
   /** 推荐阅读卡片站内元数据仓库：赞同/评论计数与资源类型（正文 link-card 展示）。 */
@@ -198,6 +199,9 @@ struct ContentDetailPage {
   };
   @State private phase: ContentDetailPhase = ContentDetailPhase.IDLE;
   @State private content: LoadedContentDetail | undefined = undefined;
+  @State private answerPanes: LoadedContentDetail[] = [];
+  private answerPaneWaiter?: (ready: boolean) => void;
+  private answerPaneTimer: number = -1;
   @State private errorMessage: string = '';
   @State private requiresLogin: boolean = false;
   @State private openedRecordPhase: OpenedRecordPhase = OpenedRecordPhase.NOT_CONFIGURED;
@@ -361,6 +365,7 @@ struct ContentDetailPage {
 
   private onLoginChanged(): void {
     this.answerSwitchEpoch += 1;
+    this.finishAnswerPaneWait(false);
     this.authenticated = this.session?.getState().status === SessionStatus.AUTHENTICATED;
     if (!this.pageActive) { return; }
     this.answersController?.deactivate();
@@ -374,6 +379,7 @@ struct ContentDetailPage {
 
   aboutToDisappear(): void {
     this.answerSwitchEpoch += 1;
+    this.finishAnswerPaneWait(false);
     this.pageActive = false;
     this.unsubscribeHoldingHand();
     this.indicator?.dispose();
@@ -688,9 +694,15 @@ struct ContentDetailPage {
               if (this.kind === ContentDetailKind.QUESTION) {
                 this.questionDocument(this.content)
               } else if (this.kind === ContentDetailKind.ANSWER) {
-                ForEach([this.content], (item: LoadedContentDetail) => {
-                  this.loadedContent(item)
+                Stack() {
+                ForEach(this.answerPanes, (item: LoadedContentDetail) => {
+                  Stack() { this.loadedContent(item) }
+                    .width('100%').height('100%')
+                    .opacity(item.value.id === this.activeContentId ? 1 : 0)
+                    .zIndex(item.value.id === this.activeContentId ? 1 : 0)
+                    .hitTestBehavior(item.value.id === this.activeContentId ? HitTestMode.Default : HitTestMode.None)
                 }, (item: LoadedContentDetail): string => `${item.value.id}:${item.loadGeneration ?? 0}`)
+                }.width('100%').height('100%')
               } else {
                 this.loadedContent(this.content)
               }
@@ -1002,6 +1014,8 @@ struct ContentDetailPage {
           readingLayout: true,
           positionKey: readerPositionKey(content.kind, content.value.id),
           positionOwnerKey: readerPositionKey(this.kind, this.contentId),
+          answerDocumentKey: content.kind === ContentDetailKind.ANSWER ? this.answerDocumentKey(content) : '',
+          onViewportPrepared: (): void => { this.onAnswerPanePrepared(content); },
           topInsetVp: this.immersiveReading ? 0 : FLOATING_TITLE_BAR_OFFSET,
           bottomInsetVp: readerBottomInsetVp(this.bottomActionBarHeightVp, this.immersiveReading),
           onVideoOpen: (videoId: string): void => this.openVideo(videoId),
@@ -1480,6 +1494,10 @@ struct ContentDetailPage {
               contentAuthorName(content).length > 0 ? 8 : 0 })
             .onAreaChange((_oldArea: Area, newArea: Area): void => {
               const height = Number(newArea.height);
+              if (content.kind === ContentDetailKind.ANSWER && height > 0) {
+                this.answerPaneTitleHeights.set(this.answerDocumentKey(content), height);
+                if (!acceptsContentDocumentEvent(this.phase, this.content, content)) { return; }
+              }
               if (height > 0 && Math.abs(height - this.contentTitleHeightVp) > 1) {
                 this.contentTitleHeightVp = height;
               }
@@ -2544,6 +2562,35 @@ struct ContentDetailPage {
       .showToast({ message: `已将双击正文动作设为：${answerDoubleTapActionLabel(action)}` });
   }
 
+  private answerDocumentKey(content: LoadedContentDetail): string {
+    return `${this.contentId}:${content.value.id}:${content.loadGeneration ?? 0}`;
+  }
+
+  private finishAnswerPaneWait(ready: boolean): void {
+    if (this.answerPaneTimer >= 0) { clearTimeout(this.answerPaneTimer); }
+    this.answerPaneTimer = -1;
+    const waiter = this.answerPaneWaiter;
+    this.answerPaneWaiter = undefined;
+    waiter?.(ready);
+  }
+
+  private onAnswerPanePrepared(content: LoadedContentDetail): void {
+    if (content.value.id !== this.activeContentId && this.answerPanes.some((pane: LoadedContentDetail): boolean =>
+      this.answerDocumentKey(pane) === this.answerDocumentKey(content))) {
+      this.finishAnswerPaneWait(true);
+    }
+  }
+
+  private waitForAnswerPane(content: LoadedContentDetail): Promise<boolean> {
+    return new Promise<boolean>((resolve: (ready: boolean) => void): void => {
+      this.answerPaneWaiter = resolve;
+      this.answerPaneTimer = setTimeout((): void => this.finishAnswerPaneWait(false), 8000);
+      const current = this.content;
+      if (current === undefined) { this.finishAnswerPaneWait(false); return; }
+      this.answerPanes = [current, content];
+    });
+  }
+
   private async moveAnswer(direction: number): Promise<void> {
     if (this.navigatorBusy) { return; }
     const epoch = this.answerSwitchEpoch;
@@ -2569,11 +2616,18 @@ struct ContentDetailPage {
           .showToast({ message: message.length > 0 ? message : '暂时无法切换回答' });
         return;
       }
+      const ready = await this.waitForAnswerPane(prepared);
+      if (!this.pageActive || epoch !== this.answerSwitchEpoch) { return; }
+      if (!ready) {
+        this.getUIContext().getPromptAction().showToast({ message: '回答准备超时，请重试' });
+        return;
+      }
       if (navigator === undefined || !navigator.commitMove(id)) { return; }
       // 详情成功后才切换交互身份，等待和失败期间保留当前正文。
       // 新内容从顶部渲染：边界状态归位，避免沿用上一答的贴底状态误触发底部过滑。
       this.contentAtBottom = false;
       this.contentAtTop = true;
+      this.contentTitleHeightVp = this.answerPaneTitleHeights.get(this.answerDocumentKey(prepared)) ?? 0;
       // 顶栏折叠态随新答复位：新内容从顶部渲染，问题标题回到视口内。
       this.answerQuestionScrolled = false;
       // 折叠的标题栏/底部操作栏随新答复位回显（对齐上游：切回答 = 新建 ScrollState，
@@ -2586,8 +2640,17 @@ struct ContentDetailPage {
       this.favoriteDialogShown = false;
       this.contentFavorited = false;
       this.activeContentId = id;
+      AppStorage.setOrCreate('readerActiveAnswerDocument', this.answerDocumentKey(prepared));
       controller?.commitPreparedAnswer(prepared);
-    } finally { this.navigatorBusy = false; }
+    } finally {
+      this.finishAnswerPaneWait(false);
+      if (this.content !== undefined) { this.answerPanes = [this.content]; }
+      const activeKey = this.content === undefined ? '' : this.answerDocumentKey(this.content);
+      this.answerPaneTitleHeights.forEach((_height: number, key: string): void => {
+        if (key !== activeKey) { this.answerPaneTitleHeights.delete(key); }
+      });
+      this.navigatorBusy = false;
+    }
   }
 
   /** 按 tanh 阻尼转为过滑偏移：横向模式不依赖正文纵向边界，纵向模式仍要求贴顶/贴底。 */
@@ -3247,6 +3310,14 @@ struct ContentDetailPage {
   private applyState(state: ContentDetailViewState): void {
     this.phase = state.phase;
     this.content = state.content;
+    if (state.content?.kind === ContentDetailKind.ANSWER) {
+      const current = state.content;
+      if (!this.answerPanes.some((pane: LoadedContentDetail): boolean =>
+        this.answerDocumentKey(pane) === this.answerDocumentKey(current))) {
+        this.answerPanes = [current];
+      }
+      AppStorage.setOrCreate('readerActiveAnswerDocument', this.answerDocumentKey(current));
+    }
     this.segmentInfos = this.extractSegmentInfos(state.content);
     this.errorMessage = state.errorMessage ?? '';
     this.requiresLogin = state.requiresLogin;
