@@ -170,6 +170,41 @@ export class ContentDetailController {
     }
   }
 
+  /** 准备回答时保留已显示内容；调用方确认导航后再提交。 */
+  async prepareAnswer(id: string): Promise<LoadedContentDetail | undefined> {
+    if (!this.active || this.phase !== ContentDetailPhase.READY) { return undefined; }
+    const generation = ++this.generation;
+    this.errorMessage = undefined;
+    try {
+      const loaded = await this.fetch(ContentDetailKind.ANSWER, id, generation);
+      return this.isCurrent(generation) ? loaded : undefined;
+    } catch (error) {
+      if (this.isCurrent(generation)) {
+        this.errorMessage = contentDetailErrorMessage(error);
+      }
+      return undefined;
+    }
+  }
+
+  preparedAnswerError(): string { return this.errorMessage ?? ''; }
+
+  commitPreparedAnswer(content: LoadedContentDetail): boolean {
+    if (content.kind !== ContentDetailKind.ANSWER || content.loadGeneration === undefined ||
+      !this.isCurrent(content.loadGeneration) || this.content?.loadGeneration === content.loadGeneration) {
+      return false;
+    }
+    this.kind = ContentDetailKind.ANSWER;
+    this.content = content;
+    this.errorMessage = undefined;
+    this.requiresLogin = false;
+    this.phase = ContentDetailPhase.READY;
+    this.openedRecordPhase = this.openedContentStore === undefined
+      ? OpenedRecordPhase.NOT_CONFIGURED : OpenedRecordPhase.PENDING;
+    this.emit();
+    void this.recordOpenIfConfigured(content, content.loadGeneration);
+    return true;
+  }
+
   private async fetch(kind: ContentDetailKind, id: string, generation: number): Promise<LoadedContentDetail> {
     switch (kind) {
       case ContentDetailKind.QUESTION:

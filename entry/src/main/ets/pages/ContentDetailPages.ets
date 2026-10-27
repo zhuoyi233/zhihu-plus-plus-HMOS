@@ -2,7 +2,7 @@ import { QuestionAnswerDataSource } from './QuestionAnswerDataSource';
 import { AnswerNavigationPreview, QuestionAnswerNavigator, stageQuestionAnswerNavigator, takeQuestionAnswerNavigator } from './QuestionAnswerNavigator';
 import { ContentImagePreview } from './NativeContentDocument';
 import { publishQuestionTitle } from './QuestionTitleBar';
-import { publishAnswerTitle, AnswerTitleBar } from './AnswerTitleBar';
+import { publishAnswerTitle } from './AnswerTitleBar';
 import { publishArticleTitle } from './ArticleTitleBar';
 import { FeedContentSummary } from './components/FeedContentSummary';
 import {
@@ -105,7 +105,6 @@ import { hdsMaterial } from '@kit.UIDesignKit';
 import { GlassCapsule } from './components/MaterialCanvas';
 import { getSpeechPlaybackService, SpeechPlaybackStatus } from '../platform/SpeechPlaybackService';
 import { accumulateAnswerSwitchDrag } from './AnswerSwitchGesture';
-import { readerBlockSpacing, readerBodyFontSize, readerBodyLineHeight } from './ReaderTypography';
 import { readerBottomInsetVp, readerCompactActions, readerHorizontalPaddingVp } from './ReaderViewportLayout';
 import { SegmentPill } from './components/SegmentPill';
 import { hilog } from '@kit.PerformanceAnalysisKit';
@@ -118,6 +117,7 @@ struct ContentDetailPage {
   @State private activeContentId: string = '';
   @State @Watch('syncAnswerRefreshIndicator') private refreshingAnswers: boolean = false;
   @State private navigatorBusy: boolean = false;
+  private answerSwitchEpoch: number = 0;
   @State private navigatorRevision: number = 0;
   /** 回答页过滑切换：纵向模式沿 Y 轴、横向模式沿 X 轴平移。 */
   @State private answerOverscrollOffset: number = 0;
@@ -132,10 +132,6 @@ struct ContentDetailPage {
   /** 正文存在选区（长按建词/拖选扩展中）：过滑 pan 让位，防止拖选位移被误判为切换。 */
   private bodyTextSelectionActive: boolean = false;
   /** 阅读排版偏好（AppStorage 广播键，与 NativeContentDocument 同源）：横向预览页摘要排版对齐正文。 */
-  @StorageProp('contentFontSize') private previewFontSizePercent: number = 100;
-  @StorageProp('contentLineHeight') private previewLineHeightPercent: number = 160;
-  @StorageProp('contentBlockSpacing') private previewBlockSpacingPercent: number = 100;
-  @StorageProp('contentTypographyPreset') private previewTypographyPreset: string = 'comfortable';
   @StorageProp('resolvedThemeColor') @Watch('onResolvedThemeColorChanged') private resolvedThemeColor: string =
     DEFAULT_THEME_COLOR;
   /** 上一次 pan 手势 offsetY（换算单帧 delta）。 */
@@ -364,6 +360,7 @@ struct ContentDetailPage {
   }
 
   private onLoginChanged(): void {
+    this.answerSwitchEpoch += 1;
     this.authenticated = this.session?.getState().status === SessionStatus.AUTHENTICATED;
     if (!this.pageActive) { return; }
     this.answersController?.deactivate();
@@ -376,6 +373,7 @@ struct ContentDetailPage {
   }
 
   aboutToDisappear(): void {
+    this.answerSwitchEpoch += 1;
     this.pageActive = false;
     this.unsubscribeHoldingHand();
     this.indicator?.dispose();
@@ -689,6 +687,10 @@ struct ContentDetailPage {
             Column() {
               if (this.kind === ContentDetailKind.QUESTION) {
                 this.questionDocument(this.content)
+              } else if (this.kind === ContentDetailKind.ANSWER) {
+                ForEach([this.content], (item: LoadedContentDetail) => {
+                  this.loadedContent(item)
+                }, (item: LoadedContentDetail): string => `${item.value.id}:${item.loadGeneration ?? 0}`)
               } else {
                 this.loadedContent(this.content)
               }
@@ -718,7 +720,7 @@ struct ContentDetailPage {
         if (this.answerSwitchMode === 'horizontal') {
           if (this.answerOverscrollOffset > 0 && this.navigatorHasPrevious()) {
             Stack({ alignContent: Alignment.Center }) {
-              this.horizontalAnswerPage(true)
+              this.horizontalAnswerLoading(true)
             }
             .width('100%')
             .height('100%')
@@ -728,7 +730,7 @@ struct ContentDetailPage {
           }
           if (this.answerOverscrollOffset < 0 && this.navigatorHasNext()) {
             Stack({ alignContent: Alignment.Center }) {
-              this.horizontalAnswerPage(false)
+              this.horizontalAnswerLoading(false)
             }
             .width('100%')
             .height('100%')
@@ -773,12 +775,28 @@ struct ContentDetailPage {
         .opacity(this.kind === ContentDetailKind.ANSWER && this.answerSwitchMode !== 'horizontal'
           ? Math.max(0, 1 - this.answerOverscrollProgress()) : 1)
         .hitTestBehavior(this.kind === ContentDetailKind.ANSWER &&
-          (this.answerOverscrollOffset !== 0 || this.answerOverscrollProgress() >= 1)
+          (this.navigatorBusy || this.answerOverscrollOffset !== 0 || this.answerOverscrollProgress() >= 1)
           ? HitTestMode.None : HitTestMode.Transparent)
         .translate({
           x: this.answerSwitchMode === 'horizontal' ? this.answerOverscrollOffset : 0,
           y: this.answerSwitchMode === 'horizontal' ? 0 : this.answerOverscrollOffset
         })
+      }
+
+      if (this.navigatorBusy && this.kind === ContentDetailKind.ANSWER && this.content !== undefined) {
+        Column() {
+          Text('正在加载回答…')
+            .fontSize($r('app.float.caption_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .padding(8)
+            .borderRadius(8)
+            .backgroundColor($r('app.color.surface_background'))
+            .id('answer_switch_loading')
+        }
+        .width('100%')
+        .padding({ top: this.immersiveReading ? this.statusBarHeightVp : FLOATING_TITLE_BAR_OFFSET })
+        .alignItems(HorizontalAlign.Center)
+        .hitTestBehavior(HitTestMode.None)
       }
 
       // 悬浮"下一个回答"按钮（对齐上游 SkipNext FAB）：右下角、底部操作栏上方，可拖动避让正文；
@@ -1070,193 +1088,21 @@ struct ContentDetailPage {
     )
   }
 
-  /** 横向相邻回答整页（对齐上游 CachedAnswerPreview）。
-   * 顶栏、正文信息头和底部操作栏必须与松手后真正加载的回答页共用同一几何口径，
-   * 否则拖动途中会看到问题标题/作者和底栏在切换完成的一瞬间发生纵向跳变。 */
+  /** 候选全文尚未准备时，仅显示局部占位。 */
   @Builder
-  private horizontalAnswerPage(previous: boolean) {
-    Stack({ alignContent: Alignment.TopStart }) {
-      Column() {
-        // 最终页面顶部由 HDS AnswerTitleBar 占据 64vp 槽位，未滚动时显示“回答”；
-        // 问题标题属于其下方的正文信息头，不能提前塞进顶栏槽位。
-        this.horizontalAnswerTitleBar()
-
-        Column({ space: $r('app.float.spacing_small') }) {
-          Text(this.currentAnswerQuestionTitle())
-            .id(previous ? 'answer_prev_horizontal_question' : 'answer_next_horizontal_question')
-            .fontSize($r('app.float.reader_title_font_size'))
-            .lineHeight($r('app.float.reader_title_line_height'))
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.primary_text'))
-            .width('100%')
-            // 与正式页一致：外层 10vp 间距 + 8vp，标题到作者共 18vp。
-            .margin({ bottom: 8 })
-
-          Row({ space: $r('app.float.spacing_small') }) {
-            Stack({ alignContent: Alignment.Center }) {
-              Circle()
-                .width(40)
-                .height(40)
-                .fill($r('app.color.control_background'))
-              if (this.answerPreviewAvatarUrl(previous).length > 0) {
-                Image(this.answerPreviewAvatarUrl(previous))
-                  .width(40)
-                  .height(40)
-                  .borderRadius(20)
-                  .objectFit(ImageFit.Cover)
-              } else if (this.answerPreviewAuthorName(previous).length > 0) {
-                Text(this.answerPreviewAuthorName(previous).substring(0, 1))
-                  .fontSize($r('app.float.body_font_size'))
-                  .fontColor($r('app.color.secondary_text'))
-              }
-            }
-            .width(40)
-            .height(40)
-            .clip(true)
-
-            Column({ space: 2 }) {
-              Text(this.answerPreviewAuthorName(previous))
-                .fontSize($r('app.float.body_font_size'))
-                .fontWeight(FontWeight.Medium)
-                .fontColor($r('app.color.primary_text'))
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-              if (this.answerPreviewAuthorHeadline(previous).length > 0) {
-                Text(this.answerPreviewAuthorHeadline(previous))
-                  .fontSize($r('app.float.caption_font_size'))
-                  .fontColor($r('app.color.secondary_text'))
-                  .maxLines(1)
-                  .textOverflow({ overflow: TextOverflow.Ellipsis })
-              }
-            }
-            .layoutWeight(1)
-            .alignItems(HorizontalAlign.Start)
-          }
-          .width('100%')
-
-          Text(`${this.answerPreviewVoteupCount(previous)} 赞同 · ${this.answerPreviewCommentCount(previous)} 条评论`)
-            .fontSize($r('app.float.caption_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .width('100%')
-
-          Text(this.answerPreviewExcerpt(previous))
-            .fontSize(readerBodyFontSize(this.previewFontSizePercent, this.previewTypographyPreset))
-            .fontColor($r('app.color.primary_text'))
-            // 与 NativeContentDocument 正文同一套排版映射：行高随阅读偏好，不再写死 28。
-            .lineHeight(readerBodyLineHeight(this.previewFontSizePercent, this.previewLineHeightPercent,
-              this.previewTypographyPreset))
-            .width('100%')
-            // 预览没有真实 List，补足到正式页的信息头→正文 24vp 间距。
-            .margin({ top: Math.max(24, readerBlockSpacing(this.previewBlockSpacingPercent,
-              this.previewTypographyPreset)) - 10 })
-        }
-        .layoutWeight(1)
-        .width('100%')
-        // 与 NativeContentDocument 的阅读布局统一：独立正文边距、顶部 spacingMedium。
-        .padding({
-          left: readerHorizontalPaddingVp(this.answerViewportWidthVp),
-          right: readerHorizontalPaddingVp(this.answerViewportWidthVp),
-          top: $r('app.float.spacing_medium')
-        })
-        .clip(true)
-      }
-      .width('100%')
-      .height('100%')
-
-      // 最终页底栏是覆盖正文的悬浮层，不参与正文 Column 的高度分配；预览保持相同。
-      Stack({ alignContent: Alignment.Bottom }) {
-        this.horizontalAnswerBottomBar(previous)
-      }
-      .width('100%')
-      .height('100%')
-      .hitTestBehavior(HitTestMode.None)
+  private horizontalAnswerLoading(previous: boolean) {
+    Column() {
+      Text(previous ? '上一回答' : '下一回答')
+        .fontSize($r('app.float.body_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+      Text('松手后加载完整内容')
+        .fontSize($r('app.float.caption_font_size'))
+        .fontColor($r('app.color.secondary_text'))
     }
-    .id(previous ? 'answer_prev_horizontal_page' : 'answer_next_horizontal_page')
     .width('100%')
     .height('100%')
-    .backgroundColor($r('app.color.page_background'))
-  }
-
-  /** 与标准页同一份 AnswerTitleBar（answerId 置空恒为未折叠"回答"态）：预览模式下
-   * 组件自身不随过滑平移/淡出，整体在 64vp 顶栏槽位内居中，几何与 AppShell 顶栏一致。 */
-  @Builder
-  private horizontalAnswerTitleBar() {
-    Column() {
-      AnswerTitleBar({ answerId: '', previewMode: true })
-    }
-    .width('100%')
-    .height(FLOATING_TITLE_BAR_OFFSET)
     .justifyContent(FlexAlign.Center)
-  }
-
-  /** 与 bottomActionBar 相同的左右双胶囊预览；只展示相邻回答数据，不承载点击行为。 */
-  @Builder
-  private horizontalAnswerBottomBar(previous: boolean) {
-    Column() {
-      Row({ space: $r('app.float.spacing_small') }) {
-        GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
-          Row({ space: 0 }) {
-            Row({ space: 4 }) {
-              SymbolGlyph($r('sys.symbol.arrowtriangle_left'))
-                .fontSize('20vp')
-                .fontColor([this.resolvedThemeColor])
-                .rotate({ x: 0, y: 0, z: 1, angle: 90 })
-              if (!this.compactDetailActions()) {
-                Text(`${this.answerPreviewVoteupCount(previous)}`)
-                  .fontSize($r('app.float.secondary_font_size'))
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor(this.resolvedThemeColor)
-              }
-            }
-            .padding({ left: 8, right: 8, top: 8, bottom: 8 })
-
-            SymbolGlyph($r('sys.symbol.arrowtriangle_left'))
-              .fontSize('20vp')
-              .fontColor([this.resolvedThemeColor])
-              .rotate({ x: 0, y: 0, z: 1, angle: -90 })
-              .padding({ left: 8, right: 8, top: 8, bottom: 8 })
-          }
-        }
-
-        Blank().layoutWeight(1)
-
-        GlassCapsule({ useMaterial: this.immersiveMaterialSupported }) {
-          Row({ space: 0 }) {
-            SymbolGlyph($r('sys.symbol.bookmark'))
-              .fontSize('20vp')
-              .fontColor([$r('app.color.secondary_text')])
-              .width(36)
-              .height(36)
-            Row({ space: 4 }) {
-              SymbolGlyph($r('sys.symbol.message'))
-                .fontSize('20vp')
-                .fontColor([$r('app.color.secondary_text')])
-              if (!this.compactDetailActions()) {
-                Text(`${this.answerPreviewCommentCount(previous)}`)
-                  .fontSize($r('app.float.secondary_font_size'))
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor($r('app.color.secondary_text'))
-              }
-            }
-            .padding({ left: 6, right: 6, top: 8, bottom: 8 })
-            SymbolGlyph($r('sys.symbol.ellipsis_circle'))
-              .fontSize('20vp')
-              .fontColor([$r('app.color.secondary_text')])
-              .width(36)
-              .height(36)
-          }
-        }
-      }
-      .width('100%')
-      .padding({
-        left: $r('app.float.page_padding'),
-        right: $r('app.float.page_padding'),
-        // 与标准底栏/主页导航栏同口径，保证横向切换预览与常规页悬浮高度一致
-        bottom: Math.max(this.bottomRectHeightVp, 0)
-      })
-    }
-    .width('100%')
-    .hitTestBehavior(HitTestMode.None)
+    .alignItems(HorizontalAlign.Center)
   }
 
   /** 纵向过滑预览卡（对齐上游 AnswerPreviewCard）：上一答卡标签行在上、作者行在下；
@@ -2700,19 +2546,31 @@ struct ContentDetailPage {
 
   private async moveAnswer(direction: number): Promise<void> {
     if (this.navigatorBusy) { return; }
+    const epoch = this.answerSwitchEpoch;
     this.navigatorBusy = true;
     this.resetAnswerOverscroll(false);
     try {
-      const id = await this.answerNavigator?.move(direction);
+      const navigator = this.answerNavigator;
+      const controller = this.controller;
+      const id = await navigator?.prepareMove(direction);
       this.navigatorRevision += 1;
-      if (!this.pageActive) { return; }
+      if (!this.pageActive || epoch !== this.answerSwitchEpoch) { return; }
       if (id === undefined) {
         const message = this.answerNavigator?.errorMessage() ?? '';
         this.getUIContext().getPromptAction()
           .showToast({ message: message.length > 0 ? message : '暂时无法切换回答' });
         return;
       }
-      // 取得目标后再复位，紧接着 load 卸载旧正文；分页等待/切换失败不破坏当前边界。
+      const prepared = await controller?.prepareAnswer(id);
+      if (!this.pageActive || epoch !== this.answerSwitchEpoch) { return; }
+      if (prepared === undefined) {
+        const message = controller?.preparedAnswerError() ?? '';
+        this.getUIContext().getPromptAction()
+          .showToast({ message: message.length > 0 ? message : '暂时无法切换回答' });
+        return;
+      }
+      if (navigator === undefined || !navigator.commitMove(id)) { return; }
+      // 详情成功后才切换交互身份，等待和失败期间保留当前正文。
       // 新内容从顶部渲染：边界状态归位，避免沿用上一答的贴底状态误触发底部过滑。
       this.contentAtBottom = false;
       this.contentAtTop = true;
@@ -2728,7 +2586,7 @@ struct ContentDetailPage {
       this.favoriteDialogShown = false;
       this.contentFavorited = false;
       this.activeContentId = id;
-      await this.controller?.load(ContentDetailKind.ANSWER, id);
+      controller?.commitPreparedAnswer(prepared);
     } finally { this.navigatorBusy = false; }
   }
 

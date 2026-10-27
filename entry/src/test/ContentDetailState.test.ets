@@ -40,6 +40,7 @@ class ControlledContentRepository implements ContentRepository {
   readonly pendingQuestions: Array<PendingQuestion> = [];
   cancelCount: number = 0;
   answer: Answer = answerFixture();
+  failAnswer: boolean = false;
   article: Article = articleFixture();
 
   getQuestion(_id: string): Promise<Question> {
@@ -50,6 +51,7 @@ class ControlledContentRepository implements ContentRepository {
   }
 
   getAnswer(_id: string): Promise<Answer> {
+    if (this.failAnswer) { return Promise.reject(new Error('network')); }
     return Promise.resolve(this.answer);
   }
 
@@ -89,6 +91,32 @@ class HttpFailingContentRepository implements ContentRepository {
 
 export default function contentDetailStateTest(): void {
   describe('contentDetailStateTest', () => {
+    it('preparesAnswerWithoutReplacingCurrentAndRejectsStaleCommit', 0, async () => {
+      const repository = new ControlledContentRepository();
+      const controller = new ContentDetailController(repository);
+      controller.activate();
+      await controller.load(ContentDetailKind.ANSWER, '2');
+      const original = controller.snapshot().content;
+      repository.failAnswer = true;
+      expect(await controller.prepareAnswer('3') === undefined).assertTrue();
+      expect(controller.snapshot().content?.loadGeneration).assertEqual(original?.loadGeneration);
+      expect(controller.preparedAnswerError().length > 0).assertTrue();
+      repository.failAnswer = false;
+      const prepared = await controller.prepareAnswer('3');
+      expect(controller.snapshot().phase).assertEqual(ContentDetailPhase.READY);
+      expect(controller.snapshot().content?.loadGeneration).assertEqual(original?.loadGeneration);
+      expect(prepared !== undefined).assertTrue();
+      if (prepared === undefined) { return; }
+      controller.deactivate();
+      expect(controller.commitPreparedAnswer(prepared)).assertFalse();
+      controller.activate();
+      const next = await controller.prepareAnswer('3');
+      if (next === undefined) { expect(false).assertTrue(); return; }
+      expect(controller.commitPreparedAnswer(next)).assertTrue();
+      expect(controller.commitPreparedAnswer(next)).assertFalse();
+      expect(controller.snapshot().content?.loadGeneration).assertEqual(next.loadGeneration);
+      controller.deactivate();
+    });
     it('acceptsNewDocumentEdgesWhileRejectingDepartedDocumentEvents', 0, () => {
       const oldDetail: LoadedAnswerDetail = { kind: ContentDetailKind.ANSWER, value: answerFixture(), loadGeneration: 1 };
       const newDetail: LoadedAnswerDetail = { kind: ContentDetailKind.ANSWER, value: answerFixture(), loadGeneration: 2 };

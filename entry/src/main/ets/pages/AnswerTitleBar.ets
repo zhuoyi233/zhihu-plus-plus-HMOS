@@ -45,7 +45,6 @@ export struct AnswerTitleBar {
   /** 回答页过滑切换进行中：整栏淡出让位给整页级预览卡（上游中顶栏随 MainContent 平移滑走）。 */
   @StorageProp('answerOverscrollActive') private overscrollActive: boolean = false;
   /** 横向切换时与正文使用同一 X 轴偏移，保持当前回答的问题栏随整页一起移动。 */
-  @StorageProp('answerOverscrollOffset') private overscrollOffset: number = 0;
   @StorageProp('answerSwitchMode') private answerSwitchMode: string = 'vertical';
 
   private state(): AnswerTitleState | undefined {
@@ -61,7 +60,8 @@ export struct AnswerTitleBar {
   }
 
   private scrolled(): boolean {
-    return this.state()?.scrolled ?? false;
+    return (this.answerSwitchMode === 'horizontal' && (this.state()?.questionTitle ?? '').length > 0) ||
+      (this.state()?.scrolled ?? false);
   }
 
   build() {
@@ -188,11 +188,8 @@ export struct AnswerTitleBar {
     // 预览模式恒显示未折叠态且不随过滑平移（位移由预览容器承担）。
     .opacity(this.previewMode ? 1
       : (this.overscrollActive && this.answerSwitchMode !== 'horizontal' ? 0 : 1))
-    .translate({
-      x: this.previewMode || this.answerSwitchMode !== 'horizontal' ? 0 : this.overscrollOffset
-    })
     // 过滑时关闭命中，避免移动中的返回键仍可点。
-    .hitTestBehavior(this.previewMode || this.overscrollActive
+    .hitTestBehavior(this.previewMode || (this.overscrollActive && this.answerSwitchMode !== 'horizontal')
       ? HitTestMode.None : HitTestMode.Transparent)
   }
 }

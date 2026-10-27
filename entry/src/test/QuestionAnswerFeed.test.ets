@@ -97,6 +97,10 @@ export default function questionAnswerFeedTest(): void {
         { items: [content('3')], cursor: { isEnd: true, isStart: false, page: 2, total: 3 } }
       ]);
       const navigator = new QuestionAnswerNavigator('123', '2', seed, repository);
+      expect(await navigator.prepareMove(1)).assertEqual('3');
+      expect(navigator.currentId()).assertEqual('2');
+      expect(await navigator.prepareMove(1)).assertEqual('3');
+      expect(navigator.currentId()).assertEqual('2');
       expect(await navigator.move(-1)).assertEqual('1');
       expect(await navigator.move(1)).assertEqual('2');
       expect(await navigator.move(1)).assertEqual('3');
