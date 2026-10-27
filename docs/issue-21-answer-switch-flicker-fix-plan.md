@@ -234,6 +234,7 @@ pwsh -NoProfile -File scripts/verify-harmony.ps1 -SkipDependencyInstall
 | §5.4 预取与缓存 | 新增 `AnswerSwitchPrefetch.ets`（`AnswerDetailPrefetcher`）：独立 `ContentRepository`（独立 `ZhihuHttpClient`，避免单飞互斥）、并发 1、前台插队、同答去重、LRU 3 份、`reset()` 作废在途与缓存；只取详情，不写阅读记录/进度 |
 | §5.4 触发点 | 当前答 READY 后按「下一答优先、再上一答」预取；结果就绪且页面空闲（`offset=0`、非切换中）时提前挂载候选；提交后立刻为新的相邻答预热 |
 | §7.2 观测 | 新增 `AnswerSwitch` 事务日志（`traceAnswerSwitch`），记录 意图/候选/详情/正文/提交 五个点，仅含回答 ID、方向、耗时 |
+| 切换等待提示 | 由自绘的顶栏气泡改为**常规 toast**（系统底部居中）：需要拉分页或候选未预取/未挂载时立即提示，候选就绪即关闭；候选已预挂载时只留 300 ms 布局兜底，因此预取命中与落位动画期间都不显示 |
 
 新增/调整文件：`entry/src/main/ets/pages/AnswerSwitchPrefetch.ets`（新）、`AnswerSwitchPrefetch.test.ets`（新）、
 `ContentDetailPages.ets`、`ContentDetailState.ets`、`NativeContentDocument.ets`、`QuestionAnswerNavigator.ets`（`peekId`）、

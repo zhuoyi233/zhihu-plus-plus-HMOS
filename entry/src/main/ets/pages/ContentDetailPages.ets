@@ -211,6 +211,10 @@ struct ContentDetailPage {
   @State private candidateDirection: number = 0;
   /** 候选正文当前滚动偏移（vp）：提交时据此继承折叠态，避免落位瞬间顶栏回弹。 */
   private candidateScrollOffset: number = 0;
+  /** 切换等待 toast：延迟出现、候选就绪即关闭（预取命中的快速切换不闪提示）。 */
+  private answerSwitchWaitTimer: number = -1;
+  private answerSwitchWaitToastId: number = -1;
+  private answerSwitchWaitWanted: boolean = false;
   /** 已回报视口就绪的正文实例键（含预挂载候选），避免重复等待。 */
   private preparedAnswerPanes: Set<string> = new Set();
   private answerPaneWaiter?: (ready: boolean) => void;
@@ -382,6 +386,7 @@ struct ContentDetailPage {
   private onLoginChanged(): void {
     this.answerSwitchEpoch += 1;
     this.finishAnswerPaneWait(false);
+    this.dismissAnswerSwitchWaitToast();
     this.unmountAnswerCandidate();
     this.resetAnswerPrefetcher();
     this.authenticated = this.session?.getState().status === SessionStatus.AUTHENTICATED;
@@ -398,6 +403,7 @@ struct ContentDetailPage {
   aboutToDisappear(): void {
     this.answerSwitchEpoch += 1;
     this.finishAnswerPaneWait(false);
+    this.dismissAnswerSwitchWaitToast();
     this.answerPrefetcher?.dispose();
     this.answerPrefetcher = undefined;
     this.pageActive = false;
@@ -822,21 +828,9 @@ struct ContentDetailPage {
         })
       }
 
-      if (this.navigatorBusy && this.kind === ContentDetailKind.ANSWER && this.content !== undefined) {
-        Column() {
-          Text('正在加载回答…')
-            .fontSize($r('app.float.caption_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .padding(8)
-            .borderRadius(8)
-            .backgroundColor($r('app.color.surface_background'))
-            .id('answer_switch_loading')
-        }
-        .width('100%')
-        .padding({ top: this.immersiveReading ? this.statusBarHeightVp : FLOATING_TITLE_BAR_OFFSET })
-        .alignItems(HorizontalAlign.Center)
-        .hitTestBehavior(HitTestMode.None)
-      }
+      // 切换等待提示改由常规 toast 承担（见 beginAnswerSwitchWait）：
+      // 只有候选确实需要等请求/等布局时才出现，位置与样式跟随系统 toast，
+      // 不再在顶栏下方叠加自绘气泡，也不会在落位动画期间显示。
 
       // 悬浮"下一个回答"按钮（对齐上游 SkipNext FAB）：右下角、底部操作栏上方，可拖动避让正文；
       // 底部"下一答"预览卡展开时隐藏，避免盖住预览卡。
@@ -2840,6 +2834,68 @@ struct ContentDetailPage {
   }
 
   /**
+   * 切换等待提示（常规 toast）：只有候选确实需要等请求/等布局时才出现。
+   * - 需要拉分页或候选未预取/未挂载：立即弹，等待期间可见；
+   * - 候选已就绪（只等布局）：延迟兜底，正常一帧内完成不会弹；
+   * 候选就绪或事务结束立即关闭，落位动画期间不显示。
+   */
+  private beginAnswerSwitchWait(direction: number): void {
+    const id = this.answerNavigator?.peekId(direction);
+    const mounted = this.candidatePane();
+    const prepared = id !== undefined &&
+      (mounted?.value.id === id || this.answerPrefetcher?.peek(id) !== undefined);
+    if (prepared) {
+      this.scheduleAnswerSwitchWaitToast(ANSWER_SWITCH_WAIT_TOAST_LAYOUT_DELAY_MS);
+      return;
+    }
+    this.showAnswerSwitchWaitToast();
+  }
+
+  private showAnswerSwitchWaitToast(): void {
+    if (this.answerSwitchWaitWanted) { return; }
+    this.answerSwitchWaitWanted = true;
+    this.getUIContext().getPromptAction().openToast({
+      message: '正在加载回答…',
+      duration: ANSWER_SWITCH_WAIT_TOAST_DURATION
+    }).then((toastId: number): void => {
+      this.answerSwitchWaitToastId = toastId;
+      this.traceAnswerSwitch('wait-toast', 'show');
+      // 弹窗返回前事务可能已就绪：补一次关闭，避免提示悬挂。
+      if (!this.answerSwitchWaitWanted) { this.closeAnswerSwitchWaitToast(toastId); }
+    }).catch((_error: Object): void => {
+    });
+  }
+
+  private scheduleAnswerSwitchWaitToast(delayMs: number): void {
+    this.dismissAnswerSwitchWaitToast();
+    this.answerSwitchWaitTimer = setTimeout((): void => {
+      this.answerSwitchWaitTimer = -1;
+      this.showAnswerSwitchWaitToast();
+    }, delayMs);
+  }
+
+  private dismissAnswerSwitchWaitToast(): void {
+    if (this.answerSwitchWaitTimer >= 0) {
+      clearTimeout(this.answerSwitchWaitTimer);
+      this.answerSwitchWaitTimer = -1;
+    }
+    this.answerSwitchWaitWanted = false;
+    const toastId = this.answerSwitchWaitToastId;
+    this.answerSwitchWaitToastId = -1;
+    if (toastId >= 0) {
+      this.closeAnswerSwitchWaitToast(toastId);
+    }
+  }
+
+  private closeAnswerSwitchWaitToast(toastId: number): void {
+    try {
+      this.getUIContext().getPromptAction().closeToast(toastId);
+    } catch (_error) {
+      // 提示已自然消失时 closeToast 会抛 103401，忽略。
+    }
+  }
+
+  /**
    * 单篇回答切换事务（计划 §5.2）：准备（导航目标＋全文＋候选视口）与提交分离。
    * 准备期间及失败时保留当前正文与导航位置；只有全部就绪后才原子提交。
    */
@@ -2850,9 +2906,10 @@ struct ContentDetailPage {
     this.overscrollRawDrag = 0;
     const startedAt = Date.now();
     this.traceAnswerSwitch('intent', `dir=${direction} mode=${this.answerSwitchMode} from=${this.activeContentId}`);
-    // 纵向模式沿用"立即回位 + 整页加载提示"的既有观感；横向模式保留拖动位移，
+    // 纵向模式沿用"立即回位 + 等待提示"的既有观感；横向模式保留拖动位移，
     // 待候选就绪后从当前偏移继续滑到目标位置（真实候选跟手落地）。
     if (this.answerSwitchMode !== 'horizontal') { this.resetAnswerOverscroll(false); }
+    this.beginAnswerSwitchWait(direction);
     try {
       const navigator = this.answerNavigator;
       const controller = this.controller;
@@ -2884,9 +2941,12 @@ struct ContentDetailPage {
         return;
       }
       this.traceAnswerSwitch('pane', `target=${id} ready=${ready} cost=${Date.now() - startedAt}ms`);
+      // 候选就绪即撤掉等待提示，落位动画（180 ms）期间不再显示。
+      this.dismissAnswerSwitchWaitToast();
       await this.settleAnswerSwitch(prepared, direction, epoch);
     } finally {
       this.finishAnswerPaneWait(false);
+      this.dismissAnswerSwitchWaitToast();
       const activeKey = this.content === undefined ? '' : this.answerDocumentKey(this.content);
       const candidate = this.candidatePane();
       const candidateKey = candidate === undefined ? '' : this.answerDocumentKey(candidate);
@@ -4217,6 +4277,10 @@ const ANSWER_TITLE_AUTHOR_GAP: number = 18;
 const ANSWER_TITLE_FOLD_MARGIN: number = 8;
 /** 标题高度尚未测得时的折叠阈值兜底（vp）。 */
 const ANSWER_TITLE_FOLD_FALLBACK_THRESHOLD: number = 64;
+/** 只等布局时的提示延迟（ms）：候选已预挂载时正常一帧完成，不应弹提示。 */
+const ANSWER_SWITCH_WAIT_TOAST_LAYOUT_DELAY_MS: number = 300;
+/** 切换等待提示时长（ms）：候选就绪时主动关闭，此值仅为异常情况兜底。 */
+const ANSWER_SWITCH_WAIT_TOAST_DURATION: number = 3000;
 
 /**
  * 回答页顶栏折叠阈值（vp）：信息头中问题标题与答主行都滚出视口后才折叠。
