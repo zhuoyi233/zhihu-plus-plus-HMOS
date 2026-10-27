@@ -17,6 +17,7 @@ import {
 } from './CommentState';
 import { CommentLikeButton } from './CommentLikeButton';
 import { CommentLikeState, CommentLikeStateStore } from './CommentLikeState';
+import { CommentAvatar } from './components/CommentAvatar';
 import { ContentImagePreview } from './NativeContentDocument';
 import { EmojiText } from './EmojiText';
 import { HarmonyOSCapabilities } from '../common/platform/HarmonyOSCapabilities';
@@ -478,30 +479,18 @@ export struct CommentPage {
     )
   }
 
+  /**
+   * 根评论、置顶根评论、内嵌预览回复、子评论四类入口共用：加载期只显示中性底座，
+   * 详细约束见 components/CommentAvatar.ets。
+   */
   @Builder
   private avatar(comment: CommentItem) {
-    Stack({ alignContent: Alignment.Center }) {
-      Text(authorInitial(comment.author.name))
-        .fontSize(16)
-        .fontColor(onThemeColor(this.resolvedThemeColor))
-        .textAlign(TextAlign.Center)
-        .width(36)
-        .height(36)
-        .backgroundColor(this.resolvedThemeColor)
-      if (commentAvatarUrl(comment.author.avatarUrl).length > 0) {
-        Image(commentAvatarUrl(comment.author.avatarUrl))
-          .id(`comments_avatar_${comment.id}`)
-          .width(36)
-          .height(36)
-          .objectFit(ImageFit.Cover)
-      }
-    }
-    .width(36)
-    .height(36)
-    .borderRadius(18)
-    .clip(true)
-    .accessibilityText(comment.author.name)
-    .onClick((): void => this.openAuthor(comment))
+    CommentAvatar({
+      avatarUrl: commentAvatarUrl(comment.author.avatarUrl),
+      authorName: comment.author.name,
+      commentId: comment.id,
+      onTap: (): void => this.openAuthor(comment)
+    })
   }
 
   @Builder
@@ -968,11 +957,6 @@ export struct CommentPage {
     publishCommentTitle({ id: this.titleStateId(), replying: state.activeRoot !== undefined,
       previewing: this.previewUrl.length > 0 });
   }
-}
-
-function authorInitial(name: string): string {
-  const trimmed = name.trim();
-  return trimmed.length > 0 ? trimmed.charAt(0) : '?';
 }
 
 /** 评论用户头像 URL：http 归一化为 https，缺失或不受信返回空串（走首字占位）。 */
