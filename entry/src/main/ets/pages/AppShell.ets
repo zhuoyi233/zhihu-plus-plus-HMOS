@@ -579,13 +579,17 @@ export struct AppShell {
       HdsNavDestination() {
         this.settingsHomePageContent();
       }
-      // 设置目录与二级页共用一条沉浸光感顶栏：标题、返回与“更多”都由宿主状态驱动，
-      // 玻璃按钮沿用首页顶栏的材质路径（uiMaterial / materialCanvas），只画一次标题。
+      // 目录与二级页共用一条沉浸光感顶栏，返回键由 HDS backIcon 统一承载。
       .titleBar({
         style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()),
         avoidLayoutSafeArea: true,
         content: {
           stackBuilder: (): void => this.settingsTitleBar(),
+          backIcon: {
+            componentId: 'settings_detail_back',
+            label: this.settingsHomeDetailBackActive ? '返回上一级设置' : '返回我的',
+            action: (): void => this.onSettingsTitleBack()
+          },
           divider: { showType: DividerShowType.OFF }
         }
       })
@@ -1552,32 +1556,10 @@ export struct AppShell {
     ArticleTitleBar({ articleId: id, onBack: (): void => { this.pathStack.pop(); } })
   }
 
-  /**
-   * 设置页顶栏（目录与二级页共用一条）：玻璃返回 + 页标题 + 玻璃“更多”。
-   * 两个按钮沿用首页顶栏的图标按钮写法：API 26 用 uiMaterial 系统材质（薄玻璃），
-   * 低版本退回 COMPONENT_ULTRA_THIN 模糊，二者都不改变 40vp 圆形热区。
-   */
+  /** 设置顶栏只注入标题与“更多”，左侧让出 HDS 系统返回键的区域。 */
   @Builder
   private settingsTitleBar() {
     Row({ space: $r('app.float.spacing_small') }) {
-      Button({ type: ButtonType.Circle, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(20)
-          .fontColor([$r('app.color.primary_text')])
-      }
-      .id('settings_detail_back')
-      .width(40)
-      .height(40)
-      .padding(0)
-      .backgroundColor(Color.Transparent)
-      .backgroundBlurStyle(TITLE_BAR_GLASS_MATERIAL === undefined
-        ? BlurStyle.COMPONENT_ULTRA_THIN : BlurStyle.NONE)
-      .systemMaterial(TITLE_BAR_GLASS_MATERIAL)
-      .accessibilityText(this.settingsHomeDetailBackActive ? '返回上一级设置' : '返回设置目录')
-      .onClick((): void => {
-        this.onSettingsTitleBack();
-      })
-
       Text(this.settingsHomeTitle)
         .fontSize($r('app.float.heading_font_size'))
         .fontWeight(FontWeight.Medium)
@@ -1611,7 +1593,9 @@ export struct AppShell {
       }
     }
     .width('100%')
-    .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding') })
+    .height(48)
+    // stackBuilder 覆盖整条标题栏，标题必须避开系统返回键及其点击区域。
+    .padding({ left: 80, right: $r('app.float.page_padding') })
     .hitTestBehavior(HitTestMode.Transparent)
   }
 
