@@ -8,6 +8,8 @@ import {
   notificationKindInfo,
   onThemeColor
 } from 'data';
+import { floatingTitleBarOffset } from './AppPageChrome';
+
 import { common } from '@kit.AbilityKit';
 import { deviceInfo } from '@kit.BasicServicesKit';
 import notificationManager from '@ohos.notificationManager';
@@ -154,6 +156,7 @@ export struct NotificationSettingsPage {
         top: this.embedded ? 12 : 94, bottom: $r('app.float.page_padding') })
     }
     .align(Alignment.TopStart)
+    .contentStartOffset(this.embedded ? floatingTitleBarOffset() : 0)
     .id('notifications_settings_page')
     .width('100%')
     .height('100%')

@@ -217,6 +217,10 @@ export struct AppShell {
   @StorageProp('commentTitleStates') private commentTitleStates: CommentTitleState[] = [];
   /** 全屏图片查看器打开中（详情页广播）：同样隐藏顶栏，使查看器真全屏。 */
   @StorageProp('imagePreviewUrl') private imagePreviewUrl: string = '';
+  /** 设置宿主广播的顶栏状态：标题、当前是否处于二级页、二级页是否注册了“更多”动作。 */
+  @StorageProp('settingsHomeTitle') private settingsHomeTitle: string = '设置';
+  @StorageProp('settingsHomeDetailBackActive') private settingsHomeDetailBackActive: boolean = false;
+  @StorageProp('settingsHomeActionsAvailable') private settingsHomeActionsAvailable: boolean = false;
   @State private installedVersionLabel: string = '正在读取已安装版本…';
   @State private aboutVersionSheetShown: boolean = false;
   @State private developerModeEnabled: boolean = false;
@@ -575,10 +579,16 @@ export struct AppShell {
       HdsNavDestination() {
         this.settingsHomePageContent();
       }
-      // 标题与返回统一由设置宿主绘制（目录/详情共用同一行）；HDS 悬浮标题栏若同时存在，
-      // 二级页会出现“设置”与详情标题两条标题、两个返回键，因此这里隐藏系统标题栏。
-      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '设置' }, divider: { showType: DividerShowType.OFF } } })
-      .hideTitleBar(true)
+      // 设置目录与二级页共用一条沉浸光感顶栏：标题、返回与“更多”都由宿主状态驱动，
+      // 玻璃按钮沿用首页顶栏的材质路径（uiMaterial / materialCanvas），只画一次标题。
+      .titleBar({
+        style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()),
+        avoidLayoutSafeArea: true,
+        content: {
+          stackBuilder: (): void => this.settingsTitleBar(),
+          divider: { showType: DividerShowType.OFF }
+        }
+      })
       .onBackPressed((): boolean => this.handleSettingsHomeBack())
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
@@ -1542,9 +1552,87 @@ export struct AppShell {
     ArticleTitleBar({ articleId: id, onBack: (): void => { this.pathStack.pop(); } })
   }
 
+  /**
+   * 设置页顶栏（目录与二级页共用一条）：玻璃返回 + 页标题 + 玻璃“更多”。
+   * 两个按钮沿用首页顶栏的图标按钮写法：API 26 用 uiMaterial 系统材质（薄玻璃），
+   * 低版本退回 COMPONENT_ULTRA_THIN 模糊，二者都不改变 40vp 圆形热区。
+   */
   @Builder
-  private detailTitleBar(title: string) {
+  private settingsTitleBar() {
     Row({ space: $r('app.float.spacing_small') }) {
+      Button({ type: ButtonType.Circle, stateEffect: true }) {
+        SymbolGlyph($r('sys.symbol.chevron_left'))
+          .fontSize(20)
+          .fontColor([$r('app.color.primary_text')])
+      }
+      .id('settings_detail_back')
+      .width(40)
+      .height(40)
+      .padding(0)
+      .backgroundColor(Color.Transparent)
+      .backgroundBlurStyle(TITLE_BAR_GLASS_MATERIAL === undefined
+        ? BlurStyle.COMPONENT_ULTRA_THIN : BlurStyle.NONE)
+      .systemMaterial(TITLE_BAR_GLASS_MATERIAL)
+      .accessibilityText(this.settingsHomeDetailBackActive ? '返回上一级设置' : '返回设置目录')
+      .onClick((): void => {
+        this.onSettingsTitleBack();
+      })
+
+      Text(this.settingsHomeTitle)
+        .fontSize($r('app.float.heading_font_size'))
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.primary_text'))
+        .layoutWeight(1)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+      if (this.settingsHomeActionsAvailable) {
+        Button({ type: ButtonType.Circle, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.ellipsis_circle'))
+            .fontSize(20)
+            .fontColor([$r('app.color.primary_text')])
+        }
+        .id('settings_detail_actions')
+        .width(40)
+        .height(40)
+        .padding(0)
+        .backgroundColor(Color.Transparent)
+        .backgroundBlurStyle(TITLE_BAR_GLASS_MATERIAL === undefined
+          ? BlurStyle.COMPONENT_ULTRA_THIN : BlurStyle.NONE)
+        .systemMaterial(TITLE_BAR_GLASS_MATERIAL)
+        .accessibilityText(`${this.settingsHomeTitle}更多操作`)
+        .onClick((): void => {
+          this.onSettingsTitleActions();
+        })
+      } else {
+        Blank()
+          .width(40)
+          .height(40)
+      }
+    }
+    .width('100%')
+    .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding') })
+    .hitTestBehavior(HitTestMode.Transparent)
+  }
+
+  /** 顶栏返回：二级页回上一级（交给宿主），目录页退出设置。 */
+  private onSettingsTitleBack(): void {
+    if (this.settingsHomeDetailBackActive) {
+      AppStorage.setOrCreate('settingsHomeBackTick',
+        (AppStorage.get<number>('settingsHomeBackTick') ?? 0) + 1);
+      return;
+    }
+    this.pathStack.pop();
+  }
+
+  /** 顶栏“更多”：交给宿主转调二级页注册的动作（例如屏蔽规则/记录的更多菜单）。 */
+  private onSettingsTitleActions(): void {
+    AppStorage.setOrCreate('settingsHomeActionTick',
+      (AppStorage.get<number>('settingsHomeActionTick') ?? 0) + 1);
+  }
+
+  @Builder
+  private detailTitleBar(title: string) {    Row({ space: $r('app.float.spacing_small') }) {
       Stack({ alignContent: Alignment.Center }) {
         if (this.supportsImmersiveMaterial()) {
           materialCanvas(52, 52)
@@ -1821,9 +1909,6 @@ export struct AppShell {
       updateLabel: this.pendingUpdateRelease !== undefined ? '有新版本' : '',
       navigate: (destination: AppDestination): void => this.navigate(destination),
       onLogout: (): void => this.confirmAccountLogout(),
-      closeSettings: (): void => {
-        this.pathStack.pop();
-      },
       identityContent: (): void => {
         this.identityManagementContent();
       },
@@ -1898,7 +1983,7 @@ export struct AppShell {
 
   @Builder
   private identityManagementContent() {
-    IdentityManagementPage();
+    IdentityManagementPage({ embedded: true });
   }
 
   @Builder

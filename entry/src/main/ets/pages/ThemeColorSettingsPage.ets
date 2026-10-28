@@ -12,6 +12,8 @@ import {
   rgbToHsv,
   RgbColor
 } from 'data';
+import { floatingTitleBarOffset } from './AppPageChrome';
+
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { settingsGroupBackground, settingsGroupRadius } from './AccountSettingsLayout';
 
@@ -170,6 +172,7 @@ export struct ThemeColorSettingsPage {
       })
     }
     .align(Alignment.TopStart)
+    .contentStartOffset(this.embedded ? floatingTitleBarOffset() : 0)
     .id('themecolor_settings_page')
     .width('100%')
     .height('100%')

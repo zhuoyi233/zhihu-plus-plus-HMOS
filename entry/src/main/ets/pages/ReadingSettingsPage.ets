@@ -10,7 +10,7 @@ import {
 } from 'data';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { getSpeechPlaybackService, SpeechPlaybackStatus } from '../platform/SpeechPlaybackService';
-import { AppNavigationRow, FLOATING_TITLE_BAR_OFFSET } from './AppPageChrome';
+import { AppNavigationRow, FLOATING_TITLE_BAR_OFFSET, floatingTitleBarOffset } from './AppPageChrome';
 import { settingsGroupBackground, settingsGroupRadius } from './AccountSettingsLayout';
 
 interface SpeechVoiceChoice {
@@ -110,6 +110,7 @@ export struct ReadingSettingsPage {
         top: this.embedded ? 12 : FLOATING_TITLE_BAR_OFFSET, bottom: 40 })
     }
     .align(Alignment.TopStart)
+    .contentStartOffset(this.embedded ? floatingTitleBarOffset() : 0)
     .id('reading_settings_scroll')
     .width('100%')
     .height('100%')

@@ -27,6 +27,8 @@ import {
   ReaderTypographyPreset,
   ShareActionMode
 } from 'data';
+import { floatingTitleBarOffset } from './AppPageChrome';
+
 import {
   allImmersiveMaterialModes,
   decodeImmersiveMaterialSupport,
@@ -385,6 +387,7 @@ export struct AppearanceSettingsPage {
       })
     }
     .align(Alignment.TopStart)
+    .contentStartOffset(this.embedded ? floatingTitleBarOffset() : 0)
     .id('appearance_settings_page')
     .width('100%')
     .height('100%')

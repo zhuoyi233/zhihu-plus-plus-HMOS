@@ -13,7 +13,7 @@ import {
   SessionState,
   SessionStatus
 } from 'data';
-import { AppNavigationRow } from './AppPageChrome';
+import { AppNavigationRow, floatingTitleBarOffset } from './AppPageChrome';
 import { settingsGroupBackground, settingsGroupRadius } from './AccountSettingsLayout';
 
 /**
@@ -144,6 +144,7 @@ export struct TechnicalLabPage {
       .width('100%')
       .height('100%')
       .align(Alignment.TopStart)
+      .contentStartOffset(this.embedded ? floatingTitleBarOffset() : 0)
       .backgroundColor($r('app.color.page_background'))
     }
     .id('technical_lab_top_start_container')

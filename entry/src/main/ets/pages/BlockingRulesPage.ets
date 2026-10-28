@@ -23,6 +23,7 @@ import {
 } from './BlockingRulesState';
 import { adaptiveOverlayWidth, isWideOverlayContainer, ADAPTIVE_OVERLAY_MENU_WIDTH_VP } from '../common/style/AdaptiveOverlayLayout';
 import { settingsGroupBackground, settingsGroupRadius } from './AccountSettingsLayout';
+import { floatingTitleBarOffset } from './AppPageChrome';
 
 /**
  * 内容屏蔽：开关组、分类、计数与规则行共用一个主滚动，嵌入设置右栏时由宿主画标题。
@@ -171,6 +172,8 @@ export struct BlockingRulesPage {
       .height('100%')
       // 内容不足一屏时 Scroll 默认居中，会让标题下出现大段空白；固定从顶部开始排。
       .align(Alignment.TopStart)
+      // 顶栏覆盖式呈现：内容从栏下沿开始，滚动时穿过顶栏。
+      .contentStartOffset(this.embedded ? floatingTitleBarOffset() : 0)
       .scrollBar(BarState.Off)
       .edgeEffect(EdgeEffect.Spring)
       .backgroundColor($r('app.color.page_background'))
