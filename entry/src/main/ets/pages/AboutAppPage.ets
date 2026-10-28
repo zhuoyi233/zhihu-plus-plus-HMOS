@@ -130,7 +130,7 @@ export struct AboutAppPage {
     .height('100%')
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring)
-    .contentStartOffset(this.embedded ? 0 : floatingTitleBarOffset())
+    .contentStartOffset(floatingTitleBarOffset())
     .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
     .backgroundColor($r('app.color.page_background'))
   }

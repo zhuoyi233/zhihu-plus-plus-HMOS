@@ -7,6 +7,8 @@ import {
   themeColorContainerColor,
   ZhihuIdentityAccount
 } from 'data';
+import { floatingTitleBarOffset } from './AppPageChrome';
+
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 
 type IdentityConfirmationKind = 'switch' | 'create';
@@ -23,6 +25,8 @@ export struct IdentityManagementPage {
   @State private targetAccount: ZhihuIdentityAccount | undefined = undefined;
   @State private acceptedCreateRules: boolean = false;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  /** 嵌入设置右栏时为 true：标题与顶部让位由宿主顶栏承担。 */
+  @Prop embedded: boolean = false;
   private client: IdentityManagementClient | undefined = undefined;
 
   aboutToAppear(): void {
@@ -103,6 +107,7 @@ export struct IdentityManagementPage {
           top: 16, bottom: 40 })
       }
       .align(Alignment.TopStart)
+      .contentStartOffset(this.embedded ? floatingTitleBarOffset() : 0)
       .id('identity_scroll')
       .width('100%').height('100%').scrollBar(BarState.Off)
       .backgroundColor($r('app.color.page_background'))

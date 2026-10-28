@@ -1,6 +1,8 @@
 import {
   AppUpdateDownloadSource, DEFAULT_THEME_COLOR, FeedCardStyle, onThemeColor, sha256HexOfFile, updateDownloadSources
 } from 'data';
+import { floatingTitleBarOffset } from './AppPageChrome';
+
 import { pasteboard, request } from '@kit.BasicServicesKit';
 import { fileIo, picker } from '@kit.CoreFileKit';
 import notificationManager from '@ohos.notificationManager';
@@ -383,6 +385,7 @@ export struct SystemUpdateSettingsPage {
         top: this.embedded ? 12 : 81, bottom: 40 })
     }
     .align(Alignment.TopStart)
+    .contentStartOffset(this.embedded ? floatingTitleBarOffset() : 0)
     .id('system_update_scroll').width('100%').height('100%').scrollBar(BarState.Off)
     .backgroundColor($r('app.color.page_background'))
     .bindPopup(this.selectedSource !== undefined, {

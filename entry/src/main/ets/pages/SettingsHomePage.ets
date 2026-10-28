@@ -10,7 +10,7 @@
  */
 import { AppDestination, AppDestinationName } from 'core';
 import { DEFAULT_THEME_COLOR, FeedCardStyle, onThemeColor } from 'data';
-import { AppNavigationRow } from './AppPageChrome';
+import { AppNavigationRow, floatingTitleBarOffset } from './AppPageChrome';
 import {
   resolveSettingsLayout,
   SETTINGS_DETAIL_MAX_CONTENT_WIDTH_VP,
@@ -45,8 +45,6 @@ export struct SettingsHomePage {
   @Prop updateLabel: string = '';
   navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {};
   onLogout: () => void = (): void => {};
-  /** 目录页返回：退出设置（本页已隐藏系统标题栏，返回键由宿主任一绘制）。 */
-  closeSettings: () => void = (): void => {};
   @BuilderParam identityContent: () => void = this.emptyContent;
   @BuilderParam appearanceContent: (onOpenThemeColor: () => void) => void = this.emptyAppearanceContent;
   @BuilderParam readingContent: () => void = this.emptyContent;
@@ -63,11 +61,12 @@ export struct SettingsHomePage {
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   @StorageProp('feedCardStyle') private feedCardStyle: string = FeedCardStyle.DIVIDER;
   @StorageProp('systemFontSizeScale') private systemFontSizeScale: number = 1;
-  @StorageProp('statusBarHeight') private statusBarHeightVp: number = 0;
   @StorageProp('developerModeEnabled') @Watch('onDeveloperModeChanged')
   private developerModeEnabled: boolean = false;
   /** 窄容器详情页返回信号：根导航先问当前是否处于设置内部详情，再决定离页或回目录。 */
   @StorageProp('settingsHomeBackTick') @Watch('onSettingsHomeBack') private settingsHomeBackTick: number = 0;
+  /** 顶栏“更多”点击信号：动作实体由当前二级页注册，宿主只负责转调。 */
+  @StorageProp('settingsHomeActionTick') @Watch('onDetailActionTick') private settingsHomeActionTick: number = 0;
   @State private searchQuery: string = '';
   @State private selectedPane: SettingsPaneId = SettingsPaneId.NONE;
   @State private containerWidth: number = 0;
@@ -91,8 +90,14 @@ export struct SettingsHomePage {
   private emptyActionsContent(_registerActions: (handler: () => void) => void, _releaseActions: () => void) {
   }
 
+  aboutToAppear(): void {
+    // 顶栏内容由宿主广播：进入时先同步一次标题与动作可用性，避免沿用上一次的残留。
+    this.publishTitleBarState();
+  }
+
   aboutToDisappear(): void {
     AppStorage.setOrCreate('settingsHomeDetailBackActive', false);
+    AppStorage.setOrCreate('settingsHomeActionsAvailable', false);
     this.releaseDetailActions();
   }
 
@@ -104,6 +109,12 @@ export struct SettingsHomePage {
     AppStorage.setOrCreate('settingsHomeDetailBackActive', this.hasInternalBack());
   }
 
+  /** 顶栏标题与“更多”可用性统一广播，AppShell 只渲染不判断业务。 */
+  private publishTitleBarState(): void {
+    AppStorage.setOrCreate('settingsHomeTitle', paneTitle(this.selectedPane));
+    AppStorage.setOrCreate('settingsHomeActionsAvailable', this.detailActionsAvailable);
+  }
+
   /** 切换详情页：动作槽先失效，避免上一页的“更多”菜单作用到新页面。 */
   private selectPane(pane: SettingsPaneId): void {
     if (pane !== this.selectedPane) {
@@ -113,20 +124,24 @@ export struct SettingsHomePage {
       // 开发者模式已关闭时，旧入口、恢复路径与搜索结果都不得重新打开开发者页。
       this.selectedPane = SettingsPaneId.NONE;
       this.syncDetailBackState();
+      this.publishTitleBarState();
       return;
     }
     this.selectedPane = pane;
     this.syncDetailBackState();
+    this.publishTitleBarState();
   }
 
   private registerDetailActions(handler: () => void): void {
     this.detailAction = handler;
     this.detailActionsAvailable = true;
+    this.publishTitleBarState();
   }
 
   private releaseDetailActions(): void {
     this.detailAction = (): void => {};
     this.detailActionsAvailable = false;
+    this.publishTitleBarState();
   }
 
   private goBackFromPane(): void {
@@ -136,6 +151,13 @@ export struct SettingsHomePage {
   private onSettingsHomeBack(): void {
     if (this.selectedPane !== SettingsPaneId.NONE) {
       this.goBackFromPane();
+    }
+  }
+
+  /** 顶栏“更多”被点击：转调当前二级页注册的动作。 */
+  private onDetailActionTick(): void {
+    if (this.detailActionsAvailable) {
+      this.detailAction();
     }
   }
 
@@ -149,6 +171,7 @@ export struct SettingsHomePage {
       this.releaseDetailActions();
       this.selectedPane = fallback;
       this.syncDetailBackState();
+      this.publishTitleBarState();
     }
   }
 
@@ -216,8 +239,6 @@ export struct SettingsHomePage {
     .height('100%')
     .alignItems(VerticalAlign.Top)
     .padding({
-      // 本页已隐藏系统标题栏，内容从屏幕顶端开始绘制，需自行让出状态栏高度。
-      top: this.statusBarHeightVp,
       left: this.isSplit() ? $r('app.float.page_padding') : 0,
       right: this.isSplit() ? $r('app.float.page_padding') : 0
     })
@@ -226,77 +247,42 @@ export struct SettingsHomePage {
       this.containerWidth = Number(newArea.width);
       // 跨越断点时同步返回行为：双栏下返回键直接退出设置，窄栏详情下先回目录。
       this.syncDetailBackState();
+      this.publishTitleBarState();
     })
   }
 
   @Builder
   private masterPane(fixedWidth: number) {
-    Column() {
-      this.masterHeader()
-      Scroll() {
-        Column({ space: 24 }) {
-          this.searchBox()
-          if (this.hasQuery()) {
-            this.searchResultsSection()
-          } else {
-            this.categorySections()
-          }
+    Scroll() {
+      Column({ space: 24 }) {
+        this.searchBox()
+        if (this.hasQuery()) {
+          this.searchResultsSection()
+        } else {
+          this.categorySections()
         }
-        .width('100%')
-        .padding({
-          left: $r('app.float.page_padding'),
-          right: $r('app.float.page_padding'),
-          top: $r('app.float.spacing_small'),
-          bottom: 40
-        })
       }
       .width('100%')
-      .layoutWeight(1)
-      // 设置搜索结果往往不足一屏，Scroll 默认居中会让标题下空出大段；固定从顶部开始排。
-      .align(Alignment.TopStart)
-      .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.Spring)
+      .padding({
+        left: $r('app.float.page_padding'),
+        right: $r('app.float.page_padding'),
+        top: $r('app.float.spacing_small'),
+        bottom: 40
+      })
     }
     .id('settings_master_pane')
     .width(fixedWidth > 0 ? fixedWidth : '100%')
     .height('100%')
+    // 顶栏是覆盖式沉浸光感栏：首屏内容从栏下沿开始，滚动时穿过顶栏。
+    .contentStartOffset(floatingTitleBarOffset())
+    // 设置搜索结果往往不足一屏，Scroll 默认居中会让标题下空出大段；固定从顶部开始排。
+    .align(Alignment.TopStart)
+    .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring)
     .backgroundColor($r('app.color.page_background'))
     // 单栏进入详情时目录只隐藏不销毁，返回后滚动位置与搜索词都还在。
     .visibility(this.isSplit() || this.selectedPane === SettingsPaneId.NONE ?
       Visibility.Visible : Visibility.None)
-  }
-
-  /**
-   * 目录标题行：与详情标题行同高同风格。
-   * 返回即退出设置：单栏是唯一出口，双栏时右侧详情仍可逐级返回分类根页。
-   */
-  @Builder
-  private masterHeader() {
-    Row({ space: $r('app.float.spacing_small') }) {
-      Button({ type: ButtonType.Normal, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(20)
-          .fontColor([$r('app.color.primary_text')])
-      }
-      .id('settings_home_close')
-      .width(44)
-      .height(44)
-      .padding(0)
-      .backgroundColor(Color.Transparent)
-      .accessibilityText('关闭设置')
-      .onClick((): void => this.closeSettings())
-      Text('设置')
-        .fontSize($r('app.float.heading_font_size'))
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.primary_text'))
-        .layoutWeight(1)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-    }
-    .width('100%')
-    .height(48)
-    .alignItems(VerticalAlign.Center)
-    .padding({ left: $r('app.float.spacing_xsmall'), right: $r('app.float.spacing_xsmall') })
   }
 
   @Builder
@@ -540,51 +526,6 @@ export struct SettingsHomePage {
   @Builder
   private detailPane(split: boolean) {
     Column() {
-      Row({ space: $r('app.float.spacing_small') }) {
-        if (this.hasInternalBack()) {
-          Button({ type: ButtonType.Normal, stateEffect: true }) {
-            SymbolGlyph($r('sys.symbol.chevron_left'))
-              .fontSize(20)
-              .fontColor([$r('app.color.primary_text')])
-          }
-          .id('settings_detail_back')
-          .width(44)
-          .height(44)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .accessibilityText(paneParent(this.selectedPane) !== SettingsPaneId.NONE
-            ? '返回上一级设置' : '返回设置目录')
-          .onClick((): void => {
-            this.goBackFromPane();
-          })
-        }
-        Text(paneTitle(this.selectedPane))
-          .fontSize($r('app.float.heading_font_size'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.primary_text'))
-          .layoutWeight(1)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-        if (this.detailActionsAvailable) {
-          Button({ type: ButtonType.Normal, stateEffect: true }) {
-            SymbolGlyph($r('sys.symbol.ellipsis_circle'))
-              .fontSize(20)
-              .fontColor([$r('app.color.primary_text')])
-          }
-          .id('settings_detail_actions')
-          .width(44)
-          .height(44)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .accessibilityText(`${paneTitle(this.selectedPane)}更多操作`)
-          .onClick((): void => this.detailAction())
-        }
-      }
-      .width('100%')
-      .height(48)
-      .alignItems(VerticalAlign.Center)
-      .padding({ left: $r('app.float.spacing_xsmall'), right: $r('app.float.spacing_xsmall') })
-
       if (this.selectedPane === SettingsPaneId.NONE) {
         Column() {
           Text('选择左侧设置项')
@@ -609,7 +550,7 @@ export struct SettingsHomePage {
     .layoutWeight(1)
     .height('100%')
     .alignItems(HorizontalAlign.Center)
-    // 系统标题栏已隐藏，标题与让位全部由这里的标题行承担，不再叠加覆盖式 94vp 留白。
+    // 顶栏是覆盖式沉浸光感栏：正文由各页自己的 contentStartOffset 让位，滚动时从栏后穿过。
     .visibility(split || this.selectedPane !== SettingsPaneId.NONE ? Visibility.Visible : Visibility.None)
   }
 

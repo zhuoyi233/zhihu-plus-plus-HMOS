@@ -14,6 +14,7 @@ import {
 } from './BlockedFeedHistoryState';
 import { adaptiveOverlayWidth, isWideOverlayContainer, ADAPTIVE_OVERLAY_MENU_WIDTH_VP } from '../common/style/AdaptiveOverlayLayout';
 import { settingsGroupBackground, settingsGroupRadius } from './AccountSettingsLayout';
+import { floatingTitleBarOffset } from './AppPageChrome';
 
 /**
  * 屏蔽记录：说明、状态与记录共用一个主列表，嵌入设置右栏时由宿主画标题并提供“更多”。
@@ -198,6 +199,8 @@ export struct BlockedFeedHistoryPage {
     .id('blocked_feed_history_list')
     .width('100%')
     .height('100%')
+    // 顶栏覆盖式呈现：内容从栏下沿开始，滚动时穿过顶栏。
+    .contentStartOffset(this.embedded ? floatingTitleBarOffset() : 0)
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring)
     .padding({

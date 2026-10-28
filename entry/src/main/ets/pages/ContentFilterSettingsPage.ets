@@ -15,6 +15,8 @@ import {
   RecommendationMode,
   recommendationModeLabel
 } from 'data';
+import { floatingTitleBarOffset } from './AppPageChrome';
+
 import { settingsGroupBackground, settingsGroupRadius } from './AccountSettingsLayout';
 
 type FilterBooleanKey = 'loginForRecommendation' | 'autoRefreshHomeOnStartup' | 'enableContentFilter' |
@@ -238,6 +240,7 @@ export struct ContentFilterSettingsPage {
         top: this.embedded ? 12 : 94, bottom: $r('app.float.page_padding') })
     }
     .align(Alignment.TopStart)
+    .contentStartOffset(this.embedded ? floatingTitleBarOffset() : 0)
     .id('content_filter_settings_page')
     .width('100%')
     .height('100%')
