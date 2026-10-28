@@ -186,6 +186,7 @@ export struct AccountPage {
       bottom: $r('app.float.spacing_small')
     })
     .backgroundColor(Color.Transparent)
+    .borderRadius($r('app.float.card_radius'))
     .accessibilityText(this.authenticated ? '打开个人主页' : '登录知乎')
     .onClick((): void => {
       if (this.authenticated) {
@@ -241,6 +242,7 @@ export struct AccountPage {
     .layoutWeight(1)
     .height(72)
     .backgroundColor(Color.Transparent)
+    .borderRadius($r('app.float.card_radius'))
     .accessibilityText(accessibility)
     .onClick((): void => action())
   }

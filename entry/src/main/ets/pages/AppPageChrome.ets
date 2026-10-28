@@ -215,7 +215,8 @@ export struct AppNavigationRow {
     .width('100%')
     .padding($r('app.float.card_padding'))
     .backgroundColor(this.grouped ? Color.Transparent : $r('app.color.surface_background'))
-    .borderRadius(this.grouped ? 0 : $r('app.float.card_radius'))
+    // 分组只决定静态底色，单行按压反馈始终使用圆角矩形。
+    .borderRadius($r('app.float.card_radius'))
     .accessibilityText(this.rowAccessibilityText.length > 0 ? this.rowAccessibilityText : this.title)
     .onClick((): void => this.onRowClick())
   }
