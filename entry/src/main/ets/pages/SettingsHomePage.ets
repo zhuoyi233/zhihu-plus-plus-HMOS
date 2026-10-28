@@ -232,8 +232,8 @@ export struct SettingsHomePage {
 
   build() {
     Row({ space: this.layout().columnGap }) {
-      this.masterPane(this.isSplit() ? this.layout().masterWidth : 0)
-      this.detailPane(this.isSplit())
+      this.masterPane()
+      this.detailPane()
     }
     .width('100%')
     .height('100%')
@@ -251,8 +251,14 @@ export struct SettingsHomePage {
     })
   }
 
+  /** 双栏时的目录栏宽度；返回 0 表示占满整行。
+   *  不用 @Builder 传参：按值传参会在首渲染后固化，平板首次进入时仍按单栏渲染。 */
+  private masterPaneWidth(): number {
+    return this.isSplit() ? this.layout().masterWidth : 0;
+  }
+
   @Builder
-  private masterPane(fixedWidth: number) {
+  private masterPane() {
     Scroll() {
       Column({ space: 24 }) {
         this.searchBox()
@@ -271,7 +277,7 @@ export struct SettingsHomePage {
       })
     }
     .id('settings_master_pane')
-    .width(fixedWidth > 0 ? fixedWidth : '100%')
+    .width(this.masterPaneWidth() > 0 ? this.masterPaneWidth() : '100%')
     .height('100%')
     // 顶栏是覆盖式沉浸光感栏：首屏内容从栏下沿开始，滚动时穿过顶栏。
     .contentStartOffset(floatingTitleBarOffset())
@@ -524,7 +530,7 @@ export struct SettingsHomePage {
   }
 
   @Builder
-  private detailPane(split: boolean) {
+  private detailPane() {
     Column() {
       if (this.selectedPane === SettingsPaneId.NONE) {
         Column() {
@@ -551,7 +557,8 @@ export struct SettingsHomePage {
     .height('100%')
     .alignItems(HorizontalAlign.Center)
     // 顶栏是覆盖式沉浸光感栏：正文由各页自己的 contentStartOffset 让位，滚动时从栏后穿过。
-    .visibility(split || this.selectedPane !== SettingsPaneId.NONE ? Visibility.Visible : Visibility.None)
+    .visibility(this.isSplit() || this.selectedPane !== SettingsPaneId.NONE ?
+      Visibility.Visible : Visibility.None)
   }
 
   @Builder
