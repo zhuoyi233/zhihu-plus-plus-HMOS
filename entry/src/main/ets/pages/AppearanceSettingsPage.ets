@@ -197,26 +197,28 @@ export struct AppearanceSettingsPage {
         }
 
         this.sectionTitle('主题')
+        SettingsHighlightGroup({ groupId: 'appearance_group_theme' }) {
         Column() {
-          this.themeModeSetting()
-          Divider().color($r('app.color.divider_color'))
-          this.themeColorSetting()
-          Divider().color($r('app.color.divider_color'))
-          this.immersiveMaterialSetting()
-          Divider().color($r('app.color.divider_color'))
-          this.sliderSetting({
-            title: '悬浮按钮透明度',
-            description: `控制页面悬浮操作的透明度（${this.fabOpacity}%）`,
-            value: this.fabOpacity, min: 10, max: 100, step: 5,
-            testId: 'appearance_fab_opacity', showSteps: false,
-            onChange: (value: number): void => {
-              this.updateAppearance(value, this.showFeedThumbnail, this.showRefreshFab, this.feedCardStyleValue(), this.feedColumnModeValue());
-            }
-          })
+            this.themeModeSetting()
+            Divider().color($r('app.color.divider_color'))
+            this.themeColorSetting()
+            Divider().color($r('app.color.divider_color'))
+            this.immersiveMaterialSetting()
+            Divider().color($r('app.color.divider_color'))
+            this.sliderSetting({
+              title: '悬浮按钮透明度',
+              description: `控制页面悬浮操作的透明度（${this.fabOpacity}%）`,
+              value: this.fabOpacity, min: 10, max: 100, step: 5,
+              testId: 'appearance_fab_opacity', showSteps: false,
+              onChange: (value: number): void => {
+                this.updateAppearance(value, this.showFeedThumbnail, this.showRefreshFab, this.feedCardStyleValue(), this.feedColumnModeValue());
+              }
+            })
+          }
+          .width('100%')
+          .borderRadius(settingsGroupRadius(this.feedCardStyle))
+          .backgroundColor(settingsGroupBackground(this.feedCardStyle))
         }
-        .width('100%')
-        .borderRadius(settingsGroupRadius(this.feedCardStyle))
-        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.sectionTitle('阅读')
         SettingsHighlightGroup({ groupId: 'appearance_group_reading' }) {
@@ -263,183 +265,195 @@ export struct AppearanceSettingsPage {
         }
 
         this.sectionTitle('信息流')
+        SettingsHighlightGroup({ groupId: 'appearance_group_feed' }) {
         Column() {
-          this.switchSetting('显示信息流缩略图', '在有封面信息时显示内容缩略图', this.showFeedThumbnail,
-            'appearance_feed_thumbnail', (value: boolean): void => {
-              this.updateAppearance(this.fabOpacity, value, this.showRefreshFab, this.feedCardStyleValue(), this.feedColumnModeValue());
-            })
-          Divider().color($r('app.color.divider_color'))
-          this.switchSetting('显示刷新悬浮按钮', '在信息流右下角显示快捷刷新按钮', this.showRefreshFab,
-            'appearance_refresh_fab', (value: boolean): void => {
-              this.updateAppearance(this.fabOpacity, this.showFeedThumbnail, value, this.feedCardStyleValue(), this.feedColumnModeValue());
-            })
-          Divider().color($r('app.color.divider_color'))
-          this.selectSetting('列表样式', '应用于信息流、“我的”与设置列表；卡片使用圆角表面，分割线使用细线分隔条目。',
-            this.feedCardStyleLabel(), this.feedCardStyleOptions(), this.feedCardStyleIndex(),
-            'appearance_feed_style', (index: number): void => this.updateFeedCardStyle(index))
-          Divider().color($r('app.color.divider_color'))
-          this.selectSetting('信息流列数', '自动按窗口宽度在 1～4 列间切换；手动档位在空间不足时仍会自动减少列数。',
-            this.feedColumnModeLabel(), this.feedColumnModeOptions(), this.feedColumnModeIndex(),
-            'appearance_feed_columns', (index: number): void => this.updateFeedColumnMode(index))
+            this.switchSetting('显示信息流缩略图', '在有封面信息时显示内容缩略图', this.showFeedThumbnail,
+              'appearance_feed_thumbnail', (value: boolean): void => {
+                this.updateAppearance(this.fabOpacity, value, this.showRefreshFab, this.feedCardStyleValue(), this.feedColumnModeValue());
+              })
+            Divider().color($r('app.color.divider_color'))
+            this.switchSetting('显示刷新悬浮按钮', '在信息流右下角显示快捷刷新按钮', this.showRefreshFab,
+              'appearance_refresh_fab', (value: boolean): void => {
+                this.updateAppearance(this.fabOpacity, this.showFeedThumbnail, value, this.feedCardStyleValue(), this.feedColumnModeValue());
+              })
+            Divider().color($r('app.color.divider_color'))
+            this.selectSetting('列表样式', '应用于信息流、“我的”与设置列表；卡片使用圆角表面，分割线使用细线分隔条目。',
+              this.feedCardStyleLabel(), this.feedCardStyleOptions(), this.feedCardStyleIndex(),
+              'appearance_feed_style', (index: number): void => this.updateFeedCardStyle(index))
+            Divider().color($r('app.color.divider_color'))
+            this.selectSetting('信息流列数', '自动按窗口宽度在 1～4 列间切换；手动档位在空间不足时仍会自动减少列数。',
+              this.feedColumnModeLabel(), this.feedColumnModeOptions(), this.feedColumnModeIndex(),
+              'appearance_feed_columns', (index: number): void => this.updateFeedColumnMode(index))
+          }
+          .width('100%')
+          .borderRadius(settingsGroupRadius(this.feedCardStyle))
+          .backgroundColor(settingsGroupBackground(this.feedCardStyle))
         }
-        .width('100%')
-        .borderRadius(settingsGroupRadius(this.feedCardStyle))
-        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.sectionTitle('回答页')
+        SettingsHighlightGroup({ groupId: 'appearance_group_answer' }) {
         Column() {
-          this.selectSetting('回答阅读模式', '打开回答时的默认阅读方式；连续模式下切答手势不生效（仅单篇）',
-            this.answerReadingMode === 'continuous' ? '连续' : '单篇', this.answerReadingModeOptions(),
-            this.answerReadingMode === 'continuous' ? 1 : 0, 'appearance_answer_reading_mode',
-            (index: number): void => this.updateAnswerReadingMode(index))
-          Divider().color($r('app.color.divider_color'))
-          this.switchSetting('自动隐藏回答标题', '滚动时自动隐藏回答标题栏', this.titleAutoHide,
-            'appearance_title_auto_hide', (value: boolean): void => this.updateExperienceBoolean('titleAutoHide', value))
-          Divider().color($r('app.color.divider_color'))
-          this.switchSetting('问题标题集成到顶栏', '开启后问题标题常驻顶栏，滚动时保持可见；问题过长时标题只显示两行，超出部分会显示不全（省略）',
-            this.questionInTitleBar, 'appearance_question_in_title_bar',
-            (value: boolean): void => this.updateExperienceBoolean('questionInTitleBar', value))
-          Divider().color($r('app.color.divider_color'))
-          this.switchSetting('自动隐藏回答底部按钮', '上划时隐藏底部操作，下划时重新显示', this.autoHideArticleBottomBar,
-            'appearance_bottom_bar_auto_hide', (value: boolean): void => this.updateExperienceBoolean('autoHideArticleBottomBar', value))
-          Divider().color($r('app.color.divider_color'))
-          this.switchSetting('显示跳转下一个回答按钮', '在回答页显示可拖动的快速跳转按钮', this.buttonSkipAnswer,
-            'appearance_skip_answer', (value: boolean): void => this.updateExperienceBoolean('buttonSkipAnswer', value))
-          if (this.buttonSkipAnswer) {
+            this.selectSetting('回答阅读模式', '打开回答时的默认阅读方式；连续模式下切答手势不生效（仅单篇）',
+              this.answerReadingMode === 'continuous' ? '连续' : '单篇', this.answerReadingModeOptions(),
+              this.answerReadingMode === 'continuous' ? 1 : 0, 'appearance_answer_reading_mode',
+              (index: number): void => this.updateAnswerReadingMode(index))
             Divider().color($r('app.color.divider_color'))
-            this.switchSetting('滚动时自动隐藏跳转按钮', '上划时淡出，下划时淡入', this.autoHideSkipAnswerButton,
-              'appearance_skip_answer_auto_hide', (value: boolean): void => this.updateExperienceBoolean('autoHideSkipAnswerButton', value))
-          }
-          // 原生智感握姿依赖设备硬件传感器：不支持的机型自动隐藏该开关（默认关闭）。
-          if (this.gripMotionSupported) {
+            this.switchSetting('自动隐藏回答标题', '滚动时自动隐藏回答标题栏', this.titleAutoHide,
+              'appearance_title_auto_hide', (value: boolean): void => this.updateExperienceBoolean('titleAutoHide', value))
             Divider().color($r('app.color.divider_color'))
-            this.switchSetting('操作跟随智感握姿', '跟随系统识别的握持手：回答/文章等详情页的操作胶囊与跳转按钮移到握持侧，赞同/反对（关注问题）胶囊留在另一侧',
-              this.gripFollowActions, 'appearance_grip_follow_actions',
-              (value: boolean): void => this.updateExperienceBoolean('gripFollowActions', value))
-          }
-          Divider().color($r('app.color.divider_color'))
-          this.switchSetting('置顶回答日期', '将发布和编辑日期移到内容最前面', this.pinAnswerDate,
-            'appearance_pin_answer_date', (value: boolean): void => this.updateExperienceBoolean('pinAnswerDate', value))
-          Divider().color($r('app.color.divider_color'))
-          this.switchSetting('显示热评', '在回答底部展示按热度排序的前几条评论', this.showHotComments,
-            'appearance_hot_comments', (value: boolean): void => this.updateExperienceBoolean('showHotComments', value))
-          Divider().color($r('app.color.divider_color'))
-          this.selectSetting('回答切换手势', '在同一问题的回答之间切换', this.answerSwitchModeLabel(),
-            this.answerSwitchModeOptions(), this.answerSwitchModeIndex(), 'appearance_answer_switch_mode',
-            (index: number): void => this.updateAnswerSwitchMode(index))
-          if (this.answerSwitchMode !== AnswerSwitchMode.OFF) {
+            this.switchSetting('问题标题集成到顶栏', '开启后问题标题常驻顶栏，滚动时保持可见；问题过长时标题只显示两行，超出部分会显示不全（省略）',
+              this.questionInTitleBar, 'appearance_question_in_title_bar',
+              (value: boolean): void => this.updateExperienceBoolean('questionInTitleBar', value))
             Divider().color($r('app.color.divider_color'))
-            this.sliderSetting({
-              title: '回答切换灵敏度',
-              description: `当前 ${this.answerSwitchSensitivity.toFixed(1)}x，数值越高滑动越短`,
-              value: this.answerSwitchSensitivity, min: 0.5, max: 3, step: 0.1,
-              testId: 'appearance_answer_switch_sensitivity', showSteps: false,
-              onChange: (value: number): void => this.updateExperienceNumber('answerSwitchSensitivity', value)
-            })
+            this.switchSetting('自动隐藏回答底部按钮', '上划时隐藏底部操作，下划时重新显示', this.autoHideArticleBottomBar,
+              'appearance_bottom_bar_auto_hide', (value: boolean): void => this.updateExperienceBoolean('autoHideArticleBottomBar', value))
+            Divider().color($r('app.color.divider_color'))
+            this.switchSetting('显示跳转下一个回答按钮', '在回答页显示可拖动的快速跳转按钮', this.buttonSkipAnswer,
+              'appearance_skip_answer', (value: boolean): void => this.updateExperienceBoolean('buttonSkipAnswer', value))
+            if (this.buttonSkipAnswer) {
+              Divider().color($r('app.color.divider_color'))
+              this.switchSetting('滚动时自动隐藏跳转按钮', '上划时淡出，下划时淡入', this.autoHideSkipAnswerButton,
+                'appearance_skip_answer_auto_hide', (value: boolean): void => this.updateExperienceBoolean('autoHideSkipAnswerButton', value))
+            }
+            // 原生智感握姿依赖设备硬件传感器：不支持的机型自动隐藏该开关（默认关闭）。
+            if (this.gripMotionSupported) {
+              Divider().color($r('app.color.divider_color'))
+              this.switchSetting('操作跟随智感握姿', '跟随系统识别的握持手：回答/文章等详情页的操作胶囊与跳转按钮移到握持侧，赞同/反对（关注问题）胶囊留在另一侧',
+                this.gripFollowActions, 'appearance_grip_follow_actions',
+                (value: boolean): void => this.updateExperienceBoolean('gripFollowActions', value))
+            }
+            Divider().color($r('app.color.divider_color'))
+            this.switchSetting('置顶回答日期', '将发布和编辑日期移到内容最前面', this.pinAnswerDate,
+              'appearance_pin_answer_date', (value: boolean): void => this.updateExperienceBoolean('pinAnswerDate', value))
+            Divider().color($r('app.color.divider_color'))
+            this.switchSetting('显示热评', '在回答底部展示按热度排序的前几条评论', this.showHotComments,
+              'appearance_hot_comments', (value: boolean): void => this.updateExperienceBoolean('showHotComments', value))
+            Divider().color($r('app.color.divider_color'))
+            this.selectSetting('回答切换手势', '在同一问题的回答之间切换', this.answerSwitchModeLabel(),
+              this.answerSwitchModeOptions(), this.answerSwitchModeIndex(), 'appearance_answer_switch_mode',
+              (index: number): void => this.updateAnswerSwitchMode(index))
+            if (this.answerSwitchMode !== AnswerSwitchMode.OFF) {
+              Divider().color($r('app.color.divider_color'))
+              this.sliderSetting({
+                title: '回答切换灵敏度',
+                description: `当前 ${this.answerSwitchSensitivity.toFixed(1)}x，数值越高滑动越短`,
+                value: this.answerSwitchSensitivity, min: 0.5, max: 3, step: 0.1,
+                testId: 'appearance_answer_switch_sensitivity', showSteps: false,
+                onChange: (value: number): void => this.updateExperienceNumber('answerSwitchSensitivity', value)
+              })
+            }
+            Divider().color($r('app.color.divider_color'))
+            this.selectSetting('双击正文动作', '详情页双击正文时执行，默认询问；可用动作取决于页面',
+              answerDoubleTapActionLabel(this.answerDoubleTapAction), this.answerDoubleTapSelectOptions(),
+              this.answerDoubleTapIndex(), 'appearance_answer_double_tap',
+              (index: number): void => {
+                const actions = allAnswerDoubleTapActions();
+                if (index >= 0 && index < actions.length) {
+                  this.updateAnswerDoubleTapAction(actions[index]);
+                }
+              })
           }
-          Divider().color($r('app.color.divider_color'))
-          this.selectSetting('双击正文动作', '详情页双击正文时执行，默认询问；可用动作取决于页面',
-            answerDoubleTapActionLabel(this.answerDoubleTapAction), this.answerDoubleTapSelectOptions(),
-            this.answerDoubleTapIndex(), 'appearance_answer_double_tap',
-            (index: number): void => {
-              const actions = allAnswerDoubleTapActions();
-              if (index >= 0 && index < actions.length) {
-                this.updateAnswerDoubleTapAction(actions[index]);
-              }
-            })
+          .width('100%')
+          .borderRadius(settingsGroupRadius(this.feedCardStyle))
+          .backgroundColor(settingsGroupBackground(this.feedCardStyle))
         }
-        .width('100%')
-        .borderRadius(settingsGroupRadius(this.feedCardStyle))
-        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.sectionTitle('底部导航栏')
+        SettingsHighlightGroup({ groupId: 'appearance_group_bottom_bar' }) {
         Column() {
-          // 不能走 selectSetting：其 options/selected/value 是 @Builder 按值传参，
-          // 首渲染后固化，底部栏项目实时增删时下拉列表不会更新（builder 体内直读状态才可刷新）。
-          this.startDestinationSetting()
-          Divider().color($r('app.color.divider_color'))
-          Column({ space: $r('app.float.spacing_small') }) {
-            Text('底部栏项目与顺序')
-              .fontSize($r('app.float.body_font_size'))
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.primary_text'))
-              .width('100%')
-            Text('选择 3–5 个项目并调整顺序；“我的”固定保留')
-              .fontSize($r('app.float.secondary_font_size'))
-              .fontColor($r('app.color.secondary_text'))
-              .width('100%')
-            ForEach(this.allBottomBarKeys(), (key: string): void => {
-              this.bottomBarItemSetting(key)
-            }, (key: string): string => key)
+            // 不能走 selectSetting：其 options/selected/value 是 @Builder 按值传参，
+            // 首渲染后固化，底部栏项目实时增删时下拉列表不会更新（builder 体内直读状态才可刷新）。
+            this.startDestinationSetting()
+            Divider().color($r('app.color.divider_color'))
+            Column({ space: $r('app.float.spacing_small') }) {
+              Text('底部栏项目与顺序')
+                .fontSize($r('app.float.body_font_size'))
+                .fontWeight(FontWeight.Medium)
+                .fontColor($r('app.color.primary_text'))
+                .width('100%')
+              Text('选择 3–5 个项目并调整顺序；“我的”固定保留')
+                .fontSize($r('app.float.secondary_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+                .width('100%')
+              ForEach(this.allBottomBarKeys(), (key: string): void => {
+                this.bottomBarItemSetting(key)
+              }, (key: string): string => key)
+            }
+            .alignItems(HorizontalAlign.Start)
+            .width('100%')
+            .padding($r('app.float.card_padding'))
+            Divider().color($r('app.color.divider_color'))
+            this.switchSetting('点击底部导航栏回到顶部/刷新', '点击当前页签回到顶部；连续点击两次刷新（滑动中双击会先回到顶部再刷新）', this.tapToRefresh,
+              'appearance_tap_to_refresh', (value: boolean): void => this.updateExperienceBoolean('tapToRefresh', value))
+            Divider().color($r('app.color.divider_color'))
+            this.switchSetting('滚动时自动隐藏底部导航栏', '上划时隐藏，下划时重新显示', this.autoHideBottomBar,
+              'appearance_nav_auto_hide', (value: boolean): void => this.updateExperienceBoolean('autoHideBottomBar', value))
           }
-          .alignItems(HorizontalAlign.Start)
           .width('100%')
-          .padding($r('app.float.card_padding'))
-          Divider().color($r('app.color.divider_color'))
-          this.switchSetting('点击底部导航栏回到顶部/刷新', '点击当前页签回到顶部；连续点击两次刷新（滑动中双击会先回到顶部再刷新）', this.tapToRefresh,
-            'appearance_tap_to_refresh', (value: boolean): void => this.updateExperienceBoolean('tapToRefresh', value))
-          Divider().color($r('app.color.divider_color'))
-          this.switchSetting('滚动时自动隐藏底部导航栏', '上划时隐藏，下划时重新显示', this.autoHideBottomBar,
-            'appearance_nav_auto_hide', (value: boolean): void => this.updateExperienceBoolean('autoHideBottomBar', value))
+          .borderRadius(settingsGroupRadius(this.feedCardStyle))
+          .backgroundColor(settingsGroupBackground(this.feedCardStyle))
         }
-        .width('100%')
-        .borderRadius(settingsGroupRadius(this.feedCardStyle))
-        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.sectionTitle('电纸书翻页')
         Text('在内容列表、正文、评论区和设置等可滚动页面生效，私聊除外。')
           .fontSize($r('app.float.secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
           .width('100%')
+        SettingsHighlightGroup({ groupId: 'appearance_group_page_turn' }) {
         Column() {
-          this.switchSetting('音量键翻页', '短按翻页，长按跳到顶部或底部', this.volumeKeyPageTurn,
-            'appearance_volume_page_turn', (value: boolean): void => this.updateExperienceBoolean('volumeKeyPageTurn', value))
-          Divider().color($r('app.color.divider_color'))
-          this.switchSetting('翻页切换回答', '在回答顶部或底部继续翻页时切换回答', this.pageTurnSwitchAnswer,
-            'appearance_page_turn_answer', (value: boolean): void => this.updateExperienceBoolean('pageTurnSwitchAnswer', value))
-          Divider().color($r('app.color.divider_color'))
-          this.switchSetting('显示翻页悬浮按钮', '只在支持翻页的可滚动页面显示', this.showPageTurnFab,
-            'appearance_page_turn_fab', (value: boolean): void => this.updateExperienceBoolean('showPageTurnFab', value))
-          Divider().color($r('app.color.divider_color'))
-          this.sliderSetting({
-            title: '翻页距离',
-            description: `每次滚动可见区域的 ${this.pageTurnPercent}%`,
-            value: this.pageTurnPercent, min: 50, max: 100, step: 5,
-            testId: 'appearance_page_turn_percent', showSteps: false,
-            onChange: (value: number): void => this.updateExperienceNumber('pageTurnPercent', value)
-          })
-          Divider().color($r('app.color.divider_color'))
-          this.switchSetting('显示翻页位置线', '翻页后标记上一页与下一页的重叠位置', this.showPageTurnGuide,
-            'appearance_page_turn_guide', (value: boolean): void => this.updateExperienceBoolean('showPageTurnGuide', value))
-          Divider().color($r('app.color.divider_color'))
-          this.switchSetting('显示内容结束标记', '方便电纸书用户确定内容已结束', this.showContentEndMarker,
-            'appearance_content_end_marker', (value: boolean): void => this.updateExperienceBoolean('showContentEndMarker', value))
+            this.switchSetting('音量键翻页', '短按翻页，长按跳到顶部或底部', this.volumeKeyPageTurn,
+              'appearance_volume_page_turn', (value: boolean): void => this.updateExperienceBoolean('volumeKeyPageTurn', value))
+            Divider().color($r('app.color.divider_color'))
+            this.switchSetting('翻页切换回答', '在回答顶部或底部继续翻页时切换回答', this.pageTurnSwitchAnswer,
+              'appearance_page_turn_answer', (value: boolean): void => this.updateExperienceBoolean('pageTurnSwitchAnswer', value))
+            Divider().color($r('app.color.divider_color'))
+            this.switchSetting('显示翻页悬浮按钮', '只在支持翻页的可滚动页面显示', this.showPageTurnFab,
+              'appearance_page_turn_fab', (value: boolean): void => this.updateExperienceBoolean('showPageTurnFab', value))
+            Divider().color($r('app.color.divider_color'))
+            this.sliderSetting({
+              title: '翻页距离',
+              description: `每次滚动可见区域的 ${this.pageTurnPercent}%`,
+              value: this.pageTurnPercent, min: 50, max: 100, step: 5,
+              testId: 'appearance_page_turn_percent', showSteps: false,
+              onChange: (value: number): void => this.updateExperienceNumber('pageTurnPercent', value)
+            })
+            Divider().color($r('app.color.divider_color'))
+            this.switchSetting('显示翻页位置线', '翻页后标记上一页与下一页的重叠位置', this.showPageTurnGuide,
+              'appearance_page_turn_guide', (value: boolean): void => this.updateExperienceBoolean('showPageTurnGuide', value))
+            Divider().color($r('app.color.divider_color'))
+            this.switchSetting('显示内容结束标记', '方便电纸书用户确定内容已结束', this.showContentEndMarker,
+              'appearance_content_end_marker', (value: boolean): void => this.updateExperienceBoolean('showContentEndMarker', value))
+          }
+          .width('100%')
+          .borderRadius(settingsGroupRadius(this.feedCardStyle))
+          .backgroundColor(settingsGroupBackground(this.feedCardStyle))
         }
-        .width('100%')
-        .borderRadius(settingsGroupRadius(this.feedCardStyle))
-        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.sectionTitle('交互')
+        SettingsHighlightGroup({ groupId: 'appearance_group_interaction' }) {
         Column() {
-          this.selectSetting('分享操作', '点击分享按钮时的默认行为', this.shareActionModeLabel(),
-            this.shareActionModeOptions(), this.shareActionModeIndex(), 'appearance_share_action',
-            (index: number): void => this.updateShareActionMode(index))
+            this.selectSetting('分享操作', '点击分享按钮时的默认行为', this.shareActionModeLabel(),
+              this.shareActionModeOptions(), this.shareActionModeIndex(), 'appearance_share_action',
+              (index: number): void => this.updateShareActionMode(index))
+          }
+          .width('100%')
+          .borderRadius(settingsGroupRadius(this.feedCardStyle))
+          .backgroundColor(settingsGroupBackground(this.feedCardStyle))
         }
-        .width('100%')
-        .borderRadius(settingsGroupRadius(this.feedCardStyle))
-        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.sectionTitle('搜索')
+        SettingsHighlightGroup({ groupId: 'appearance_group_search' }) {
         Column() {
-          this.switchSetting('搜索界面显示热搜', '在搜索界面空白时显示知乎热搜关键词', this.showSearchHotSearch,
-            'appearance_search_hot', (value: boolean): void => this.updateExperienceBoolean('showSearchHotSearch', value))
-          Divider().color($r('app.color.divider_color'))
-          this.switchSetting('记录并显示搜索历史', '关闭后不再记录新的搜索关键词', this.showSearchHistory,
-            'appearance_search_history', (value: boolean): void => this.updateExperienceBoolean('showSearchHistory', value))
+            this.switchSetting('搜索界面显示热搜', '在搜索界面空白时显示知乎热搜关键词', this.showSearchHotSearch,
+              'appearance_search_hot', (value: boolean): void => this.updateExperienceBoolean('showSearchHotSearch', value))
+            Divider().color($r('app.color.divider_color'))
+            this.switchSetting('记录并显示搜索历史', '关闭后不再记录新的搜索关键词', this.showSearchHistory,
+              'appearance_search_history', (value: boolean): void => this.updateExperienceBoolean('showSearchHistory', value))
+          }
+          .width('100%')
+          .borderRadius(settingsGroupRadius(this.feedCardStyle))
+          .backgroundColor(settingsGroupBackground(this.feedCardStyle))
         }
-        .width('100%')
-        .borderRadius(settingsGroupRadius(this.feedCardStyle))
-        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
       }
       .width('100%')
       .id('appearance_settings_content')

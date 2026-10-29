@@ -105,6 +105,28 @@ export default function settingsSearchIndexTest(): void {
       expect(typography[0].id).assertEqual('appearance_typography_preset');
       expect(typography[0].anchorId).assertEqual('appearance_anchor_typography_preset');
 
+      // “缩略图”命中信息流细项（此前清点遗漏）。
+      const thumbnail: Array<SettingsSearchEntry> = matchSettingsSearchEntries(entries, '缩略图');
+      expect(thumbnail.length > 0).assertTrue();
+      expect(thumbnail[0].id).assertEqual('appearance_feed_thumbnail');
+      expect(thumbnail[0].anchorId).assertEqual('appearance_feed_thumbnail');
+      expect(thumbnail[0].highlightGroupId).assertEqual('appearance_group_feed');
+
+      // 外观页其余代表细项：翻页距离、主题模式、双击动作、搜索历史。
+      const pageTurn: Array<SettingsSearchEntry> = matchSettingsSearchEntries(entries, '翻页距离');
+      expect(pageTurn[0].id).assertEqual('appearance_page_turn_percent');
+      const themeMode: Array<SettingsSearchEntry> = matchSettingsSearchEntries(entries, '深色模式');
+      expect(themeMode[0].id).assertEqual('appearance_theme_mode');
+      const doubleTap: Array<SettingsSearchEntry> = matchSettingsSearchEntries(entries, '双击');
+      expect(doubleTap[0].id).assertEqual('appearance_answer_double_tap');
+      const searchHistory: Array<SettingsSearchEntry> = matchSettingsSearchEntries(entries, '搜索历史');
+      expect(searchHistory[0].id).assertEqual('appearance_search_history');
+
+      // 条件行声明前置回退：跳转按钮隐藏时定位其开关。
+      const skipAutoHide: Array<SettingsSearchEntry> = matchSettingsSearchEntries(entries, '跳转按钮');
+      expect(skipAutoHide[0].id).assertEqual('appearance_skip_answer_auto_hide');
+      expect(skipAutoHide[0].fallbackAnchorId).assertEqual('appearance_skip_answer');
+
       // 主题色落点为主题颜色页的选色区域。
       const themeColor: Array<SettingsSearchEntry> = matchSettingsSearchEntries(entries, '主题色');
       expect(themeColor[0].id).assertEqual(SettingsEntryId.THEME_COLOR);
