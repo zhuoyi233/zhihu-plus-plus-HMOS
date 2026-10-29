@@ -25,6 +25,9 @@ export struct SettingsHighlightGroup {
   @StorageProp(SettingsSearchLocationKeys.HIGHLIGHT_TICK) @Watch('onHighlightTick')
   private highlightTick: number = 0;
   @State private level: number = 0;
+  /** 分组实测尺寸（vp）：overlay 用数值绘制，百分比尺寸在 overlay 语境会取页面约束。 */
+  @State private groupWidth: number = 0;
+  @State private groupHeight: number = 0;
   private activeRequestId: number = -1;
   private timerId: number = -1;
 
@@ -120,25 +123,44 @@ export struct SettingsHighlightGroup {
     return this.feedCardStyle === FeedCardStyle.CARD;
   }
 
+  @Builder
+  private highlightLayer() {
+    // 以 .overlay() 挂在 Stack 上，不参与布局。尺寸必须用 onAreaChange 实测的
+    // 数值 vp：height('100%') 在 Stack 子项语境会把分组撑高约一屏（布局被撑大），
+    // 在 overlay 语境则会画到约一屏高（高亮层越界覆盖下方分组）。
+    Column()
+      .width(this.groupWidth)
+      .height(this.groupHeight)
+      .hitTestBehavior(HitTestMode.None)
+      .borderRadius(settingsGroupRadius(this.feedCardStyle))
+      .border({
+        width: this.isCardStyle() ? 2 : 0,
+        color: this.strokeColor()
+      })
+      .backgroundColor(this.fillColor())
+      .opacity(this.level)
+  }
+
+  private onGroupAreaChange(_oldArea: Area, newArea: Area): void {
+    const width: number = Number(newArea.width);
+    const height: number = Number(newArea.height);
+    if (Number.isFinite(width) && width > 0) {
+      this.groupWidth = width;
+    }
+    if (Number.isFinite(height) && height > 0) {
+      this.groupHeight = height;
+    }
+  }
+
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       Column() {
         this.content()
       }
       .width('100%')
-
-      Column()
-        .width('100%')
-        .height('100%')
-        .hitTestBehavior(HitTestMode.None)
-        .borderRadius(settingsGroupRadius(this.feedCardStyle))
-        .border({
-          width: this.isCardStyle() ? 2 : 0,
-          color: this.strokeColor()
-        })
-        .backgroundColor(this.fillColor())
-        .opacity(this.level)
     }
     .width('100%')
+    .onAreaChange((oldArea: Area, newArea: Area): void => this.onGroupAreaChange(oldArea, newArea))
+    .overlay(this.highlightLayer(), { align: Alignment.TopStart })
   }
 }
