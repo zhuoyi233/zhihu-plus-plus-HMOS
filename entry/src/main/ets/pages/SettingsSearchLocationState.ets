@@ -3,6 +3,9 @@
  * 不依赖 UI，宿主、设置页与 Hypium 共用同一套判定。
  */
 import { SettingsSearchLocationRequest, readHighlightSignal } from './SettingsSearchTarget';
+import componentUtils from '@ohos.arkui.componentUtils';
+import { ComponentUtils } from '@ohos.arkui.UIContext';
+import { display } from '@kit.ArkUI';
 
 /** 请求阶段：pending → waitingLayout → scrolling → highlighting → completed。 */
 export enum SettingsLocatePhase {
@@ -100,4 +103,46 @@ export function withAlpha(color: string, alphaHex: string): string {
     return `#${alphaHex}${color.substring(color.length - 6)}`;
   }
   return color;
+}
+
+/** 组件矩形（已换算为 vp）。windowX/windowY 为窗口坐标，width/height 为尺寸。 */
+export interface ComponentRectVp {
+  readonly windowX: number;
+  readonly windowY: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+function displayDensity(): number {
+  try {
+    const density: number = display.getDefaultDisplaySync().densityPixels;
+    return Number.isFinite(density) && density > 0 ? density : 1;
+  } catch (_error) {
+    return 1;
+  }
+}
+
+/**
+ * 读取组件矩形并统一换算为 vp：getRectangleById 返回 px，
+ * 而 Scroller.currentOffset/scrollTo 均为 vp，必须除以屏幕密度后参与计算。
+ * 组件未挂载或尺寸非法时返回 undefined。
+ */
+export function readComponentRectVp(utils: ComponentUtils, id: string): ComponentRectVp | undefined {
+  try {
+    const rect: componentUtils.ComponentInfo = utils.getRectangleById(id);
+    const scale: number = displayDensity();
+    const width: number = Number(rect.size.width) / scale;
+    const height: number = Number(rect.size.height) / scale;
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      return undefined;
+    }
+    return {
+      windowX: Number(rect.windowOffset.x) / scale,
+      windowY: Number(rect.windowOffset.y) / scale,
+      width: width,
+      height: height
+    };
+  } catch (_error) {
+    return undefined;
+  }
 }

@@ -9,9 +9,10 @@
  */
 import { DEFAULT_THEME_COLOR, FeedCardStyle } from 'data';
 import { settingsGroupRadius } from '../pages/AccountSettingsLayout';
-import { highlightPlan, withAlpha } from '../pages/SettingsSearchLocationState';
+import { highlightPlan, readComponentRectVp, withAlpha } from '../pages/SettingsSearchLocationState';
 import {
   readHighlightSignal,
+  readLocationRequest,
   SettingsSearchLocationKeys
 } from '../pages/SettingsSearchTarget';
 
@@ -28,6 +29,9 @@ export struct SettingsHighlightGroup {
   /** 分组实测尺寸（vp）：overlay 用数值绘制，百分比尺寸在 overlay 语境会取页面约束。 */
   @State private groupWidth: number = 0;
   @State private groupHeight: number = 0;
+  /** 行级高亮：目标行相对分组顶部的偏移与高度；rowTop < 0 表示回退整组。 */
+  @State private rowTop: number = -1;
+  @State private rowHeight: number = 0;
   private activeRequestId: number = -1;
   private timerId: number = -1;
 
@@ -54,8 +58,44 @@ export struct SettingsHighlightGroup {
       return;
     }
     this.stopBlinking();
+    this.measureRowRect(signal.requestId);
     this.activeRequestId = signal.requestId;
     this.runBlinkSteps(0);
+  }
+
+  private stackId(): string {
+    return `hl_group_${this.groupId}`;
+  }
+
+  /**
+   * 测量目标行在分组内的位置：读取当前请求的锚点（条件隐藏时用回退锚点），
+   * 以“锚点控件垂直范围上下各扩 14vp”作为行高亮矩形——锚点控件（开关/滑杆）
+   * 垂直居中于所在行，扩展后与整行基本对齐。测量失败回退整组。
+   */
+  private measureRowRect(requestId: number): void {
+    const request = readLocationRequest();
+    if (request === undefined || request.requestId !== requestId) {
+      return;
+    }
+    try {
+      const utils = this.getUIContext().getComponentUtils();
+      const groupRect = readComponentRectVp(utils, this.stackId());
+      const anchor = readComponentRectVp(utils, request.anchorId) ??
+        readComponentRectVp(utils, request.fallbackAnchorId);
+      if (groupRect === undefined || anchor === undefined) {
+        this.rowTop = -1;
+        return;
+      }
+      const rawTop: number = anchor.windowY - groupRect.windowY - 14;
+      const rawHeight: number = anchor.height + 28;
+      // 钳制到分组范围，避免超高行或越界行画出分组。
+      const top: number = Math.min(Math.max(0, rawTop), Math.max(0, this.groupHeight - 8));
+      const bottom: number = Math.min(this.groupHeight, rawTop + rawHeight);
+      this.rowTop = top;
+      this.rowHeight = Math.max(8, bottom - top);
+    } catch (_error) {
+      this.rowTop = -1;
+    }
   }
 
   private stopBlinking(): void {
@@ -128,17 +168,32 @@ export struct SettingsHighlightGroup {
     // 以 .overlay() 挂在 Stack 上，不参与布局。尺寸必须用 onAreaChange 实测的
     // 数值 vp：height('100%') 在 Stack 子项语境会把分组撑高约一屏（布局被撑大），
     // 在 overlay 语境则会画到约一屏高（高亮层越界覆盖下方分组）。
-    Column()
-      .width(this.groupWidth)
-      .height(this.groupHeight)
-      .hitTestBehavior(HitTestMode.None)
-      .borderRadius(settingsGroupRadius(this.feedCardStyle))
-      .border({
-        width: this.isCardStyle() ? 2 : 0,
-        color: this.strokeColor()
-      })
-      .backgroundColor(this.fillColor())
-      .opacity(this.level)
+    // 行级优先：测量到请求锚点行时只亮那一小行，测量失败回退整组。
+    Stack({ alignContent: Alignment.TopStart }) {
+      if (this.rowTop >= 0) {
+        Column()
+          .width(this.groupWidth)
+          .height(this.rowHeight)
+          .position({ x: 0, y: this.rowTop })
+          .borderRadius(8)
+          .border({ width: 2, color: this.strokeColor() })
+          .backgroundColor(this.fillColor())
+      } else {
+        Column()
+          .width(this.groupWidth)
+          .height(this.groupHeight)
+          .borderRadius(settingsGroupRadius(this.feedCardStyle))
+          .border({
+            width: this.isCardStyle() ? 2 : 0,
+            color: this.strokeColor()
+          })
+          .backgroundColor(this.fillColor())
+      }
+    }
+    .width(this.groupWidth)
+    .height(this.groupHeight)
+    .hitTestBehavior(HitTestMode.None)
+    .opacity(this.level)
   }
 
   private onGroupAreaChange(_oldArea: Area, newArea: Area): void {
@@ -160,6 +215,7 @@ export struct SettingsHighlightGroup {
       .width('100%')
     }
     .width('100%')
+    .id(this.stackId())
     .onAreaChange((oldArea: Area, newArea: Area): void => this.onGroupAreaChange(oldArea, newArea))
     .overlay(this.highlightLayer(), { align: Alignment.TopStart })
   }

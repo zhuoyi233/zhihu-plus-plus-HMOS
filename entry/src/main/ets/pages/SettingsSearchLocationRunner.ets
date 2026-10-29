@@ -7,8 +7,10 @@
  */
 import {
   computeScrollPlan,
+  ComponentRectVp,
   LOCATE_POLL_INTERVAL_MS,
   LOCATE_TOTAL_TIMEOUT_MS,
+  readComponentRectVp,
   scrollDurationMs,
   SCROLL_SETTLE_MS
 } from './SettingsSearchLocationState';
@@ -20,8 +22,6 @@ import {
 } from './SettingsSearchTarget';
 
 import { ComponentUtils } from '@ohos.arkui.UIContext';
-import componentUtils from '@ohos.arkui.componentUtils';
-import { display } from '@kit.ArkUI';
 
 export interface SettingsLocatorHooks {
   getUIContext: () => UIContext;
@@ -42,41 +42,8 @@ export interface SettingsLocatorHooks {
   onFallback: () => void;
 }
 
-interface RectangleLike {
-  windowX: number;
-  windowY: number;
-  width: number;
-  height: number;
-}
-
-function displayDensity(): number {
-  try {
-    const density: number = display.getDefaultDisplaySync().densityPixels;
-    return Number.isFinite(density) && density > 0 ? density : 1;
-  } catch (_error) {
-    return 1;
-  }
-}
-
-/**
- * 读取组件矩形并统一换算为 vp：getRectangleById 返回 px，
- * 而 Scroller.currentOffset/scrollTo 均为 vp，必须除以屏幕密度后参与计算。
- */
-function readRectangle(utils: ComponentUtils, id: string): RectangleLike | undefined {
-  try {
-    const rect: componentUtils.ComponentInfo = utils.getRectangleById(id);
-    const scale: number = displayDensity();
-    const width: number = Number(rect.size.width) / scale;
-    const height: number = Number(rect.size.height) / scale;
-    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-      return undefined;
-    }
-    return { windowX: Number(rect.windowOffset.x) / scale, windowY: Number(rect.windowOffset.y) / scale,
-      width: width, height: height };
-  } catch (_error) {
-    // 组件尚未挂载（异步 loaded 门控、条件渲染）时按“未就绪”处理。
-    return undefined;
-  }
+function readRectangle(utils: ComponentUtils, id: string): ComponentRectVp | undefined {
+  return readComponentRectVp(utils, id);
 }
 
 export class SettingsSearchLocationRunner {
@@ -191,7 +158,7 @@ export class SettingsSearchLocationRunner {
     this.startScroll(anchor.windowY);
   }
 
-  private measureAnchor(anchorId: string): RectangleLike | undefined {
+  private measureAnchor(anchorId: string): ComponentRectVp | undefined {
     if (anchorId.length === 0) {
       return undefined;
     }
