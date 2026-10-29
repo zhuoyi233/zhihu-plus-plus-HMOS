@@ -99,6 +99,12 @@ export default function settingsSearchIndexTest(): void {
       expect(lineHeight.length > 0).assertTrue();
       expect(lineHeight[0].id).assertEqual('appearance_line_height');
 
+      // “正文排版”命中排版预设细项（此前清点遗漏）。
+      const typography: Array<SettingsSearchEntry> = matchSettingsSearchEntries(entries, '正文排版');
+      expect(typography.length > 0).assertTrue();
+      expect(typography[0].id).assertEqual('appearance_typography_preset');
+      expect(typography[0].anchorId).assertEqual('appearance_anchor_typography_preset');
+
       // 主题色落点为主题颜色页的选色区域。
       const themeColor: Array<SettingsSearchEntry> = matchSettingsSearchEntries(entries, '主题色');
       expect(themeColor[0].id).assertEqual(SettingsEntryId.THEME_COLOR);

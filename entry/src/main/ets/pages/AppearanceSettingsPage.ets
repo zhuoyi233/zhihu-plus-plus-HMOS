@@ -221,7 +221,11 @@ export struct AppearanceSettingsPage {
         this.sectionTitle('阅读')
         SettingsHighlightGroup({ groupId: 'appearance_group_reading' }) {
           Column() {
-            this.typographyPresetSetting()
+            Column() {
+              this.typographyPresetSetting()
+            }
+            .id('appearance_anchor_typography_preset')
+            .width('100%')
             Divider().color($r('app.color.divider_color'))
             this.fontSizeSetting()
             Divider().color($r('app.color.divider_color'))

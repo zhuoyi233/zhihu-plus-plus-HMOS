@@ -95,6 +95,18 @@ const SETTINGS_SEARCH_ENTRIES: Array<SettingsSearchEntry> = [
     fallbackAnchorId: ''
   },
   {
+    id: 'appearance_typography_preset',
+    title: '正文排版',
+    path: '外观与阅读体验 · 阅读',
+    keywords: '排版 预设 舒适排版 原有排版 排版预设 行距',
+    visibility: SettingsEntryVisibility.ALWAYS,
+    targetKind: SettingsTargetKind.SETTING_ITEM,
+    paneId: SettingsPaneId.APPEARANCE,
+    anchorId: 'appearance_anchor_typography_preset',
+    highlightGroupId: 'appearance_group_reading',
+    fallbackAnchorId: ''
+  },
+  {
     id: 'appearance_font_size',
     title: '字号',
     path: '外观与阅读体验 · 阅读',
