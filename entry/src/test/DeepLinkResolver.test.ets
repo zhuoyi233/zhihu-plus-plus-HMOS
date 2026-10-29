@@ -1,5 +1,7 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
+  DAILY_STORY_WEB_HOST,
+  dailyStoryWebUrl,
   DeepLinkType,
   extractZhihuLinkFromText,
   MAX_DEEP_LINK_INPUT_LENGTH,
@@ -114,6 +116,43 @@ export default function deepLinkResolverTest(): void {
       expect(extractZhihuLinkFromText('没有链接的纯文本')).assertUndefined();
       expect(extractZhihuLinkFromText('')).assertUndefined();
       expect(extractZhihuLinkFromText('链接被截断 https://www.zhihu.com/question/')).assertUndefined();
+    });
+
+    it('resolvesDailyStoryUrlsByExactHostAndPath', 0, () => {
+      const story = resolveZhihuLink('https://daily.zhihu.com/story/9793572');
+      expect(story?.type).assertEqual(DeepLinkType.DAILY_STORY);
+      expect(story?.id).assertEqual('9793572');
+
+      const withQuery = resolveZhihuLink('https://daily.zhihu.com/story/9793572?utm_source=share');
+      expect(withQuery?.type).assertEqual(DeepLinkType.DAILY_STORY);
+
+      const clipboard = extractZhihuLinkFromText('分享一篇日报 https://daily.zhihu.com/story/9793572 快看');
+      expect(clipboard?.type).assertEqual(DeepLinkType.DAILY_STORY);
+      expect(clipboard?.id).assertEqual('9793572');
+
+      // 长 ID 保持字符串精度。
+      const longId = '9'.repeat(30);
+      expect(resolveZhihuLink(`https://daily.zhihu.com/story/${longId}`)?.id).assertEqual(longId);
+    });
+
+    it('rejectsDailyStoryUrlsOutsideTheExactShape', 0, () => {
+      // 非 https、伪造后缀、用户信息、自定义端口、非 story 路径、多段路径、非法 ID 都不路由。
+      expect(resolveZhihuLink('http://daily.zhihu.com/story/9793572')).assertUndefined();
+      expect(resolveZhihuLink('https://daily.zhihu.com.evil.example/story/1')).assertUndefined();
+      expect(resolveZhihuLink('https://user@daily.zhihu.com/story/1')).assertUndefined();
+      expect(resolveZhihuLink('https://daily.zhihu.com:8443/story/1')).assertUndefined();
+      expect(resolveZhihuLink('https://daily.zhihu.com/')).assertUndefined();
+      expect(resolveZhihuLink('https://daily.zhihu.com/api/7/story/1')).assertUndefined();
+      expect(resolveZhihuLink('https://daily.zhihu.com/story/1/extra')).assertUndefined();
+      expect(resolveZhihuLink('https://daily.zhihu.com/story/not-a-number')).assertUndefined();
+      expect(resolveZhihuLink('https://daily.zhihu.com/story/0')).assertUndefined();
+      expect(resolveZhihuLink('https://daily.zhihu.com/story/01')).assertUndefined();
+      expect(resolveZhihuLink(`https://daily.zhihu.com/story/${'1'.repeat(31)}`)).assertUndefined();
+    });
+
+    it('buildsCanonicalDailyStoryWebUrl', 0, () => {
+      expect(dailyStoryWebUrl('9793572')).assertEqual('https://daily.zhihu.com/story/9793572');
+      expect(DAILY_STORY_WEB_HOST).assertEqual('daily.zhihu.com');
     });
   });
 }

@@ -123,6 +123,9 @@ export function contentLinkDestination(link: string): AppDestination | undefined
   if (deep.type === DeepLinkType.PERSON) {
     return isSafePeopleIdentifier(deep.id) ? { name: AppDestinationName.PEOPLE, id: deep.id } : undefined;
   }
+  if (deep.type === DeepLinkType.DAILY_STORY) {
+    return { name: AppDestinationName.DAILY_STORY, id: deep.id };
+  }
   return undefined;
 }
 

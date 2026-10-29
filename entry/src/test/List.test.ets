@@ -55,6 +55,8 @@ import onlineHistoryRepositoryTest from './OnlineHistoryRepository.test';
 import remoteHistorySyncTest from './RemoteHistorySync.test';
 import dailyStoryRepositoryTest from './DailyStoryRepository.test';
 import dailyStoryDetailStateTest from './DailyStoryDetailState.test';
+import dailyStoryDocumentTest from './DailyStoryDocument.test';
+import dailyStoryReaderPreferencesTest from './DailyStoryReaderPreferences.test';
 import voteRepositoryTest from './VoteRepository.test';
 import followRepositoryTest from './FollowRepository.test';
 import contentInteractionStateTest from './ContentInteractionState.test';
@@ -172,6 +174,8 @@ export default function testsuite(): void {
   remoteHistorySyncTest();
   dailyStoryRepositoryTest();
   dailyStoryDetailStateTest();
+  dailyStoryDocumentTest();
+  dailyStoryReaderPreferencesTest();
   voteRepositoryTest();
   followRepositoryTest();
   contentInteractionStateTest();

@@ -153,5 +153,7 @@ export function toAppDestination(destination: DeepLinkDestination): AppDestinati
       return { name: AppDestinationName.PEOPLE, id: destination.id };
     case DeepLinkType.SEARCH:
       return { name: AppDestinationName.SEARCH, query: destination.query };
+    case DeepLinkType.DAILY_STORY:
+      return { name: AppDestinationName.DAILY_STORY, id: destination.id };
   }
 }

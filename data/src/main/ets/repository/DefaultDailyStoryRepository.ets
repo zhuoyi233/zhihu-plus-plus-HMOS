@@ -1,5 +1,5 @@
 import { AppDestination } from 'core';
-import { decodeDailyStoryDestination } from '../domain/DailyStoryDetailDecoder';
+import { DailyStoryPayload, decodeDailyStoryDestination, decodeDailyStoryPayload } from '../domain/DailyStoryDetailDecoder';
 import { ZhihuHttpClient } from '../network/ZhihuHttpClient';
 import { DailyStoryRepository } from './DailyStoryRepository';
 
@@ -42,6 +42,23 @@ export class DefaultDailyStoryRepository implements DailyStoryRepository {
   cancel(): void {
     this.generation += 1;
     this.httpClient.cancel();
+  }
+
+  /**
+   * 新链路正文入口：匿名、无 Cookie/ZSE、禁止重定向（沿用 ZhihuHttpClient 白名单与响应上限）；
+   * 响应 ID 必须与请求 ID 一致，否则按解码失败处理，不展示其它日报的正文。
+   */
+  async getStory(storyId: string): Promise<DailyStoryPayload> {
+    const normalized = normalizeDailyStoryId(storyId);
+    const generation = this.generation;
+    const response = await this.httpClient.execute({
+      url: buildDailyStoryDetailUrl(normalized),
+      accept: 'application/json'
+    });
+    if (generation !== this.generation) {
+      throw new DailyStoryRepositoryFailure(DailyStoryRepositoryFailureKind.CANCELLED);
+    }
+    return decodeDailyStoryPayload(response.body, normalized);
   }
 
   async getDestination(storyId: string): Promise<AppDestination | undefined> {

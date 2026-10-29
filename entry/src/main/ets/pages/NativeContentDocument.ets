@@ -23,6 +23,7 @@ import {
 } from 'data';
 import {
   clearFormulaByteCache,
+  isTrustedReaderImageUrl,
   parseZhihuHtml,
   ReaderBlock,
   ReaderBlockDataSource,
@@ -76,8 +77,13 @@ function clampValue(value: number, limit: number): number {
   return Math.min(limit, Math.max(-limit, value));
 }
 
+/**
+ * 预览/存图/分享的图片来源判定：与 reader 的 `isTrustedReaderImageUrl` 同一口径
+ * （https、无用户信息、无自定义端口、主机在 pic / pica / picx / picN 的 zhimg 子域白名单内）。
+ * 曾因这里只用 picx 与 picN 的正则而漏掉 `pica.zhimg.com`，导致日报正文图能看不能存。
+ */
 function isTrustedPreviewImageUrl(value: string): boolean {
-  return /^https:\/\/(?:picx?|pic[0-9]+)\.zhimg\.com\//i.test(value);
+  return isTrustedReaderImageUrl(value);
 }
 
 function previewImageExtension(value: string): string {
@@ -393,6 +399,14 @@ let nativeDocumentSequence: number = 0;
 export struct NativeContentDocument {
   private readonly bodyTapDetector: DoubleTapDetector = new DoubleTapDetector();
   html: string = '';
+  /**
+   * 预解析正文块（可选）：提供时不再内部调用 `parseZhihuHtml`，直接按块渲染。
+   * 与 `html` 互斥——两者同时存在时以 `documentBlocks` 为准（日报原生页据此复用整份阅读器，
+   * 避免把已解析的块再转回 HTML 二次解析）。块身份（id）决定阅读锚点，必须稳定。
+   */
+  documentBlocks: ReaderBlock[] = [];
+  /** 预解析正文的完整性提示：非空时在正文末尾就地提示（日报 PARTIAL 态）。 */
+  contentNotice: string = '';
   /** 仅真实回答/文章传入；问题列表和相邻回答预览不读写进度。 */
   positionKey: string = '';
   /** 导航目的地身份保持不变；在同一路由内切换回答时，保存键仍使用实际回答 ID。 */
@@ -646,7 +660,9 @@ export struct NativeContentDocument {
       this.registeredDocument = true;
       mountedNativeDocuments += 1;
     }
-    const blocks = parseZhihuHtml(this.html);
+    // 预解析输入（日报原生页）优先：不再把块转回 HTML 二次解析。
+    const preParsed = this.documentBlocks;
+    const blocks = preParsed.length > 0 || this.html.length === 0 ? preParsed : parseZhihuHtml(this.html);
     this.empty = blocks.length === 0;
     this.blocks = blocks;
     this.previousBlocks.clear();
@@ -657,8 +673,13 @@ export struct NativeContentDocument {
     if (this.answerDocumentKey.length === 0 || this.positionIsActive()) {
       this.loadLinkCardMetas(blocks);
     }
-    const plainLength = this.html.replace(/<[^>]*>/g, '').trim().length;
-    this.collapsibleActive = this.collapsible && (plainLength >= 100 || this.html.includes('<img'));
+    // 折叠判定只看可读文本与图片：预解析输入没有 HTML 源串，不能按标签剥离长度判断。
+    let plainLength = 0;
+    blocks.forEach((block: ReaderBlock): void => {
+      plainLength += block.text.length;
+    });
+    const hasImage = blocks.some((block: ReaderBlock): boolean => block.kind === ReaderBlockKind.IMAGE);
+    this.collapsibleActive = this.collapsible && (plainLength >= 100 || hasImage);
     this.prepareReaderPosition();
     this.onDocumentPrepared?.();
   }
@@ -999,6 +1020,17 @@ export struct NativeContentDocument {
               this.reportChromeHeight('bodyFooter', newArea);
             })
           this.documentItems()
+          if (this.contentNotice.length > 0) {
+            ListItem() {
+              Text(this.contentNotice)
+                .id('content_document_notice')
+                .fontSize($r('app.float.secondary_font_size'))
+                .fontColor($r('app.color.secondary_text'))
+                .width('100%')
+                .padding({ top: 12, bottom: 12 })
+            }
+            .width('100%')
+          }
           if (this.showContentEndMarker && !this.empty) {
             ListItem() {
               Text('— 内容结束 —')

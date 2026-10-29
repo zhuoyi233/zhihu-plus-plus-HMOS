@@ -808,6 +808,40 @@ export function parseZhihuHtml(html: string): Array<ReaderBlock> {
   return blocks;
 }
 
+/**
+ * 以下导出只把既有纯函数暴露给其他解析入口（如日报方言适配），不改变任何解析行为：
+ * 行内样式、实体解码、图片源优选与链接归一化必须共用同一实现，避免不同入口出现
+ * 文本/链接口径漂移。外部入口不得依赖其内部实现细节。
+ */
+export function readerPlainText(fragment: string): string {
+  return plainText(fragment);
+}
+
+export function readerInlineRuns(content: string, blockId: string,
+  references?: Map<number, ReaderReferenceItem>): Array<ReaderInlineRun> {
+  return inlineRuns(content, blockId, references);
+}
+
+export function readerAttributeValue(tag: string, name: string): string {
+  return attributeValue(tag, name);
+}
+
+export function readerDecodeHtml(value: string): string {
+  return decodeHtml(value);
+}
+
+export function readerPreferredImageSource(tag: string): string {
+  return preferredImageSource(tag);
+}
+
+export function readerNormalizeLinkHref(href: string): string {
+  return normalizeLinkHref(href);
+}
+
+export function readerLinkCardDisplayUrl(url: string): string {
+  return linkCardDisplayUrl(url);
+}
+
 export function readerDocumentStats(blocks: Array<ReaderBlock>): ReaderDocumentStats {
   let textLength = 0;
   let headingCount = 0;
