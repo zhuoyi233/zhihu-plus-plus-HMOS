@@ -21,6 +21,9 @@ export struct ZhihuHdsTabs {
   @StorageProp('bottomRectHeight') bottomRectHeight: number = 0;
   @StorageProp('autoHideBottomBar') private autoHideBottomBar: boolean = false;
   @StorageProp('bottomBarHiddenByScroll') private bottomBarHiddenByScroll: boolean = false;
+  /** 当前顶层页签是否为信息流页签：只有信息流的滚动允许隐藏底栏，
+   *  避免离屏信息流重建/惯性滚动留下的全局标记让"我的"等页签的底栏一起消失。 */
+  @StorageProp('topLevelFeedTabActive') private topLevelFeedTabActive: boolean = true;
   @StorageProp('immersiveMaterialLevel') private immersiveMaterialLevel: string = 'adaptive';
   @StorageProp('immersiveMaterialSupport') private immersiveMaterialSupport: string = 'unknown';
   controller: HdsTabsController = new HdsTabsController();
@@ -44,7 +47,7 @@ export struct ZhihuHdsTabs {
     }
     .id('hds_tabs')
     .barMode(BarMode.Fixed)
-    .barHeight(this.autoHideBottomBar && this.bottomBarHiddenByScroll ? 0 : 64)
+    .barHeight(this.autoHideBottomBar && this.topLevelFeedTabActive && this.bottomBarHiddenByScroll ? 0 : 64)
     .barOverlap(true)
     .animationDuration(250)
     .scrollable(true)

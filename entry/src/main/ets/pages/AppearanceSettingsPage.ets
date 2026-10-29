@@ -110,6 +110,9 @@ export struct AppearanceSettingsPage {
   @StorageProp('buttonSkipAnswer') private buttonSkipAnswer: boolean = true;
   @StorageProp('autoHideSkipAnswerButton') private autoHideSkipAnswerButton: boolean = true;
   @StorageProp('gripFollowActions') private gripFollowActions: boolean = false;
+  /** 回答页底部的热评预览卡片开关。 */
+  @StorageProp('showHotComments') private showHotComments: boolean = true;
+  @StorageProp('questionInTitleBar') private questionInTitleBar: boolean = false;
   @StorageProp('pinAnswerDate') private pinAnswerDate: boolean = false;
   @StorageProp('answerSwitchMode') private answerSwitchMode: string = AnswerSwitchMode.VERTICAL;
   @StorageProp('answerSwitchSensitivity') private answerSwitchSensitivity: number = 1;
@@ -240,6 +243,10 @@ export struct AppearanceSettingsPage {
           this.switchSetting('自动隐藏回答标题', '滚动时自动隐藏回答标题栏', this.titleAutoHide,
             'appearance_title_auto_hide', (value: boolean): void => this.updateExperienceBoolean('titleAutoHide', value))
           Divider().color($r('app.color.divider_color'))
+          this.switchSetting('问题标题集成到顶栏', '开启后问题标题常驻顶栏，滚动时保持可见；问题过长时标题只显示两行，超出部分会显示不全（省略）',
+            this.questionInTitleBar, 'appearance_question_in_title_bar',
+            (value: boolean): void => this.updateExperienceBoolean('questionInTitleBar', value))
+          Divider().color($r('app.color.divider_color'))
           this.switchSetting('自动隐藏回答底部按钮', '上划时隐藏底部操作，下划时重新显示', this.autoHideArticleBottomBar,
             'appearance_bottom_bar_auto_hide', (value: boolean): void => this.updateExperienceBoolean('autoHideArticleBottomBar', value))
           Divider().color($r('app.color.divider_color'))
@@ -260,6 +267,9 @@ export struct AppearanceSettingsPage {
           Divider().color($r('app.color.divider_color'))
           this.switchSetting('置顶回答日期', '将发布和编辑日期移到内容最前面', this.pinAnswerDate,
             'appearance_pin_answer_date', (value: boolean): void => this.updateExperienceBoolean('pinAnswerDate', value))
+          Divider().color($r('app.color.divider_color'))
+          this.switchSetting('显示热评', '在回答底部展示按热度排序的前几条评论', this.showHotComments,
+            'appearance_hot_comments', (value: boolean): void => this.updateExperienceBoolean('showHotComments', value))
           Divider().color($r('app.color.divider_color'))
           this.selectSetting('回答切换手势', '在同一问题的回答之间切换', this.answerSwitchModeLabel(),
             this.answerSwitchModeOptions(), this.answerSwitchModeIndex(), 'appearance_answer_switch_mode',
@@ -1137,7 +1147,9 @@ export struct AppearanceSettingsPage {
       shareActionMode: this.shareActionModeValue(),
       showSearchHotSearch: this.showSearchHotSearch,
       showSearchHistory: this.showSearchHistory,
-      gripFollowActions: this.gripFollowActions
+      gripFollowActions: this.gripFollowActions,
+      showHotComments: this.showHotComments,
+      questionInTitleBar: this.questionInTitleBar
     });
   }
 
@@ -1158,6 +1170,8 @@ export struct AppearanceSettingsPage {
     else if (key === 'showSearchHotSearch') next.showSearchHotSearch = value;
     else if (key === 'showSearchHistory') next.showSearchHistory = value;
     else if (key === 'gripFollowActions') next.gripFollowActions = value;
+    else if (key === 'showHotComments') next.showHotComments = value;
+    else if (key === 'questionInTitleBar') next.questionInTitleBar = value;
     this.persistExperience(next);
   }
 
@@ -1199,6 +1213,8 @@ export struct AppearanceSettingsPage {
     AppStorage.setOrCreate('showSearchHotSearch', value.showSearchHotSearch);
     AppStorage.setOrCreate('showSearchHistory', value.showSearchHistory);
     AppStorage.setOrCreate('gripFollowActions', value.gripFollowActions);
+    AppStorage.setOrCreate('showHotComments', value.showHotComments);
+    AppStorage.setOrCreate('questionInTitleBar', value.questionInTitleBar);
     void this.store?.saveExperiencePreferences(value).then((): void => {
       this.statusMessage = '';
     }).catch((_error: Object): void => {

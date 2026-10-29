@@ -1,3 +1,4 @@
+import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AbilityConstant, abilityAccessCtrl, Configuration, ConfigurationConstant, Permissions,
   PermissionRequestResult, UIAbility, Want } from '@kit.AbilityKit';
 import { display, window } from '@kit.ArkUI';
@@ -9,7 +10,7 @@ import { AppSessionOwner, AppThemeMode, closeAppDatabase, ContentDraftStore, DEF
 import { clearAbilityContext, setAbilityContext } from './AbilityContextHolder';
 import { maintainControlledImageCaches } from '../platform/ControlledImageCacheMaintenance';
 import { purgeExpiredShareTemporaryFiles } from '../platform/SystemShareTemporaryCleaner';
-import { updateStatusBarAppearance } from '../platform/SystemBars';
+import { bindSystemBarWindow, detachSystemBarWindow, retryStatusBarVisibility, setStatusBarHidden, updateStatusBarAppearance } from '../platform/SystemBars';
 import {
   appDestinationIdentity,
   AppLogEvent,
@@ -27,6 +28,10 @@ import {
 } from 'core';
 
 export default class EntryAbility extends UIAbility {
+  private windowGeneration: number = 0;
+  private currentWindow: window.Window | undefined = undefined;
+  private windowCleanup: Array<() => void> = [];
+  private avoidAreaListening: boolean = false;
   private startup: AppStartup | undefined = undefined;
   private sessionOwner: AppSessionOwner | undefined = undefined;
   private readonly lifecycleGuard: LatestOperationGuard = new LatestOperationGuard();
@@ -150,28 +155,74 @@ export default class EntryAbility extends UIAbility {
   onWindowStageCreate(windowStage: window.WindowStage): void {
     AppStorage.setOrCreate('systemFontSizeScale', this.context.config.fontSizeScale ?? 1);
     const mainWindow = windowStage.getMainWindowSync();
+    this.releaseWindow();
+    this.currentWindow = mainWindow;
+    const generation = this.windowGeneration;
+    bindSystemBarWindow(mainWindow);
     this.configureImmersiveWindow(mainWindow);
-    mainWindow.on('windowSizeChange', (): void => this.configureImmersiveWindow(mainWindow));
-    mainWindow.on('windowEvent', (event: window.WindowEventType): void => {
-      // 对齐上游 MainActivity.onWindowFocusChanged：窗口获得焦点（含冷启动与回前台）时
-      // 识别剪切板；剪切板读取要求焦点就绪，onForeground 时系统会拒绝访问，不能挂在那里。
+    const sizeChanged = (): void => {
+      if (generation === this.windowGeneration) { this.configureImmersiveWindow(mainWindow); }
+    };
+    const windowEvent = (event: window.WindowEventType): void => {
+      if (generation !== this.windowGeneration) { return; }
       if (event === window.WindowEventType.WINDOW_ACTIVE) {
         AppStorage.setOrCreate('systemFontSizeScale', this.context.config.fontSizeScale ?? 1);
+        retryStatusBarVisibility();
+        this.ensureAvoidAreaListener(mainWindow, generation);
+        this.publishAvoidAreas(mainWindow);
         updateStatusBarAppearance();
         this.readClipboardForNavigation();
       }
-    });
-    mainWindow.on('avoidAreaChange', (data: window.AvoidAreaOptions): void => {
+    };
+    try {
+      mainWindow.on('windowSizeChange', sizeChanged);
+      this.windowCleanup.push((): void => mainWindow.off('windowSizeChange', sizeChanged));
+    } catch (_error) { this.logWindowListenerFailure('windowSizeChange'); }
+    try {
+      mainWindow.on('windowEvent', windowEvent);
+      this.windowCleanup.push((): void => mainWindow.off('windowEvent', windowEvent));
+    } catch (_error) { this.logWindowListenerFailure('windowEvent'); }
+    this.ensureAvoidAreaListener(mainWindow, generation);
+    void this.loadContentAfterCriticalStartup(windowStage, this.lifecycleGeneration, generation);
+  }
+
+  private ensureAvoidAreaListener(mainWindow: window.Window, generation: number): void {
+    if (this.avoidAreaListening || generation !== this.windowGeneration) { return; }
+    const changed = (data: window.AvoidAreaOptions): void => {
+      if (generation !== this.windowGeneration) { return; }
       if (data.type === window.AvoidAreaType.TYPE_SYSTEM ||
         data.type === window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR) {
         this.publishAvoidArea(data.type, data.area);
       }
-    });
-    this.loadContentAfterCriticalStartup(windowStage, this.lifecycleGeneration);
+    };
+    try {
+      mainWindow.on('avoidAreaChange', changed);
+      this.avoidAreaListening = true;
+      this.windowCleanup.push((): void => mainWindow.off('avoidAreaChange', changed));
+    } catch (_error) { this.logWindowListenerFailure('avoidAreaChange'); }
+  }
+
+  private logWindowListenerFailure(event: string): void {
+    hilog.warn(0x0000, 'EntryAbility', 'window listener unavailable: %{public}s', event);
+  }
+
+  onWindowStageDestroy(): void { this.releaseWindow(); }
+
+  private releaseWindow(): void {
+    this.windowGeneration += 1;
+    this.currentWindow = undefined;
+    this.avoidAreaListening = false;
+    detachSystemBarWindow();
+    for (const cleanup of this.windowCleanup) {
+      try { cleanup(); } catch (_error) { }
+    }
+    this.windowCleanup = [];
   }
 
   onDestroy(): void {
     this.lifecycleGuard.invalidate();
+    this.releaseWindow();
+    setStatusBarHidden(false);
     clearAbilityContext();
     this.sessionOwner?.cancelInFlightVerification();
     closeAppDatabase().catch((_error: Error): void => {
@@ -179,13 +230,13 @@ export default class EntryAbility extends UIAbility {
   }
 
   private async loadContentAfterCriticalStartup(windowStage: window.WindowStage,
-    lifecycleGeneration: number): Promise<void> {
+    lifecycleGeneration: number, windowGeneration: number): Promise<void> {
     if (this.startup === undefined) {
       AppLogger.failure(AppLogEvent.STARTUP_NOT_READY);
       return;
     }
     const criticalSummary = await this.startup.runCritical();
-    if (!this.lifecycleGuard.isCurrent(lifecycleGeneration)) {
+    if (!this.lifecycleGuard.isCurrent(lifecycleGeneration) || windowGeneration !== this.windowGeneration) {
       return;
     }
     if (criticalSummary.status !== StartupPhaseStatus.SUCCEEDED) {
@@ -194,7 +245,7 @@ export default class EntryAbility extends UIAbility {
     }
 
     windowStage.loadContent('pages/Index', (error) => {
-      if (!this.lifecycleGuard.isCurrent(lifecycleGeneration)) {
+      if (!this.lifecycleGuard.isCurrent(lifecycleGeneration) || windowGeneration !== this.windowGeneration) {
         return;
       }
       if (error.code) {
@@ -280,21 +331,26 @@ export default class EntryAbility extends UIAbility {
   }
 
   private configureImmersiveWindow(mainWindow: window.Window): void {
-    mainWindow.setImmersiveModeEnabledState(true);
-    void mainWindow.setWindowSystemBarProperties({
-      navigationBarColor: '#00000000',
-      statusBarColor: '#00000000'
-    }).catch((_error: Object): void => {
-    });
+    if (mainWindow !== this.currentWindow) { return; }
+    try { mainWindow.setImmersiveModeEnabledState(true); } catch (_error) { }
+    try {
+      void mainWindow.setWindowSystemBarProperties({
+        navigationBarColor: '#00000000',
+        statusBarColor: '#00000000'
+      }).catch((_error: Object): void => {});
+    } catch (_error) { this.logWindowListenerFailure('setWindowSystemBarProperties'); }
     updateStatusBarAppearance();
     this.publishAvoidAreas(mainWindow);
   }
 
   private publishAvoidAreas(mainWindow: window.Window): void {
-    const systemArea = mainWindow.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM);
-    const navigationArea = mainWindow.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR);
-    this.publishAvoidArea(window.AvoidAreaType.TYPE_SYSTEM, systemArea);
-    this.publishAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR, navigationArea);
+    if (mainWindow !== this.currentWindow) { return; }
+    try {
+      this.publishAvoidArea(window.AvoidAreaType.TYPE_SYSTEM,
+        mainWindow.getWindowAvoidArea(window.AvoidAreaType.TYPE_SYSTEM));
+      this.publishAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR,
+        mainWindow.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR));
+    } catch (_error) { this.logWindowListenerFailure('getWindowAvoidArea'); }
   }
 
   private publishAvoidArea(type: window.AvoidAreaType, area: window.AvoidArea): void {
@@ -303,6 +359,7 @@ export default class EntryAbility extends UIAbility {
     if (type === window.AvoidAreaType.TYPE_SYSTEM) {
       const top = area.topRect.height / safeDensity;
       AppStorage.setOrCreate('statusBarHeight', top);
+      AppStorage.setOrCreate('statusBarHeightVp', top);
       AppStorage.setOrCreate('topRectHeight', top);
       return;
     }

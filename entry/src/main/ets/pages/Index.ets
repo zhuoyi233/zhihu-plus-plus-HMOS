@@ -146,7 +146,7 @@ struct Index {
   @State private questionRepository?: ContentRepository = undefined;
   private questionAnswerFeedFactory: () => QuestionAnswerFeedRepository | undefined = () => undefined;
   @State private answerRepository?: ContentRepository = undefined;
-  /** 单篇回答切换的相邻答全文预取工厂（独立 client，见 docs/issue-21-answer-switch-flicker-fix-plan.md §5.4）。 */
+  private hotCommentRepositoryFactory: () => CommentRepository | undefined = () => undefined;
   private answerPrefetchRepositoryFactory: () => ContentRepository | undefined = () => undefined;
   @State private articleRepository?: ContentRepository = undefined;
   private continuousRepositoriesFactory: () => ContinuousAnswerRepositories = (): ContinuousAnswerRepositories =>
@@ -236,6 +236,8 @@ struct Index {
       this.questionAnswerFeedFactory = (): QuestionAnswerFeedRepository =>
         new DefaultQuestionAnswerFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.answerRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
+      this.hotCommentRepositoryFactory = (): CommentRepository =>
+        new DefaultCommentRepository(new ZhihuHttpClient(session));
       this.answerPrefetchRepositoryFactory = (): ContentRepository =>
         new DefaultContentRepository(new ZhihuHttpClient(session));
       this.articleRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
@@ -490,6 +492,7 @@ struct Index {
       contentId: id,
       repository: this.answerRepository,
       answerPrefetchRepositoryFactory: this.answerPrefetchRepositoryFactory,
+      hotCommentRepositoryFactory: this.hotCommentRepositoryFactory,
       linkCardMetaRepository: this.linkCardMetaRepository,
       openedContentStore: this.openedContentStore,
       historyUploader: this.readHistoryUploader,

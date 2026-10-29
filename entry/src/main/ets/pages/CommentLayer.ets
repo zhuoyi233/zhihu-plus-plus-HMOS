@@ -28,6 +28,7 @@ import {
   removeCommentTitle
 } from './CommentTitleBar';
 import { materialCanvas } from './components/MaterialCanvas';
+import { commentAvatarUrl, commentImageUrls, stripCommentHtml } from './CommentText';
 
 /** 评论输入胶囊与 PR #23 详情页底栏使用同一套 48vp 大胶囊规格。 */
 const COMMENT_INPUT_CAPSULE_HEIGHT: number = 48;
@@ -452,20 +453,19 @@ export struct CommentPage {
           copyOption: CopyOptions.LocalDevice,
           componentId: `comments_content_${comment.id}`
         })
-        if (commentImageUrl(comment.contentHtml).length > 0) {
-          Image(commentImageUrl(comment.contentHtml))
-            .id(`comments_image_${comment.id}`)
+        ForEach(commentImageUrls(comment.contentHtml), (url: string, index: number): void => {
+          Image(url)
+            .id(`comments_image_${comment.id}_${index}`)
             .width(200)
             .height(100)
             .constraintSize({ maxWidth: '100%' })
             .objectFit(ImageFit.Contain)
             .borderRadius(12)
             .margin({ top: 4 })
-            .accessibilityText('查看评论图片')
-            .onClick((): void => {
-              this.setPreviewUrl(commentImageUrl(comment.contentHtml));
-            })
-        }
+            .focusable(true)
+            .accessibilityText(`查看评论图片 ${index + 1}`)
+            .onClick((): void => this.setPreviewUrl(url), 12)
+        }, (url: string): string => url)
         this.commentFooter(comment, showDelete)
       }
       .alignItems(HorizontalAlign.Start)
@@ -957,51 +957,6 @@ export struct CommentPage {
     publishCommentTitle({ id: this.titleStateId(), replying: state.activeRoot !== undefined,
       previewing: this.previewUrl.length > 0 });
   }
-}
-
-/** 评论用户头像 URL：http 归一化为 https，缺失或不受信返回空串（走首字占位）。 */
-function commentAvatarUrl(raw: string): string {
-  const trimmed = raw.trim();
-  const url = trimmed.startsWith('http://') ? `https://${trimmed.substring(7)}` : trimmed;
-  if (!/^https:\/\/[A-Za-z0-9.-]+/.test(url)) {
-    return '';
-  }
-  return url;
-}
-
-function commentImageUrl(html: string): string {
-  const anchors = html.match(/<a\b[^>]*>/gi) ?? [];
-  for (const anchor of anchors) {
-    if (!/\bclass\s*=\s*["'][^"']*\bcomment_(img|gif|sticker)\b/i.test(anchor)) {
-      continue;
-    }
-    const href = anchor.match(/\bhref\s*=\s*["']([^"']+)["']/i);
-    if (href !== null) {
-      const url = commentAvatarUrl(href[1].replace(/&amp;/gi, '&'));
-      if (/^https:\/\/(?:picx?|pic[0-9]+)\.zhimg\.com\//i.test(url)) {
-        return url;
-      }
-    }
-  }
-  return '';
-}
-
-function stripCommentHtml(html: string): string {
-  const content = commentImageUrl(html).length > 0
-    ? html.replace(/<a\b[^>]*\bclass\s*=\s*["'][^"']*\bcomment_(img|gif|sticker)\b[^"']*["'][^>]*>[\s\S]*?<\/a>/gi, '')
-    : html;
-  let text = content
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/(p|div|h[1-6]|li|blockquote)>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/g, '\'')
-    .replace(/\n{3,}/g, '\n\n');
-  return text.trim();
 }
 
 function twoDigits(value: number): string {

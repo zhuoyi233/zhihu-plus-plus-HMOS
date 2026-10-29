@@ -175,6 +175,58 @@ export default function answerSwitchPrefetchTest(): void {
       prefetcher.dispose();
     });
 
+    it('promotesQueuedDuplicateWithoutStartingAnotherRequest', 0, async () => {
+      const repository = new ControlledAnswerRepository();
+      const prefetcher = new AnswerDetailPrefetcher(repository);
+      const first = prefetcher.request('2', false);
+      const background = prefetcher.request('3', false);
+      const target = prefetcher.request('4', false);
+      const foreground = prefetcher.request('4', true);
+      expect(target === foreground).assertTrue();
+      await tick();
+      repository.resolveNext(); await tick();
+      expect(repository.requested[1]).assertEqual('4');
+      repository.resolveNext(); await tick();
+      expect(repository.requested[2]).assertEqual('3');
+      repository.resolveNext();
+      await Promise.all([first, background, target, foreground]);
+      expect(repository.maxInFlight).assertEqual(1);
+      prefetcher.dispose();
+    });
+
+    it('resetDoesNotLetOldCompletionEraseSameIdNewTask', 0, async () => {
+      const repository = new ControlledAnswerRepository();
+      const prefetcher = new AnswerDetailPrefetcher(repository);
+      const old = prefetcher.request('2', false); await tick();
+      prefetcher.reset();
+      expect(await old === undefined).assertTrue();
+      const fresh = prefetcher.request('2', true);
+      repository.resolveNext(); await tick();
+      expect(prefetcher.request('2', true) === fresh).assertTrue();
+      expect(repository.requested.length).assertEqual(2);
+      expect(prefetcher.peek('2')).assertUndefined();
+      repository.resolveNext();
+      expect((await fresh)?.id).assertEqual('2');
+      expect(repository.maxInFlight).assertEqual(1);
+      prefetcher.dispose();
+    });
+
+    it('resetBeforeDispatchDoesNotSendObsoleteRequest', 0, async () => {
+      const repository = new ControlledAnswerRepository();
+      const prefetcher = new AnswerDetailPrefetcher(repository);
+      const old = prefetcher.request('2', false);
+      const queued = prefetcher.request('3', false);
+      prefetcher.reset();
+      expect(await old === undefined).assertTrue();
+      expect(await queued === undefined).assertTrue();
+      await tick();
+      expect(repository.requested.length).assertEqual(0);
+      const fresh = prefetcher.request('4', true); await tick();
+      repository.resolveNext();
+      expect((await fresh)?.id).assertEqual('4');
+      prefetcher.dispose();
+    });
+
     it('disposeIsIdempotentAndRejectsFurtherRequests', 0, async () => {
       const repository = new ControlledAnswerRepository();
       const prefetcher = new AnswerDetailPrefetcher(repository);

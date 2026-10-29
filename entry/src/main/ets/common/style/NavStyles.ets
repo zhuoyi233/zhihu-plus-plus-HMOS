@@ -269,3 +269,18 @@ export function getChatTitleBarStyle(): TitleBarStyleOptions {
     }
   };
 }
+
+/** 回答 Native 列表嵌套在候选树中，HDS 无法可靠观察其滚动；由正文几何显式选择材质态。 */
+export function getAnswerTitleBarStyle(materialMode: ImmersiveMaterialMode,
+  materialSupport: ImmersiveMaterialSupportState, materialVisible: boolean): TitleBarStyleOptions {
+  const style = getPersistentImmersiveTitleBarStyle(materialMode, materialSupport);
+  // 不再让 HDS 的第二套滚动阈值改变身份折叠。模拟器/无材质设备用实色保持文字可读。
+  style.blurStrategy = BlurStrategy.ENABLE;
+  style.scrollEffectOpts = { enableScrollEffect: false, scrollEffectType: ScrollEffectType.COMMON_BLUR };
+  const background: ResourceColor = !materialVisible ? Color.Transparent :
+    (materialSupport === ImmersiveMaterialSupportState.SUPPORTED
+      ? $r('app.color.immersive_title_background') : $r('app.color.page_background'));
+  style.originalStyle = { backgroundStyle: { backgroundColor: background } };
+  style.scrollEffectStyle = { backgroundStyle: { backgroundColor: background } };
+  return style;
+}

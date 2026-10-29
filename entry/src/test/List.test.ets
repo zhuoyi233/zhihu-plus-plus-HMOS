@@ -1,3 +1,8 @@
+import systemBarVisibilityTest from './SystemBarVisibility.test';
+import hotCommentLifecycleTest from './HotCommentLifecycle.test';
+import answerTitleGeometryTest from './AnswerTitleGeometry.test';
+import answerPanePreparationTest from './AnswerPanePreparation.test';
+import answerSwitchPrefetchTest from './AnswerSwitchPrefetch.test';
 import feedWaterfallLayoutTest from './FeedWaterfallLayout.test';
 import feedFlowDataSourceTest from './FeedFlowDataSource.test';
 import continuousAnswerLifecycleTest from './ContinuousAnswerLifecycle.test';
@@ -34,7 +39,6 @@ import searchStateTest from './SearchState.test';
 import contentDetailRepositoryTest from './ContentDetailRepository.test';
 import questionAnswerFeedTest from './QuestionAnswerFeed.test';
 import contentDetailStateTest from './ContentDetailState.test';
-import answerSwitchPrefetchTest from './AnswerSwitchPrefetch.test';
 import loginControllerTest from './LoginController.test';
 import channelFeedRepositoryTest from './ChannelFeedRepository.test';
 import channelFeedStateTest from './ChannelFeedState.test';
@@ -109,6 +113,8 @@ import continuousAnswerStateTest from './ContinuousAnswerState.test';
 import accountSettingsLayoutTest from './AccountSettingsLayout.test';
 import settingsSearchIndexTest from './SettingsSearchIndex.test';
 import settingsNavigationStateTest from './SettingsNavigationState.test';
+import hotCommentStateTest from './HotCommentState.test';
+import commentTextTest from './CommentText.test';
 
 export default function testsuite(): void {
   feedWaterfallLayoutTest();
@@ -147,6 +153,8 @@ export default function testsuite(): void {
   questionAnswerFeedTest();
   contentDetailStateTest();
   answerSwitchPrefetchTest();
+  answerTitleGeometryTest();
+  answerPanePreparationTest();
   loginControllerTest();
   channelFeedRepositoryTest();
   channelFeedStateTest();
@@ -222,4 +230,8 @@ export default function testsuite(): void {
   accountSettingsLayoutTest();
   settingsSearchIndexTest();
   settingsNavigationStateTest();
+  systemBarVisibilityTest();
+  hotCommentLifecycleTest();
+  hotCommentStateTest();
+  commentTextTest();
 }

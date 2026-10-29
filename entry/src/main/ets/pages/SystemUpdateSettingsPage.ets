@@ -158,11 +158,12 @@ export struct SystemUpdateSettingsPage {
     const cachePath = `${context.cacheDir}/update-${Date.now()}-${assetName}`;
     let task: request.agent.Task | undefined = undefined;
     try {
+      const appName = context.resourceManager.getStringSync($r('app.string.EntryAbility_label').id);
       const config: request.agent.Config = {
         action: request.agent.Action.DOWNLOAD,
         url: source.url,
         title: assetName,
-        description: `知乎++鸿蒙版 ${source.label}`,
+        description: `${appName} ${source.label}`,
         saveas: cachePath,
         mode: request.agent.Mode.BACKGROUND,
         overwrite: true,
@@ -170,7 +171,7 @@ export struct SystemUpdateSettingsPage {
         redirect: true,
         notification: {
           title: '正在下载安装包',
-          text: `知乎++鸿蒙版 ${source.label}`,
+          text: `${appName} ${source.label}`,
           visibility: request.agent.VISIBILITY_PROGRESS
         }
       };
@@ -274,7 +275,7 @@ export struct SystemUpdateSettingsPage {
         Column({ space: 12 }) {
           Row() {
             Column({ space: 4 }) {
-              Text('知乎++鸿蒙版').fontSize(20).fontWeight(FontWeight.Bold)
+              Text($r('app.string.EntryAbility_label')).fontSize(20).fontWeight(FontWeight.Bold)
                 .fontColor($r('app.color.primary_text'))
               Text(`已安装 ${this.installedVersionLabel}`).id('system_installed_version')
                 .fontSize($r('app.float.secondary_font_size'))

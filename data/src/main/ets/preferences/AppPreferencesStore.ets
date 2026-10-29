@@ -177,6 +177,11 @@ export interface ExperiencePreferences {
   /** 操作跟随智感握姿：按近期触点分布推断握持手，回答页"下一个回答"按钮与
    * 收藏/评论/更多胶囊吸附握持侧，赞同/反对胶囊留在另一侧。 */
   gripFollowActions: boolean;
+  /** 回答页底部的热评预览卡片：关闭后不拉取也不展示。 */
+  showHotComments: boolean;
+  /** 问题标题并入顶栏：开启后回答页顶栏常驻问题标题（未滚动两行、滚动后单行），
+   *  正文信息头不再重复展示；关闭时保持问题标题在信息头、滚动后才折叠进顶栏。 */
+  questionInTitleBar: boolean;
 }
 
 export function defaultExperiencePreferences(): ExperiencePreferences {
@@ -201,7 +206,9 @@ export function defaultExperiencePreferences(): ExperiencePreferences {
     shareActionMode: ShareActionMode.ASK,
     showSearchHotSearch: true,
     showSearchHistory: true,
-    gripFollowActions: false
+    gripFollowActions: false,
+    showHotComments: true,
+    questionInTitleBar: false
   };
 }
 
@@ -235,7 +242,9 @@ export function normalizeExperiencePreferences(value: ExperiencePreferences): Ex
     shareActionMode: shareActionMode,
     showSearchHotSearch: value.showSearchHotSearch,
     showSearchHistory: value.showSearchHistory,
-    gripFollowActions: value.gripFollowActions === true
+    gripFollowActions: value.gripFollowActions === true,
+    showHotComments: value.showHotComments !== false,
+    questionInTitleBar: value.questionInTitleBar === true
   };
 }
 
@@ -1302,7 +1311,9 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
         shareActionMode: await readString('shareActionMode', defaults.shareActionMode) as ShareActionMode,
         showSearchHotSearch: await readBoolean('showSearchHotSearch', defaults.showSearchHotSearch),
         showSearchHistory: await readBoolean('showSearchHistory', defaults.showSearchHistory),
-        gripFollowActions: await readBoolean('gripFollowActions', defaults.gripFollowActions)
+        gripFollowActions: await readBoolean('gripFollowActions', defaults.gripFollowActions),
+        showHotComments: await readBoolean('showHotComments', defaults.showHotComments),
+        questionInTitleBar: await readBoolean('questionInTitleBar', defaults.questionInTitleBar)
       });
     } catch (error) {
       if (error instanceof Error) {
@@ -1346,6 +1357,8 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
       await store.put('showSearchHotSearch', value.showSearchHotSearch);
       await store.put('showSearchHistory', value.showSearchHistory);
       await store.put('gripFollowActions', value.gripFollowActions);
+      await store.put('showHotComments', value.showHotComments);
+      await store.put('questionInTitleBar', value.questionInTitleBar);
       await store.flush();
     } catch (error) {
       if (error instanceof Error) {

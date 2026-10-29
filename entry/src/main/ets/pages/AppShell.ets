@@ -1,8 +1,9 @@
+import { setFeedScrollOwner } from './FeedScrollOwnership';
 import { updateStatusBarAppearance } from '../platform/SystemBars';
 import { QuestionTitleBar } from './QuestionTitleBar';
 import { SearchTitleBar } from './SearchTitleBar';
 import { HistoryTitleBar } from './HistoryTitleBar';
-import { AnswerTitleBar } from './AnswerTitleBar';
+import { AnswerTitleBar, AnswerTitleState } from './AnswerTitleBar';
 import { ArticleTitleBar } from './ArticleTitleBar';
 import { peopleTitleText, PeopleTitleState } from './PeopleTitleBar';
 import { CommentTitleBar, CommentTitleState, commentTitleStateId } from './CommentTitleBar';
@@ -78,7 +79,7 @@ import {
 } from './TopLevelTabs';
 import { DividerShowType, hdsMaterial, HdsNavDestination, HdsNavigation, HdsNavigationAttribute, HdsNavigationTitleMode, HdsTabsController } from '@kit.UIDesignKit';
 import { ContinuousAnswerTitleState, continuousAnswerRouteId, continuousAnswerTitle } from './ContinuousAnswerRouteState';
-import { getContinuousAnswerTitleBarStyle, getChatTitleBarStyle, getImmersiveTitleBarStyle, getPersistentImmersiveTitleBarStyle, getRootChromeTitleBarStyle } from '../common/style/NavStyles';
+import { getAnswerTitleBarStyle, getContinuousAnswerTitleBarStyle, getChatTitleBarStyle, getImmersiveTitleBarStyle, getPersistentImmersiveTitleBarStyle, getRootChromeTitleBarStyle } from '../common/style/NavStyles';
 import {
   decodeImmersiveMaterialSupport,
   ImmersiveMaterialSupportState
@@ -209,10 +210,10 @@ export struct AppShell {
   /** 回答/文章详情页沉浸式阅读中（页面广播）：隐藏 NavDestination 顶栏（对齐上游 topBar={}）。 */
   @StorageProp('detailImmersiveActive') private detailImmersiveActive: boolean = false;
   @StorageProp('detailTitleHiddenByScroll') private detailTitleHiddenByScroll: boolean = false;
+  /** 正文发布的回答标题状态，以固定路由 ID 读取。 */
+  @StorageProp('answerTitleStates') private answerTitleStates: AnswerTitleState[] = [];
   /** 连续阅读页问题标题（页面加载后广播；空串显示占位标题）。 */
   @StorageProp('continuousAnswerTitles') private continuousAnswerTitles: Array<ContinuousAnswerTitleState> = [];
-  @StorageProp('answerOverscrollActive') private answerOverscrollActive: boolean = false;
-  @StorageProp('answerSwitchMode') private answerSwitchMode: string = 'vertical';
   @StorageProp('peopleTitleStates') private peopleTitleStates: PeopleTitleState[] = [];
   @StorageProp('commentTitleStates') private commentTitleStates: CommentTitleState[] = [];
   /** 全屏图片查看器打开中（详情页广播）：同样隐藏顶栏，使查看器真全屏。 */
@@ -265,6 +266,9 @@ export struct AppShell {
   @StorageProp('tapToRefresh') private tapToRefresh: boolean = true;
   /** 当前生效主题色（启动时广播，深浅色已解析），驱动全壳强调色。 */
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  /** 状态栏时间/电量颜色（SystemBars 按主题广播），供 HdsNavigation.systemBarStyle 使用：
+   * 导航转场由系统按栈顶页面应用并还原，避免详情页退出后图标色残留为白色。 */
+  @StorageProp('systemBarContentColor') private systemBarContentColor: string = '#000000';
   /** 主题色 seed：设置页选择/拖动时写入，@Watch 重新解析生效色并广播（否则换色不生效）。 */
   @StorageProp('themeColor') @Watch('onThemeColorSeedChanged') private themeColorSeed: string =
     DEFAULT_THEME_COLOR;
@@ -323,6 +327,7 @@ export struct AppShell {
       }
     });
     this.tabScrollerBindings = next;
+    this.broadcastBottomBarScrollOwner();
   }
 
   private tabScrollerBinding(tab: number): Array<Scroller> {
@@ -831,7 +836,9 @@ export struct AppShell {
           }
         );
       }
-      .titleBar({ style: getPersistentImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.questionTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
+      // 与首页/我的/设置等信息流页同一套沉浸顶栏：静止透明、滚动出渐变模糊，
+      // 避免详情页用常驻半透明底时在顶栏下沿形成一条"挡"住正文的实边。
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.questionTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
       // 问题页正文图片同样可打开全屏查看器：隐藏顶栏，返回键优先关查看器。
       .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll || this.imagePreviewUrl.length > 0)
@@ -861,12 +868,14 @@ export struct AppShell {
       }
       .onShown((): void => this.setReaderRouteVisible('answer', destination.id, true))
       .onHidden((): void => this.setReaderRouteVisible('answer', destination.id, false))
-      .titleBar({ style: getPersistentImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.answerTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
+      // Native 列表显式广播材质态，避免 HDS 无法观察候选树内滚动而发生正文压字。
+      .titleBar({ style: getAnswerTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState(),
+        this.answerTitleStates.find((state: AnswerTitleState): boolean => state.id === destination.id)?.materialVisible ?? false), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.answerTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
       // 沉浸式/图片查看器中隐藏顶栏（对齐上游 topBar={}）；返回键优先关查看器、再退沉浸式。
-      // 纵向过滑须连同 HDS 材质背景一起隐藏；仅淡出 stackBuilder 内容仍会模糊遮挡预览。
-      .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll || this.imagePreviewUrl.length > 0 ||
-        (this.answerOverscrollActive && this.answerSwitchMode !== 'horizontal'))
+      // 回答切换过滑（纵向/横向）顶栏都保持不动，相邻回答整页从顶栏下方滑入。
+      .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll ||
+        this.imagePreviewUrl.length > 0)
       .onBackPressed((): boolean => {
         if (this.imagePreviewUrl.length > 0) {
           AppStorage.setOrCreate('imagePreviewUrl', '');
@@ -893,7 +902,8 @@ export struct AppShell {
       }
       .onShown((): void => this.setReaderRouteVisible('article', destination.id, true))
       .onHidden((): void => this.setReaderRouteVisible('article', destination.id, false))
-      .titleBar({ style: getPersistentImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.articleTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
+      // 同问题/回答页：走与设置/首页一致的沉浸顶栏。
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.articleTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
       .hideBackButton(true)
       // 与回答页一致：沉浸式/图片查看器中隐藏顶栏，返回键优先关查看器。
       .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll || this.imagePreviewUrl.length > 0)
@@ -1307,6 +1317,8 @@ export struct AppShell {
               // 模糊才继续铺到状态栏区域（官方问答口径），否则状态栏那段内容不模糊。
               .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM],
                 [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+              .systemBarStyle({ statusBarContentColor: this.systemBarContentColor },
+                { statusBarContentColor: this.systemBarContentColor })
             }
             .id(`top_level_${this.tabKey(tab as TopLevelTab)}_content`)
             .tabBar(this.topLevelTabBarStyle(tab as TopLevelTab))
@@ -1321,6 +1333,8 @@ export struct AppShell {
       .backgroundColor($r('app.color.page_background'))
       .expandSafeArea([SafeAreaType.SYSTEM], [SafeAreaEdge.TOP, SafeAreaEdge.BOTTOM])
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.TOP, LayoutSafeAreaEdge.BOTTOM])
+      .systemBarStyle({ statusBarContentColor: this.systemBarContentColor },
+        { statusBarContentColor: this.systemBarContentColor })
 
       // 弹层统一挂在根壳上，任何页面触发版本/许可/项目主页说明都能弹出，
       // 不依赖“我的”页或某一个 NavDestination 是否仍在前台。
@@ -1544,10 +1558,17 @@ export struct AppShell {
     NotificationTitleBar({ navigate: (destination: AppDestination): void => this.navigate(destination) })
   }
 
-  /** 回答页标题栏：滚动折叠时在返回键右侧显示问题单行 + 答主摘要（对齐上游折叠顶栏）。 */
+  /** 回答页标题栏：滚动折叠时在返回键右侧显示问题单行 + 答主摘要（对齐上游折叠顶栏）。
+   * 标题可点击：推入该问题页查看全部回答。 */
   @Builder
   private answerTitleBar(id: string) {
-    AnswerTitleBar({ answerId: id, onBack: (): void => { this.pathStack.pop(); } })
+    AnswerTitleBar({
+      answerId: id,
+      onBack: (): void => { this.pathStack.pop(); },
+      onOpenQuestion: (questionId: string): void => {
+        this.navigate({ name: AppDestinationName.QUESTION, id: questionId });
+      }
+    })
   }
 
   /** 文章页标题栏：滚动折叠时在返回键右侧显示文章标题单行（对齐问题页折叠模式）。 */
@@ -1743,6 +1764,13 @@ export struct AppShell {
       .hitTestBehavior(HitTestMode.Transparent)
     } else if (this.activeTopLevelTab() === TopLevelTab.HOT) {
       Row() {
+        Text('热榜')
+          .id('hot_titlebar_title')
+          .fontSize($r('app.float.heading_font_size'))
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.primary_text'))
+          .maxLines(1)
+          .layoutWeight(1)
         Button({ type: ButtonType.Circle, stateEffect: true }) {
           SymbolGlyph($r('sys.symbol.arrow_clockwise'))
             .fontSize(20)
@@ -1764,8 +1792,7 @@ export struct AppShell {
         })
       }
       .width('100%')
-      .justifyContent(FlexAlign.End)
-      .padding({ right: 12 })
+      .padding({ left: $r('app.float.page_padding'), right: 12 })
       .hitTestBehavior(HitTestMode.Transparent)
     } else if (this.activeTopLevelTab() === TopLevelTab.DAILY) {
       Row() {
@@ -2047,7 +2074,7 @@ export struct AppShell {
           })
       }
       .width('100%')
-      Text('知乎++鸿蒙版')
+      Text($r('app.string.EntryAbility_label'))
         .id('about_version_app_name')
         .fontSize($r('app.float.body_font_size'))
         .fontColor($r('app.color.primary_text'))
@@ -2580,6 +2607,19 @@ export struct AppShell {
 
   private onTopLevelTabIndexChanged(): void {
     this.tabsController.changeIndex(this.topLevelTabIndex);
+    this.broadcastBottomBarScrollOwner();
+  }
+
+  /** 底栏"滚动自动隐藏"只归属于信息流页签：切换到"我的/历史/收藏夹"等页签时
+   * 收回标记并强制回显，避免离屏信息流重建/惯性滚动留下的旧标记把底栏隐藏掉。 */
+  private broadcastBottomBarScrollOwner(): void {
+    const tab: number | undefined = this.bottomBarOrder[this.topLevelTabIndex];
+    const feedTab: boolean = tab !== undefined && tab >= TopLevelTab.HOME && tab <= TopLevelTab.DAILY;
+    setFeedScrollOwner(feedTab ? (this.scrollKeysForTab(tab ?? TopLevelTab.HOME)[0] ?? '') : '');
+    AppStorage.setOrCreate('topLevelFeedTabActive', feedTab);
+    if (!feedTab) {
+      AppStorage.setOrCreate('bottomBarHiddenByScroll', false);
+    }
   }
 
   private onBottomBarItemsChanged(): void {
@@ -2591,6 +2631,7 @@ export struct AppShell {
     // ForEach 重建页签后 Tabs 选中索引可能被重置/钳制（索引值未变时 @Watch 不触发），
     // 这里无条件用控制器再同步一次。
     this.tabsController.changeIndex(this.topLevelTabIndex);
+    this.broadcastBottomBarScrollOwner();
   }
 
   private setReaderRouteVisible(kind: string, id: string, visible: boolean): void {
@@ -2896,6 +2937,7 @@ export struct AppShell {
     } else if (this.topLevelTabIndex >= nextBottomBarOrder.length) {
       this.topLevelTabIndex = 0;
     }
+    this.broadcastBottomBarScrollOwner();
     AppStorage.setOrCreate('titleAutoHide', value.titleAutoHide);
     AppStorage.setOrCreate('autoHideArticleBottomBar', value.autoHideArticleBottomBar);
     AppStorage.setOrCreate('buttonSkipAnswer', value.buttonSkipAnswer);
@@ -2917,6 +2959,8 @@ export struct AppShell {
     AppStorage.setOrCreate('showSearchHotSearch', value.showSearchHotSearch);
     AppStorage.setOrCreate('showSearchHistory', value.showSearchHistory);
     AppStorage.setOrCreate('gripFollowActions', value.gripFollowActions);
+    AppStorage.setOrCreate('showHotComments', value.showHotComments);
+    AppStorage.setOrCreate('questionInTitleBar', value.questionInTitleBar);
   }
 
   private decodeBottomBarOrder(raw: string): number[] {

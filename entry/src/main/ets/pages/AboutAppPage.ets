@@ -30,7 +30,7 @@ export struct AboutAppPage {
       Column() {
         Column({ space: $r('app.float.spacing_large') }) {
           Column({ space: $r('app.float.spacing_xsmall') }) {
-            Text('知乎++鸿蒙版')
+            Text($r('app.string.EntryAbility_label'))
               .id('about_app_name')
               .fontSize(20)
               .fontWeight(FontWeight.Bold)

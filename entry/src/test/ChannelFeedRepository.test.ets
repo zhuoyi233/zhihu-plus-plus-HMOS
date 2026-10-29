@@ -342,6 +342,20 @@ export default function channelFeedRepositoryTest(): void {
       }
     });
 
+    it('usesHotItemChildThumbnailAsCardCover', 0, () => {
+      const page = decodeChannelContentPage('{"data":[{"type":"hot_list_feed","id":"hot-video",' +
+        '"detail_text":"99 万热度","children":[{"type":"zvideo","thumbnail":"https://pic.example/v.jpg"}],' +
+        '"target":{"type":"question","id":"301","title":"带视频的热榜问题","excerpt":"[视频]"}}],' +
+        '"paging":{"is_end":true}}');
+      expect(page.items.length).assertEqual(1);
+      if (page.items[0].kind === ChannelFeedItemKind.CONTENT) {
+        expect(page.items[0].feedItem.target.title).assertEqual('带视频的热榜问题');
+        expect(page.items[0].feedItem.target.thumbnailUrl).assertEqual('https://pic.example/v.jpg');
+      } else {
+        expect(false).assertTrue();
+      }
+    });
+
     it('filtersContentThroughInjectedBlockingContract', 0, async () => {
       const matcher = new TitleBlockingMatcher();
       const factory = new SequenceChannelTransportFactory([

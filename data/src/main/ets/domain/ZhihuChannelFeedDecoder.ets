@@ -104,10 +104,27 @@ function topicIds(target: JsonObjectValue | undefined): Array<string> {
   return result;
 }
 
+/** 热榜等聚合条目的子项封面（children[*].thumbnail，通常是视频封面或内容配图）。 */
+function firstChildThumbnail(item: JsonObjectValue): string {
+  const children = item.get('children');
+  if (!(children instanceof JsonArrayValue)) {
+    return '';
+  }
+  for (let index = 0; index < children.items.length; index += 1) {
+    const child = jsonObject(children.items[index]);
+    const thumbnail = child === undefined ? undefined : jsonString(child.get('thumbnail'));
+    if (thumbnail !== undefined && thumbnail.trim().length > 0) {
+      return thumbnail;
+    }
+  }
+  return '';
+}
+
 export function decodeChannelContentPage(json: string): ChannelFeedPage {
   const object = root(json, 'Feed');
   const data = requiredArray(object, 'data', 'feed.data');
   const targetsByItemId: Map<string, JsonObjectValue> = new Map<string, JsonObjectValue>();
+  const childThumbnailsByItemId: Map<string, string> = new Map<string, string>();
   data.items.forEach((value: JsonValue): void => {
     const item = jsonObject(value);
     if (item === undefined) {
@@ -134,12 +151,25 @@ export function decodeChannelContentPage(json: string): ChannelFeedPage {
     }
     if (key !== undefined && target !== undefined) {
       targetsByItemId.set(key, target);
+      // 热榜条目自身往往没有 target.thumbnail，封面在 children 里（对齐上游 HotListScreen）。
+      const childThumbnail = firstChildThumbnail(item);
+      if (childThumbnail.length > 0) {
+        childThumbnailsByItemId.set(key, childThumbnail);
+      }
     }
   });
   const decoded: FeedPage = decodeFeedPage(json);
   const items: Array<ChannelFeedItem> = decoded.items.map((item: FeedItem): ChannelContentItem => {
     if (!/^\d{1,30}$/.test(item.target.id)) {
       throw invalid('feed.target.id 缺少有效十进制 ID');
+    }
+    const childThumbnail = childThumbnailsByItemId.get(item.id);
+    if (childThumbnail !== undefined && (item.target.thumbnailUrl ?? '').length === 0) {
+      item.target.thumbnailUrl = childThumbnail;
+    }
+    // 热榜视频条目的摘要只有「[视频]」占位：应用内无法播放/没有可展示内容时该字面无意义，直接去掉。
+    if (/^[\[【]视频[\]】]$/.test(item.target.excerpt.trim())) {
+      item.target.excerpt = '';
     }
     return {
       kind: ChannelFeedItemKind.CONTENT,

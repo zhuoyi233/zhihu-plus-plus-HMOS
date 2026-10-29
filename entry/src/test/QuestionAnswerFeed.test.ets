@@ -20,6 +20,17 @@ class FakeQuestionAnswerRepository implements QuestionAnswerFeedRepository {
   cancel(): void {}
 }
 
+class ControlledQuestionAnswerRepository implements QuestionAnswerFeedRepository {
+  finish?: (page: QuestionAnswerFeedPage) => void;
+  loadPage(_questionId: string, _order: QuestionAnswerSortOrder, _cursor?: string,
+    _reset?: boolean): Promise<QuestionAnswerFeedPage> {
+    return new Promise<QuestionAnswerFeedPage>((resolve: (page: QuestionAnswerFeedPage) => void): void => {
+      this.finish = resolve;
+    });
+  }
+  cancel(): void {}
+}
+
 function content(id: string): ChannelContentItem {
   return {
     kind: ChannelFeedItemKind.CONTENT,
@@ -87,6 +98,80 @@ export default function questionAnswerFeedTest(): void {
       expect(states[states.length - 1].items.length).assertEqual(1);
     });
 
+    it('prepareAndPeekKeepIdentityAndDoNotPageUntilNeeded', 0, async () => {
+      const seed: QuestionAnswersViewState = {
+        phase: QuestionAnswersPhase.READY, items: [content('1'), content('2')], loadingMore: false,
+        canLoadMore: true, sortOrder: QuestionAnswerSortOrder.DEFAULT, errorMessage: '', requiresLogin: false,
+        nextCursor: 'next'
+      };
+      const repository = new FakeQuestionAnswerRepository([
+        { items: [content('3')], cursor: { isEnd: true, isStart: false, page: 2, total: 3 } }
+      ]);
+      const navigator = new QuestionAnswerNavigator('123', '1', seed, repository);
+      expect(navigator.peekId(-1)).assertUndefined();
+      expect(navigator.peekId(1)).assertEqual('2');
+      expect(await navigator.prepareMove(1)).assertEqual('2');
+      expect(repository.calls).assertEqual(0);
+      expect(navigator.currentId()).assertEqual('1');
+      expect(navigator.commitMove('3')).assertFalse();
+      expect(navigator.commitMove('2')).assertTrue();
+      expect(navigator.commitMove('2')).assertFalse();
+      expect(navigator.peekId(1)).assertUndefined();
+      expect(repository.calls).assertEqual(0);
+      expect(await navigator.prepareMove(1)).assertEqual('3');
+      expect(repository.calls).assertEqual(1);
+      expect(navigator.currentId()).assertEqual('2');
+      navigator.pause(); navigator.resume();
+      expect(navigator.commitMove('3')).assertFalse();
+      expect(navigator.currentId()).assertEqual('2');
+      navigator.dispose();
+    });
+
+    it('virtualEntryPreparationCanBeCancelledInEitherDirection', 0, async () => {
+      const seed: QuestionAnswersViewState = {
+        phase: QuestionAnswersPhase.READY, items: [content('7'), content('8')], loadingMore: false,
+        canLoadMore: false, sortOrder: QuestionAnswerSortOrder.UPDATED, errorMessage: '', requiresLogin: false
+      };
+      const repository = new FakeQuestionAnswerRepository([]);
+      const navigator = new QuestionAnswerNavigator('123', '99', seed, repository);
+      expect(await navigator.prepareMove(1)).assertEqual('7');
+      navigator.cancelPreparedMove();
+      expect(navigator.commitMove('7')).assertFalse();
+      expect(navigator.currentId()).assertEqual('99');
+      expect(await navigator.prepareMove(1)).assertEqual('7');
+      expect(navigator.commitMove('7')).assertTrue();
+      expect(navigator.peekId(-1)).assertEqual('99');
+      expect(await navigator.prepareMove(-1)).assertEqual('99');
+      expect(navigator.currentId()).assertEqual('7');
+      navigator.cancelPreparedMove();
+      expect(navigator.commitMove('99')).assertFalse();
+      expect(await navigator.prepareMove(-1)).assertEqual('99');
+      expect(navigator.commitMove('99')).assertTrue();
+      expect(navigator.hasPrevious()).assertFalse();
+      expect(navigator.peekId(1)).assertEqual('7');
+      expect(repository.calls).assertEqual(0);
+      navigator.dispose();
+    });
+
+    it('pauseDuringPaginationInvalidatesTargetEvenAfterResume', 0, async () => {
+      const repository = new ControlledQuestionAnswerRepository();
+      const seed: QuestionAnswersViewState = {
+        phase: QuestionAnswersPhase.READY, items: [content('1')], loadingMore: false,
+        canLoadMore: true, sortOrder: QuestionAnswerSortOrder.DEFAULT, errorMessage: '', requiresLogin: false,
+        nextCursor: 'next'
+      };
+      const navigator = new QuestionAnswerNavigator('123', '1', seed, repository);
+      const preparing = navigator.prepareMove(1);
+      navigator.pause(); navigator.resume();
+      const latePage: QuestionAnswerFeedPage = { items: [content('2')],
+        cursor: { isEnd: true, isStart: false, page: 2, total: 2 } };
+      repository.finish?.(latePage);
+      expect(await preparing === undefined).assertTrue();
+      expect(navigator.currentId()).assertEqual('1');
+      expect(navigator.commitMove('2')).assertFalse();
+      navigator.dispose();
+    });
+
     it('navigatorLoadsNextPageAndKeepsPreviousItems', 0, async () => {
       const seed: QuestionAnswersViewState = {
         phase: QuestionAnswersPhase.READY, items: [content('1'), content('2')], loadingMore: false,
@@ -97,10 +182,6 @@ export default function questionAnswerFeedTest(): void {
         { items: [content('3')], cursor: { isEnd: true, isStart: false, page: 2, total: 3 } }
       ]);
       const navigator = new QuestionAnswerNavigator('123', '2', seed, repository);
-      expect(await navigator.prepareMove(1)).assertEqual('3');
-      expect(navigator.currentId()).assertEqual('2');
-      expect(await navigator.prepareMove(1)).assertEqual('3');
-      expect(navigator.currentId()).assertEqual('2');
       expect(await navigator.move(-1)).assertEqual('1');
       expect(await navigator.move(1)).assertEqual('2');
       expect(await navigator.move(1)).assertEqual('3');
@@ -168,30 +249,9 @@ export default function questionAnswerFeedTest(): void {
         true, false, false, true)).assertEqual(0);
     });
 
-    it('navigatorPeekIdDoesNotLoadPagesOrMove', 0, async () => {
-      // 手势期间预取只允许读已加载列表：peekId 不得触发分页，也不得推进当前回答。
-      const seed: QuestionAnswersViewState = {
-        phase: QuestionAnswersPhase.READY, items: [content('1'), content('2'), content('3')], loadingMore: false,
-        canLoadMore: true, sortOrder: QuestionAnswerSortOrder.DEFAULT, errorMessage: '', requiresLogin: false,
-        nextCursor: 'next'
-      };
-      const repository = new FakeQuestionAnswerRepository([
-        { items: [content('4')], cursor: { isEnd: true, isStart: false, page: 2, total: 4 } }
-      ]);
-      const navigator = new QuestionAnswerNavigator('123', '3', seed, repository);
-      expect(navigator.peekId(-1)).assertEqual('2');
-      // 列表末尾但仍有下一页：peek 不预拉分页，返回 undefined 由松手后的 prepareMove 补齐。
-      expect(navigator.peekId(1)).assertUndefined();
-      expect(repository.calls).assertEqual(0);
-      expect(navigator.currentId()).assertEqual('3');
-      expect(await navigator.move(1)).assertEqual('4');
-      expect(repository.calls).assertEqual(1);
-      expect(navigator.peekId(-1)).assertEqual('3');
-      navigator.dispose();
-    });
-
     it('navigatorSeedlessFallsBackToFirstWhenCurrentAbsent', 0, async () => {
-      // 当前回答不在列表里（如被过滤）：首个非当前回答作为下一答。
+      // 当前回答不在列表里（如被过滤）：首个非当前回答作为下一答；
+      // 切走后「上一答」仍要能滑回入口回答（否则左滑之后无法右滑回来）。
       const repository = new FakeQuestionAnswerRepository([
         { items: [content('7'), content('8')],
           cursor: { isEnd: true, isStart: true, page: 1, total: 2 } }
@@ -202,7 +262,13 @@ export default function questionAnswerFeedTest(): void {
       const preview = navigator.nextAnswerPreview();
       expect(preview?.answerId).assertEqual('7');
       expect(await navigator.move(1)).assertEqual('7');
+      // 入口回答不在列表里，但它仍作为列表首条之前的"虚拟上一答"存在。
+      expect(navigator.hasPrevious()).assertTrue();
+      expect(navigator.previousAnswerPreview()?.answerId).assertEqual('99');
+      expect(await navigator.move(-1)).assertEqual('99');
       expect(navigator.hasPrevious()).assertFalse();
+      // 回到入口后再左滑仍是列表首条。
+      expect(await navigator.move(1)).assertEqual('7');
       navigator.dispose();
     });
   });

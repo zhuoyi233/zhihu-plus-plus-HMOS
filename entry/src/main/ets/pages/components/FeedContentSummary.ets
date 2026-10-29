@@ -17,12 +17,11 @@ export struct FeedContentSummary {
   build() {
     Column({ space: $r('app.float.spacing_small') }) {
       if (this.showTitle && this.target.title.length > 0) {
+        // 标题完整展示：不截断、不限行数（与首页卡片一致），卡片高度随内容自然增长。
         Text(this.target.title)
           .fontSize($r('app.float.heading_font_size'))
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.primary_text'))
-          .maxLines(2)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
           .width('100%')
       }
       if (this.showAuthor) {
@@ -45,6 +44,7 @@ export struct FeedContentSummary {
       }
       if (this.showStatistics) {
         Text(`${this.target.voteupCount ?? '—'} 赞同 · ${this.target.commentCount ?? '—'} 评论`)
+          .width('100%')
           .fontSize($r('app.float.secondary_font_size'))
           .fontColor($r('app.color.secondary_text'))
       }

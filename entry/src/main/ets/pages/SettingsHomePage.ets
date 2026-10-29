@@ -22,7 +22,6 @@ import {
 import {
   hasInternalBack,
   isPaneAvailable,
-  isPaneHighlighted,
   paneAfterDeveloperModeDisabled,
   paneForEntry,
   paneParent,
@@ -222,14 +221,6 @@ export struct SettingsHomePage {
     }
   }
 
-  private isCategorySelected(category: SettingsPaneId): boolean {
-    return isPaneHighlighted(this.selectedPane, category);
-  }
-
-  private selectedLabel(category: SettingsPaneId): string {
-    return this.isCategorySelected(category) ? '已选择' : '';
-  }
-
   build() {
     Row({ space: this.layout().columnGap }) {
       this.masterPane()
@@ -331,7 +322,6 @@ export struct SettingsHomePage {
           title: '身份管理',
           description: '创建马甲号或切换当前身份',
           testId: 'open_identity_management',
-          trailingText: this.selectedLabel(SettingsPaneId.IDENTITY),
           grouped: true,
           showLeadingIcon: true,
           leadingIcon: $r('sys.symbol.person_2'),
@@ -360,7 +350,6 @@ export struct SettingsHomePage {
         title: '外观与阅读体验',
         description: '主题、排版与信息流',
         testId: 'open_appearance_settings',
-        trailingText: this.selectedLabel(SettingsPaneId.APPEARANCE),
         grouped: true,
         showLeadingIcon: true,
         leadingIcon: $r('sys.symbol.eye'),
@@ -371,7 +360,6 @@ export struct SettingsHomePage {
         title: '朗读与播放',
         description: '语音与播放控制',
         testId: 'open_reading_settings',
-        trailingText: this.selectedLabel(SettingsPaneId.READING),
         grouped: true,
         showLeadingIcon: true,
         leadingIcon: $r('sys.symbol.mic'),
@@ -382,8 +370,6 @@ export struct SettingsHomePage {
         title: '推荐系统与内容过滤',
         description: '推荐来源、质量与屏蔽',
         testId: 'open_recommendation_filter_settings',
-        // 规则／记录作为子页时，父分类保持“已选择”。
-        trailingText: this.selectedLabel(SettingsPaneId.FILTER),
         grouped: true,
         showLeadingIcon: true,
         leadingIcon: $r('sys.symbol.eye_slash'),
@@ -394,7 +380,6 @@ export struct SettingsHomePage {
         title: '通知设置',
         description: '提醒与推送偏好',
         testId: 'open_notification_settings',
-        trailingText: this.selectedLabel(SettingsPaneId.NOTIFICATION),
         grouped: true,
         showLeadingIcon: true,
         leadingIcon: $r('sys.symbol.bell_badge_gearshape'),
@@ -412,8 +397,7 @@ export struct SettingsHomePage {
         title: '系统与更新',
         description: '版本信息、检查更新与反馈',
         testId: 'open_system_update_settings',
-        trailingText: this.updateLabel.length > 0 ? this.updateLabel :
-          this.selectedLabel(SettingsPaneId.SYSTEM_UPDATE),
+        trailingText: this.updateLabel,
         grouped: true,
         showLeadingIcon: true,
         leadingIcon: $r('sys.symbol.arrow_clockwise'),
@@ -424,7 +408,6 @@ export struct SettingsHomePage {
         title: '关于应用',
         description: '版本、项目与开源许可',
         testId: 'settings_open_about',
-        trailingText: this.selectedLabel(SettingsPaneId.ABOUT),
         grouped: true,
         showLeadingIcon: true,
         leadingIcon: $r('sys.symbol.info_circle'),
@@ -443,7 +426,6 @@ export struct SettingsHomePage {
           title: '开发者选项',
           description: 'Cookie、网络与调试工具',
           testId: 'open_developer_options',
-          trailingText: this.selectedLabel(SettingsPaneId.DEVELOPER),
           grouped: true,
           showLeadingIcon: true,
           leadingIcon: $r('sys.symbol.gearshape'),
@@ -488,8 +470,6 @@ export struct SettingsHomePage {
               title: entry.title,
               description: entry.path,
               testId: `settings_search_open_${entry.id}`,
-              // 搜索结果同样标出当前目标，避免重复点开同一页。
-              trailingText: this.selectedLabel(paneForEntry(entry.id)),
               grouped: true,
               onRowClick: (): void => this.openEntry(entry.id)
             });

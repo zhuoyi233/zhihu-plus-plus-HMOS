@@ -76,9 +76,15 @@ export struct ReadingProgressBar {
   @StorageProp('bottomRectHeight') private systemBarsBottomVp: number = 0;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   /**
+   * 回答页整页切换（横向/纵向过滑）进行中：正文连同进度条一起在平移，进度条跟着滑出
+   * 会与相邻回答页重叠，期间直接隐藏并关掉命中；切换结束后按原有淡入淡出恢复。
+   */
+  @StorageProp('answerOverscrollActive') @Watch('onAvailabilityChanged') private switchActive: boolean = false;
+  /**
    * 拖动开始/结束通知宿主：拖动期间正文改由 `scrollTo` 驱动，宿主需屏蔽贴边过滑
    * （回答页贴底时向上拖滚动条会被误判为"下一答"过滑）。
    */
+  @Prop @Watch('onAvailabilityChanged') active: boolean = true;
   onSeekStateChange?: (dragging: boolean) => void;
   /** 是否在场（非动画量）：false 时轨道区 `HitTestMode.None`，右缘手势交给正文列表。 */
   @State private mounted: boolean = false;
@@ -93,15 +99,21 @@ export struct ReadingProgressBar {
   private seekNotified: boolean = false;
 
   aboutToDisappear(): void {
+    this.resetBar();
+  }
+
+  private resetBar(): void {
     this.clearFadeTimer();
     this.clearUnmountTimer();
-    if (this.seekNotified) {
-      this.seekNotified = false;
-      const callback = this.onSeekStateChange;
-      if (callback !== undefined) {
-        callback(false);
-      }
-    }
+    this.dragging = false;
+    this.alpha = 0;
+    this.mounted = false;
+    this.notifySeekEnd();
+  }
+
+  private onAvailabilityChanged(): void {
+    // 隐藏期间结束未完成拖动并清除定时器；恢复后等待真实滚动再出现。
+    this.resetBar();
   }
 
   build() {
@@ -126,15 +138,17 @@ export struct ReadingProgressBar {
     }
     .id('reading_progress_bar')
     .width(READING_PROGRESS_BAR_HIT_WIDTH_VP)
-    .height('100%')
-    .padding({ top: this.topInsetVp, bottom: this.bottomInset() })
-    .opacity(this.alpha)
+    .height(this.trackHeightVp())
+    .translate({ y: this.topInsetVp })
+    .opacity(this.switchActive || !this.active ? 0 : this.alpha)
     // 命中开关与透明度分离：`alpha` 归零时节点仍在树上（不遮挡、不响应），
     // 避免"隐藏期间把手势吃掉"，也不会因节点反复进出渲染树而丢掉命中能力。
-    .hitTestBehavior(this.mounted && this.scrollable() ? HitTestMode.Default : HitTestMode.None)
+    .hitTestBehavior(this.mounted && this.scrollable() && !this.switchActive && this.active
+      ? HitTestMode.Default : HitTestMode.None)
     .gesture(
       PanGesture({ fingers: 1, direction: PanDirection.Vertical })
         .onActionStart((): void => {
+          if (!this.active || this.switchActive || !this.scrollable()) { return; }
           this.clearFadeTimer();
           this.clearUnmountTimer();
           this.dragging = true;
@@ -151,6 +165,7 @@ export struct ReadingProgressBar {
           }
         })
         .onActionUpdate((event: GestureEvent): void => {
+          if (!this.dragging || !this.active || this.switchActive) { return; }
           const travel = this.thumbTravelVp();
           const next = travel > 0
             ? clampUnit(this.dragAnchorProgress + event.offsetY / travel)
@@ -177,7 +192,8 @@ export struct ReadingProgressBar {
 
   /** 视口高与可滚动量都已就绪时，任何输入变化都视为"活动中"：显示并重置淡出计时。 */
   private onBarInputChanged(): void {
-    if (!this.scrollable()) {
+    if (!this.active || this.switchActive || !this.scrollable()) {
+      this.resetBar();
       return;
     }
     this.showBar();

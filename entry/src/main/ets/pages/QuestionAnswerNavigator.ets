@@ -23,6 +23,13 @@ export class QuestionAnswerNavigator {
   private index: number;
   /** 当前回答 id：种子列表可能不含（信息流直达），索引待列表加载后回填。 */
   private currentAnswerId: string;
+  /** 打开本页时的那条回答：信息流直达的回答可能不在已加载的回答列表里（默认排序首屏不一定包含它），
+   *  此时它是列表首条之前的"虚拟上一答"，否则切走后无法反向滑回来。 */
+  private readonly entryAnswerId: string;
+  private entryOutsideList: boolean = false;
+  private generation: number = 0;
+  private preparedId: string = '';
+  private preparedDirection: number = 0;
   private busy: boolean = false;
   private active: boolean = true;
   private readonly onStateChange?: () => void;
@@ -30,6 +37,7 @@ export class QuestionAnswerNavigator {
   constructor(questionId: string, answerId: string, seed: QuestionAnswersViewState | undefined,
     repository: QuestionAnswerFeedRepository, onStateChange?: () => void) {
     this.currentAnswerId = answerId;
+    this.entryAnswerId = answerId;
     this.index = seed?.items.findIndex((item): boolean => item.feedItem.target.id === answerId) ?? -1;
     this.onStateChange = onStateChange;
     this.controller = new QuestionAnswersController(repository, questionId,
@@ -39,12 +47,9 @@ export class QuestionAnswerNavigator {
 
   /** 列表到达后回填当前索引（信息流直达时种子为空）。 */
   private onControllerState(state: QuestionAnswersViewState): void {
-    if (this.index < 0 && state.items.length > 0) {
-      const located = state.items.findIndex((item): boolean => item.feedItem.target.id === this.currentAnswerId);
-      if (located >= 0) {
-        this.index = located;
-      }
-    }
+    this.entryOutsideList = state.items.length > 0 &&
+      !state.items.some((item): boolean => item.feedItem.target.id === this.entryAnswerId);
+    this.index = state.items.findIndex((item): boolean => item.feedItem.target.id === this.currentAnswerId);
     if (this.onStateChange !== undefined) {
       this.onStateChange();
     }
@@ -77,6 +82,11 @@ export class QuestionAnswerNavigator {
   /** 上一答预览数据：首答（无上一答）返回 undefined。 */
   previousAnswerPreview(): AnswerNavigationPreview | undefined {
     if (!this.hasPrevious()) { return undefined; }
+    if (this.index === 0 && this.entryOutsideList) {
+      // 入口回答不在列表里：没有作者/摘要可预览，只带 id，等正文从缓存出来后自然回填。
+      return { answerId: this.entryAnswerId, authorName: '', authorAvatarUrl: '', authorHeadline: '',
+        excerpt: '', voteupCount: 0, commentCount: 0, detailLoaded: false };
+    }
     const target = this.controller.snapshot().items[this.index - 1]?.feedItem.target;
     if (target === undefined) {
       return { answerId: '', authorName: '', authorAvatarUrl: '', authorHeadline: '', excerpt: '',
@@ -94,7 +104,8 @@ export class QuestionAnswerNavigator {
     };
   }
 
-  hasPrevious(): boolean { return this.index > 0; }
+  /** 上一答：列表首条之前还有"入口回答"时也算有（信息流直达的常见情形）。 */
+  hasPrevious(): boolean { return this.index > 0 || (this.index === 0 && this.entryOutsideList); }
   hasNext(): boolean {
     const state = this.controller.snapshot();
     if (this.index >= 0) {
@@ -108,6 +119,7 @@ export class QuestionAnswerNavigator {
 
   pause(): void {
     this.active = false;
+    this.cancelPreparedMove();
     this.controller.deactivate();
   }
 
@@ -116,47 +128,56 @@ export class QuestionAnswerNavigator {
     this.controller.activate();
   }
 
-  /**
-   * 不触发分页的相邻答查询：用于手势期间预取/预挂载真实候选页。
-   * 目标仍在未加载分页时返回 undefined（此时只能等松手后由 prepareMove 补齐分页）。
-   */
+  /** 相邻查询只读已到达列表，绝不隐式分页。 */
   peekId(direction: number): string | undefined {
-    if (!this.active || this.index < 0 || (direction !== -1 && direction !== 1)) { return undefined; }
-    const index = this.index + direction;
-    const state = this.controller.snapshot();
-    if (index < 0 || index >= state.items.length) { return undefined; }
-    const id = state.items[index].feedItem.target.id;
-    return id.length > 0 ? id : undefined;
+    if (!this.active || (direction !== -1 && direction !== 1)) { return undefined; }
+    if (direction === -1 && this.index === 0 && this.entryOutsideList) { return this.entryAnswerId; }
+    if (direction === -1 && this.index < 0) { return undefined; }
+    const id = this.controller.snapshot().items[this.index + direction]?.feedItem.target.id;
+    return id !== undefined && id.length > 0 && id !== this.currentAnswerId ? id : undefined;
   }
 
+  /** 准备只确定目标；正式索引在正文可以提交时才改变。 */
   async prepareMove(direction: number): Promise<string | undefined> {
-    if (!this.active || this.busy || (direction !== -1 && direction !== 1)) {
-      return undefined;
-    }
+    if (!this.active || this.busy || (direction !== -1 && direction !== 1)) { return undefined; }
+    this.cancelPreparedMove();
+    const generation = this.generation;
     this.busy = true;
     try {
-      if (direction === 1 && this.index + 1 >= this.controller.snapshot().items.length && this.hasNext()) {
+      if (this.peekId(direction) === undefined && direction === 1 && this.hasNext()) {
         await this.controller.loadMore();
       }
-      if (!this.active) { return undefined; }
-      const nextIndex = this.index + direction;
-      const item = this.controller.snapshot().items[nextIndex];
-      if (item === undefined) { return undefined; }
-      return item.feedItem.target.id;
+      if (!this.active || generation !== this.generation) { return undefined; }
+      const id = this.peekId(direction);
+      this.preparedId = id ?? '';
+      this.preparedDirection = direction;
+      return id;
     } finally {
-      this.busy = false;
+      if (generation === this.generation) { this.busy = false; }
     }
+  }
+
+  canCommitMove(id: string): boolean {
+    return this.active && id.length > 0 && this.preparedId === id &&
+      this.peekId(this.preparedDirection) === id;
   }
 
   commitMove(id: string): boolean {
-    if (!this.active) { return false; }
-    const index = this.controller.snapshot().items.findIndex((item): boolean => item.feedItem.target.id === id);
-    if (index < 0 || (this.index >= 0 && Math.abs(index - this.index) !== 1)) { return false; }
-    this.index = index;
+    if (!this.canCommitMove(id)) { return false; }
     this.currentAnswerId = id;
+    this.index = this.controller.snapshot().items.findIndex((item): boolean => item.feedItem.target.id === id);
+    this.cancelPreparedMove();
     return true;
   }
 
+  cancelPreparedMove(): void {
+    this.generation += 1;
+    this.preparedId = '';
+    this.preparedDirection = 0;
+    this.busy = false;
+  }
+
+  /** 列表调用方的便利接口；阅读页必须使用 prepare/commit 分开的事务。 */
   async move(direction: number): Promise<string | undefined> {
     const id = await this.prepareMove(direction);
     return id !== undefined && this.commitMove(id) ? id : undefined;

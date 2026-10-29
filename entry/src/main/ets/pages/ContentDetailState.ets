@@ -90,6 +90,7 @@ export class ContentDetailController {
   private openedRecordPhase: OpenedRecordPhase = OpenedRecordPhase.NOT_CONFIGURED;
   /** 已准备但尚未提交的候选回答 id：防止过期候选借新代次提交。 */
   private preparedAnswerId: string = '';
+  private pendingRequestGeneration: number = -1;
 
   constructor(repository: ContentRepository, openedContentStore?: OpenedContentStore,
     observer: ContentDetailStateObserver = (_state: ContentDetailViewState): void => {
@@ -114,7 +115,7 @@ export class ContentDetailController {
     }
     this.active = false;
     this.generation += 1;
-    this.repository.cancel();
+    this.cancelPendingRequest();
   }
 
   snapshot(): ContentDetailViewState {
@@ -132,10 +133,9 @@ export class ContentDetailController {
     if (!this.active) {
       return;
     }
-    if (this.phase === ContentDetailPhase.LOADING) {
-      this.repository.cancel();
-    }
+    this.cancelPendingRequest();
     const generation = ++this.generation;
+    this.pendingRequestGeneration = generation;
     this.kind = kind;
     this.preparedAnswerId = '';
     this.content = undefined;
@@ -148,6 +148,7 @@ export class ContentDetailController {
     this.emit();
     try {
       const loaded = await this.fetch(kind, id, generation);
+      this.finishPendingRequest(generation);
       if (!this.isCurrent(generation)) {
         return;
       }
@@ -159,6 +160,7 @@ export class ContentDetailController {
       this.emit();
       await this.recordOpenIfConfigured(loaded, generation);
     } catch (error) {
+      this.finishPendingRequest(generation);
       if (!this.isCurrent(generation)) {
         return;
       }
@@ -176,13 +178,17 @@ export class ContentDetailController {
   /** 准备回答时保留已显示内容；调用方确认导航后再提交。 */
   async prepareAnswer(id: string): Promise<LoadedContentDetail | undefined> {
     if (!this.active || this.phase !== ContentDetailPhase.READY) { return undefined; }
+    this.cancelPendingRequest();
     const generation = ++this.generation;
+    this.pendingRequestGeneration = generation;
     this.errorMessage = undefined;
     this.preparedAnswerId = id;
     try {
       const loaded = await this.fetch(ContentDetailKind.ANSWER, id, generation);
+      this.finishPendingRequest(generation);
       return this.isCurrent(generation) ? loaded : undefined;
     } catch (error) {
+      this.finishPendingRequest(generation);
       if (this.isCurrent(generation)) {
         this.errorMessage = contentDetailErrorMessage(error);
       }
@@ -199,17 +205,40 @@ export class ContentDetailController {
     if (!this.active || this.phase !== ContentDetailPhase.READY || answer.id.length === 0) {
       return undefined;
     }
+    this.cancelPendingRequest();
     this.errorMessage = undefined;
     this.preparedAnswerId = answer.id;
     return { kind: ContentDetailKind.ANSWER, loadGeneration: ++this.generation, value: answer };
   }
 
+  /** 取消候选不会清空当前正文，也不产生阅读记录。 */
+  cancelPreparedAnswer(): void {
+    this.preparedAnswerId = '';
+    this.generation += 1;
+    this.cancelPendingRequest();
+  }
+
+  private finishPendingRequest(generation: number): void {
+    if (this.pendingRequestGeneration === generation) { this.pendingRequestGeneration = -1; }
+  }
+
+  private cancelPendingRequest(): void {
+    if (this.pendingRequestGeneration < 0) { return; }
+    this.pendingRequestGeneration = -1;
+    // 仓库可能被其他详情页复用；接纳缓存候选或 READY 页退出时没有自己的网络请求。
+    this.repository.cancel();
+  }
+
+  canCommitPreparedAnswer(content: LoadedContentDetail): boolean {
+    return content.kind === ContentDetailKind.ANSWER && content.loadGeneration !== undefined &&
+      this.preparedAnswerId === content.value.id && this.isCurrent(content.loadGeneration) &&
+      this.content?.loadGeneration !== content.loadGeneration;
+  }
+
   preparedAnswerError(): string { return this.errorMessage ?? ''; }
 
   commitPreparedAnswer(content: LoadedContentDetail): boolean {
-    if (content.kind !== ContentDetailKind.ANSWER || content.loadGeneration === undefined ||
-      this.preparedAnswerId !== content.value.id ||
-      !this.isCurrent(content.loadGeneration) || this.content?.loadGeneration === content.loadGeneration) {
+    if (!this.canCommitPreparedAnswer(content) || content.loadGeneration === undefined) {
       return false;
     }
     this.preparedAnswerId = '';
@@ -247,7 +276,8 @@ export class ContentDetailController {
       return;
     }
     const recorded = await recordContentOpen(store, this.historyUploader, content);
-    if (this.isCurrent(generation)) {
+    // 候选准备会推进请求代次，但当前正文的历史写入仍属于这个实例。
+    if (this.active && this.content?.loadGeneration === generation) {
       this.openedRecordPhase = recorded ? OpenedRecordPhase.RECORDED : OpenedRecordPhase.FAILED;
       this.emit();
     }

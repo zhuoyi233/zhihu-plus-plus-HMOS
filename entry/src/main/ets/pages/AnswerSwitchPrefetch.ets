@@ -5,7 +5,7 @@ export const ANSWER_PREFETCH_CAPACITY: number = 3;
 
 interface PrefetchQueueItem {
   readonly answerId: string;
-  readonly foreground: boolean;
+  foreground: boolean;
   readonly resolve: (answer: Answer | undefined) => void;
 }
 
@@ -26,6 +26,7 @@ export class AnswerDetailPrefetcher {
   private readonly inFlight: Map<string, Promise<Answer | undefined>> = new Map();
   private readonly queue: PrefetchQueueItem[] = [];
   private busy: boolean = false;
+  private runningItem?: PrefetchQueueItem;
   private generation: number = 0;
   private disposed: boolean = false;
   private requestCount: number = 0;
@@ -55,7 +56,16 @@ export class AnswerDetailPrefetcher {
     const cached = this.peek(answerId);
     if (cached !== undefined) { return Promise.resolve(cached); }
     const running = this.inFlight.get(answerId);
-    if (running !== undefined) { return running; }
+    if (running !== undefined) {
+      // 后台排队任务被前台需要时提升优先级，同时继续复用同一 promise。
+      const index = this.queue.findIndex((item: PrefetchQueueItem): boolean => item.answerId === answerId);
+      if (foreground && index >= 0) {
+        const item = this.queue.splice(index, 1)[0];
+        item.foreground = true;
+        this.queue.unshift(item);
+      }
+      return running;
+    }
     const promise: Promise<Answer | undefined> = new Promise<Answer | undefined>(
       (resolve: (answer: Answer | undefined) => void): void => {
         const item: PrefetchQueueItem = { answerId: answerId, foreground: foreground, resolve: resolve };
@@ -68,10 +78,12 @@ export class AnswerDetailPrefetcher {
         } else {
           this.queue.push(item);
         }
-        this.pump();
       });
     this.inFlight.set(answerId, promise);
-    const clear = (): void => { this.inFlight.delete(answerId); };
+    this.pump();
+    const clear = (): void => {
+      if (this.inFlight.get(answerId) === promise) { this.inFlight.delete(answerId); }
+    };
     promise.then(clear, clear);
     return promise;
   }
@@ -86,6 +98,7 @@ export class AnswerDetailPrefetcher {
     this.generation += 1;
     this.cache.clear();
     this.inFlight.clear();
+    this.runningItem?.resolve(undefined);
     const queued = this.queue.splice(0, this.queue.length);
     for (let index = 0; index < queued.length; index++) {
       queued[index].resolve(undefined);
@@ -104,14 +117,19 @@ export class AnswerDetailPrefetcher {
     const item = this.queue.shift();
     if (item === undefined) { return; }
     this.busy = true;
+    this.runningItem = item;
     this.requestCount += 1;
     const generation = this.generation;
-    this.repository.getAnswer(item.answerId)
+    Promise.resolve().then((): Promise<Answer> => {
+      if (this.disposed || generation !== this.generation) { return Promise.reject(new Error('prefetch reset')); }
+      return this.repository.getAnswer(item.answerId);
+    })
       .then((answer: Answer): void => {
         if (this.disposed || generation !== this.generation) {
           item.resolve(undefined);
           return;
         }
+        if (answer.id !== item.answerId) { item.resolve(undefined); return; }
         this.store(answer);
         item.resolve(answer);
       })
@@ -119,6 +137,7 @@ export class AnswerDetailPrefetcher {
         item.resolve(undefined);
       })
       .then((): void => {
+        this.runningItem = undefined;
         this.busy = false;
         this.pump();
       });

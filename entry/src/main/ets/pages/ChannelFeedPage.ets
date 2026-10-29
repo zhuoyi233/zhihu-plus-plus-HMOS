@@ -1,3 +1,5 @@
+import { FeedThumbnail } from './components/FeedThumbnail';
+import { publishFeedScroll } from './FeedScrollOwnership';
 import {
   buildFeedFlowLayout,
   feedAnchorFlowIndex,
@@ -57,6 +59,8 @@ import {
   AppPageStatusPanel,
   FeedLoadMoreIndicator,
   FeedPullDownIndicatorHost,
+  FEED_DIVIDER_ITEM_HORIZONTAL_PADDING_VP,
+  feedTopContentInset,
   floatingTitleBarOffset,
   PULL_REFRESH_PULL_DOWN_RATIO,
   PULL_REFRESH_TRIGGER_OFFSET_VP,
@@ -314,9 +318,7 @@ export struct ChannelFeedPage {
           .id(`channel_${this.source}_list`)
           .width('100%')
           .onDidScroll((offset: number): void => {
-              if (offset !== 0) {
-                AppStorage.setOrCreate('bottomBarHiddenByScroll', offset > 0);
-              }
+              publishFeedScroll(this.source, offset);
             })
             // 记录手势起手时是否在顶部：从列表中间回滑到顶部后继续下拉的过冲
             // 也会被 Refresh 判成下拉刷新，需要据此区分。
@@ -566,21 +568,21 @@ export struct ChannelFeedPage {
         .width('100%')
         // 热榜条目是问题（接口只给 question，无作者）：不渲染作者行，避免「空头像 + 知乎用户」；
         // 统计改由 HotQuestionStatistics 呈现热度/回答/关注（对齐安卓上游问题卡的详情行）。
+        // 视频条目没有问答统计，退回卡片自带的赞同/评论行。
         FeedContentSummary({
           target: item.feedItem.target,
-          showStatistics: this.source !== ChannelFeedSource.HOT,
+          showStatistics: this.source !== ChannelFeedSource.HOT ||
+            item.feedItem.target.kind !== FeedTargetKind.QUESTION,
           showAuthor: this.source !== ChannelFeedSource.HOT,
           summaryMaxLines: this.feedColumns > 1 ? 2 : 3
         })
         if (this.showFeedThumbnail && (item.feedItem.target.thumbnailUrl ?? '').length > 0) {
-          Image(item.feedItem.target.thumbnailUrl)
+          FeedThumbnail({ url: item.feedItem.target.thumbnailUrl ?? '' })
             .width('100%')
             .height(128)
             .borderRadius($r('app.float.spacing_small'))
-            .objectFit(ImageFit.Cover)
-            .alt('内容缩略图')
         }
-        if (this.source === ChannelFeedSource.HOT) {
+        if (this.source === ChannelFeedSource.HOT && item.feedItem.target.kind === FeedTargetKind.QUESTION) {
           HotQuestionStatistics({ target: item.feedItem.target, repositoryFactory: this.questionRepositoryFactory })
         }
       }
@@ -589,7 +591,14 @@ export struct ChannelFeedPage {
     }
     .id(`channel_content_${item.feedItem.target.kind}_${item.feedItem.target.id}`)
     .width('100%')
-    .padding($r('app.float.card_padding'))
+    // 分割线样式与正文页两侧留白对齐（容器 page_padding + 这里的 8vp = 20vp）；
+    // 卡片样式保留 card_padding，卡面内需要内缩。
+    .padding({
+      left: this.usesCardSurface() ? $r('app.float.card_padding') : FEED_DIVIDER_ITEM_HORIZONTAL_PADDING_VP,
+      right: this.usesCardSurface() ? $r('app.float.card_padding') : FEED_DIVIDER_ITEM_HORIZONTAL_PADDING_VP,
+      top: $r('app.float.card_padding'),
+      bottom: $r('app.float.card_padding')
+    })
     .borderRadius(this.usesCardSurface() ? $r('app.float.card_radius') : 0)
     .backgroundColor(this.usesCardSurface() ? $r('app.color.surface_background') : Color.Transparent)
     // border 的 radius 优先级高于 borderRadius 属性（未指定时按 0 处理），
@@ -630,12 +639,10 @@ export struct ChannelFeedPage {
       if (this.feedColumns > 1) {
         Column({ space: $r('app.float.spacing_small') }) {
           if (this.showFeedThumbnail && item.story.imageUrl !== undefined && /^https:\/\/[^\s]+$/i.test(item.story.imageUrl)) {
-            Image(item.story.imageUrl)
+            FeedThumbnail({ url: item.story.imageUrl ?? '' })
               .width('100%')
               .aspectRatio(1.6)
               .borderRadius($r('app.float.spacing_small'))
-              .objectFit(ImageFit.Cover)
-              .alt('日报缩略图')
           } else {
             // 无缩略图（或偏好关闭）时的等比占位，维持整卡高度一致
             Column()
@@ -667,12 +674,10 @@ export struct ChannelFeedPage {
       } else {
         Row({ space: $r('app.float.spacing_medium') }) {
           if (this.showFeedThumbnail && item.story.imageUrl !== undefined && /^https:\/\/[^\s]+$/i.test(item.story.imageUrl)) {
-            Image(item.story.imageUrl)
+            FeedThumbnail({ url: item.story.imageUrl ?? '' })
               .width('28%')
               .aspectRatio(1)
               .borderRadius($r('app.float.spacing_small'))
-              .objectFit(ImageFit.Cover)
-              .alt('日报缩略图')
           }
           Column({ space: $r('app.float.spacing_small') }) {
             Text(item.story.title)
@@ -700,7 +705,14 @@ export struct ChannelFeedPage {
     }
     .id(`channel_daily_${item.story.id}`)
     .width('100%')
-    .padding($r('app.float.card_padding'))
+    // 分割线样式与正文页两侧留白对齐（容器 page_padding + 这里的 8vp = 20vp）；
+    // 卡片样式保留 card_padding，卡面内需要内缩。
+    .padding({
+      left: this.usesCardSurface() ? $r('app.float.card_padding') : FEED_DIVIDER_ITEM_HORIZONTAL_PADDING_VP,
+      right: this.usesCardSurface() ? $r('app.float.card_padding') : FEED_DIVIDER_ITEM_HORIZONTAL_PADDING_VP,
+      top: $r('app.float.card_padding'),
+      bottom: $r('app.float.card_padding')
+    })
     .borderRadius(this.usesCardSurface() ? $r('app.float.card_radius') : 0)
     .backgroundColor(this.usesCardSurface() ? $r('app.color.surface_background') : Color.Transparent)
     // border 的 radius 优先级高于 borderRadius 属性（未指定时按 0 处理），
@@ -912,10 +924,11 @@ export struct ChannelFeedPage {
   @Builder
   private flowRenderItem(renderItem: FeedRenderItem) {
     if (renderItem.kind === FeedRenderKind.TOP_SPACER) {
-      // 用真实条目让位，系统点状态栏回顶时也能保留悬浮标题栏空间。
+      // 用真实条目让位，系统点状态栏回顶时也能保留悬浮标题栏空间；
+      // 高度按信息流口径在标题栏下沿上浮一段，让首屏卡片贴近悬浮顶栏。
       Row()
         .width('100%')
-        .height(floatingTitleBarOffset())
+        .height(feedTopContentInset())
     } else if (renderItem.kind === FeedRenderKind.ERROR_BANNER) {
       this.channelErrorBanner()
     } else if (renderItem.kind === FeedRenderKind.TOP_CONTENT) {

@@ -45,6 +45,27 @@ export function floatingTitleBarOffset(): number {
   return Math.max(FLOATING_TITLE_BAR_OFFSET, statusBar + ROOT_TITLE_BAR_CONTENT_HEIGHT);
 }
 
+/**
+ * 信息流首屏让位的上浮量（vp）：标题栏自身的 56vp 里只有居中搜索胶囊，
+ * 整段都让给内容会让首屏卡片明显低于华为官方应用的信息流。上浮这一段后
+ * 首个条目贴住胶囊下沿，滚动穿透与回顶让位都不受影响。
+ */
+export const FEED_TOP_CONTENT_OVERLAP_VP: number = 10;
+
+/** 信息流首个内容条目的让位高度（vp）：标题栏下沿再上浮上一条的幅度。 */
+export function feedTopContentInset(): number {
+  return Math.max(ROOT_TITLE_BAR_CONTENT_HEIGHT,
+    floatingTitleBarOffset() - FEED_TOP_CONTENT_OVERLAP_VP);
+}
+
+/**
+ * 分割线模式信息流条目的左右内边距（vp）：信息流容器自身已有 page_padding（12vp），
+ * 这里补到 20vp，与详情页正文两侧留白（readerHorizontalPaddingVp）对齐——分割线样式
+ * 没有卡面，再按卡片的 card_padding 内缩会让两侧空白明显大于正文页。
+ * 卡片模式仍用 card_padding，保持卡面内的呼吸留白。
+ */
+export const FEED_DIVIDER_ITEM_HORIZONTAL_PADDING_VP: number = 8;
+
 /** 加载更多时给悬浮底栏及系统手势区留出空间，圆圈完整停在底栏上方。 */
 @Component
 export struct FeedLoadMoreIndicator {

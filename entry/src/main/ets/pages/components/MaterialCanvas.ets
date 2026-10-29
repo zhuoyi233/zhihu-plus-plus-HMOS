@@ -75,6 +75,7 @@ export function materialCanvas(widthVp: number, heightVp: number) {
 export struct GlassCapsule {
   @BuilderParam content: () => void = this.emptyContent;
   @Prop useMaterial: boolean = true;
+  onBoundsMeasured?: (area: Area) => void;
   @State private canvasWidth: number = 240;
   // 默认至少 48vp；大字体内容增高时同步增加玻璃画布高度与圆角。
   @State private canvasHeight: number = 48;
@@ -110,6 +111,7 @@ export struct GlassCapsule {
       .width(this.canvasWidth)
       .borderRadius(this.canvasHeight / 2)
       .clip(true)
+      .onAreaChange((_oldArea: Area, area: Area): void => { this.onBoundsMeasured?.(area); })
     } else {
       // 降级：组件模糊（不支持的设备上沉浸材质不可用）
       Row() {
@@ -118,6 +120,7 @@ export struct GlassCapsule {
       .padding({ left: 10, right: 10, top: 6, bottom: 6 })
       .borderRadius(24)
       .backgroundBlurStyle(BlurStyle.COMPONENT_ULTRA_THIN)
+      .onAreaChange((_oldArea: Area, area: Area): void => { this.onBoundsMeasured?.(area); })
     }
   }
 }

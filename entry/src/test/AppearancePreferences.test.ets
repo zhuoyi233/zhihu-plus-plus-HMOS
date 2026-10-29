@@ -15,6 +15,16 @@ import {
 
 export default function appearancePreferencesTest(): void {
   describe('appearancePreferencesTest', () => {
+    it('defaultsBothTitleOptionsOffAndKeepsThemIndependent', 0, () => {
+      const value = defaultExperiencePreferences();
+      expect(value.titleAutoHide).assertFalse(); expect(value.questionInTitleBar).assertFalse();
+      value.questionInTitleBar = true;
+      expect(normalizeExperiencePreferences(value).questionInTitleBar).assertTrue();
+      expect(normalizeExperiencePreferences(value).titleAutoHide).assertFalse();
+      value.questionInTitleBar = false; value.titleAutoHide = true;
+      expect(normalizeExperiencePreferences(value).questionInTitleBar).assertFalse();
+      expect(normalizeExperiencePreferences(value).titleAutoHide).assertTrue();
+    });
     it('normalizesFloatingButtonOpacity', 0, () => {
       expect(decodeFabOpacity('80')).assertEqual(100);
       expect(decodeFabOpacity(2)).assertEqual(10);
@@ -65,12 +75,15 @@ export default function appearancePreferencesTest(): void {
       raw.answerSwitchSensitivity = 9;
       raw.pageTurnPercent = 77;
       raw.shareActionMode = ShareActionMode.COPY;
+      raw.showHotComments = false;
       const value = normalizeExperiencePreferences(raw);
       expect(value.bottomBarItems).assertEqual('ReadHistory,Collections,Settings');
       expect(value.startDestination).assertEqual('ReadHistory');
       expect(value.answerSwitchSensitivity).assertEqual(3);
       expect(value.pageTurnPercent).assertEqual(75);
       expect(value.shareActionMode).assertEqual(ShareActionMode.COPY);
+      expect(defaultExperiencePreferences().showHotComments).assertTrue();
+      expect(value.showHotComments).assertFalse();
     });
   });
 }

@@ -27,7 +27,6 @@ import {
   contentStatistics,
   contentTitle,
   contentUpdatedAtText,
-  answerTitleFoldThreshold,
   formatContentDateTime
 } from '../main/ets/pages/ContentDetailPages';
 import { parseZhihuHtml, ReaderBlockKind, ReaderInlineKind } from 'reader';
@@ -85,6 +84,17 @@ class ControlledContentRepository implements ContentRepository {
 
   cancel(): void {
     this.cancelCount += 1;
+  }
+}
+
+class DeferredAnswerRepository extends ControlledContentRepository {
+  resolveAnswer?: (answer: Answer) => void;
+  getAnswer(id: string): Promise<Answer> {
+    if (id !== '3') { return super.getAnswer(id); }
+    return new Promise<Answer>((resolve: (answer: Answer) => void): void => { this.resolveAnswer = resolve; });
+  }
+  async finishAnswer(): Promise<void> {
+    this.resolveAnswer?.(await super.getAnswer('3'));
   }
 }
 
@@ -184,15 +194,53 @@ export default function contentDetailStateTest(): void {
       expect(controller.snapshot().content?.value.id).assertEqual('4');
       controller.deactivate();
     });
-    it('foldsAnswerTitleBarOnlyAfterHeaderIdentityScrollsOut', 0, () => {
-      // 折叠阈值必须覆盖「问题标题 + 答主行」：只按标题判定会让答主信息在正文仍可见时
-      // 就出现在顶栏，形成信息冗余（横向模式曾强制折叠，问题标题同样冗余）。
-      expect(answerTitleFoldThreshold(60, 0)).assertEqual(68);
-      expect(answerTitleFoldThreshold(60, 40)).assertEqual(60 + 18 + 40 + 8);
-      // 答主行未测得时退化到仅按标题判定；标题也未测得时用兜底阈值。
-      expect(answerTitleFoldThreshold(0, 40)).assertEqual(64);
-      expect(answerTitleFoldThreshold(0, 0)).assertEqual(64);
+    it('cancelledCandidateCannotCommitOrReplaceCurrent', 0, async () => {
+      const repository = new ControlledContentRepository();
+      const controller = new ContentDetailController(repository);
+      controller.activate();
+      await controller.load(ContentDetailKind.ANSWER, '2');
+      const original = controller.snapshot().content;
+      const candidate = await controller.prepareAnswer('3');
+      expect(candidate !== undefined).assertTrue();
+      if (candidate === undefined) { return; }
+      controller.cancelPreparedAnswer();
+      expect(controller.canCommitPreparedAnswer(candidate)).assertFalse();
+      expect(controller.commitPreparedAnswer(candidate)).assertFalse();
+      expect(controller.snapshot().content?.value.id).assertEqual('2');
+      expect(controller.snapshot().content?.loadGeneration).assertEqual(original?.loadGeneration);
+      controller.deactivate();
     });
+
+    it('cancelledCachedCandidateDoesNotCancelAnotherPageRequest', 0, async () => {
+      const repository = new DeferredAnswerRepository();
+      const previous = new ContentDetailController(repository);
+      const next = new ContentDetailController(repository);
+      previous.activate(); next.activate();
+      await previous.load(ContentDetailKind.ANSWER, '1');
+      const opening = next.load(ContentDetailKind.ANSWER, '3');
+      const cached = answerFixture(); cached.id = '2';
+      previous.admitAnswer(cached);
+      previous.cancelPreparedAnswer(); previous.deactivate();
+      expect(repository.cancelCount).assertEqual(0);
+      await repository.finishAnswer(); await opening;
+      expect(next.snapshot().content?.value.id).assertEqual('3');
+      expect(next.snapshot().phase).assertEqual(ContentDetailPhase.READY);
+      next.deactivate();
+    });
+
+    it('cancelsOwnPreparationRequestAndRejectsItsLateResult', 0, async () => {
+      const repository = new DeferredAnswerRepository();
+      const controller = new ContentDetailController(repository);
+      controller.activate(); await controller.load(ContentDetailKind.ANSWER, '1');
+      const preparing = controller.prepareAnswer('3');
+      controller.cancelPreparedAnswer();
+      expect(repository.cancelCount).assertEqual(1);
+      await repository.finishAnswer();
+      expect(await preparing === undefined).assertTrue();
+      expect(controller.snapshot().content?.value.id).assertEqual('1');
+      controller.deactivate();
+    });
+
     it('acceptsNewDocumentEdgesWhileRejectingDepartedDocumentEvents', 0, () => {
       const oldDetail: LoadedAnswerDetail = { kind: ContentDetailKind.ANSWER, value: answerFixture(), loadGeneration: 1 };
       const newDetail: LoadedAnswerDetail = { kind: ContentDetailKind.ANSWER, value: answerFixture(), loadGeneration: 2 };

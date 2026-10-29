@@ -1,3 +1,5 @@
+import { FeedThumbnail } from './components/FeedThumbnail';
+import { publishFeedScroll } from './FeedScrollOwnership';
 import {
   buildFeedFlowLayout,
   feedAnchorFlowIndex,
@@ -44,6 +46,8 @@ import {
   AppPageStatusPanel,
   FeedLoadMoreIndicator,
   FeedPullDownIndicatorHost,
+  FEED_DIVIDER_ITEM_HORIZONTAL_PADDING_VP,
+  feedTopContentInset,
   floatingTitleBarOffset,
   PULL_REFRESH_PULL_DOWN_RATIO,
   PULL_REFRESH_TRIGGER_OFFSET_VP,
@@ -265,9 +269,7 @@ export struct HomeFeedPage {
             .id('home_feed_list')
             .width('100%')
             .onDidScroll((offset: number): void => {
-              if (offset !== 0) {
-                AppStorage.setOrCreate('bottomBarHiddenByScroll', offset > 0);
-              }
+              publishFeedScroll(HOME_FEED_SCROLL_KEY, offset);
             })
             // 记录手势起手时是否在顶部：从列表中间回滑到顶部后继续下拉的过冲
             // 也会被 Refresh 判成下拉刷新，需要据此区分。
@@ -371,10 +373,11 @@ export struct HomeFeedPage {
   @Builder
   private flowRenderItem(renderItem: FeedRenderItem) {
     if (renderItem.kind === FeedRenderKind.TOP_SPACER) {
-      // 用真实条目让位，系统点状态栏回顶时也能保留悬浮标题栏空间。
+      // 用真实条目让位，系统点状态栏回顶时也能保留悬浮标题栏空间；
+      // 高度按信息流口径在标题栏下沿上浮一段，让首屏卡片贴近搜索胶囊。
       Row()
         .width('100%')
-        .height(floatingTitleBarOffset())
+        .height(feedTopContentInset())
     } else if (renderItem.kind === FeedRenderKind.ERROR_BANNER) {
       this.recoverableErrorBanner()
     } else if (renderItem.kind === FeedRenderKind.UPDATE_ANNOUNCEMENT) {
@@ -526,7 +529,14 @@ export struct HomeFeedPage {
     }
     .id(`home_feed_card_${item.target.kind}_${item.target.id}`)
     .width('100%')
-    .padding($r('app.float.card_padding'))
+    // 分割线样式与正文页两侧留白对齐（容器 page_padding + 这里的 8vp = 20vp）；
+    // 卡片样式保留 card_padding，卡面内需要内缩。
+    .padding({
+      left: this.usesCardSurface() ? $r('app.float.card_padding') : FEED_DIVIDER_ITEM_HORIZONTAL_PADDING_VP,
+      right: this.usesCardSurface() ? $r('app.float.card_padding') : FEED_DIVIDER_ITEM_HORIZONTAL_PADDING_VP,
+      top: $r('app.float.card_padding'),
+      bottom: $r('app.float.card_padding')
+    })
     .borderRadius(this.usesCardSurface() ? $r('app.float.card_radius') : 0)
     .backgroundColor(this.usesCardSurface() ? $r('app.color.surface_background') : Color.Transparent)
     // border 的 radius 优先级高于 borderRadius 属性（未指定时按 0 处理），
@@ -566,15 +576,26 @@ export struct HomeFeedPage {
     .accessibilityText('更多选项')
   }
 
+  /** 卡片是否带图片/视频封面（受“显示信息流缩略图”开关控制）。 */
+  private hasFeedThumbnail(item: FeedItem): boolean {
+    return this.showFeedThumbnail && (item.target.thumbnailUrl ?? '').length > 0;
+  }
+
+  /** 摘要行数：带图时让右侧文字按左侧大图高度铺满，避免文字只占一小块留下大片空白。 */
+  private feedExcerptMaxLines(hasThumbnail: boolean): number {
+    if (hasThumbnail) {
+      return this.feedColumns > 2 ? 4 : 6;
+    }
+    return this.feedColumns > 1 ? 2 : 3;
+  }
+
   @Builder
   private feedCardContent(item: FeedItem) {
-    // 对齐上游 FeedCard 标准排版：标题 → 头像与昵称 → 摘要（3 行截断）→ 缩略图 → 页脚。
+    // 标题完整展示：不截断、不限行数，长问题换行后卡片高度自然增长（瀑布流不强行对齐行）。
     Text(item.target.title)
       .fontSize($r('app.float.heading_font_size'))
       .fontWeight(FontWeight.Medium)
       .fontColor($r('app.color.primary_text'))
-      .maxLines(2)
-      .textOverflow({ overflow: TextOverflow.Ellipsis })
       .width('100%')
 
     if (item.target.author !== undefined) {
@@ -595,14 +616,22 @@ export struct HomeFeedPage {
       .alignItems(VerticalAlign.Center)
     }
 
+    // 图片/视频封面改为左侧大图，摘要与推荐语排在右侧（对齐需求示意）。
     Row({ space: $r('app.float.spacing_small') }) {
+      if (this.hasFeedThumbnail(item)) {
+        FeedThumbnail({ url: item.target.thumbnailUrl ?? '' })
+          .width('42%')
+          .aspectRatio(1)
+          .constraintSize({ maxHeight: 150 })
+          .borderRadius($r('app.float.spacing_small'))
+      }
       Column({ space: $r('app.float.spacing_xsmall') }) {
         if (item.target.excerpt.trim().length > 0) {
           Text(item.target.excerpt)
             .fontSize($r('app.float.body_font_size'))
             .fontColor($r('app.color.secondary_text'))
-            // 多列卡宽收窄，摘要由三行收至两行；单列保持现有行为
-            .maxLines(this.feedColumns > 1 ? 2 : 3)
+            // 多列卡宽收窄，摘要由三行收至两行；带图时按左侧大图高度铺满。
+            .maxLines(this.feedExcerptMaxLines(this.hasFeedThumbnail(item)))
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%')
         }
@@ -617,19 +646,10 @@ export struct HomeFeedPage {
         }
       }
       .alignItems(HorizontalAlign.Start)
-      .layoutWeight(2)
-
-      if (this.showFeedThumbnail && (item.target.thumbnailUrl ?? '').length > 0) {
-        Image(item.target.thumbnailUrl)
-          .width(60)
-          .height(60)
-          .borderRadius($r('app.float.spacing_small'))
-          .objectFit(ImageFit.Cover)
-          .alt('内容缩略图')
-      }
+      .layoutWeight(1)
     }
     .width('100%')
-    .alignItems(VerticalAlign.Center)
+    .alignItems(VerticalAlign.Top)
   }
 
   private async openFeedItem(item: FeedItem): Promise<void> {

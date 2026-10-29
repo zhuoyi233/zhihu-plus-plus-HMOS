@@ -2,8 +2,11 @@ import { display } from '@kit.ArkUI';
 import { ReaderBlock, ReaderBlockKind } from './ReaderDocument';
 import { ImageDisplaySize, computeImageDisplaySize } from './ReaderImageSizing';
 
-/** 加载完成前的占位宽高比（加载后按源图比例覆盖）。 */
+/** 加载完成前的占位比例，解码后使用源图比例。 */
 const IMAGE_PLACEHOLDER_ASPECT_RATIO = 4 / 3;
+
+/** 原生点击按位移过滤拖动；不限制合法按住时间，保留鼠标、键盘与无障碍点击语义。 */
+const IMAGE_TAP_SLOP_VP = 12;
 
 /** 屏幕视口（vp）与密度：像素原大小折算 vp、屏幕占比计算共用。 */
 interface ScreenViewport {
@@ -48,24 +51,6 @@ export struct ReaderImageBlock {
   private naturalPixelSize: ImageDisplaySize = { width: 0, height: 0 };
   /** 正文容器可用宽度（vp）：显示宽度上限，避免超出排版宽度溢出。 */
   private availableWidthVp: number = 0;
-  private imageTouchX: number = 0;
-  private imageTouchY: number = 0;
-  private imageTouchMoved: boolean = false;
-
-  private trackImageTouch(event: TouchEvent): void {
-    const touch = event.touches[0];
-    if (event.type === TouchType.Down && touch !== undefined) {
-      this.imageTouchX = touch.windowX;
-      this.imageTouchY = touch.windowY;
-      this.imageTouchMoved = false;
-    } else if (event.type === TouchType.Move && touch !== undefined &&
-      (Math.abs(touch.windowX - this.imageTouchX) > 8 || Math.abs(touch.windowY - this.imageTouchY) > 8)) {
-      this.imageTouchMoved = true;
-    } else if (event.type === TouchType.Cancel) {
-      this.imageTouchMoved = true;
-    }
-  }
-
   private imageSource(): string {
     if (this.retryRevision === 0) {
       return this.item.sourceUrl;
@@ -117,13 +102,11 @@ export struct ReaderImageBlock {
         .onError(() => {
           this.failed = true;
         })
-        .onTouch((event: TouchEvent): void => { this.trackImageTouch(event); })
-        .onClick(() => {
-          if (!this.failed && !this.imageTouchMoved) {
-            this.onPreview(this.item.sourceUrl);
-          }
-          this.imageTouchMoved = false;
-        })
+        .focusable(true)
+        .accessibilityText(this.item.text.length > 0 ? this.item.text : '查看正文图片')
+        .onClick((): void => {
+          if (!this.failed) { this.onPreview(this.item.sourceUrl); }
+        }, IMAGE_TAP_SLOP_VP)
 
       if (this.item.text.length > 0) {
         Text(this.item.text)
@@ -144,6 +127,8 @@ export struct ReaderImageBlock {
             .fontColor(this.secondaryTextColor)
           Button('重试')
             .id(`reader_image_retry_${this.item.id}`)
+            .backgroundColor(Color.Transparent)
+            .fontColor(this.secondaryTextColor)
             .onClick(() => {
               this.failed = false;
               this.retryRevision += 1;
