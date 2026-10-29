@@ -10,6 +10,10 @@ import notification from '@ohos.notification';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { settingsGroupBackground, settingsGroupRadius } from './AccountSettingsLayout';
+import { SettingsHighlightGroup } from '../components/SettingsSearchHighlight';
+import { SettingsSearchLocationRunner } from './SettingsSearchLocationRunner';
+import { readLocationRequest, SettingsPaneId, SettingsSearchLocationRequest } from './SettingsSearchTarget';
+
 
 interface PopupStateChange {
   isVisible: boolean;
@@ -269,8 +273,47 @@ export struct SystemUpdateSettingsPage {
     }
   }
 
+  /** 搜索定位：本页滚动容器执行器与请求 tick 监听。 */
+  private scroller: Scroller = new Scroller();
+  private locator: SettingsSearchLocationRunner | undefined = undefined;
+  @StorageProp('settingsSearchLocationTick') @Watch('onSearchLocationRequest')
+  private searchLocationTick: number = 0;
+
+  private onSearchLocationRequest(): void {
+    this.consumeSearchLocation();
+  }
+
+
+  /** 消费定位请求：仅嵌入设置实例且目标为本页时执行滚动与提醒。 */
+  private consumeSearchLocation(): void {
+    const request = readLocationRequest();
+    if (request === undefined || request.paneId !== SettingsPaneId.SYSTEM_UPDATE || !this.embedded) {
+      return;
+    }
+    this.locator?.cancel(false);
+    this.locator = new SettingsSearchLocationRunner({
+      getUIContext: (): UIContext => this.getUIContext(),
+      isEmbedded: (): boolean => this.embedded,
+      isReady: (): boolean => true,
+      getScroller: (): Scroller => this.scroller,
+      scrollId: 'system_update_scroll',
+      contentId: 'system_update_content',
+      desiredTop: (): number => floatingTitleBarOffset() + 12,
+      onFailed: (): void => this.getUIContext().getPromptAction().showToast({
+        message: '暂时无法定位，请稍后重试', duration: 2000
+      }),
+      onFallback: (): void => this.getUIContext().getPromptAction().showToast({
+        message: '该项当前被隐藏，已定位到前置开关', duration: 2000
+      })
+    });
+    this.locator.consume(request);
+  }
+  aboutToAppear(): void {
+    this.consumeSearchLocation();
+  }
+
   build() {
-    Scroll() {
+    Scroll(this.scroller) {
       Column({ space: 18 }) {
         Column({ space: 12 }) {
           Row() {
@@ -381,13 +424,20 @@ export struct SystemUpdateSettingsPage {
           .backgroundColor(settingsGroupBackground(this.feedCardStyle))
           .onClick((): void => this.onOpenProject())
       }
+      .id('system_update_content')
       .width('100%')
       .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
         top: this.embedded ? 12 : 81, bottom: 40 })
     }
     .align(Alignment.TopStart)
     .contentStartOffset(this.embedded ? floatingTitleBarOffset() : 0)
-    .id('system_update_scroll').width('100%').height('100%').scrollBar(BarState.Off)
+    .id('system_update_scroll')
+      .onScrollStart((): void => {
+        this.locator?.onScrollStarted();
+      })
+      .onScrollStop((): void => {
+        this.locator?.onScrollStopped();
+      }).width('100%').height('100%').scrollBar(BarState.Off)
     .backgroundColor($r('app.color.page_background'))
     .bindPopup(this.selectedSource !== undefined, {
       builder: () => { this.sourcePopup() },

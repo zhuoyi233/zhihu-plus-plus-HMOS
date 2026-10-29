@@ -14,6 +14,9 @@ import { common } from '@kit.AbilityKit';
 import { deviceInfo } from '@kit.BasicServicesKit';
 import notificationManager from '@ohos.notificationManager';
 import { settingsGroupBackground, settingsGroupRadius } from './AccountSettingsLayout';
+import { SettingsHighlightGroup } from '../components/SettingsSearchHighlight';
+import { SettingsSearchLocationRunner } from './SettingsSearchLocationRunner';
+import { readLocationRequest, SettingsPaneId, SettingsSearchLocationRequest } from './SettingsSearchTarget';
 
 @Component
 export struct NotificationSettingsPage {
@@ -34,6 +37,11 @@ export struct NotificationSettingsPage {
   @State private systemNotificationSettingsOpening: boolean = false;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   @StorageProp('feedCardStyle') private feedCardStyle: string = FeedCardStyle.DIVIDER;
+  /** 搜索定位：本页滚动容器执行器与请求 tick 监听。 */
+  private scroller: Scroller = new Scroller();
+  private locator: SettingsSearchLocationRunner | undefined = undefined;
+  @StorageProp('settingsSearchLocationTick') @Watch('onSearchLocationRequest')
+  private searchLocationTick: number = 0;
 
   aboutToAppear(): void {
     this.refreshSystemNotificationStatus();
@@ -50,10 +58,45 @@ export struct NotificationSettingsPage {
       this.loaded = true;
       this.saveStatus = '读取通知设置失败，显示默认值';
     });
+    this.consumeSearchLocation();
+  }
+
+  aboutToDisappear(): void {
+    this.locator?.cancel(false);
+    this.locator = undefined;
+  }
+
+  private onSearchLocationRequest(): void {
+    this.consumeSearchLocation();
+  }
+
+  /** 消费定位请求：等待 loaded 后定位到具体通知设置行。 */
+  private consumeSearchLocation(): void {
+    const request = readLocationRequest();
+    if (request === undefined || request.paneId !== SettingsPaneId.NOTIFICATION || !this.embedded) {
+      return;
+    }
+    this.locator?.cancel(false);
+    this.locator = new SettingsSearchLocationRunner({
+      getUIContext: (): UIContext => this.getUIContext(),
+      isEmbedded: (): boolean => this.embedded,
+      isReady: (): boolean => this.loaded,
+      getScroller: (): Scroller => this.scroller,
+      scrollId: 'notifications_settings_page',
+      contentId: 'notifications_settings_content',
+      desiredTop: (): number => floatingTitleBarOffset() + 12,
+      onFailed: (): void => this.getUIContext().getPromptAction().showToast({
+        message: '暂时无法定位，请稍后重试', duration: 2000
+      }),
+      onFallback: (): void => this.getUIContext().getPromptAction().showToast({
+        message: '该项当前被隐藏，已定位到前置开关', duration: 2000
+      })
+    });
+    this.locator.consume(request);
   }
 
   build() {
-    Scroll() {
+    Scroll(this.scroller) {
       Column({ space: $r('app.float.spacing_medium') }) {
         if (this.saveStatus.length > 0) {
           Text(this.saveStatus)
@@ -63,95 +106,102 @@ export struct NotificationSettingsPage {
             .width('100%')
         }
 
-        Column({ space: $r('app.float.spacing_small') }) {
-          Text('阅读行为')
-            .fontSize($r('app.float.heading_font_size'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.primary_text'))
-          this.settingRow(
-            '打开通知自动已读',
-            '进入通知页后自动把当前批次标记为已读',
-            this.preferences.autoMarkAsRead,
-            'notifications_settings_auto_read',
-            (checked: boolean): void => {
-              this.updatePreferences(withAutoMarkAsRead(this.preferences, checked));
-            }
-          )
-          this.settingRow(
-            '显示未读红点',
-            '在通知分类上显示未读数量',
-            this.preferences.unreadBadge,
-            'notifications_settings_unread_badge',
-            (checked: boolean): void => {
-              this.updatePreferences(withUnreadBadge(this.preferences, checked));
-            }
-          )
-        }
-        .alignItems(HorizontalAlign.Start)
-        .width('100%')
-        .padding($r('app.float.card_padding'))
-        .borderRadius(settingsGroupRadius(this.feedCardStyle))
-        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
-
-        Column({ space: $r('app.float.spacing_small') }) {
-          Text('系统通知')
-            .fontSize($r('app.float.heading_font_size'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.primary_text'))
-          Text('通知授权和提醒方式由 HarmonyOS 在应用级统一管理，不按消息类型复制 Android 通知渠道。')
-            .fontSize($r('app.float.caption_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .width('100%')
-          Text(this.systemNotificationStatus)
-            .id('notifications_settings_system_status')
-            .fontSize($r('app.float.secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .width('100%')
-          Button(this.systemNotificationSettingsOpening ? '正在打开系统通知设置…' : '管理系统通知')
-            .id('notifications_settings_system_open')
-            .width('100%')
-            .fontSize($r('app.float.body_font_size'))
-            .fontColor(onThemeColor(this.resolvedThemeColor))
-            .backgroundColor(this.resolvedThemeColor)
-            .enabled(!this.systemNotificationSettingsOpening)
-            .onClick((): void => {
-              this.openSystemNotificationSettings();
-            })
-        }
-        .alignItems(HorizontalAlign.Start)
-        .width('100%')
-        .padding($r('app.float.card_padding'))
-        .borderRadius(settingsGroupRadius(this.feedCardStyle))
-        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
-
-        Column({ space: $r('app.float.spacing_small') }) {
-          Text('应用内显示')
-            .fontSize($r('app.float.heading_font_size'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.primary_text'))
-          Text('选择在通知页面显示哪些通知；默认策略与上游一致（邀请回答默认关闭）')
-            .fontSize($r('app.float.caption_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .width('100%')
-          ForEach(NOTIFICATION_KINDS, (kind: NotificationKind) => {
+        SettingsHighlightGroup({ groupId: 'notifications_group_behavior' }) {
+          Column({ space: $r('app.float.spacing_small') }) {
+            Text('阅读行为')
+              .fontSize($r('app.float.heading_font_size'))
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.primary_text'))
             this.settingRow(
-              notificationKindInfo(kind).displayName,
-              '',
-              this.displayEnabled(kind),
-              `notifications_settings_display_${kind}`,
+              '打开通知自动已读',
+              '进入通知页后自动把当前批次标记为已读',
+              this.preferences.autoMarkAsRead,
+              'notifications_settings_auto_read',
               (checked: boolean): void => {
-                this.updatePreferences(this.withDisplay(kind, checked));
+                this.updatePreferences(withAutoMarkAsRead(this.preferences, checked));
               }
             )
-          }, (kind: NotificationKind): string => kind)
+            this.settingRow(
+              '显示未读红点',
+              '在通知分类上显示未读数量',
+              this.preferences.unreadBadge,
+              'notifications_settings_unread_badge',
+              (checked: boolean): void => {
+                this.updatePreferences(withUnreadBadge(this.preferences, checked));
+              }
+            )
+          }
+          .alignItems(HorizontalAlign.Start)
+          .width('100%')
+          .padding($r('app.float.card_padding'))
+          .borderRadius(settingsGroupRadius(this.feedCardStyle))
+          .backgroundColor(settingsGroupBackground(this.feedCardStyle))
         }
-        .alignItems(HorizontalAlign.Start)
-        .width('100%')
-        .padding($r('app.float.card_padding'))
-        .borderRadius(settingsGroupRadius(this.feedCardStyle))
-        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
+
+        SettingsHighlightGroup({ groupId: 'notifications_group_system' }) {
+          Column({ space: $r('app.float.spacing_small') }) {
+            Text('系统通知')
+              .fontSize($r('app.float.heading_font_size'))
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.primary_text'))
+            Text('通知授权和提醒方式由 HarmonyOS 在应用级统一管理，不按消息类型复制 Android 通知渠道。')
+              .fontSize($r('app.float.caption_font_size'))
+              .fontColor($r('app.color.secondary_text'))
+              .width('100%')
+            Text(this.systemNotificationStatus)
+              .id('notifications_settings_system_status')
+              .fontSize($r('app.float.secondary_font_size'))
+              .fontColor($r('app.color.secondary_text'))
+              .width('100%')
+            Button(this.systemNotificationSettingsOpening ? '正在打开系统通知设置…' : '管理系统通知')
+              .id('notifications_settings_system_open')
+              .width('100%')
+              .fontSize($r('app.float.body_font_size'))
+              .fontColor(onThemeColor(this.resolvedThemeColor))
+              .backgroundColor(this.resolvedThemeColor)
+              .enabled(!this.systemNotificationSettingsOpening)
+              .onClick((): void => {
+                this.openSystemNotificationSettings();
+              })
+          }
+          .alignItems(HorizontalAlign.Start)
+          .width('100%')
+          .padding($r('app.float.card_padding'))
+          .borderRadius(settingsGroupRadius(this.feedCardStyle))
+          .backgroundColor(settingsGroupBackground(this.feedCardStyle))
+        }
+
+        SettingsHighlightGroup({ groupId: 'notifications_group_display' }) {
+          Column({ space: $r('app.float.spacing_small') }) {
+            Text('应用内显示')
+              .fontSize($r('app.float.heading_font_size'))
+              .fontWeight(FontWeight.Medium)
+              .fontColor($r('app.color.primary_text'))
+            Text('选择在通知页面显示哪些通知；默认策略与上游一致（邀请回答默认关闭）')
+              .fontSize($r('app.float.caption_font_size'))
+              .fontColor($r('app.color.secondary_text'))
+              .width('100%')
+            ForEach(NOTIFICATION_KINDS, (kind: NotificationKind) => {
+              this.settingRow(
+                notificationKindInfo(kind).displayName,
+                '',
+                this.displayEnabled(kind),
+                `notifications_settings_display_${kind}`,
+                (checked: boolean): void => {
+                  this.updatePreferences(this.withDisplay(kind, checked));
+                }
+              )
+            }, (kind: NotificationKind): string => kind)
+          }
+          .alignItems(HorizontalAlign.Start)
+          .width('100%')
+          .padding($r('app.float.card_padding'))
+          .borderRadius(settingsGroupRadius(this.feedCardStyle))
+          .backgroundColor(settingsGroupBackground(this.feedCardStyle))
+        }
       }
       .width('100%')
+      .id('notifications_settings_content')
       .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
         top: this.embedded ? 12 : 94, bottom: $r('app.float.page_padding') })
     }
@@ -162,6 +212,12 @@ export struct NotificationSettingsPage {
     .height('100%')
     .scrollBar(BarState.Off)
     .backgroundColor($r('app.color.page_background'))
+    .onScrollStart((): void => {
+      this.locator?.onScrollStarted();
+    })
+    .onScrollStop((): void => {
+      this.locator?.onScrollStopped();
+    })
   }
 
   @Builder

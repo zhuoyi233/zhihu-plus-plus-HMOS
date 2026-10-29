@@ -143,60 +143,64 @@ export struct ContentFilterSettingsPage {
         }
         if (this.loaded) {
         this.sectionTitle('推荐来源')
+        SettingsHighlightGroup({ groupId: 'filter_group_source' }) {
         Column() {
-          this.recommendationModeSetting()
-          Divider().color($r('app.color.divider_color'))
-          this.switchSetting('推荐内容时登录', '获取推荐内容时携带登录凭证', this.filter.loginForRecommendation,
-            true, 'filter_login_recommendation', (value: boolean): void =>
-              this.updateFilterBoolean('loginForRecommendation', value))
-          Divider().color($r('app.color.divider_color'))
-          this.switchSetting('启动时自动刷新首页', '关闭后优先显示上次获取的一批首页推荐；没有缓存时仍会加载新推荐',
-            this.filter.autoRefreshHomeOnStartup, true, 'filter_auto_refresh_startup', (value: boolean): void =>
-              this.updateFilterBoolean('autoRefreshHomeOnStartup', value))
+            this.recommendationModeSetting()
+            Divider().color($r('app.color.divider_color'))
+            this.switchSetting('推荐内容时登录', '获取推荐内容时携带登录凭证', this.filter.loginForRecommendation,
+              true, 'filter_login_recommendation', (value: boolean): void =>
+                this.updateFilterBoolean('loginForRecommendation', value))
+            Divider().color($r('app.color.divider_color'))
+            this.switchSetting('启动时自动刷新首页', '关闭后优先显示上次获取的一批首页推荐；没有缓存时仍会加载新推荐',
+              this.filter.autoRefreshHomeOnStartup, true, 'filter_auto_refresh_startup', (value: boolean): void =>
+                this.updateFilterBoolean('autoRefreshHomeOnStartup', value))
+          }
+          .width('100%')
+          .borderRadius(settingsGroupRadius(this.feedCardStyle))
+          .backgroundColor(settingsGroupBackground(this.feedCardStyle))
         }
-        .width('100%')
-        .borderRadius(settingsGroupRadius(this.feedCardStyle))
-        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.sectionTitle('内容质量')
+        SettingsHighlightGroup({ groupId: 'filter_group_quality' }) {
         Column() {
-          this.qualityModeSetting()
-          Divider().color($r('app.color.divider_color'))
-          this.thresholdSetting('回答最低赞数', '低于此赞同数的未关注作者回答会被过滤',
-            'answerVoteupThreshold', true, 'filter_answer_vote_threshold')
-          Divider().color($r('app.color.divider_color'))
-          this.thresholdSetting('文章最低赞数', '低于此赞数或作者粉丝低于对应阈值的文章会被过滤',
-            'articleVoteupThreshold', true, 'filter_article_vote_threshold')
-          Divider().color($r('app.color.divider_color'))
-          // 按分支重建入口，避免 @Builder 的描述参数固化在首次渲染值。
-          if (this.advancedThresholdsExpanded) {
-            this.navigationSetting('其他质量过滤阈值', '文章粉丝数、视频和问题规则 · 收起',
-              'filter_advanced_thresholds', (): void => { this.advancedThresholdsExpanded = false; })
-          } else {
-            this.navigationSetting('其他质量过滤阈值', '文章粉丝数、视频和问题规则 · 展开',
-              'filter_advanced_thresholds', (): void => { this.advancedThresholdsExpanded = true; })
+            this.qualityModeSetting()
+            Divider().color($r('app.color.divider_color'))
+            this.thresholdSetting('回答最低赞数', '低于此赞同数的未关注作者回答会被过滤',
+              'answerVoteupThreshold', true, 'filter_answer_vote_threshold')
+            Divider().color($r('app.color.divider_color'))
+            this.thresholdSetting('文章最低赞数', '低于此赞数或作者粉丝低于对应阈值的文章会被过滤',
+              'articleVoteupThreshold', true, 'filter_article_vote_threshold')
+            Divider().color($r('app.color.divider_color'))
+            // 按分支重建入口，避免 @Builder 的描述参数固化在首次渲染值。
+            if (this.advancedThresholdsExpanded) {
+              this.navigationSetting('其他质量过滤阈值', '文章粉丝数、视频和问题规则 · 收起',
+                'filter_advanced_thresholds', (): void => { this.advancedThresholdsExpanded = false; })
+            } else {
+              this.navigationSetting('其他质量过滤阈值', '文章粉丝数、视频和问题规则 · 展开',
+                'filter_advanced_thresholds', (): void => { this.advancedThresholdsExpanded = true; })
+            }
+            if (this.advancedThresholdsExpanded) {
+              Divider().color($r('app.color.divider_color'))
+              this.thresholdSetting('文章最低粉丝数', '文章作者粉丝数低于此值时应用质量过滤',
+                'articleFollowersThreshold', true, 'filter_article_follower_threshold')
+              Divider().color($r('app.color.divider_color'))
+              this.thresholdSetting('视频最低赞数', '视频赞同数低于此值时应用质量过滤',
+                'videoVoteThreshold', true, 'filter_video_vote_threshold')
+              Divider().color($r('app.color.divider_color'))
+              this.thresholdSetting('视频最低粉丝数', '视频作者粉丝数低于此值时应用质量过滤',
+                'videoFollowersThreshold', true, 'filter_video_follower_threshold')
+              Divider().color($r('app.color.divider_color'))
+              this.thresholdSetting('问题最低回答数', '问题回答数低于此值时应用质量过滤',
+                'questionAnswerThreshold', true, 'filter_question_answer_threshold')
+              Divider().color($r('app.color.divider_color'))
+              this.thresholdSetting('问题最低关注数', '问题关注数低于此值时应用质量过滤',
+                'questionFollowersThreshold', true, 'filter_question_follower_threshold')
+            }
           }
-          if (this.advancedThresholdsExpanded) {
-            Divider().color($r('app.color.divider_color'))
-            this.thresholdSetting('文章最低粉丝数', '文章作者粉丝数低于此值时应用质量过滤',
-              'articleFollowersThreshold', true, 'filter_article_follower_threshold')
-            Divider().color($r('app.color.divider_color'))
-            this.thresholdSetting('视频最低赞数', '视频赞同数低于此值时应用质量过滤',
-              'videoVoteThreshold', true, 'filter_video_vote_threshold')
-            Divider().color($r('app.color.divider_color'))
-            this.thresholdSetting('视频最低粉丝数', '视频作者粉丝数低于此值时应用质量过滤',
-              'videoFollowersThreshold', true, 'filter_video_follower_threshold')
-            Divider().color($r('app.color.divider_color'))
-            this.thresholdSetting('问题最低回答数', '问题回答数低于此值时应用质量过滤',
-              'questionAnswerThreshold', true, 'filter_question_answer_threshold')
-            Divider().color($r('app.color.divider_color'))
-            this.thresholdSetting('问题最低关注数', '问题关注数低于此值时应用质量过滤',
-              'questionFollowersThreshold', true, 'filter_question_follower_threshold')
-          }
+          .width('100%')
+          .borderRadius(settingsGroupRadius(this.feedCardStyle))
+          .backgroundColor(settingsGroupBackground(this.feedCardStyle))
         }
-        .width('100%')
-        .borderRadius(settingsGroupRadius(this.feedCardStyle))
-        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.sectionTitle('智能与规则过滤')
         SettingsHighlightGroup({ groupId: 'filter_group_rules' }) {
@@ -284,22 +288,24 @@ export struct ContentFilterSettingsPage {
         }
 
         this.sectionTitle('管理与统计')
+        SettingsHighlightGroup({ groupId: 'filter_group_manage' }) {
         Column() {
-          this.navigationSetting('内容屏蔽', '关键词、用户和主题精确规则', 'filter_open_blocklist',
-            this.onOpenBlocklist)
-          Divider().color($r('app.color.divider_color'))
-          this.navigationSetting('屏蔽记录', '查看最近被过滤或手动隐藏的内容', 'filter_open_history',
-            this.onOpenBlockedHistory)
-          if (this.filter.enableContentFilter) {
+            this.navigationSetting('内容屏蔽', '关键词、用户和主题精确规则', 'filter_open_blocklist',
+              this.onOpenBlocklist)
             Divider().color($r('app.color.divider_color'))
-            this.navigationSetting('过滤统计', '查看当前保留记录的过滤率，并清理或重置数据', 'filter_statistics', (): void => {
-              void this.openStats();
-            })
+            this.navigationSetting('屏蔽记录', '查看最近被过滤或手动隐藏的内容', 'filter_open_history',
+              this.onOpenBlockedHistory)
+            if (this.filter.enableContentFilter) {
+              Divider().color($r('app.color.divider_color'))
+              this.navigationSetting('过滤统计', '查看当前保留记录的过滤率，并清理或重置数据', 'filter_statistics', (): void => {
+                void this.openStats();
+              })
+            }
           }
+          .width('100%')
+          .borderRadius(settingsGroupRadius(this.feedCardStyle))
+          .backgroundColor(settingsGroupBackground(this.feedCardStyle))
         }
-        .width('100%')
-        .borderRadius(settingsGroupRadius(this.feedCardStyle))
-        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
         }
       }
       .width('100%')

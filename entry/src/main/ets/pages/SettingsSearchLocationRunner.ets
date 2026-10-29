@@ -212,7 +212,11 @@ export class SettingsSearchLocationRunner {
       this.schedulePoll();
       return;
     }
-    const current: number = this.hooks.getScroller().currentOffset().yOffset;
+    const scroller: Scroller = this.hooks.getScroller();
+    const offset = scroller.currentOffset();
+    // Scroller 未绑定到 Scroll（页面装配遗漏）时 currentOffset 返回 undefined：
+    // 按零偏移降级处理，避免空指针直接崩溃。
+    const current: number = offset === undefined ? 0 : Number(offset.yOffset) || 0;
     const anchorContentY: number = (anchorWindowY - scrollRect.windowY) + current;
     const plan = computeScrollPlan(anchorContentY, current, scrollRect.height, contentRect.height,
       this.hooks.desiredTop());
@@ -249,7 +253,8 @@ export class SettingsSearchLocationRunner {
       const anchor = readRectangle(utils, this.activeAnchorId);
       const scrollRect = readRectangle(utils, this.hooks.scrollId);
       if (anchor !== undefined && scrollRect !== undefined) {
-        const current: number = this.hooks.getScroller().currentOffset().yOffset;
+        const offset = this.hooks.getScroller().currentOffset();
+        const current: number = offset === undefined ? 0 : Number(offset.yOffset) || 0;
         const anchorViewportY: number = anchor.windowY - scrollRect.windowY;
         const desired: number = this.hooks.desiredTop();
         const drift: number = anchorViewportY - desired;

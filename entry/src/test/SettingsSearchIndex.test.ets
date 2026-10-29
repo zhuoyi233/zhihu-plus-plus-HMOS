@@ -59,9 +59,11 @@ export default function settingsSearchIndexTest(): void {
         .assertTrue();
 
       const blockingHistory: Array<SettingsSearchEntry> = matchSettingsSearchEntries(entries, '屏蔽记录');
-      expect(blockingHistory.length).assertEqual(1);
+      // 分类与其管理入口细项都命中；标题全等的分类排第一。
+      expect(blockingHistory.length).assertEqual(2);
       expect(blockingHistory[0].id).assertEqual(SettingsEntryId.BLOCKED_HISTORY);
       expect(blockingHistory[0].path).assertEqual('推荐系统与内容过滤');
+      expect(blockingHistory[1].id).assertEqual('filter_open_history');
 
       const license: Array<SettingsSearchEntry> = matchSettingsSearchEntries(entries, 'AGPL');
       expect(license.some((entry: SettingsSearchEntry): boolean => entry.id === SettingsEntryId.ABOUT_LICENSE))
@@ -184,13 +186,34 @@ export default function settingsSearchIndexTest(): void {
         seenIds.add(entry.id);
         if (entry.targetKind !== SettingsTargetKind.EXTERNAL) {
           expect(paneIds.has(entry.paneId)).assertTrue();
-          // 具体设置项必须同时具备锚点与提醒卡片。
-          if (entry.targetKind === SettingsTargetKind.SETTING_ITEM) {
+          // 具体设置项必须能落地：有锚点（滚动定位）或为页顶落点；声明高亮组时同页必须可接受。
+          if (entry.targetKind === SettingsTargetKind.SETTING_ITEM && entry.highlightGroupId.length > 0) {
             expect(entry.anchorId.length > 0).assertTrue();
-            expect(entry.highlightGroupId.length > 0).assertTrue();
           }
         }
       });
+    });
+
+    it('coversRowsAcrossAllSettingsPages', 0, () => {
+      const entries: Array<SettingsSearchEntry> = visibleSettingsSearchEntries(authenticatedOptions(true));
+
+      const alg: Array<SettingsSearchEntry> = matchSettingsSearchEntries(entries, '推荐算法');
+      expect(alg[0].id).assertEqual('filter_recommendation_mode');
+      const autoRead: Array<SettingsSearchEntry> = matchSettingsSearchEntries(entries, '自动已读');
+      expect(autoRead[0].id).assertEqual('notifications_auto_read');
+      const badge: Array<SettingsSearchEntry> = matchSettingsSearchEntries(entries, '红点');
+      expect(badge[0].id).assertEqual('notifications_unread_badge');
+      const update: Array<SettingsSearchEntry> = matchSettingsSearchEntries(entries, '检查更新');
+      expect(update[0].id).assertEqual('system_check_update');
+      const identity: Array<SettingsSearchEntry> = matchSettingsSearchEntries(entries, '马甲');
+      expect(identity[0].targetKind).assertEqual(SettingsTargetKind.SETTING_ITEM);
+      expect(identity[0].id).assertEqual('identity_create');
+      const addRule: Array<SettingsSearchEntry> = matchSettingsSearchEntries(entries, '添加 规则');
+      expect(addRule.some((entry: SettingsSearchEntry): boolean => entry.id === 'blocking_add_rule')).assertTrue();
+      const reverse: Array<SettingsSearchEntry> = matchSettingsSearchEntries(entries, '反向');
+      expect(reverse[0].id).assertEqual('filter_reverse');
+      const invite: Array<SettingsSearchEntry> = matchSettingsSearchEntries(entries, '邀请回答');
+      expect(invite[0].id).assertEqual('notifications_display_invite_answer');
     });
   });
 }
