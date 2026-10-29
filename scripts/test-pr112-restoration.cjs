@@ -77,7 +77,10 @@ function pageFixture(repository = {getAnswer: async id => answer(id), cancel() {
   const storage = {setOrCreate: (key, value) => broadcasts.push({key, value})};
   const names = ['applyAnswerMove', 'moveAnswer', 'commitAnswerSwitch', 'invalidateAnswerSwitch',
     'waitForAnswerViewport', 'finishAnswerViewportWait', 'showAnswerSwitchFailure', 'applyVoteState', 'onLoginChanged', 'isDisplayedContent',
-    'resetHotComments', 'refreshHotComments', 'onHotCommentsChanged', 'answerDocumentKey', 'setAnswerPanes', 'candidatePane', 'mountAnswerCandidate', 'unmountAnswerCandidate',
+    'resetHotComments', 'refreshHotComments', 'onHotCommentsChanged', 'answerDocumentKey', 'setAnswerPanes', 'publishAnswerPanes',
+    'answerNeighbor', 'answerPaneDirection', 'answerPaneForDirection', 'candidatePane', 'mountAnswerCandidate', 'unmountAnswerCandidate',
+    'commitAnswerPanes', 'pruneAnswerNeighbors', 'answerDragDirection', 'answerSwitchHintOffset', 'answerSwitchHintAlignment',
+    'answerSwitchWaitText', 'prefetchNeighborAnswers',
     'onAnswerDocumentPrepared', 'onAnswerViewportPrepared', 'trackAnswerPaneViewport', 'trackAnswerPaneEdges',
     'beginAnswerSwitchWait', 'dismissAnswerSwitchWait', 'prepareSwitchAnswer', 'cancelAnswerDrag',
     'onAnswerTitleLayoutChanged', 'contentTopInsetVp', 'answerIdentityLayout', 'measureAnswerIdentity', 'updateAnswerTitleScrolled', 'syncAnswerTitle', 'answerPageVisible', 'publishActiveAnswerDocument', 'onReaderOwnerChanged', 'answerPaneTranslate', 'answerPaneVisible', 'answerSwitchPageTranslate', 'answerSwitchExtentVp', 'applyOverscrollOffset'];
@@ -94,6 +97,7 @@ function pageFixture(repository = {getAnswer: async id => answer(id), cancel() {
     page.content = state.content;
     if (state.content?.kind === ContentDetailKind.ANSWER &&
       !page.answerPanes.some(pane => page.answerDocumentKey(pane) === page.answerDocumentKey(state.content))) {
+      page.answerNeighborPanes.clear();
       page.setAnswerPanes([state.content]);
     }
     if (state.content?.kind === ContentDetailKind.ANSWER) page.syncAnswerTitle();
@@ -106,7 +110,10 @@ function pageFixture(repository = {getAnswer: async id => answer(id), cancel() {
   Object.assign(page, {kind: ContentDetailKind.ANSWER, answerNavigator: navigator, navigatorRevision: 0,
     pageActive: true, contentId: '1', readerVisibleOwner: 'answer:1', activeContentId: '1', phase: 'ready', controller, answerQuestionId: '123',
     navigatorBusy: false, interactionPending: false, answerSwitchEpoch: 0, favoriteStateEpoch: 0,
-    answerPanes: [], answerPaneScope: 1, candidateDirection: 0, answerPaneRevision: 0,
+    answerPanes: [], answerPaneScope: 1, answerPaneRevision: 0,
+    answerNeighborPanes: new Map(),
+    answerPaneLayout: new (load(pages + 'AnswerPaneLayout.ets').AnswerPaneLayout)(),
+    answerSwitchWaitDirection: 0,
     answerSwitchWaitTimer: -1, answerPaneViewports: new Map(), statusBarHeightVp: 0,
     answerTitleGeometry: new (load(pages + 'AnswerTitleGeometry.ets').AnswerTitleGeometry)(),
     answerPanePreparation: new (load(pages + 'AnswerPanePreparation.ets').AnswerPanePreparation)(),
@@ -161,18 +168,22 @@ contract('prepare-failure-keeps-current-document', false, async () => {
     assert.equal(controller.snapshot().phase, 'ready');
   } finally { controller.deactivate(); }
 });
-contract('candidate-commits-once-and-rejects-stale-candidate', false, async () => {
+contract('candidate-commits-once-and-admits-both-neighbors', false, async () => {
   const {controller} = controllerFixture();
   try {
     await controller.load(ContentDetailKind.ANSWER, '1');
     assert.equal(typeof controller.admitAnswer, 'function', 'restore admission API');
-    const stale = controller.admitAnswer(answer('2'));
+    const previous = controller.admitAnswer(answer('2'));
     const next = controller.admitAnswer(answer('3'));
-    assert(stale && next);
-    assert.equal(controller.commitPreparedAnswer(stale), false);
-    assert.equal(controller.snapshot().content.value.id, '1');
+    assert(previous && next);
+    // 前后两答同时处于只读准备态：另一邻答登记完成不得让本次目标失效。
+    assert.equal(controller.canCommitPreparedAnswer(previous), true);
     assert.equal(controller.commitPreparedAnswer(next), true);
+    assert.equal(controller.snapshot().content.value.id, '3');
     assert.equal(controller.commitPreparedAnswer(next), false);
+    // 离开的正文仍是登记态，回退时原样提交（正文代次不变，实例键不重建）。
+    assert.equal(controller.commitPreparedAnswer(previous), true);
+    assert.equal(controller.snapshot().content.value.id, '2');
     const departed = controller.admitAnswer(answer('4'));
     controller.deactivate(); controller.activate();
     assert.equal(controller.commitPreparedAnswer(departed), false);
@@ -471,6 +482,7 @@ for (const mode of ['horizontal', 'vertical']) {
       let animations = 0;
       fixture.page.animateOverscrollTo = async target => {if (target !== 0) animations++;};
       const moving = fixture.page.applyAnswerMove(1); await tick();
+      const departed = fixture.page.content;
       const candidate = fixture.page.candidatePane();
       const key = fixture.page.answerDocumentKey(candidate);
       fixture.page.answerOverscrollOffset = -100;
@@ -481,13 +493,50 @@ for (const mode of ['horizontal', 'vertical']) {
       assert.equal(fixture.page.activeContentId, '1');
       fixture.page.onAnswerDocumentPrepared(candidate); await moving;
       assert.equal(animations, 1);
-      assert.equal(fixture.page.answerPanes.length, 1);
-      assert.equal(fixture.page.answerPanes[0], candidate, 'commit must retain admitted candidate object');
-      assert.equal(fixture.page.answerDocumentKey(fixture.page.answerPanes[0]), key);
+      // 提交后离开的正文保留为反方向邻答（实例键不重建），整页集合因此是两份。
+      assert.equal(fixture.page.answerPanes.length, 2);
+      assert.equal(fixture.page.answerPanes[0], departed, 'departed body must be retained as previous pane');
+      assert.equal(fixture.page.answerNeighborPanes.get(-1), departed);
+      assert.equal(fixture.page.answerDocumentKey(candidate), key);
+      assert.equal(fixture.page.answerPaneDirection(candidate), 0);
+      assert.equal(fixture.controller.snapshot().content.value.id, '2');
       assert.equal(fixture.controller.snapshot().content.loadGeneration, candidate.loadGeneration);
     } finally {fixture.dispose();}
   });
 }
+contract('previous-answer-preview-uses-the-retained-body-and-commits-back', false, async () => {
+  const fixture = pageFixture();
+  try {
+    await fixture.controller.load(ContentDetailKind.ANSWER, '1');
+    // 当前正文在真实渲染中由 NativeContentDocument 回报解析与视口就绪，这里等价地补上。
+    fixture.page.measureAnswerIdentity(fixture.page.content, {height: 100});
+    fixture.page.onAnswerViewportPrepared(fixture.page.content, true);
+    fixture.page.onAnswerDocumentPrepared(fixture.page.content);
+    assert.equal(await fixture.page.applyAnswerMove(1), true);
+    assert.equal(fixture.page.activeContentId, '2');
+    // A → B 后 A 的正文实例保留为上一答：代次与实例键都不应变化。
+    const retained = fixture.page.answerNeighborPanes.get(-1);
+    assert(retained, 'departed body must stay mounted as previous answer');
+    const retainedKey = fixture.page.answerDocumentKey(retained);
+    const retainedGeneration = retained.loadGeneration;
+    assert.equal(retained.value.id, '1');
+    assert.equal(fixture.page.answerPaneDirection(retained), -1);
+    // 上一答从切换轴另一侧进入：正偏移时位移为 d - E。
+    fixture.page.answerOverscrollOffset = 120;
+    const position = fixture.page.answerPaneTranslate(retained);
+    assert.equal(fixture.page.answerSwitchMode === 'horizontal' ? position.x : position.y, 120 - 360);
+    fixture.page.answerOverscrollOffset = 0;
+    const prepared = await fixture.page.prepareSwitchAnswer('1', -1, fixture.page.answerSwitchEpoch);
+    assert.equal(prepared, retained, 'preview must reuse the retained instance instead of refetching');
+    assert.equal(await fixture.page.applyAnswerMove(-1), true);
+    assert.equal(fixture.page.activeContentId, '1');
+    assert.equal(fixture.controller.snapshot().content.value.id, '1');
+    assert.equal(fixture.controller.snapshot().content.loadGeneration, retainedGeneration);
+    assert.equal(fixture.page.answerDocumentKey(fixture.page.content), retainedKey);
+    // 离开的 B 反过来成为下一答，方向与实例键同样保持。
+    assert.equal(fixture.page.answerNeighborPanes.get(1).value.id, '2');
+  } finally {fixture.dispose();}
+});
 contract('candidate-ready-callback-after-cancellation-cannot-unblock-another-instance', false, async () => {
   const fixture = pageFixture();
   try {

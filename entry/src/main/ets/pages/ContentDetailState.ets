@@ -81,15 +81,22 @@ export class ContentDetailController {
   private readonly historyUploader?: ReadHistoryUploadRepository;
   private readonly observer: ContentDetailStateObserver;
   private active: boolean = false;
-  private generation: number = 0;
+  /** 请求有效代次：加载与准备请求发起时快照，只有重新加载/退场/显式取消才推进。 */
+  private requestEpoch: number = 0;
+  /** 正文实例代次分配器：只增不减，供面板实例键与正文事件过滤使用。 */
+  private documentSequence: number = 0;
   private phase: ContentDetailPhase = ContentDetailPhase.IDLE;
   private kind?: ContentDetailKind;
   private content?: LoadedContentDetail;
   private errorMessage?: string;
   private requiresLogin: boolean = false;
   private openedRecordPhase: OpenedRecordPhase = OpenedRecordPhase.NOT_CONFIGURED;
-  /** 已准备但尚未提交的候选回答 id：防止过期候选借新代次提交。 */
-  private preparedAnswerId: string = '';
+  /**
+   * 已登记可提交的邻答：回答 id → 首次登记的正文实例。
+   * 代次在登记时固定，同一回答反复登记返回同一实例，保证邻答转正时实例键不变、不重建正文。
+   * 前后两答可同时登记（预览与切答事务分离），每次提交仍由调用方按导航目标择一。
+   */
+  private readonly admittedAnswers: Map<string, LoadedContentDetail> = new Map();
   private pendingRequestGeneration: number = -1;
 
   constructor(repository: ContentRepository, openedContentStore?: OpenedContentStore,
@@ -114,7 +121,8 @@ export class ContentDetailController {
       return;
     }
     this.active = false;
-    this.generation += 1;
+    this.requestEpoch += 1;
+    this.admittedAnswers.clear();
     this.cancelPendingRequest();
   }
 
@@ -134,10 +142,11 @@ export class ContentDetailController {
       return;
     }
     this.cancelPendingRequest();
-    const generation = ++this.generation;
-    this.pendingRequestGeneration = generation;
+    this.requestEpoch += 1;
+    const epoch = this.requestEpoch;
+    this.pendingRequestGeneration = epoch;
     this.kind = kind;
-    this.preparedAnswerId = '';
+    this.admittedAnswers.clear();
     this.content = undefined;
     this.errorMessage = undefined;
     this.requiresLogin = false;
@@ -147,9 +156,9 @@ export class ContentDetailController {
     this.phase = ContentDetailPhase.LOADING;
     this.emit();
     try {
-      const loaded = await this.fetch(kind, id, generation);
-      this.finishPendingRequest(generation);
-      if (!this.isCurrent(generation)) {
+      const loaded = await this.fetch(kind, id, this.nextDocumentGeneration());
+      this.finishPendingRequest(epoch);
+      if (!this.isCurrent(epoch)) {
         return;
       }
       this.content = loaded;
@@ -158,10 +167,10 @@ export class ContentDetailController {
         ? OpenedRecordPhase.NOT_CONFIGURED
         : OpenedRecordPhase.PENDING;
       this.emit();
-      await this.recordOpenIfConfigured(loaded, generation);
+      await this.recordOpenIfConfigured(loaded, loaded.loadGeneration ?? -1);
     } catch (error) {
-      this.finishPendingRequest(generation);
-      if (!this.isCurrent(generation)) {
+      this.finishPendingRequest(epoch);
+      if (!this.isCurrent(epoch)) {
         return;
       }
       this.content = undefined;
@@ -178,18 +187,20 @@ export class ContentDetailController {
   /** 准备回答时保留已显示内容；调用方确认导航后再提交。 */
   async prepareAnswer(id: string): Promise<LoadedContentDetail | undefined> {
     if (!this.active || this.phase !== ContentDetailPhase.READY) { return undefined; }
+    const admitted = this.admittedAnswers.get(id);
+    if (admitted !== undefined) { return admitted; }
     this.cancelPendingRequest();
-    const generation = ++this.generation;
-    this.pendingRequestGeneration = generation;
+    this.requestEpoch += 1;
+    const epoch = this.requestEpoch;
+    this.pendingRequestGeneration = epoch;
     this.errorMessage = undefined;
-    this.preparedAnswerId = id;
     try {
-      const loaded = await this.fetch(ContentDetailKind.ANSWER, id, generation);
-      this.finishPendingRequest(generation);
-      return this.isCurrent(generation) ? loaded : undefined;
+      const loaded = await this.fetch(ContentDetailKind.ANSWER, id, this.nextDocumentGeneration());
+      this.finishPendingRequest(epoch);
+      return this.isCurrent(epoch) ? this.registerAdmittedAnswer(loaded) : undefined;
     } catch (error) {
-      this.finishPendingRequest(generation);
-      if (this.isCurrent(generation)) {
+      this.finishPendingRequest(epoch);
+      if (this.isCurrent(epoch)) {
         this.errorMessage = contentDetailErrorMessage(error);
       }
       return undefined;
@@ -197,24 +208,49 @@ export class ContentDetailController {
   }
 
   /**
-   * 登记预取/手势期间已取得的候选详情：分配本次加载代次并标记为准备态。
-   * 不替换当前显示内容、不写阅读记录；返回的对象必须同时用于挂载候选正文实例与提交，
-   * 否则正文实例键会变化导致重建。
+   * 登记预取/手势期间已取得的候选详情：分配本次正文代次并保持可提交。
+   * 不替换当前显示内容、不写阅读记录、不作废其他邻走的登记（前后两答可同时准备）；
+   * 返回的对象必须同时用于挂载候选正文实例与提交，否则正文实例键会变化导致重建。
    */
   admitAnswer(answer: Answer): LoadedContentDetail | undefined {
     if (!this.active || this.phase !== ContentDetailPhase.READY || answer.id.length === 0) {
       return undefined;
     }
-    this.cancelPendingRequest();
+    const existing = this.admittedAnswers.get(answer.id);
+    if (existing !== undefined) {
+      return existing;
+    }
     this.errorMessage = undefined;
-    this.preparedAnswerId = answer.id;
-    return { kind: ContentDetailKind.ANSWER, loadGeneration: ++this.generation, value: answer };
+    return this.registerAdmittedAnswer({ kind: ContentDetailKind.ANSWER, loadGeneration: this.nextDocumentGeneration(),
+      value: answer });
   }
 
-  /** 取消候选不会清空当前正文，也不产生阅读记录。 */
+  /**
+   * 登记已挂载的邻答正文（提交后保留的上一答/下一答）：沿用原实例与代次，不换键重建。
+   * 该正文此前已经过问题归属校验并真实显示过，这里只补登记，不发起请求、不写历史。
+   */
+  admitMountedAnswer(content: LoadedContentDetail): LoadedContentDetail | undefined {
+    if (!this.active || this.phase !== ContentDetailPhase.READY || content.kind !== ContentDetailKind.ANSWER ||
+      content.loadGeneration === undefined || content.value.id.length === 0) { return undefined; }
+    const admitted = this.admittedAnswers.get(content.value.id);
+    if (admitted !== undefined) { return admitted; }
+    if (this.content?.loadGeneration === content.loadGeneration) { return undefined; }
+    this.admittedAnswers.set(content.value.id, content);
+    return content;
+  }
+
+  /** 裁剪邻答登记：只保留仍在整页面板中的回答，淘汰的正文不得再借旧代次提交。 */  retainAdmittedAnswers(answerIds: string[]): void {
+    for (const id of Array.from(this.admittedAnswers.keys())) {
+      if (!answerIds.includes(id)) { this.admittedAnswers.delete(id); }
+    }
+  }
+
+  admittedAnswerCount(): number { return this.admittedAnswers.size; }
+
+  /** 取消候选不会清空当前正文，也不产生阅读记录；已登记的邻答一并作废。 */
   cancelPreparedAnswer(): void {
-    this.preparedAnswerId = '';
-    this.generation += 1;
+    this.admittedAnswers.clear();
+    this.requestEpoch += 1;
     this.cancelPendingRequest();
   }
 
@@ -230,8 +266,10 @@ export class ContentDetailController {
   }
 
   canCommitPreparedAnswer(content: LoadedContentDetail): boolean {
-    return content.kind === ContentDetailKind.ANSWER && content.loadGeneration !== undefined &&
-      this.preparedAnswerId === content.value.id && this.isCurrent(content.loadGeneration) &&
+    if (!this.active || this.phase !== ContentDetailPhase.READY ||
+      content.kind !== ContentDetailKind.ANSWER || content.loadGeneration === undefined) { return false; }
+    const admitted = this.admittedAnswers.get(content.value.id);
+    return admitted !== undefined && admitted.loadGeneration === content.loadGeneration &&
       this.content?.loadGeneration !== content.loadGeneration;
   }
 
@@ -241,7 +279,6 @@ export class ContentDetailController {
     if (!this.canCommitPreparedAnswer(content) || content.loadGeneration === undefined) {
       return false;
     }
-    this.preparedAnswerId = '';
     this.kind = ContentDetailKind.ANSWER;
     this.content = content;
     this.errorMessage = undefined;
@@ -252,6 +289,19 @@ export class ContentDetailController {
     this.emit();
     void this.recordOpenIfConfigured(content, content.loadGeneration);
     return true;
+  }
+
+  private nextDocumentGeneration(): number {
+    this.documentSequence += 1;
+    return this.documentSequence;
+  }
+
+  /** 同一回答只登记一次：重复登记返回首次实例，避免换取新代次后被迫重建正文。 */
+  private registerAdmittedAnswer(content: LoadedContentDetail): LoadedContentDetail {
+    const existing = this.admittedAnswers.get(content.value.id);
+    if (existing !== undefined) { return existing; }
+    this.admittedAnswers.set(content.value.id, content);
+    return content;
   }
 
   private async fetch(kind: ContentDetailKind, id: string, generation: number): Promise<LoadedContentDetail> {
@@ -283,8 +333,8 @@ export class ContentDetailController {
     }
   }
 
-  private isCurrent(generation: number): boolean {
-    return this.active && generation === this.generation;
+  private isCurrent(epoch: number): boolean {
+    return this.active && epoch === this.requestEpoch;
   }
 
   private emit(): void {
