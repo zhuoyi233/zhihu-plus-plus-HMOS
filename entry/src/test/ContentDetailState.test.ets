@@ -173,25 +173,83 @@ export default function contentDetailStateTest(): void {
       expect(controller.commitPreparedAnswer(admitted)).assertFalse();
       controller.deactivate();
     });
-    it('rejectsCommitForCandidateOtherThanAdmitted', 0, async () => {
+    it('admitsBothNeighborsAndCommitsEachOnlyOnce', 0, async () => {
+      const repository = new ControlledContentRepository();
+      const controller = new ContentDetailController(repository);
+      controller.activate();
+      await controller.load(ContentDetailKind.ANSWER, '2');
+      const previous = answerFixture();
+      previous.id = '3';
+      const admittedPrevious = controller.admitAnswer(previous);
+      const next = answerFixture();
+      next.id = '4';
+      const admittedNext = controller.admitAnswer(next);
+      if (admittedPrevious === undefined || admittedNext === undefined) {
+        expect(false).assertTrue();
+        return;
+      }
+      // 前后两答可同时登记：另一邻答准备完成不得使当前拖动目标失效。
+      expect(controller.admittedAnswerCount()).assertEqual(2);
+      expect(controller.canCommitPreparedAnswer(admittedPrevious)).assertTrue();
+      expect(controller.canCommitPreparedAnswer(admittedNext)).assertTrue();
+      // 同一回答重复登记返回同一实例与同一代次，拖动不必换键重建正文。
+      const again = controller.admitAnswer(previous);
+      expect(again?.loadGeneration).assertEqual(admittedPrevious.loadGeneration);
+      // 每次手势只提交选中目标；提交后离开的正文转为邻答，仍可再次登记与提交。
+      expect(controller.commitPreparedAnswer(admittedNext)).assertTrue();
+      expect(controller.snapshot().content?.value.id).assertEqual('4');
+      expect(controller.commitPreparedAnswer(admittedNext)).assertFalse();
+      expect(controller.canCommitPreparedAnswer(admittedPrevious)).assertTrue();
+      expect(controller.commitPreparedAnswer(admittedPrevious)).assertTrue();
+      expect(controller.snapshot().content?.value.id).assertEqual('3');
+      expect(controller.snapshot().content?.loadGeneration).assertEqual(admittedPrevious.loadGeneration);
+      controller.deactivate();
+    });
+    it('retainsCommittedNeighborInstanceAcrossRoundTrip', 0, async () => {
       const repository = new ControlledContentRepository();
       const controller = new ContentDetailController(repository);
       controller.activate();
       await controller.load(ContentDetailKind.ANSWER, '2');
       const first = answerFixture();
       first.id = '3';
-      const admittedFirst = controller.admitAnswer(first);
-      const other = answerFixture();
-      other.id = '4';
-      const admittedOther = controller.admitAnswer(other);
-      if (admittedFirst === undefined || admittedOther === undefined) {
+      const admitted = controller.admitAnswer(first);
+      if (admitted === undefined) { expect(false).assertTrue(); return; }
+      const generation = admitted.loadGeneration;
+      expect(controller.commitPreparedAnswer(admitted)).assertTrue();
+      // A → B 后 A 仍处于登记态：回到 A 不需要重新换取正文代次（否则实例键变化会重建正文）。
+      expect(controller.admittedAnswerCount()).assertEqual(1);
+      expect(controller.canCommitPreparedAnswer(admitted)).assertFalse();
+      // 离开 A 后再登记 B 不会作废 A。
+      const back = answerFixture();
+      back.id = '2';
+      const admittedBack = controller.admitAnswer(back);
+      if (admittedBack === undefined) { expect(false).assertTrue(); return; }
+      expect(controller.admittedAnswerCount()).assertEqual(2);
+      expect(controller.commitPreparedAnswer(admittedBack)).assertTrue();
+      expect(controller.canCommitPreparedAnswer(admitted)).assertTrue();
+      expect(controller.commitPreparedAnswer(admitted)).assertTrue();
+      expect(controller.snapshot().content?.loadGeneration).assertEqual(generation);
+      controller.deactivate();
+    });
+    it('retainAdmittedAnswersDropsEvictedNeighbor', 0, async () => {
+      const repository = new ControlledContentRepository();
+      const controller = new ContentDetailController(repository);
+      controller.activate();
+      await controller.load(ContentDetailKind.ANSWER, '2');
+      const previous = answerFixture();
+      previous.id = '3';
+      const next = answerFixture();
+      next.id = '4';
+      const admittedPrevious = controller.admitAnswer(previous);
+      const admittedNext = controller.admitAnswer(next);
+      if (admittedPrevious === undefined || admittedNext === undefined) {
         expect(false).assertTrue();
         return;
       }
-      // 后一次登记使先前候选失效：手势取消后不得再提交旧候选。
-      expect(controller.commitPreparedAnswer(admittedFirst)).assertFalse();
-      expect(controller.commitPreparedAnswer(admittedOther)).assertTrue();
-      expect(controller.snapshot().content?.value.id).assertEqual('4');
+      controller.retainAdmittedAnswers(['4']);
+      expect(controller.admittedAnswerCount()).assertEqual(1);
+      expect(controller.commitPreparedAnswer(admittedPrevious)).assertFalse();
+      expect(controller.commitPreparedAnswer(admittedNext)).assertTrue();
       controller.deactivate();
     });
     it('cancelledCandidateCannotCommitOrReplaceCurrent', 0, async () => {

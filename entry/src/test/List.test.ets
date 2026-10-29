@@ -2,6 +2,7 @@ import systemBarVisibilityTest from './SystemBarVisibility.test';
 import hotCommentLifecycleTest from './HotCommentLifecycle.test';
 import answerTitleGeometryTest from './AnswerTitleGeometry.test';
 import answerPanePreparationTest from './AnswerPanePreparation.test';
+import answerPaneLayoutTest from './AnswerPaneLayout.test';
 import answerSwitchPrefetchTest from './AnswerSwitchPrefetch.test';
 import feedWaterfallLayoutTest from './FeedWaterfallLayout.test';
 import feedFlowDataSourceTest from './FeedFlowDataSource.test';
@@ -155,6 +156,7 @@ export default function testsuite(): void {
   answerSwitchPrefetchTest();
   answerTitleGeometryTest();
   answerPanePreparationTest();
+  answerPaneLayoutTest();
   loginControllerTest();
   channelFeedRepositoryTest();
   channelFeedStateTest();
