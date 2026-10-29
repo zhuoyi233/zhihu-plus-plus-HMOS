@@ -18,6 +18,9 @@ import {
 import { floatingTitleBarOffset } from './AppPageChrome';
 
 import { settingsGroupBackground, settingsGroupRadius } from './AccountSettingsLayout';
+import { SettingsHighlightGroup } from '../components/SettingsSearchHighlight';
+import { SettingsSearchLocationRunner } from './SettingsSearchLocationRunner';
+import { readLocationRequest, SettingsPaneId, SettingsSearchLocationRequest } from './SettingsSearchTarget';
 
 type FilterBooleanKey = 'loginForRecommendation' | 'autoRefreshHomeOnStartup' | 'enableContentFilter' |
   'filterFollowedUserContent' | 'blockZhihuAdPlatform' | 'blockZhihuSchool' |
@@ -76,13 +79,53 @@ export struct ContentFilterSettingsPage {
   @State private stats: ContentFilterStats = { totalSeen: 0, totalFiltered: 0, filterRate: 0, lastFilteredAt: 0 };
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   @StorageProp('feedCardStyle') private feedCardStyle: string = FeedCardStyle.DIVIDER;
+  /** 搜索定位：本页滚动容器执行器与请求 tick 监听。 */
+  private scroller: Scroller = new Scroller();
+  private locator: SettingsSearchLocationRunner | undefined = undefined;
+  @StorageProp('settingsSearchLocationTick') @Watch('onSearchLocationRequest')
+  private searchLocationTick: number = 0;
 
   aboutToAppear(): void {
     void this.restore();
+    this.consumeSearchLocation();
+  }
+
+  aboutToDisappear(): void {
+    this.locator?.cancel(false);
+    this.locator = undefined;
+  }
+
+  private onSearchLocationRequest(): void {
+    this.consumeSearchLocation();
+  }
+
+  /** 消费定位请求：等待 loaded；主题屏蔽阈值依赖关闭时回退到前置开关。 */
+  private consumeSearchLocation(): void {
+    const request = readLocationRequest();
+    if (request === undefined || request.paneId !== SettingsPaneId.FILTER || !this.embedded) {
+      return;
+    }
+    this.locator?.cancel(false);
+    this.locator = new SettingsSearchLocationRunner({
+      getUIContext: (): UIContext => this.getUIContext(),
+      isEmbedded: (): boolean => this.embedded,
+      isReady: (): boolean => this.loaded,
+      getScroller: (): Scroller => this.scroller,
+      scrollId: 'content_filter_settings_page',
+      contentId: 'content_filter_settings_content',
+      desiredTop: (): number => floatingTitleBarOffset() + 12,
+      onFailed: (): void => this.getUIContext().getPromptAction().showToast({
+        message: '暂时无法定位，请稍后重试', duration: 2000
+      }),
+      onFallback: (): void => this.getUIContext().getPromptAction().showToast({
+        message: '需先开启“启用主题屏蔽”后再设置阈值', duration: 2500
+      })
+    });
+    this.locator.consume(request);
   }
 
   build() {
-    Scroll() {
+    Scroll(this.scroller) {
       Column({ space: $r('app.float.spacing_large') }) {
         if (this.statusMessage.length > 0) {
           Text(this.statusMessage)
@@ -156,65 +199,89 @@ export struct ContentFilterSettingsPage {
         .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.sectionTitle('智能与规则过滤')
-        Column() {
-          this.switchSetting('启用智能内容过滤', '过滤本机和服务器已读，以及已展示过的内容；已读保留已关注作者',
-            this.filter.enableContentFilter, true, 'filter_smart_enabled', (value: boolean): void =>
-              this.updateFilterBoolean('enableContentFilter', value))
-          Divider().color($r('app.color.divider_color'))
-          // 按值传给 @Builder 的 enabled 不会更新已挂载控件；切换分支重建，保持与总开关联动。
-          if (this.filter.enableContentFilter) {
-            this.switchSetting('过滤已关注用户内容', '关闭后，已关注作者的内容始终显示',
-              this.filter.filterFollowedUserContent, true, 'filter_followed_user', (value: boolean): void =>
-                this.updateFilterBoolean('filterFollowedUserContent', value))
-          } else {
-            this.switchSetting('过滤已关注用户内容', '关闭后，已关注作者的内容始终显示',
-              this.filter.filterFollowedUserContent, false, 'filter_followed_user', (value: boolean): void =>
-                this.updateFilterBoolean('filterFollowedUserContent', value))
-          }
-          Divider().color($r('app.color.divider_color'))
-          this.ruleSwitchSetting('启用关键词屏蔽', '屏蔽包含特定关键词的内容',
-            this.rules.keywordBlockingEnabled, 'keywordBlockingEnabled', 'filter_keyword_enabled')
-          Divider().color($r('app.color.divider_color'))
-          this.ruleSwitchSetting('启用用户屏蔽', '屏蔽特定用户发布的内容，以及由其提出的问题',
-            this.rules.userBlockingEnabled, 'userBlockingEnabled', 'filter_user_enabled')
-          Divider().color($r('app.color.divider_color'))
-          this.ruleSwitchSetting('启用主题屏蔽', '屏蔽包含特定主题的内容',
-            this.rules.topicBlockingEnabled, 'topicBlockingEnabled', 'filter_topic_enabled')
-          if (this.rules.topicBlockingEnabled) {
+        SettingsHighlightGroup({ groupId: 'filter_group_rules' }) {
+          Column() {
+            this.switchSetting('启用智能内容过滤', '过滤本机和服务器已读，以及已展示过的内容；已读保留已关注作者',
+              this.filter.enableContentFilter, true, 'filter_smart_enabled', (value: boolean): void =>
+                this.updateFilterBoolean('enableContentFilter', value))
             Divider().color($r('app.color.divider_color'))
-            this.thresholdSetting('主题屏蔽阈值', '命中的已屏蔽主题数量达到此值时过滤内容',
-              'topicBlockingThreshold', true, 'filter_topic_threshold')
+            // 按值传给 @Builder 的 enabled 不会更新已挂载控件；切换分支重建，保持与总开关联动。
+            if (this.filter.enableContentFilter) {
+              this.switchSetting('过滤已关注用户内容', '关闭后，已关注作者的内容始终显示',
+                this.filter.filterFollowedUserContent, true, 'filter_followed_user', (value: boolean): void =>
+                  this.updateFilterBoolean('filterFollowedUserContent', value))
+            } else {
+              this.switchSetting('过滤已关注用户内容', '关闭后，已关注作者的内容始终显示',
+                this.filter.filterFollowedUserContent, false, 'filter_followed_user', (value: boolean): void =>
+                  this.updateFilterBoolean('filterFollowedUserContent', value))
+            }
+            Divider().color($r('app.color.divider_color'))
+            Column() {
+              this.ruleSwitchSetting('启用关键词屏蔽', '屏蔽包含特定关键词的内容',
+                this.rules.keywordBlockingEnabled, 'keywordBlockingEnabled', 'filter_keyword_enabled')
+            }
+            .id('filter_anchor_keyword_enabled')
+            .width('100%')
+            Divider().color($r('app.color.divider_color'))
+            this.ruleSwitchSetting('启用用户屏蔽', '屏蔽特定用户发布的内容，以及由其提出的问题',
+              this.rules.userBlockingEnabled, 'userBlockingEnabled', 'filter_user_enabled')
+            Divider().color($r('app.color.divider_color'))
+            Column() {
+              this.ruleSwitchSetting('启用主题屏蔽', '屏蔽包含特定主题的内容',
+                this.rules.topicBlockingEnabled, 'topicBlockingEnabled', 'filter_topic_enabled')
+            }
+            .id('filter_anchor_topic_enabled')
+            .width('100%')
+            if (this.rules.topicBlockingEnabled) {
+              Divider().color($r('app.color.divider_color'))
+              Column() {
+                this.thresholdSetting('主题屏蔽阈值', '命中的已屏蔽主题数量达到此值时过滤内容',
+                  'topicBlockingThreshold', true, 'filter_topic_threshold')
+              }
+              .id('filter_anchor_topic_threshold')
+              .width('100%')
+            }
           }
+          .width('100%')
+          .borderRadius(settingsGroupRadius(this.feedCardStyle))
+          .backgroundColor(settingsGroupBackground(this.feedCardStyle))
         }
-        .width('100%')
-        .borderRadius(settingsGroupRadius(this.feedCardStyle))
-        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.sectionTitle('推广与付费内容')
-        Column() {
-          this.switchSetting('屏蔽知乎广告平台内容', '匹配并屏蔽包含 xg.zhihu.com 的推广内容',
-            this.filter.blockZhihuAdPlatform, true, 'filter_zhihu_ad', (value: boolean): void =>
-              this.updateFilterBoolean('blockZhihuAdPlatform', value))
-          Divider().color($r('app.color.divider_color'))
-          this.switchSetting('屏蔽知乎学堂内容', '匹配并屏蔽包含 d.zhihu.com 或 data-edu-card-id 的内容',
-            this.filter.blockZhihuSchool, true, 'filter_zhihu_school', (value: boolean): void =>
-              this.updateFilterBoolean('blockZhihuSchool', value))
-          Divider().color($r('app.color.divider_color'))
-          this.switchSetting('屏蔽微信公众号文章', '匹配并屏蔽包含 mp.weixin.qq.com 的外链文章',
-            this.filter.blockWeChatOfficialAccount, true, 'filter_wechat', (value: boolean): void =>
-              this.updateFilterBoolean('blockWeChatOfficialAccount', value))
-          Divider().color($r('app.color.divider_color'))
-          this.switchSetting('屏蔽知乎盐选付费内容', '屏蔽知乎盐选会员专享的付费回答和文章',
-            this.filter.blockPaidContent, true, 'filter_paid', (value: boolean): void =>
-              this.updateFilterBoolean('blockPaidContent', value))
-          Divider().color($r('app.color.divider_color'))
-          this.switchSetting('反向屏蔽（吃💩模式）', '开启后首页只保留广告和付费内容，屏蔽其余内容',
-            this.filter.reverseBlock, true, 'filter_reverse', (value: boolean): void =>
-              this.updateFilterBoolean('reverseBlock', value))
+        SettingsHighlightGroup({ groupId: 'filter_group_promotion' }) {
+          Column() {
+            Column() {
+              this.switchSetting('屏蔽知乎广告平台内容', '匹配并屏蔽包含 xg.zhihu.com 的推广内容',
+                this.filter.blockZhihuAdPlatform, true, 'filter_zhihu_ad', (value: boolean): void =>
+                  this.updateFilterBoolean('blockZhihuAdPlatform', value))
+            }
+            .id('filter_anchor_zhihu_ad')
+            .width('100%')
+            Divider().color($r('app.color.divider_color'))
+            this.switchSetting('屏蔽知乎学堂内容', '匹配并屏蔽包含 d.zhihu.com 或 data-edu-card-id 的内容',
+              this.filter.blockZhihuSchool, true, 'filter_zhihu_school', (value: boolean): void =>
+                this.updateFilterBoolean('blockZhihuSchool', value))
+            Divider().color($r('app.color.divider_color'))
+            this.switchSetting('屏蔽微信公众号文章', '匹配并屏蔽包含 mp.weixin.qq.com 的外链文章',
+              this.filter.blockWeChatOfficialAccount, true, 'filter_wechat', (value: boolean): void =>
+                this.updateFilterBoolean('blockWeChatOfficialAccount', value))
+            Divider().color($r('app.color.divider_color'))
+            Column() {
+              this.switchSetting('屏蔽知乎盐选付费内容', '屏蔽知乎盐选会员专享的付费回答和文章',
+                this.filter.blockPaidContent, true, 'filter_paid', (value: boolean): void =>
+                  this.updateFilterBoolean('blockPaidContent', value))
+            }
+            .id('filter_anchor_paid')
+            .width('100%')
+            Divider().color($r('app.color.divider_color'))
+            this.switchSetting('反向屏蔽（吃💩模式）', '开启后首页只保留广告和付费内容，屏蔽其余内容',
+              this.filter.reverseBlock, true, 'filter_reverse', (value: boolean): void =>
+                this.updateFilterBoolean('reverseBlock', value))
+          }
+          .width('100%')
+          .borderRadius(settingsGroupRadius(this.feedCardStyle))
+          .backgroundColor(settingsGroupBackground(this.feedCardStyle))
         }
-        .width('100%')
-        .borderRadius(settingsGroupRadius(this.feedCardStyle))
-        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.sectionTitle('管理与统计')
         Column() {
@@ -236,6 +303,7 @@ export struct ContentFilterSettingsPage {
         }
       }
       .width('100%')
+      .id('content_filter_settings_content')
       .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
         top: this.embedded ? 12 : 94, bottom: $r('app.float.page_padding') })
     }
@@ -247,6 +315,12 @@ export struct ContentFilterSettingsPage {
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring)
     .backgroundColor($r('app.color.page_background'))
+    .onScrollStart((): void => {
+      this.locator?.onScrollStarted();
+    })
+    .onScrollStop((): void => {
+      this.locator?.onScrollStopped();
+    })
     .bindSheet($$this.settingsSheetShown, this.settingsSheet(), {
       preferType: SheetType.CENTER,
       height: SheetSize.FIT_CONTENT,

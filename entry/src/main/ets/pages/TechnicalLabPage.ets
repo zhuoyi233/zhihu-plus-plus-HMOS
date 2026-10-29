@@ -20,6 +20,9 @@ import {
 } from 'data';
 import { AppNavigationRow, floatingTitleBarOffset } from './AppPageChrome';
 import { settingsGroupBackground, settingsGroupRadius } from './AccountSettingsLayout';
+import { SettingsHighlightGroup } from '../components/SettingsSearchHighlight';
+import { SettingsSearchLocationRunner } from './SettingsSearchLocationRunner';
+import { readLocationRequest, SettingsPaneId, SettingsSearchLocationRequest } from './SettingsSearchTarget';
 
 /**
  * 开发者选项：可嵌入设置右栏。
@@ -57,11 +60,42 @@ export struct TechnicalLabPage {
   onDeveloperModeDisabled: () => void = (): void => {};
   private readonly httpProbeClient: HttpProbeClient = new HttpProbeClient();
   private probeGeneration: number = 0;
+  /** 搜索定位：本页滚动容器执行器与请求 tick 监听。 */
+  private scroller: Scroller = new Scroller();
+  private locator: SettingsSearchLocationRunner | undefined = undefined;
+  @StorageProp('settingsSearchLocationTick') @Watch('onSearchLocationRequest')
+  private searchLocationTick: number = 0;
 
   aboutToAppear(): void {
     this.developerModeEnabled = this.developerModeStorage;
     this.dailyStoryReaderMode = decodeDailyStoryReaderMode(this.dailyStoryReaderModeStorage);
     this.refreshLoginStatus();
+    this.consumeSearchLocation();
+  }
+
+  /** 消费定位请求：仅嵌入设置实例且目标为本页（开发者选项）时执行。 */
+  private consumeSearchLocation(): void {
+    const request = readLocationRequest();
+    if (request === undefined || request.paneId !== SettingsPaneId.DEVELOPER || !this.embedded) {
+      return;
+    }
+    this.locator?.cancel(false);
+    this.locator = new SettingsSearchLocationRunner({
+      getUIContext: (): UIContext => this.getUIContext(),
+      isEmbedded: (): boolean => this.embedded,
+      isReady: (): boolean => this.developerModeEnabled,
+      getScroller: (): Scroller => this.scroller,
+      scrollId: 'technical_lab_scroll',
+      contentId: 'technical_lab_content',
+      desiredTop: (): number => floatingTitleBarOffset() + 12,
+      onFailed: (): void => this.getUIContext().getPromptAction().showToast({
+        message: '暂时无法定位，请稍后重试', duration: 2000
+      }),
+      onFallback: (): void => this.getUIContext().getPromptAction().showToast({
+        message: '该项当前被隐藏，已定位到前置开关', duration: 2000
+      })
+    });
+    this.locator.consume(request);
   }
 
   /** 广播来源变化（启动恢复、其他入口切换）同步到本地控件。 */
@@ -72,7 +106,13 @@ export struct TechnicalLabPage {
   aboutToDisappear(): void {
     // 逻辑离页：取消探针并作废在途结果，避免回包更新已销毁视图。
     this.cancelHttpProbe();
+    this.locator?.cancel(false);
+    this.locator = undefined;
     this.cookieInput = '';
+  }
+
+  private onSearchLocationRequest(): void {
+    this.consumeSearchLocation();
   }
 
   private onDeveloperModeChanged(): void {
@@ -90,7 +130,7 @@ export struct TechnicalLabPage {
 
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
-      Scroll() {
+      Scroll(this.scroller) {
         Column({ space: $r('app.float.spacing_medium') }) {
           if (!this.developerModeEnabled) {
             Column({ space: $r('app.float.spacing_small') }) {
@@ -149,6 +189,7 @@ export struct TechnicalLabPage {
           }
         }
         .width('100%')
+        .id('technical_lab_content')
         .padding({
           left: $r('app.float.page_padding'),
           right: $r('app.float.page_padding'),
@@ -163,6 +204,12 @@ export struct TechnicalLabPage {
       .align(Alignment.TopStart)
       .contentStartOffset(this.embedded ? floatingTitleBarOffset() : 0)
       .backgroundColor($r('app.color.page_background'))
+      .onScrollStart((): void => {
+        this.locator?.onScrollStarted();
+      })
+      .onScrollStop((): void => {
+        this.locator?.onScrollStopped();
+      })
     }
     .id('technical_lab_top_start_container')
     .width('100%')
@@ -183,63 +230,66 @@ export struct TechnicalLabPage {
   @Builder
   private sessionGroup() {
     this.sectionTitle('账号与会话')
-    Column({ space: $r('app.float.spacing_medium') }) {
-      Text(this.loginStatus)
-        .id('developer_login_status')
-        .fontSize($r('app.float.body_font_size'))
-        .fontColor($r('app.color.primary_text'))
-        .width('100%')
-      Button('验证登录')
-        .id('developer_verify_login')
-        .width('100%')
-        .fontColor(onThemeColor(this.resolvedThemeColor))
-        .backgroundColor(this.resolvedThemeColor)
-        .enabled(!this.sessionBusy)
-        .onClick((): void => {
-          void this.verifyLogin();
-        })
-      Text('手动设置 Cookie')
-        .fontSize($r('app.float.heading_font_size'))
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.primary_text'))
-        .width('100%')
-      Text('请输入完整 Cookie 字符串。仅在本机验证并加密保存，提交后输入框会立即清空。')
-        .fontSize($r('app.float.secondary_font_size'))
-        .fontColor($r('app.color.secondary_text'))
-        .width('100%')
-      TextInput({ text: this.cookieInput, placeholder: 'name1=value1; name2=value2' })
-        .id('developer_cookie_input')
-        .type(InputType.Password)
-        .maxLength(COOKIE_HEADER_MAX_LENGTH)
-        .enabled(!this.sessionBusy)
-        .onChange((value: string): void => {
-          this.cookieInput = value;
-        })
-      Button('确认设置并验证')
-        .id('developer_cookie_submit')
-        .width('100%')
-        .fontColor(onThemeColor(this.resolvedThemeColor))
-        .backgroundColor(this.resolvedThemeColor)
-        .enabled(!this.sessionBusy && this.cookieInput.trim().length > 0)
-        .onClick((): void => {
-          void this.importCookie();
-        })
-      Button('退出并清理本地会话')
-        .id('developer_logout')
-        .width('100%')
-        .fontColor($r('app.color.error_text'))
-        .backgroundColor($r('app.color.control_background'))
-        .enabled(!this.sessionBusy)
-        .accessibilityText('退出登录并清理本地会话，不删除收藏、屏蔽规则与历史记录')
-        .onClick((): void => {
-          void this.logout();
-        })
+    SettingsHighlightGroup({ groupId: 'developer_group_cookie' }) {
+      Column({ space: $r('app.float.spacing_medium') }) {
+        Text(this.loginStatus)
+          .id('developer_login_status')
+          .fontSize($r('app.float.body_font_size'))
+          .fontColor($r('app.color.primary_text'))
+          .width('100%')
+        Button('验证登录')
+          .id('developer_verify_login')
+          .width('100%')
+          .fontColor(onThemeColor(this.resolvedThemeColor))
+          .backgroundColor(this.resolvedThemeColor)
+          .enabled(!this.sessionBusy)
+          .onClick((): void => {
+            void this.verifyLogin();
+          })
+        Text('手动设置 Cookie')
+          .id('developer_anchor_cookie')
+          .fontSize($r('app.float.heading_font_size'))
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.primary_text'))
+          .width('100%')
+        Text('请输入完整 Cookie 字符串。仅在本机验证并加密保存，提交后输入框会立即清空。')
+          .fontSize($r('app.float.secondary_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .width('100%')
+        TextInput({ text: this.cookieInput, placeholder: 'name1=value1; name2=value2' })
+          .id('developer_cookie_input')
+          .type(InputType.Password)
+          .maxLength(COOKIE_HEADER_MAX_LENGTH)
+          .enabled(!this.sessionBusy)
+          .onChange((value: string): void => {
+            this.cookieInput = value;
+          })
+        Button('确认设置并验证')
+          .id('developer_cookie_submit')
+          .width('100%')
+          .fontColor(onThemeColor(this.resolvedThemeColor))
+          .backgroundColor(this.resolvedThemeColor)
+          .enabled(!this.sessionBusy && this.cookieInput.trim().length > 0)
+          .onClick((): void => {
+            void this.importCookie();
+          })
+        Button('退出并清理本地会话')
+          .id('developer_logout')
+          .width('100%')
+          .fontColor($r('app.color.error_text'))
+          .backgroundColor($r('app.color.control_background'))
+          .enabled(!this.sessionBusy)
+          .accessibilityText('退出登录并清理本地会话，不删除收藏、屏蔽规则与历史记录')
+          .onClick((): void => {
+            void this.logout();
+          })
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+      .padding($r('app.float.card_padding'))
+      .borderRadius(settingsGroupRadius(this.feedCardStyle))
+      .backgroundColor(settingsGroupBackground(this.feedCardStyle))
     }
-    .alignItems(HorizontalAlign.Start)
-    .width('100%')
-    .padding($r('app.float.card_padding'))
-    .borderRadius(settingsGroupRadius(this.feedCardStyle))
-    .backgroundColor(settingsGroupBackground(this.feedCardStyle))
   }
 
   /**

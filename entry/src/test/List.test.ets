@@ -116,6 +116,7 @@ import continuousAnswerStateTest from './ContinuousAnswerState.test';
 import accountSettingsLayoutTest from './AccountSettingsLayout.test';
 import settingsSearchIndexTest from './SettingsSearchIndex.test';
 import settingsNavigationStateTest from './SettingsNavigationState.test';
+import settingsSearchLocationStateTest from './SettingsSearchLocationState.test';
 import hotCommentStateTest from './HotCommentState.test';
 import commentTextTest from './CommentText.test';
 
@@ -236,6 +237,7 @@ export default function testsuite(): void {
   accountSettingsLayoutTest();
   settingsSearchIndexTest();
   settingsNavigationStateTest();
+  settingsSearchLocationStateTest();
   systemBarVisibilityTest();
   hotCommentLifecycleTest();
   hotCommentStateTest();

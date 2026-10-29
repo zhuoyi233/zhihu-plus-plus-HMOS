@@ -40,6 +40,9 @@ import {
 import { display } from '@kit.ArkUI';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { settingsGroupBackground, settingsGroupRadius } from './AccountSettingsLayout';
+import { SettingsHighlightGroup } from '../components/SettingsSearchHighlight';
+import { SettingsSearchLocationRunner } from './SettingsSearchLocationRunner';
+import { readLocationRequest, SettingsPaneId, SettingsSearchLocationRequest } from './SettingsSearchTarget';
 
 /**
  * “外观与阅读体验”设置页。保留上游跨平台设置语义，但移除 Material You、
@@ -135,6 +138,11 @@ export struct AppearanceSettingsPage {
    * 不支持的机型自动隐藏该开关（默认关闭，无入口即不可开启）。 */
   @State private gripMotionSupported: boolean = false;
   private store: AppPreferencesStore | undefined = undefined;
+  /** 搜索定位：本页滚动容器执行器与请求 tick 监听。 */
+  private scroller: Scroller = new Scroller();
+  private locator: SettingsSearchLocationRunner | undefined = undefined;
+  @StorageProp('settingsSearchLocationTick') @Watch('onSearchLocationRequest')
+  private searchLocationTick: number = 0;
 
   aboutToAppear(): void {
     this.gripMotionSupported = canIUse('SystemCapability.MultimodalAwareness.Motion');
@@ -144,10 +152,41 @@ export struct AppearanceSettingsPage {
       return;
     }
     this.store = new AppPreferencesStore(context);
+    this.consumeSearchLocation();
+  }
+
+  aboutToDisappear(): void {
+    this.locator?.cancel(false);
+    this.locator = undefined;
+  }
+
+  private onSearchLocationRequest(): void {
+    this.consumeSearchLocation();
+  }
+
+  /** 消费定位请求：仅嵌入设置实例且目标为本页时执行滚动与提醒。 */
+  private consumeSearchLocation(): void {
+    const request = readLocationRequest();
+    if (request === undefined || request.paneId !== SettingsPaneId.APPEARANCE || !this.embedded) {
+      return;
+    }
+    this.locator?.cancel(false);
+    this.locator = new SettingsSearchLocationRunner({
+      getUIContext: (): UIContext => this.getUIContext(),
+      isEmbedded: (): boolean => this.embedded,
+      isReady: (): boolean => true,
+      getScroller: (): Scroller => this.scroller,
+      scrollId: 'appearance_settings_page',
+      contentId: 'appearance_settings_content',
+      desiredTop: (): number => floatingTitleBarOffset() + 12,
+      onFailed: (): void => this.showToast('暂时无法定位，请稍后重试'),
+      onFallback: (): void => this.showToast('该项当前被隐藏，已定位到前置开关')
+    });
+    this.locator.consume(request);
   }
 
   build() {
-    Scroll() {
+    Scroll(this.scroller) {
       Column({ space: $r('app.float.spacing_large') }) {
         if (this.statusMessage.length > 0) {
           Text(this.statusMessage)
@@ -180,34 +219,44 @@ export struct AppearanceSettingsPage {
         .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.sectionTitle('阅读')
-        Column() {
-          this.typographyPresetSetting()
-          Divider().color($r('app.color.divider_color'))
-          this.fontSizeSetting()
-          Divider().color($r('app.color.divider_color'))
-          this.sliderSetting({
-            title: '行高',
-            description: `调整内容行间距（${this.contentLineHeight}%）`,
-            value: this.contentLineHeight, min: 100, max: 300, step: 10,
-            testId: 'appearance_line_height', showSteps: false,
-            onChange: (value: number): void => {
-              this.updateTypography(this.contentFontSize, decodeContentLineHeight(value), this.contentBlockSpacing);
+        SettingsHighlightGroup({ groupId: 'appearance_group_reading' }) {
+          Column() {
+            this.typographyPresetSetting()
+            Divider().color($r('app.color.divider_color'))
+            this.fontSizeSetting()
+            Divider().color($r('app.color.divider_color'))
+            Column() {
+              this.sliderSetting({
+                title: '行高',
+                description: `调整内容行间距（${this.contentLineHeight}%）`,
+                value: this.contentLineHeight, min: 100, max: 300, step: 10,
+                testId: 'appearance_line_height', showSteps: false,
+                onChange: (value: number): void => {
+                  this.updateTypography(this.contentFontSize, decodeContentLineHeight(value), this.contentBlockSpacing);
+                }
+              })
             }
-          })
-          Divider().color($r('app.color.divider_color'))
-          this.sliderSetting({
-            title: '段间距',
-            description: `调整正文段落和块级内容间距（${this.contentBlockSpacing}%）`,
-            value: this.contentBlockSpacing, min: 0, max: 300, step: 10,
-            testId: 'appearance_block_spacing', showSteps: false,
-            onChange: (value: number): void => {
-              this.updateTypography(this.contentFontSize, this.contentLineHeight, decodeContentBlockSpacing(value));
+            .id('appearance_anchor_line_height')
+            .width('100%')
+            Divider().color($r('app.color.divider_color'))
+            Column() {
+              this.sliderSetting({
+                title: '段间距',
+                description: `调整正文段落和块级内容间距（${this.contentBlockSpacing}%）`,
+                value: this.contentBlockSpacing, min: 0, max: 300, step: 10,
+                testId: 'appearance_block_spacing', showSteps: false,
+                onChange: (value: number): void => {
+                  this.updateTypography(this.contentFontSize, this.contentLineHeight, decodeContentBlockSpacing(value));
+                }
+              })
             }
-          })
+            .id('appearance_anchor_block_spacing')
+            .width('100%')
+          }
+          .width('100%')
+          .borderRadius(settingsGroupRadius(this.feedCardStyle))
+          .backgroundColor(settingsGroupBackground(this.feedCardStyle))
         }
-        .width('100%')
-        .borderRadius(settingsGroupRadius(this.feedCardStyle))
-        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.sectionTitle('信息流')
         Column() {
@@ -389,6 +438,7 @@ export struct AppearanceSettingsPage {
         .backgroundColor(settingsGroupBackground(this.feedCardStyle))
       }
       .width('100%')
+      .id('appearance_settings_content')
       .padding({
         left: $r('app.float.page_padding'),
         right: $r('app.float.page_padding'),
@@ -404,6 +454,13 @@ export struct AppearanceSettingsPage {
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring)
     .backgroundColor($r('app.color.page_background'))
+    .onScrollStart((): void => {
+      // 用户拖动接管：取消进行中的自动定位，不与手势争抢位置。
+      this.locator?.onScrollStarted();
+    })
+    .onScrollStop((): void => {
+      this.locator?.onScrollStopped();
+    })
   }
 
   @Builder
@@ -637,6 +694,7 @@ export struct AppearanceSettingsPage {
     .alignItems(HorizontalAlign.Start)
     .width('100%')
     .padding($r('app.float.card_padding'))
+    .id('appearance_anchor_font_size')
   }
 
   @Builder

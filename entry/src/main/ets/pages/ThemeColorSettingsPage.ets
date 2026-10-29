@@ -16,6 +16,9 @@ import { floatingTitleBarOffset } from './AppPageChrome';
 
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { settingsGroupBackground, settingsGroupRadius } from './AccountSettingsLayout';
+import { SettingsHighlightGroup } from '../components/SettingsSearchHighlight';
+import { SettingsSearchLocationRunner } from './SettingsSearchLocationRunner';
+import { readLocationRequest, SettingsPaneId, SettingsSearchLocationRequest } from './SettingsSearchTarget';
 
 /**
  * 主题颜色配置页：13 个预设色（2 排 × 7 列）+ 自定义取色（色盘 + 亮度条）。
@@ -101,6 +104,11 @@ export struct ThemeColorSettingsPage {
   private hexInputToastShown: boolean = false;
   private rgbInputToastShown: boolean = false;
   private store: AppPreferencesStore | undefined = undefined;
+  /** 搜索定位：本页滚动容器执行器与请求 tick 监听。 */
+  private scroller: Scroller = new Scroller();
+  private locator: SettingsSearchLocationRunner | undefined = undefined;
+  @StorageProp('settingsSearchLocationTick') @Watch('onSearchLocationRequest')
+  private searchLocationTick: number = 0;
 
   aboutToAppear(): void {
     const context = getAbilityContext();
@@ -112,10 +120,45 @@ export struct ThemeColorSettingsPage {
     this.syncHsvFromHex(this.storedThemeColor);
     const preset = this.presetOf(normalizeThemeColor(this.storedThemeColor));
     this.selectedPresetHex = preset === undefined ? '' : preset.hex;
+    this.consumeSearchLocation();
+  }
+
+  aboutToDisappear(): void {
+    this.locator?.cancel(false);
+    this.locator = undefined;
+  }
+
+  private onSearchLocationRequest(): void {
+    this.consumeSearchLocation();
+  }
+
+  /** 消费定位请求：定位预设色网格区域；独立根路由实例不响应。 */
+  private consumeSearchLocation(): void {
+    const request = readLocationRequest();
+    if (request === undefined || request.paneId !== SettingsPaneId.THEME_COLOR || !this.embedded) {
+      return;
+    }
+    this.locator?.cancel(false);
+    this.locator = new SettingsSearchLocationRunner({
+      getUIContext: (): UIContext => this.getUIContext(),
+      isEmbedded: (): boolean => this.embedded,
+      isReady: (): boolean => true,
+      getScroller: (): Scroller => this.scroller,
+      scrollId: 'themecolor_settings_page',
+      contentId: 'themecolor_settings_content',
+      desiredTop: (): number => floatingTitleBarOffset() + 12,
+      onFailed: (): void => this.getUIContext().getPromptAction().showToast({
+        message: '暂时无法定位，请稍后重试', duration: 2000
+      }),
+      onFallback: (): void => this.getUIContext().getPromptAction().showToast({
+        message: '该项当前被隐藏，已定位到前置开关', duration: 2000
+      })
+    });
+    this.locator.consume(request);
   }
 
   build() {
-    Scroll() {
+    Scroll(this.scroller) {
       Column({ space: $r('app.float.spacing_large') }) {
         if (this.statusMessage.length > 0) {
           Text(this.statusMessage)
@@ -125,22 +168,25 @@ export struct ThemeColorSettingsPage {
             .width('100%')
         }
 
-        Column() {
-          Grid() {
-            ForEach(GRID_ITEMS, (item: PresetColorItem): void => {
-              GridItem() {
-                this.colorCell(item)
-              }
-            }, (item: PresetColorItem): string => item.name)
+        SettingsHighlightGroup({ groupId: 'theme_color_group_presets' }) {
+          Column() {
+            Grid() {
+              ForEach(GRID_ITEMS, (item: PresetColorItem): void => {
+                GridItem() {
+                  this.colorCell(item)
+                }
+              }, (item: PresetColorItem): string => item.name)
+            }
+            .columnsTemplate('1fr 1fr 1fr 1fr 1fr 1fr 1fr')
+            .rowsGap($r('app.float.spacing_medium'))
+            .width('100%')
+            .padding($r('app.float.card_padding'))
           }
-          .columnsTemplate('1fr 1fr 1fr 1fr 1fr 1fr 1fr')
-          .rowsGap($r('app.float.spacing_medium'))
+          .id('theme_color_anchor_presets')
           .width('100%')
-          .padding($r('app.float.card_padding'))
+          .borderRadius(settingsGroupRadius(this.feedCardStyle))
+          .backgroundColor(settingsGroupBackground(this.feedCardStyle))
         }
-        .width('100%')
-        .borderRadius(settingsGroupRadius(this.feedCardStyle))
-        .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
         this.hexRgbCard()
 
@@ -164,6 +210,7 @@ export struct ThemeColorSettingsPage {
         .backgroundColor(settingsGroupBackground(this.feedCardStyle))
       }
       .width('100%')
+      .id('themecolor_settings_content')
       .padding({
         left: $r('app.float.page_padding'),
         right: $r('app.float.page_padding'),
