@@ -424,7 +424,12 @@ struct Index {
 
   @Builder
   dailyStoryContent(id: string, navigate: (destination: AppDestination) => void) {
-    DailyStoryDetailPage({ storyId: id, repository: this.dailyStoryRepository, navigate: navigate });
+    DailyStoryDetailPage({
+      storyId: id,
+      // 日报页各自持有仓库实例：一个页面的 cancel 不会取消另一个页面的在途请求。
+      repository: new DefaultDailyStoryRepository(new ZhihuHttpClient()),
+      navigate: navigate
+    });
   }
 
   @Builder

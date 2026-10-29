@@ -1,7 +1,12 @@
 import { AppDestination, AppDestinationName } from 'core';
 import {
+  AppPreferencesStore,
   COOKIE_HEADER_MAX_LENGTH,
   CookieSessionStore,
+  DailyStoryReaderMode,
+  dailyStoryReaderModeDescription,
+  DEFAULT_DAILY_STORY_READER_MODE,
+  decodeDailyStoryReaderMode,
   getAppSessionOwner,
   HttpProbeClient,
   onThemeColor,
@@ -41,6 +46,11 @@ export struct TechnicalLabPage {
   @StorageProp('feedCardStyle') private feedCardStyle: string = FeedCardStyle.DIVIDER;
   @StorageProp('developerModeEnabled') @Watch('onDeveloperModeChanged')
   private developerModeStorage: boolean = false;
+  /** 日报原生阅读开关（AppStorage 广播 + 本地副本，切换后即时生效）。 */
+  @StorageProp('dailyStoryReaderMode') @Watch('onDailyStoryReaderModeChanged')
+  private dailyStoryReaderModeStorage: string = DEFAULT_DAILY_STORY_READER_MODE;
+  @State private dailyStoryReaderMode: DailyStoryReaderMode = DEFAULT_DAILY_STORY_READER_MODE;
+  @State private dailyStoryReaderNotice: string = '';
   navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {
   };
   /** 只负责持久化与广播；涉及导航的部分由入口来源（目录/独立路由）决定。 */
@@ -50,7 +60,13 @@ export struct TechnicalLabPage {
 
   aboutToAppear(): void {
     this.developerModeEnabled = this.developerModeStorage;
+    this.dailyStoryReaderMode = decodeDailyStoryReaderMode(this.dailyStoryReaderModeStorage);
     this.refreshLoginStatus();
+  }
+
+  /** 广播来源变化（启动恢复、其他入口切换）同步到本地控件。 */
+  private onDailyStoryReaderModeChanged(): void {
+    this.dailyStoryReaderMode = decodeDailyStoryReaderMode(this.dailyStoryReaderModeStorage);
   }
 
   aboutToDisappear(): void {
@@ -126,6 +142,7 @@ export struct TechnicalLabPage {
             .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
             this.sessionGroup()
+            this.readerModeGroup()
             this.networkGroup()
             this.probePagesGroup()
             this.storageGroup()
@@ -223,6 +240,64 @@ export struct TechnicalLabPage {
     .padding($r('app.float.card_padding'))
     .borderRadius(settingsGroupRadius(this.feedCardStyle))
     .backgroundColor(settingsGroupBackground(this.feedCardStyle))
+  }
+
+  /**
+   * 实验阅读链路：集中式本地开关（日报原生渲染计划 §7 P4）。
+   * 默认开启；关闭后日报列表与 DAILY_STORY 深链恢复旧直跳路径。
+   * 保存失败保留本次已生效的选择并提示，与沉浸光感挡位的处理口径一致。
+   */
+  @Builder
+  private readerModeGroup() {
+    this.sectionTitle('实验阅读链路')
+    Column({ space: $r('app.float.spacing_small') }) {
+      Row() {
+        Column({ space: 4 }) {
+          Text('日报原生阅读')
+            .fontSize($r('app.float.body_font_size'))
+            .fontColor($r('app.color.primary_text'))
+          Text(dailyStoryReaderModeDescription(this.dailyStoryReaderMode))
+            .fontSize($r('app.float.secondary_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+        Toggle({ type: ToggleType.Switch, isOn: this.dailyStoryReaderMode === DailyStoryReaderMode.NATIVE })
+          .id('daily_story_native_toggle')
+          .selectedColor(this.resolvedThemeColor)
+          .onChange((enabled: boolean): void => {
+            this.applyDailyStoryReaderMode(enabled ? DailyStoryReaderMode.NATIVE : DailyStoryReaderMode.LEGACY);
+          })
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+      if (this.dailyStoryReaderNotice.length > 0) {
+        Text(this.dailyStoryReaderNotice)
+          .id('daily_story_native_notice')
+          .fontSize($r('app.float.secondary_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .width('100%')
+      }
+    }
+    .width('100%')
+    .padding($r('app.float.card_padding'))
+    .borderRadius(settingsGroupRadius(this.feedCardStyle))
+    .backgroundColor(settingsGroupBackground(this.feedCardStyle))
+  }
+
+  /** 切换并持久化：先广播即时生效，再串行保存；失败保留已生效的选择。 */
+  private applyDailyStoryReaderMode(mode: DailyStoryReaderMode): void {
+    this.dailyStoryReaderMode = mode;
+    AppStorage.setOrCreate('dailyStoryReaderMode', mode);
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      this.dailyStoryReaderNotice = '设置暂不可保存，本次调整仅当前会话有效';
+      return;
+    }
+    this.dailyStoryReaderNotice = '';
+    new AppPreferencesStore(context).saveDailyStoryReaderMode(mode).catch((_error: Object): void => {
+      this.dailyStoryReaderNotice = '设置保存失败，本次调整仍已生效';
+    });
   }
 
   @Builder

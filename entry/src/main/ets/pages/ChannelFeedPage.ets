@@ -45,7 +45,8 @@ import {
   DefaultChannelFeedRepository,
   FeedColumnMode,
   FeedItem,
-  FeedTargetKind
+  FeedTargetKind,
+  isNativeDailyStoryEnabled
 } from 'data';
 import {
   BlockingActionContext,
@@ -73,7 +74,7 @@ import {
   ChannelFeedViewState,
   ChannelFeedInteractionBridge
 } from './ChannelFeedState';
-import { dailyStoryDetailErrorMessage } from './DailyStoryDetailState';
+import { dailyStoryErrorMessage } from './DailyStoryDetailState';
 import { dailyFeedDateAtIndex, formatDailyDate } from './DailyFeedDates';
 import { DraggableRefreshButton } from './components/DraggableRefreshButton';
 import { topLevelScrollRegistry } from './TopLevelScrollRegistry';
@@ -729,12 +730,17 @@ export struct ChannelFeedPage {
   }
 
   /**
-   * 直接打开日报正文：先取目标（问题/回答/文章）再一步导航，避免经过
-   * DailyStoryDetailPage 中间跳转页（用户看到“多了一个页面”）。
-   * 知乎部分日报（如「瞎扯」合集）的 originUrl 是 question/None/answer/None，
-   * 没有单一原生正文可跳，此时改为提供浏览器打开原文。
+   * 打开日报正文。
+   *
+   * 原生日报链路开启时：直接导航到 `DAILY_STORY(id)`，由日报页发一次正文请求并在本地排版，
+   * 不再在列表里预取原文目标（否则一次点击会花两次请求，且其中一次结果会被丢弃）。
+   * 开关关闭时保留旧行为：先取原文目标再一步导航，失败提供浏览器入口。
    */
   private async openDailyStory(storyId: string, storyUrl: string): Promise<void> {
+    if (isNativeDailyStoryEnabled(AppStorage.get<string>('dailyStoryReaderMode'))) {
+      this.navigate({ name: AppDestinationName.DAILY_STORY, id: storyId });
+      return;
+    }
     const repository = this.dailyStoryRepository;
     if (repository === undefined) {
       this.navigate({ name: AppDestinationName.DAILY_STORY, id: storyId });
@@ -756,7 +762,7 @@ export struct ChannelFeedPage {
         this.dailyStoryOpenError = '该日报暂不支持原生阅读，可在浏览器中查看原文';
       }
     } catch (error) {
-      this.dailyStoryOpenError = dailyStoryDetailErrorMessage(error);
+      this.dailyStoryOpenError = dailyStoryErrorMessage(error);
     } finally {
       this.dailyStoryOpening = false;
       this.dailyStoryOpenUrl = unsupportedUrl;

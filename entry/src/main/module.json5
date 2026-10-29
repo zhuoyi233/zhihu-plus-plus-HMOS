@@ -87,6 +87,12 @@
               {
                 "scheme": "https",
                 "host": "link.zhihu.com"
+              },
+              {
+                // 日报：resolveZhihuLink 只接受 https + 精确 host + /story/{十进制 ID}，
+                // 其余路径仍判为不可路由，不会把接口地址当成页面。
+                "scheme": "https",
+                "host": "daily.zhihu.com"
               }
             ],
             "domainVerify": false

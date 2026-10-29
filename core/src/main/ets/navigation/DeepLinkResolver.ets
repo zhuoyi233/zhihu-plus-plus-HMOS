@@ -9,7 +9,15 @@ export enum DeepLinkType {
   VIDEO = 'video',
   PIN = 'pin',
   SEARCH = 'search',
-  MAIN_TABS = 'main_tabs'
+  MAIN_TABS = 'main_tabs',
+  DAILY_STORY = 'daily_story'
+}
+
+/** 日报规范网页地址；应用内分享与失败兜底统一使用它，不信任响应里的 url/share_url。 */
+export const DAILY_STORY_WEB_HOST: string = 'daily.zhihu.com';
+
+export function dailyStoryWebUrl(storyId: string): string {
+  return `https://${DAILY_STORY_WEB_HOST}/story/${storyId}`;
 }
 
 export interface DeepLinkDestination {
@@ -49,6 +57,8 @@ export function describeDeepLink(destination: DeepLinkDestination): string {
       return `搜索：${destination.query}`;
     case DeepLinkType.MAIN_TABS:
       return '首页';
+    case DeepLinkType.DAILY_STORY:
+      return `日报：${destination.id}`;
   }
 }
 
@@ -94,6 +104,18 @@ function resolveZhihuLinkAtDepth(input: string, depth: number): DeepLinkDestinat
     if (host === 'link.zhihu.com') {
       const target = parsed.params.get('target');
       return target === undefined ? undefined : resolveZhihuLinkAtDepth(target, depth + 1);
+    }
+    // 日报：精确匹配 daily.zhihu.com/story/{十进制 ID}（仅 https，拒绝凭据与自定义端口）。
+    // 只接受 `story/` 下一段，其它路径（/、/api/...、多段）不当作可路由内容，
+    // 避免把接口地址或伪造后缀误判成页面。
+    if (host === DAILY_STORY_WEB_HOST) {
+      if (protocol !== 'https:') {
+        return undefined;
+      }
+      return segments.length === 2 && segments[0] === 'story' && isSafeDecimalContentId(segments[1]) &&
+        !/^0/.test(segments[1])
+        ? { type: DeepLinkType.DAILY_STORY, id: segments[1], query: emptyQuery }
+        : undefined;
     }
     if (host === 'zhuanlan.zhihu.com') {
       if (segments.length === 2 && segments[0] === 'p' && isSafeDecimalContentId(segments[1])) {

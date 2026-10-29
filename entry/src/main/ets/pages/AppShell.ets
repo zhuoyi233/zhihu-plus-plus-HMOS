@@ -19,6 +19,7 @@ import {
   AppThemeMode,
   decodeImmersiveMaterialModeText,
   DEFAULT_IMMERSIVE_MATERIAL_MODE,
+  DEFAULT_DAILY_STORY_READER_MODE,
   DEFAULT_THEME_COLOR,
   FORMULA_FOREGROUND_DARK,
   FORMULA_FOREGROUND_LIGHT,
@@ -367,6 +368,7 @@ export struct AppShell {
     void this.restoreImmersiveMaterialLevel();
     void this.restoreDeveloperMode();
     void this.restoreAnswerReadingMode();
+    void this.restoreDailyStoryReaderMode();
     this.refreshInstalledVersionLabel();
     this.unsubscribeStartupDestination?.();
     const listener: StartupDestinationListener = (destination: AppDestination): void => {
@@ -823,7 +825,17 @@ export struct AppShell {
           (destination: AppDestination): void => this.navigate(destination)
         );
       }
-      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '日报正文' }, divider: { showType: DividerShowType.OFF } } })
+      // 同问题/文章页：沉浸顶栏（静止透明、滚动出模糊），内容延伸到顶栏之后。
+      .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '知乎日报' }, divider: { showType: DividerShowType.OFF } } })
+      .hideBackButton(false)
+      .hideTitleBar(this.imagePreviewUrl.length > 0)
+      .onBackPressed((): boolean => {
+        if (this.imagePreviewUrl.length > 0) {
+          AppStorage.setOrCreate('imagePreviewUrl', '');
+          return true;
+        }
+        return false;
+      })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.QUESTION) {
@@ -2849,6 +2861,24 @@ export struct AppShell {
         await new AppPreferencesStore(context).loadAnswerReadingMode());
     } catch (_error) {
       AppStorage.setOrCreate('answerReadingMode', 'single');
+    }
+  }
+
+  /**
+   * 日报阅读模式（日报原生渲染计划 §7 P4）：启动时恢复并广播。
+   * 读取失败保持默认（原生阅读）——与设置里默认值一致，不因一次读取失败悄悄换链路。
+   */
+  private async restoreDailyStoryReaderMode(): Promise<void> {
+    const context = getAbilityContext();
+    if (context === undefined) {
+      AppStorage.setOrCreate('dailyStoryReaderMode', DEFAULT_DAILY_STORY_READER_MODE);
+      return;
+    }
+    try {
+      AppStorage.setOrCreate('dailyStoryReaderMode',
+        await new AppPreferencesStore(context).loadDailyStoryReaderMode());
+    } catch (_error) {
+      AppStorage.setOrCreate('dailyStoryReaderMode', DEFAULT_DAILY_STORY_READER_MODE);
     }
   }
 

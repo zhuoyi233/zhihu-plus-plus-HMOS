@@ -4,5 +4,7 @@ export * from './src/main/ets/reader/FormulaSourcePolicy';
 export * from './src/main/ets/reader/FormulaSvgText';
 export * from './src/main/ets/reader/ReaderBlockDataSource';
 export * from './src/main/ets/reader/ReaderDocument';
+export * from './src/main/ets/reader/DailyStoryDocument';
+export * from './src/main/ets/reader/ReaderImageSourcePolicy';
 export * from './src/main/ets/reader/ReaderImageBlock';
 export * from './src/main/ets/reader/ReaderImageSizing';

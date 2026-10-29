@@ -15,6 +15,12 @@ import {
 } from '../domain/NotificationModels';
 import { JsonArrayValue, JsonStringValue, parseStrictJson } from 'core';
 import {
+  DailyStoryReaderMode,
+  DEFAULT_DAILY_STORY_READER_MODE,
+  decodeDailyStoryReaderMode,
+  decodeDailyStoryReaderModeValue
+} from './DailyStoryReaderPreferences';
+import {
   decodeQualityFilterMode,
   decodeRecommendationMode,
   defaultRecommendationFilterPreferences,
@@ -84,6 +90,8 @@ const SPEECH_STYLE_KEY = 'readingSpeechStyle';
 // 沉浸光感挡位：独立键保存（不入 AppearancePreferences 整包），避免其他外观设置
 // 写回时用默认值意外覆盖本偏好。
 const IMMERSIVE_MATERIAL_LEVEL_KEY = 'immersiveMaterialLevel';
+/** 日报阅读模式：'legacy' 旧直跳（默认）/ 'native' 原生日报页（docs/plans 日报计划 §7 P4）。 */
+const DAILY_STORY_READER_MODE_KEY = 'dailyStoryReaderMode';
 
 export const DEFAULT_CONTENT_FONT_SIZE = 100;
 export const DEFAULT_CONTENT_LINE_HEIGHT = 160;
@@ -687,6 +695,39 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
     );
     this.saveQueue = operation.then((): void => {}, (): void => {});
     return operation;
+  }
+
+  /** 日报阅读模式：新链路默认关闭，读取失败按未开启处理（保守回退旧路径）。 */
+  async loadDailyStoryReaderMode(): Promise<DailyStoryReaderMode> {
+    await this.saveQueue;
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      const value = await store.get(DAILY_STORY_READER_MODE_KEY, DEFAULT_DAILY_STORY_READER_MODE);
+      return decodeDailyStoryReaderModeValue(value);
+    } catch (error) {
+      const detail = error instanceof Error ? error : undefined;
+      throw new Error(appPreferencesFailureMessage('Daily story reader mode load', detail));
+    }
+  }
+
+  saveDailyStoryReaderMode(mode: DailyStoryReaderMode): Promise<void> {
+    const operation = this.saveQueue.then(
+      (): Promise<void> => this.writeDailyStoryReaderMode(mode),
+      (): Promise<void> => this.writeDailyStoryReaderMode(mode)
+    );
+    this.saveQueue = operation.then((): void => {}, (): void => {});
+    return operation;
+  }
+
+  private async writeDailyStoryReaderMode(mode: DailyStoryReaderMode): Promise<void> {
+    try {
+      const store = await preferences.getPreferences(this.context, PREFERENCES_NAME);
+      await store.put(DAILY_STORY_READER_MODE_KEY, decodeDailyStoryReaderMode(mode));
+      await store.flush();
+    } catch (error) {
+      const detail = error instanceof Error ? error : undefined;
+      throw new Error(appPreferencesFailureMessage('Daily story reader mode save', detail));
+    }
   }
 
   private async writeDeveloperMode(enabled: boolean): Promise<void> {

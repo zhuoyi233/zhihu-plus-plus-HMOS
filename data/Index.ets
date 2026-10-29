@@ -98,6 +98,7 @@ export * from './src/main/ets/preferences/ReaderPosition';
 export * from './src/main/ets/preferences/ReaderPositionStore';
 export * from './src/main/ets/preferences/ImmersiveMaterialPreferences';
 export * from './src/main/ets/preferences/RecommendationFilterPreferences';
+export * from './src/main/ets/preferences/DailyStoryReaderPreferences';
 export * from './src/main/ets/preferences/SpeechPreferences';
 export * from './src/main/ets/data/AppDatabase';
 export * from './src/main/ets/data/OpenedContentStore';
