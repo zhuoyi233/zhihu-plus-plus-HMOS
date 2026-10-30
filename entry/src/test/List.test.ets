@@ -121,6 +121,7 @@ import hotCommentStateTest from './HotCommentState.test';
 import commentTextTest from './CommentText.test';
 import pinDetailLayoutTest from './PinDetailLayout.test';
 import pinBlockDialogStateTest from './PinBlockDialogState.test';
+import pinMetaTextTest from './PinMetaText.test';
 
 export default function testsuite(): void {
   feedWaterfallLayoutTest();
@@ -246,4 +247,5 @@ export default function testsuite(): void {
   commentTextTest();
   pinDetailLayoutTest();
   pinBlockDialogStateTest();
+  pinMetaTextTest();
 }

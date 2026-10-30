@@ -59,6 +59,7 @@ import {
   pinCompactBottomActions,
   pinTopContentInsetVp
 } from './PinDetailLayout';
+import { pinMetaText } from './PinMetaText';
 import {
   emptyPinBlockDialogView,
   PinBlockDialogKind,
@@ -375,14 +376,6 @@ export struct PinDetailPage {
         this.navigate({ name: AppDestinationName.PEOPLE, id: pin.author.urlToken ?? pin.author.id });
       })
 
-      // 时间属于辅助信息，不扩大为作者跳转热区。
-      if (pin.createdAt > 0) {
-        Text(pinTimeText(pin))
-          .id('pin_detail_time')
-          .fontSize($r('app.float.secondary_font_size'))
-          .fontColor($r('app.color.secondary_text'))
-          .width('100%')
-      }
       if (!this.cardSurface()) {
         Divider()
           .color($r('app.color.divider_color'))
@@ -402,8 +395,8 @@ export struct PinDetailPage {
   }
 
   /**
-   * 尾部：话题胶囊 → 统计行 → 非阻断提示。
-   * 统计与底栏点赞共用同一状态源（likeCount），避免两处数字不一致。
+   * 尾部：话题胶囊 → 发布/编辑时间与 IP 属地 → 非阻断提示。
+   * 赞/评论数只在底栏胶囊显示，正文尾部不再重复。
    */
   @Builder
   private pinTrailer(pin: PinDetail) {
@@ -429,11 +422,15 @@ export struct PinDetailPage {
         .id('pin_detail_topics')
         .width('100%')
       }
-      Text(`${this.likeCount} 赞 · ${pin.commentCount} 条评论`)
-        .id('pin_detail_statistics')
-        .fontSize($r('app.float.secondary_font_size'))
-        .fontColor($r('app.color.secondary_text'))
-        .width('100%')
+      // 与网页一致的发布/编辑时间与 IP 属地；不再在正文尾部重复赞/评论数。
+      if (pinMetaText(pin.createdAt, pin.updatedAt, pin.ipInfo ?? '').length > 0) {
+        Text(pinMetaText(pin.createdAt, pin.updatedAt, pin.ipInfo ?? ''))
+          .id('pin_detail_time')
+          .fontSize($r('app.float.secondary_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .maxLines(2)
+          .width('100%')
+      }
       if (this.openedRecordFailed) {
         Text('本次打开记录未能保存，阅读不受影响')
           .id('pin_detail_opened_record_failed')
@@ -712,14 +709,17 @@ export struct PinDetailPage {
   private pinLikeAction() {
     Button({ type: ButtonType.Normal, stateEffect: false }) {
       Row({ space: 4 }) {
-        SymbolGlyph(this.liked ? $r('sys.symbol.hand_thumbsup_fill') : $r('sys.symbol.hand_thumbsup'))
-          .fontSize(20)
-          .fontColor([this.liked ? this.resolvedThemeColor : $r('app.color.primary_text')])
+        // 与回答页同款赞同三角标：空心/实心切换，旋转 90° 使箭头朝上，前景统一用主题色。
+        SymbolGlyph(this.liked ? $r('sys.symbol.arrowtriangle_left_fill') : $r('sys.symbol.arrowtriangle_left'))
+          .fontSize('20vp')
+          .fontColor([this.resolvedThemeColor])
+          .rotate({ x: 0, y: 0, z: 1, angle: 90 })
+        // 窄窗/大字体收起数字，读数仍保留在可访问名称里。
         if (!this.compactBottomActions()) {
           Text(`${this.likeCount}`)
             .fontSize($r('app.float.secondary_font_size'))
             .fontWeight(this.liked ? FontWeight.Bold : FontWeight.Medium)
-            .fontColor(this.liked ? this.resolvedThemeColor : $r('app.color.secondary_text'))
+            .fontColor(this.resolvedThemeColor)
         }
       }
       .padding({ left: 8, right: 8, top: 8, bottom: 8 })
@@ -1079,11 +1079,4 @@ export struct PinDetailPage {
     .backgroundColor($r('app.color.card_background'))
     .borderRadius($r('app.float.card_radius'))
   }
-}
-
-function pinTimeText(pin: PinDetail): string {
-  const usesUpdatedTime = pin.updatedAt > pin.createdAt;
-  const value = usesUpdatedTime ? pin.updatedAt : pin.createdAt;
-  const date = new Date(value * 1000);
-  return `${usesUpdatedTime ? '更新于' : '发布于'} ${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
 }

@@ -42,7 +42,7 @@ export function pinBottomBarSideInsetVp(containerWidthVp: number): number {
 /**
  * 底栏是否收起可见数字：窄窗（<340vp）或系统大字体（>1.2 倍）。
  *
- * 收起后完整计数仍保留在正文尾部统计行与按钮的可访问名称里。
+ * 收起后完整计数仍保留在按钮的可访问名称里，读数不丢失。
  */
 export function pinCompactBottomActions(containerWidthVp: number, fontScale: number): boolean {
   return readerCompactActions(containerWidthVp, fontScale);

@@ -389,6 +389,7 @@ function clonePinDetail(pin: PinDetail): PinDetail {
     commentCount: pin.commentCount,
     createdAt: pin.createdAt,
     updatedAt: pin.updatedAt,
+    ipInfo: pin.ipInfo,
     author: cloneUserProfile(pin.author),
     topics: pin.topics.map((topic: PinTopic): PinTopic => ({ id: topic.id, name: topic.name }))
   };

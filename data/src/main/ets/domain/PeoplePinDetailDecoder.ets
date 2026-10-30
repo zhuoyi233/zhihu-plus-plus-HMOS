@@ -225,6 +225,8 @@ export function decodePinDetail(json: string, expectedId: string): PinDetail {
       });
     });
   }
+  // 想法接口的 IP 属地字段与回答/文章同名（ip_info），存在才展示。
+  const ipInfo = optionalString(object, 'ip_info', 'pin.ip_info');
   return {
     id: id,
     contentHtml: textOrEmpty(optionalString(object, 'content_html', 'pin.content_html'), 'pin.content_html',
@@ -238,6 +240,7 @@ export function decodePinDetail(json: string, expectedId: string): PinDetail {
       'pin.comment_count'),
     createdAt: nonNegativeInteger(optionalNumber(object, 'created', 'pin.created'), 'pin.created'),
     updatedAt: nonNegativeInteger(optionalNumber(object, 'updated', 'pin.updated'), 'pin.updated'),
+    ipInfo: ipInfo !== undefined && ipInfo.trim().length > 0 ? ipInfo.trim().substring(0, 32) : undefined,
     author: compactAuthor(optionalObject(object, 'author', 'pin.author')),
     topics: topics
   };
