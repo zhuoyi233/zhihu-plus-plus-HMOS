@@ -35,6 +35,13 @@ import {
   SettingsSearchOptions,
   visibleSettingsSearchEntries
 } from './SettingsSearchIndex';
+import {
+  publishHighlightSignal,
+  SettingsSearchHighlightSignal,
+  SettingsSearchLocationKeys,
+  SettingsSearchLocationRequest,
+  SettingsTargetKind
+} from './SettingsSearchTarget';
 import { ThemeColorSettingsPage } from './ThemeColorSettingsPage';
 
 @Component
@@ -72,6 +79,10 @@ export struct SettingsHomePage {
   /** 详情标题栏的动作由子页注册（如“更多”菜单），宿主只画一次标题。 */
   @State private detailActionsAvailable: boolean = false;
   private detailAction: () => void = (): void => {};
+  /** 搜索定位请求编号：Date.now() 做种子保证跨进程重启单调递增。 */
+  private locationRequestSeed: number = Date.now();
+  private locationRequestCount: number = 0;
+  private locationSessionId: number = Date.now();
 
   @Builder
   private emptyContent() {
@@ -201,7 +212,7 @@ export struct SettingsHomePage {
     return matchSettingsSearchEntries(visibleSettingsSearchEntries(this.searchOptions()), this.searchQuery);
   }
 
-  private destinationForEntry(id: SettingsEntryId): AppDestination | undefined {
+  private destinationForEntry(id: string): AppDestination | undefined {
     if (id === SettingsEntryId.LOGIN) {
       return { name: AppDestinationName.LOGIN };
     }
@@ -209,7 +220,7 @@ export struct SettingsHomePage {
   }
 
   /** 目录/搜索入口统一解析：内部 pane 一律留在设置实例，其余才走根路由。 */
-  private openEntry(id: SettingsEntryId): void {
+  private openEntry(id: string): void {
     const pane: SettingsPaneId = paneForEntry(id);
     if (pane !== SettingsPaneId.NONE) {
       this.selectPane(pane);
@@ -219,6 +230,50 @@ export struct SettingsHomePage {
     if (destination !== undefined) {
       this.navigate(destination);
     }
+  }
+
+  /** 收起键盘并移出搜索焦点：滚动测量前稳定视口。 */
+  private focusControllerClearFocus(): void {
+    this.getUIContext().getFocusController().clearFocus();
+  }
+
+  /**
+   * 搜索结果激活：与目录进入（openEntry）区分，携带定位请求——
+   * 收起键盘并移出焦点 → 发布请求 → 切换目标 pane，由详情页完成滚动与提醒。
+   */
+  private activateSearchEntry(entry: SettingsSearchEntry): void {
+    if (entry.targetKind === SettingsTargetKind.EXTERNAL) {
+      this.openEntry(entry.id);
+      return;
+    }
+    if (entry.paneId === SettingsPaneId.NONE || !isPaneAvailable(entry.paneId, this.developerModeEnabled)) {
+      return;
+    }
+    this.focusControllerClearFocus();
+    this.publishLocationRequest(entry);
+    this.selectPane(entry.paneId);
+  }
+
+  /** 发布定位请求快照与 tick；同时以取消信号复位上一请求的残留提醒动画。 */
+  private publishLocationRequest(entry: SettingsSearchEntry): void {
+    this.locationRequestCount += 1;
+    const request: SettingsSearchLocationRequest = {
+      sessionId: this.locationSessionId,
+      requestId: this.locationRequestSeed + this.locationRequestCount,
+      entryId: entry.id,
+      paneId: entry.paneId,
+      anchorId: entry.anchorId,
+      highlightGroupId: entry.highlightGroupId,
+      fallbackAnchorId: entry.fallbackAnchorId
+    };
+    AppStorage.setOrCreate(SettingsSearchLocationKeys.REQUEST, request);
+    const tick: number = AppStorage.get<number>(SettingsSearchLocationKeys.REQUEST_TICK) ?? 0;
+    AppStorage.setOrCreate(SettingsSearchLocationKeys.REQUEST_TICK, tick + 1);
+    publishHighlightSignal({
+      requestId: request.requestId,
+      highlightGroupId: '',
+      cancelled: true
+    } as SettingsSearchHighlightSignal);
   }
 
   build() {
@@ -471,7 +526,7 @@ export struct SettingsHomePage {
               description: entry.path,
               testId: `settings_search_open_${entry.id}`,
               grouped: true,
-              onRowClick: (): void => this.openEntry(entry.id)
+              onRowClick: (): void => this.activateSearchEntry(entry)
             });
           }, (entry: SettingsSearchEntry): string => entry.id)
         }
@@ -529,6 +584,10 @@ export struct SettingsHomePage {
         .width('100%')
         .constraintSize({ maxWidth: SETTINGS_DETAIL_MAX_CONTENT_WIDTH_VP })
         .layoutWeight(1)
+        // 单栏进入详情/双栏切换右栏内容时的轻量入场：淡入 + 24vp 横向位移（约 220ms）。
+        .transition(TransitionEffect.OPACITY
+          .combine(TransitionEffect.translate({ x: 24 }))
+          .animation({ duration: 220, curve: Curve.EaseOut }))
       }
     }
     .id('settings_detail_pane')

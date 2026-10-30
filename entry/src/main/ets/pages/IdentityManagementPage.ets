@@ -8,6 +8,10 @@ import {
   ZhihuIdentityAccount
 } from 'data';
 import { floatingTitleBarOffset } from './AppPageChrome';
+import { SettingsHighlightGroup } from '../components/SettingsSearchHighlight';
+import { SettingsSearchLocationRunner } from './SettingsSearchLocationRunner';
+import { readLocationRequest, SettingsPaneId, SettingsSearchLocationRequest } from './SettingsSearchTarget';
+
 
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 
@@ -29,6 +33,41 @@ export struct IdentityManagementPage {
   @Prop embedded: boolean = false;
   private client: IdentityManagementClient | undefined = undefined;
 
+  /** 搜索定位：本页滚动容器执行器与请求 tick 监听。 */
+  private scroller: Scroller = new Scroller();
+  private locator: SettingsSearchLocationRunner | undefined = undefined;
+  @StorageProp('settingsSearchLocationTick') @Watch('onSearchLocationRequest')
+  private searchLocationTick: number = 0;
+
+  private onSearchLocationRequest(): void {
+    this.consumeSearchLocation();
+  }
+
+
+  /** 消费定位请求：仅嵌入设置实例且目标为本页时执行滚动与提醒。 */
+  private consumeSearchLocation(): void {
+    const request = readLocationRequest();
+    if (request === undefined || request.paneId !== SettingsPaneId.IDENTITY || !this.embedded) {
+      return;
+    }
+    this.locator?.cancel(false);
+    this.locator = new SettingsSearchLocationRunner({
+      getUIContext: (): UIContext => this.getUIContext(),
+      isEmbedded: (): boolean => this.embedded,
+      isReady: (): boolean => true,
+      getScroller: (): Scroller => this.scroller,
+      scrollId: 'identity_scroll',
+      contentId: 'identity_content',
+      desiredTop: (): number => floatingTitleBarOffset() + 12,
+      onFailed: (): void => this.getUIContext().getPromptAction().showToast({
+        message: '暂时无法定位，请稍后重试', duration: 2000
+      }),
+      onFallback: (): void => this.getUIContext().getPromptAction().showToast({
+        message: '该项当前被隐藏，已定位到前置开关', duration: 2000
+      })
+    });
+    this.locator.consume(request);
+  }
   aboutToAppear(): void {
     const context = getAbilityContext();
     if (context === undefined) {
@@ -42,11 +81,13 @@ export struct IdentityManagementPage {
 
   aboutToDisappear(): void {
     this.client?.cancel();
+    this.locator?.cancel(false);
+    this.locator = undefined;
   }
 
   build() {
     Stack() {
-      Scroll() {
+      Scroll(this.scroller) {
         Column({ space: $r('app.float.spacing_large') }) {
           if (this.loading && this.accounts.length === 0) {
             Column({ space: $r('app.float.spacing_medium') }) {
@@ -102,6 +143,7 @@ export struct IdentityManagementPage {
               .borderRadius($r('app.float.card_radius')).backgroundColor($r('app.color.surface_background'))
           }
         }
+        .id('identity_content')
         .width('100%')
         .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
           top: 16, bottom: 40 })
@@ -109,6 +151,12 @@ export struct IdentityManagementPage {
       .align(Alignment.TopStart)
       .contentStartOffset(this.embedded ? floatingTitleBarOffset() : 0)
       .id('identity_scroll')
+      .onScrollStart((): void => {
+        this.locator?.onScrollStarted();
+      })
+      .onScrollStop((): void => {
+        this.locator?.onScrollStopped();
+      })
       .width('100%').height('100%').scrollBar(BarState.Off)
       .backgroundColor($r('app.color.page_background'))
 

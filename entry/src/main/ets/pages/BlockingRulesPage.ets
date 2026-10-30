@@ -23,6 +23,10 @@ import {
 } from './BlockingRulesState';
 import { adaptiveOverlayWidth, isWideOverlayContainer, ADAPTIVE_OVERLAY_MENU_WIDTH_VP } from '../common/style/AdaptiveOverlayLayout';
 import { settingsGroupBackground, settingsGroupRadius } from './AccountSettingsLayout';
+import { SettingsHighlightGroup } from '../components/SettingsSearchHighlight';
+import { SettingsSearchLocationRunner } from './SettingsSearchLocationRunner';
+import { readLocationRequest, SettingsPaneId, SettingsSearchLocationRequest } from './SettingsSearchTarget';
+
 import { floatingTitleBarOffset } from './AppPageChrome';
 
 /**
@@ -89,6 +93,41 @@ export struct BlockingRulesPage {
     }
   }
 
+  /** 搜索定位：本页滚动容器执行器与请求 tick 监听。 */
+  private scroller: Scroller = new Scroller();
+  private locator: SettingsSearchLocationRunner | undefined = undefined;
+  @StorageProp('settingsSearchLocationTick') @Watch('onSearchLocationRequest')
+  private searchLocationTick: number = 0;
+
+  private onSearchLocationRequest(): void {
+    this.consumeSearchLocation();
+  }
+
+
+  /** 消费定位请求：仅嵌入设置实例且目标为本页时执行滚动与提醒。 */
+  private consumeSearchLocation(): void {
+    const request = readLocationRequest();
+    if (request === undefined || request.paneId !== SettingsPaneId.BLOCKING_RULES || !this.embedded) {
+      return;
+    }
+    this.locator?.cancel(false);
+    this.locator = new SettingsSearchLocationRunner({
+      getUIContext: (): UIContext => this.getUIContext(),
+      isEmbedded: (): boolean => this.embedded,
+      isReady: (): boolean => true,
+      getScroller: (): Scroller => this.scroller,
+      scrollId: 'blocking_rules_scroll',
+      contentId: 'blocking_rules_content',
+      desiredTop: (): number => floatingTitleBarOffset() + 12,
+      onFailed: (): void => this.getUIContext().getPromptAction().showToast({
+        message: '暂时无法定位，请稍后重试', duration: 2000
+      }),
+      onFallback: (): void => this.getUIContext().getPromptAction().showToast({
+        message: '该项当前被隐藏，已定位到前置开关', duration: 2000
+      })
+    });
+    this.locator.consume(request);
+  }
   aboutToAppear(): void {
     if (this.embedded) {
       this.onRegisterHeaderActions((): void => {
@@ -124,7 +163,9 @@ export struct BlockingRulesPage {
   aboutToDisappear(): void {
     if (this.embedded) {
       this.onReleaseHeaderActions();
-    }
+      this.locator?.cancel(false);
+    this.locator = undefined;
+  }
     this.controller?.deactivate();
     this.controller = undefined;
     this.keywordInput = '';
@@ -150,7 +191,7 @@ export struct BlockingRulesPage {
 
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
-      Scroll() {
+      Scroll(this.scroller) {
         Column({ space: $r('app.float.spacing_medium') }) {
           this.preferencesPanel()
           this.tabBar()
@@ -158,6 +199,7 @@ export struct BlockingRulesPage {
           this.statusRow()
           this.ruleRows()
         }
+        .id('blocking_rules_content')
         .alignItems(HorizontalAlign.Start)
         .width('100%')
         .padding({
@@ -168,6 +210,12 @@ export struct BlockingRulesPage {
         })
       }
       .id('blocking_rules_scroll')
+      .onScrollStart((): void => {
+        this.locator?.onScrollStarted();
+      })
+      .onScrollStop((): void => {
+        this.locator?.onScrollStopped();
+      })
       .width('100%')
       .height('100%')
       // 内容不足一屏时 Scroll 默认居中，会让标题下出现大段空白；固定从顶部开始排。

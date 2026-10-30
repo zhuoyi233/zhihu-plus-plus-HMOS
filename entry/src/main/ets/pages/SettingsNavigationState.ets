@@ -8,22 +8,10 @@
  * 所有函数都不依赖 UI 状态，宿主与 Hypium 共同使用同一套判定。
  */
 import { SettingsEntryId } from './SettingsSearchIndex';
+import { SettingsPaneId } from './SettingsSearchTarget';
 
-/** 设置容器内部的详情 pane。NONE 表示目录（无详情）。 */
-export enum SettingsPaneId {
-  NONE = 'none',
-  IDENTITY = 'identity',
-  APPEARANCE = 'appearance',
-  THEME_COLOR = 'theme_color',
-  READING = 'reading',
-  FILTER = 'filter',
-  BLOCKING_RULES = 'blocking_rules',
-  BLOCKED_HISTORY = 'blocked_history',
-  NOTIFICATION = 'notification',
-  SYSTEM_UPDATE = 'system_update',
-  ABOUT = 'about',
-  DEVELOPER = 'developer'
-}
+// SettingsPaneId 已迁移到中立类型模块（避免索引/导航循环依赖），此处重新导出保持兼容。
+export { SettingsPaneId };
 
 /** 子页的直接父级；分类根页与目录返回 NONE。 */
 export function paneParent(pane: SettingsPaneId): SettingsPaneId {
@@ -109,7 +97,7 @@ export function paneTitle(pane: SettingsPaneId): string {
  * 目录行／搜索命中项 → 设置内部目的地。
  * 返回 NONE 表示该项属于设置之外（登录、身份管理等根路由），由调用方走 navigate。
  */
-export function paneForEntry(id: SettingsEntryId): SettingsPaneId {
+export function paneForEntry(id: string): SettingsPaneId {
   switch (id) {
     case SettingsEntryId.IDENTITY:
       return SettingsPaneId.IDENTITY;

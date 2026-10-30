@@ -12,6 +12,9 @@ import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { getSpeechPlaybackService, SpeechPlaybackStatus } from '../platform/SpeechPlaybackService';
 import { AppNavigationRow, FLOATING_TITLE_BAR_OFFSET, floatingTitleBarOffset } from './AppPageChrome';
 import { settingsGroupBackground, settingsGroupRadius } from './AccountSettingsLayout';
+import { SettingsHighlightGroup } from '../components/SettingsSearchHighlight';
+import { SettingsSearchLocationRunner } from './SettingsSearchLocationRunner';
+import { readLocationRequest, SettingsPaneId, SettingsSearchLocationRequest } from './SettingsSearchTarget';
 
 interface SpeechVoiceChoice {
   language: string;
@@ -36,6 +39,11 @@ export struct ReadingSettingsPage {
   @StorageProp('feedCardStyle') private feedCardStyle: string = FeedCardStyle.DIVIDER;
   private store: AppPreferencesStore | undefined = undefined;
   private voiceRequestSequence: number = 0;
+  /** 搜索定位：本页滚动容器执行器与请求 tick 监听。 */
+  private scroller: Scroller = new Scroller();
+  private locator: SettingsSearchLocationRunner | undefined = undefined;
+  @StorageProp('settingsSearchLocationTick') @Watch('onSearchLocationRequest')
+  private searchLocationTick: number = 0;
 
   aboutToAppear(): void {
     const context = getAbilityContext();
@@ -45,10 +53,45 @@ export struct ReadingSettingsPage {
     }
     this.store = new AppPreferencesStore(context);
     void this.restore();
+    this.consumeSearchLocation();
+  }
+
+  aboutToDisappear(): void {
+    this.locator?.cancel(false);
+    this.locator = undefined;
+  }
+
+  private onSearchLocationRequest(): void {
+    this.consumeSearchLocation();
+  }
+
+  /** 消费定位请求：等待 loaded 布局就绪后再滚动定位。 */
+  private consumeSearchLocation(): void {
+    const request = readLocationRequest();
+    if (request === undefined || request.paneId !== SettingsPaneId.READING || !this.embedded) {
+      return;
+    }
+    this.locator?.cancel(false);
+    this.locator = new SettingsSearchLocationRunner({
+      getUIContext: (): UIContext => this.getUIContext(),
+      isEmbedded: (): boolean => this.embedded,
+      isReady: (): boolean => this.loaded,
+      getScroller: (): Scroller => this.scroller,
+      scrollId: 'reading_settings_scroll',
+      contentId: 'reading_settings_content',
+      desiredTop: (): number => floatingTitleBarOffset() + 12,
+      onFailed: (): void => this.getUIContext().getPromptAction().showToast({
+        message: '暂时无法定位，请稍后重试', duration: 2000
+      }),
+      onFallback: (): void => this.getUIContext().getPromptAction().showToast({
+        message: '该项当前被隐藏，已定位到前置开关', duration: 2000
+      })
+    });
+    this.locator.consume(request);
   }
 
   build() {
-    Scroll() {
+    Scroll(this.scroller) {
       Column({ space: $r('app.float.spacing_large') }) {
         Text('使用 HarmonyOS Core Speech Kit 离线朗读回答和文章。设置会在下次开始朗读时生效。')
           .fontSize($r('app.float.secondary_font_size'))
@@ -57,24 +100,34 @@ export struct ReadingSettingsPage {
 
         if (this.loaded) {
           this.sectionTitle('语音')
-          Column() {
-            this.sliderSetting('语速', `调整朗读速度（${this.preferences.speed.toFixed(1)}×）`, this.preferences.speed,
-              'reading_speed', (value: number): void => {
-                this.save({ speed: value, pitch: this.preferences.pitch, person: this.preferences.person,
-                  language: this.preferences.language, style: this.preferences.style });
-              });
-            Divider().color($r('app.color.divider_color'))
-            this.sliderSetting('音调', `调整朗读音调（${this.preferences.pitch.toFixed(1)}）`, this.preferences.pitch,
-              'reading_pitch', (value: number): void => {
-                this.save({ speed: this.preferences.speed, pitch: value, person: this.preferences.person,
-                  language: this.preferences.language, style: this.preferences.style });
-              });
-            Divider().color($r('app.color.divider_color'))
-            this.voiceSetting()
+          SettingsHighlightGroup({ groupId: 'reading_group_voice' }) {
+            Column() {
+              Column() {
+                this.sliderSetting('语速', `调整朗读速度（${this.preferences.speed.toFixed(1)}×）`, this.preferences.speed,
+                  'reading_speed', (value: number): void => {
+                    this.save({ speed: value, pitch: this.preferences.pitch, person: this.preferences.person,
+                      language: this.preferences.language, style: this.preferences.style });
+                  });
+              }
+              .id('reading_anchor_speed')
+              .width('100%')
+              Divider().color($r('app.color.divider_color'))
+              Column() {
+                this.sliderSetting('音调', `调整朗读音调（${this.preferences.pitch.toFixed(1)}）`, this.preferences.pitch,
+                  'reading_pitch', (value: number): void => {
+                    this.save({ speed: this.preferences.speed, pitch: value, person: this.preferences.person,
+                      language: this.preferences.language, style: this.preferences.style });
+                  });
+              }
+              .id('reading_anchor_pitch')
+              .width('100%')
+              Divider().color($r('app.color.divider_color'))
+              this.voiceSetting()
+            }
+            .width('100%')
+            .borderRadius(settingsGroupRadius(this.feedCardStyle))
+            .backgroundColor(settingsGroupBackground(this.feedCardStyle))
           }
-          .width('100%')
-          .borderRadius(settingsGroupRadius(this.feedCardStyle))
-          .backgroundColor(settingsGroupBackground(this.feedCardStyle))
 
           this.sectionTitle('播放')
           Column() {
@@ -106,6 +159,7 @@ export struct ReadingSettingsPage {
         }
       }
       .width('100%')
+      .id('reading_settings_content')
       .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
         top: this.embedded ? 12 : FLOATING_TITLE_BAR_OFFSET, bottom: 40 })
     }
@@ -116,6 +170,12 @@ export struct ReadingSettingsPage {
     .height('100%')
     .scrollBar(BarState.Off)
     .backgroundColor($r('app.color.page_background'))
+    .onScrollStart((): void => {
+      this.locator?.onScrollStarted();
+    })
+    .onScrollStop((): void => {
+      this.locator?.onScrollStopped();
+    })
   }
 
   @Builder
@@ -238,6 +298,7 @@ export struct ReadingSettingsPage {
         .enabled(!this.voicesLoading && this.voiceChoices.length > 0)
         .onSelect((index: number): void => this.selectVoice(index))
     }
+    .id('reading_anchor_voice')
     .width('100%')
     .padding($r('app.float.card_padding'))
     .alignItems(VerticalAlign.Center)
