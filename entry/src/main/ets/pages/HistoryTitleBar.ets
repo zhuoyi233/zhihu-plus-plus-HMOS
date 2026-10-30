@@ -1,7 +1,12 @@
+import { TopBarActionButton } from './components/TopBarActionButton';
+import { TopBarBackMode, TopBarContent } from './components/TopBarContent';
+
 /**
  * 历史记录页 HDS 标题栏注入内容：标题 + 右上角溢出菜单（查看本地历史记录/清除历史记录）。
  * 与 ReadHistoryPage 分属 HdsNavDestination 的 stackBuilder 与内容两棵子树，经 AppStorage 键通信
  * （同 SearchTitleBar 模式）；菜单动作只发 tick，确认弹窗与跳转由内容页承接。
+ *
+ * 返回键归属由宿主决定：栈内入口用共享自绘返回（CUSTOM），一级页签入口用 NONE。
  */
 export const READ_HISTORY_OPEN_LOCAL_TICK_KEY = 'readHistoryOpenLocalTick';
 export const READ_HISTORY_CLEAR_TICK_KEY = 'readHistoryClearTick';
@@ -16,51 +21,62 @@ export function publishReadHistoryClear(): void {
     (AppStorage.get<number>(READ_HISTORY_CLEAR_TICK_KEY) ?? 0) + 1);
 }
 
-interface HistoryMenuAction {
-  readonly value: string;
-  readonly action: () => void;
-}
-
 @Component
 export struct HistoryTitleBar {
   title: string = '历史记录';
-  reserveBackButtonSpace: boolean = true;
+  @Prop backMode: TopBarBackMode = TopBarBackMode.CUSTOM;
+  @State private menuVisible: boolean = false;
+  /** 返回语义由宿主注入：顶栏组件不推断「返回」等于 pathStack.pop()。 */
+  onBack: () => void = (): void => {
+  };
 
   build() {
-    Row({ space: 8 }) {
-      // 返回键由 HDS 标题栏默认 backIcon 承载（AppShell 传入 action），这里从其右侧起排。
-      Text(this.title)
-        .id('history_title')
-        .fontSize($r('app.float.heading_font_size'))
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.primary_text'))
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .layoutWeight(1)
-      Button({ type: ButtonType.Normal, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.ellipsis_circle'))
-          .fontSize(20)
-          .fontColor([$r('app.color.primary_text')])
-      }
-      .id('history_overflow')
-      .width(40)
-      .height(40)
-      .padding(0)
-      .backgroundColor(Color.Transparent)
-      .accessibilityText('历史记录选项')
-      .bindMenu(this.historyMenu())
-    }
-    .width('100%')
-    .height(48)
-    // 独立页面让出 HDS 返回键区域；底栏页面没有返回键，使用普通标题边距。
-    .padding({ left: this.reserveBackButtonSpace ? 64 : 16, right: 8 })
-    .alignItems(VerticalAlign.Center)
+    TopBarContent({
+      backMode: this.backMode,
+      title: this.title,
+      titleId: 'history_title',
+      backId: 'history_back',
+      onBack: (): void => {
+        this.onBack();
+      },
+      hasTrailingSlot: true,
+      trailingSlot: (): void => this.historyAction()
+    })
   }
 
-  private historyMenu(): Array<HistoryMenuAction> {
-    return [
-      { value: '查看本地历史记录', action: (): void => publishReadHistoryOpenLocal() },
-      { value: '清除历史记录', action: (): void => publishReadHistoryClear() }
-    ];
+  @Builder
+  private historyAction() {
+    // 菜单必须绑在内置节点上：绑到自定义组件实例收不到触发，Row 作锚点与按钮同心。
+    Row() {
+      TopBarActionButton({
+        icon: $r('sys.symbol.ellipsis_circle'),
+        elementId: 'history_overflow',
+        label: '历史记录选项',
+        onAction: (): void => {
+          this.menuVisible = true;
+        }
+      })
+    }
+      .bindMenu(this.menuVisible, this.historyMenu(), {
+        onDisappear: (): void => {
+          this.menuVisible = false;
+        }
+      })
+  }
+
+  @Builder
+  private historyMenu() {
+    Menu() {
+      MenuItem({ content: '查看本地历史记录' })
+        .onClick((): void => {
+          this.menuVisible = false;
+          publishReadHistoryOpenLocal();
+        })
+      MenuItem({ content: '清除历史记录' })
+        .onClick((): void => {
+          this.menuVisible = false;
+          publishReadHistoryClear();
+        })
+    }
   }
 }

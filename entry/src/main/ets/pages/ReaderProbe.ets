@@ -311,11 +311,6 @@ export struct ReaderProbe {
     Stack({ alignContent: Alignment.Center }) {
       Column() {
         Row({ space: 12 }) {
-          Button('返回')
-            .backgroundColor($r('app.color.control_background'))
-            .fontColor($r('app.color.primary_text'))
-            .id('reader_back')
-            .onClick(() => this.onBack())
 
           Column({ space: 4 }) {
             Text('原生长正文验证')

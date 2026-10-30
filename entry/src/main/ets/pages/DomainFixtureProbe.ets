@@ -31,12 +31,6 @@ export struct DomainFixtureProbe {
     Scroll() {
       Column({ space: $r('app.float.spacing_large') }) {
         Row({ space: $r('app.float.spacing_medium') }) {
-          Button('返回')
-            .backgroundColor($r('app.color.control_background'))
-            .fontColor($r('app.color.primary_text'))
-            .id('domain_fixture_gate_back')
-            .fontSize($r('app.float.secondary_font_size'))
-            .onClick(() => this.onBack())
 
           Text('Domain fixture 设备门禁')
             .fontSize($r('app.float.heading_font_size'))

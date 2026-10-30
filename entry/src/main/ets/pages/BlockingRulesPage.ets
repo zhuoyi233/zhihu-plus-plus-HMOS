@@ -1,4 +1,6 @@
 import { CenteredOverlayDialog } from './CenteredOverlayDialog';
+import { TopBarActionButton } from './components/TopBarActionButton';
+import { TopBarBackMode, TopBarContent } from './components/TopBarContent';
 import { pasteboard, BusinessError } from '@kit.BasicServicesKit';
 import {
   BlockedKeywordRule,
@@ -231,7 +233,9 @@ export struct BlockingRulesPage {
           this.pageHeader()
         }
         .width('100%')
-        .padding({ left: 12, right: 12, top: 8 })
+        // 横向留白由共享顶栏负责；48vp 内容行在 56vp 顶栏区内居中（上下各 4vp），
+        // 与 HDS 托管标题栏同基线，跨页跳转时标题不跳动。
+        .padding({ top: 4 })
         .position({ x: 0, y: Math.max(this.statusBarHeightVp, 0) })
         .zIndex(2)
 
@@ -349,55 +353,44 @@ export struct BlockingRulesPage {
 
   @Builder
   private pageHeader() {
-    Row({ space: $r('app.float.spacing_small') }) {
-      Button({ type: ButtonType.Normal, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(20)
-          .fontColor([$r('app.color.primary_text')])
+    TopBarContent({
+      backMode: TopBarBackMode.CUSTOM,
+      title: '内容屏蔽',
+      titleId: 'blocking_rules_title',
+      backId: 'blocking_rules_back',
+      onBack: (): void => {
+        this.onBack();
+      },
+      hasTrailingSlot: true,
+      trailingSlot: (): void => this.blockingRuleActions()
+    })
+  }
+
+  @Builder
+  private blockingRuleActions() {
+    TopBarActionButton({
+      icon: $r('sys.symbol.ellipsis_circle'),
+      elementId: 'blocking_rules_actions',
+      label: '内容屏蔽操作',
+      onAction: (): void => {
+        this.actionsSheetShown = true;
       }
-        .id('blocking_rules_back')
-        .width(40)
-        .height(40)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .accessibilityText('返回')
-        .onClick((): void => this.onBack())
-      Text('内容屏蔽')
-        .fontSize($r('app.float.heading_font_size'))
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.primary_text'))
-        .layoutWeight(1)
-      Button({ type: ButtonType.Normal, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.ellipsis_circle'))
-          .fontSize(20)
-          .fontColor([$r('app.color.primary_text')])
-      }
-        .id('blocking_rules_actions')
-        .width(40)
-        .height(40)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .accessibilityText('内容屏蔽操作')
-        .bindSheet(this.actionsSheetShown, this.actionsSheet(), {
-          preferType: isWideOverlayContainer(this.overlayWidthVp) ? SheetType.POPUP : SheetType.BOTTOM,
-          width: isWideOverlayContainer(this.overlayWidthVp)
-            ? adaptiveOverlayWidth(this.overlayWidthVp, ADAPTIVE_OVERLAY_MENU_WIDTH_VP) : '100%',
-          height: SheetSize.FIT_CONTENT,
-          dragBar: !isWideOverlayContainer(this.overlayWidthVp),
-          showClose: false,
-          maskColor: '#99000000',
-          backgroundColor: $r('app.color.surface_background'),
-          onDisappear: (): void => {
-            if (this.actionsSheetShown) {
-              this.actionsSheetShown = false;
-            }
+    })
+      .bindSheet(this.actionsSheetShown, this.actionsSheet(), {
+        preferType: isWideOverlayContainer(this.overlayWidthVp) ? SheetType.POPUP : SheetType.BOTTOM,
+        width: isWideOverlayContainer(this.overlayWidthVp)
+          ? adaptiveOverlayWidth(this.overlayWidthVp, ADAPTIVE_OVERLAY_MENU_WIDTH_VP) : '100%',
+        height: SheetSize.FIT_CONTENT,
+        dragBar: !isWideOverlayContainer(this.overlayWidthVp),
+        showClose: false,
+        maskColor: '#99000000',
+        backgroundColor: $r('app.color.surface_background'),
+        onDisappear: (): void => {
+          if (this.actionsSheetShown) {
+            this.actionsSheetShown = false;
           }
-        })
-        .onClick((): void => {
-          this.actionsSheetShown = true;
-        })
-    }
-    .width('100%')
+        }
+      })
   }
 
   @Builder

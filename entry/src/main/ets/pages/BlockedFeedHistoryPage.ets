@@ -1,4 +1,6 @@
 import { CenteredOverlayDialog } from './CenteredOverlayDialog';
+import { TopBarActionButton } from './components/TopBarActionButton';
+import { TopBarBackMode, TopBarContent } from './components/TopBarContent';
 import {
   onThemeColor,
   BlockedFeedHistoryGateway,
@@ -110,7 +112,9 @@ export struct BlockedFeedHistoryPage {
           this.pageHeader()
         }
         .width('100%')
-        .padding({ left: 12, right: 12, top: 8 })
+        // 横向留白由共享顶栏负责；48vp 内容行在 56vp 顶栏区内居中（上下各 4vp），
+        // 与 HDS 托管标题栏同基线，跨页跳转时标题不跳动。
+        .padding({ top: 4 })
         .position({ x: 0, y: Math.max(this.statusBarHeightVp, 0) })
         .zIndex(2)
       } else if (this.historyActionsSheetShown) {
@@ -213,35 +217,29 @@ export struct BlockedFeedHistoryPage {
 
   @Builder
   private pageHeader() {
-    Row({ space: $r('app.float.spacing_small') }) {
-      Button({ type: ButtonType.Normal, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(20)
-          .fontColor([$r('app.color.primary_text')])
+    TopBarContent({
+      backMode: TopBarBackMode.CUSTOM,
+      title: '屏蔽记录',
+      titleId: 'blocked_feed_history_title',
+      backId: 'blocked_feed_history_back',
+      onBack: (): void => {
+        this.onBack();
+      },
+      hasTrailingSlot: true,
+      trailingSlot: (): void => this.historyActionsEntry()
+    })
+  }
+
+  @Builder
+  private historyActionsEntry() {
+    TopBarActionButton({
+      icon: $r('sys.symbol.ellipsis_circle'),
+      elementId: 'blocked_feed_history_actions',
+      label: '屏蔽记录操作',
+      onAction: (): void => {
+        this.historyActionsSheetShown = true;
       }
-      .id('blocked_feed_history_back')
-      .width(40)
-      .height(40)
-      .padding(0)
-      .backgroundColor(Color.Transparent)
-      .accessibilityText('返回')
-      .onClick((): void => this.onBack())
-      Text('屏蔽记录')
-        .fontSize($r('app.float.heading_font_size'))
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.primary_text'))
-        .layoutWeight(1)
-      Button({ type: ButtonType.Normal, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.ellipsis_circle'))
-          .fontSize(20)
-          .fontColor([$r('app.color.primary_text')])
-      }
-      .id('blocked_feed_history_actions')
-      .width(40)
-      .height(40)
-      .padding(0)
-      .backgroundColor(Color.Transparent)
-      .accessibilityText('屏蔽记录操作')
+    })
       .bindSheet(this.historyActionsSheetShown, this.historyActionsSheet(), {
         preferType: isWideOverlayContainer(this.overlayWidthVp) ? SheetType.POPUP : SheetType.BOTTOM,
         width: isWideOverlayContainer(this.overlayWidthVp)
@@ -257,11 +255,6 @@ export struct BlockedFeedHistoryPage {
           }
         }
       })
-      .onClick((): void => {
-        this.historyActionsSheetShown = true;
-      })
-    }
-    .width('100%')
   }
 
   @Builder

@@ -22,11 +22,6 @@ export struct ImageProbe {
         Column({ space: 20 }) {
           Blank().height(64)
           Row({ space: 12 }) {
-            Button('返回')
-              .backgroundColor($r('app.color.control_background'))
-              .fontColor($r('app.color.primary_text'))
-              .id('image_back')
-              .onClick(() => this.onBack())
             Column({ space: 4 }) {
               Text('图片与 GIF 验证')
                 .fontSize(22)

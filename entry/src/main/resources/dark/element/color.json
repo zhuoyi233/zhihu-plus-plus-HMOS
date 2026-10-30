@@ -49,6 +49,10 @@
       "value": "#2A2C31"
     },
     {
+      "name": "top_bar_button_fallback_background",
+      "value": "#B3191A1D"
+    },
+    {
       "name": "brand_primary",
       "value": "#5B9DFF"
     },

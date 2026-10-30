@@ -57,6 +57,10 @@
       "value": "4vp"
     },
     {
+      "name": "top_bar_action_spacing",
+      "value": "8vp"
+    },
+    {
       "name": "segment_sheet_title_font_size",
       "value": "14fp"
     },
@@ -107,6 +111,10 @@
     {
       "name": "settings_slider_thumb_gap_offset",
       "value": "-6vp"
+    },
+    {
+      "name": "top_bar_icon_font_size",
+      "value": "20fp"
     }
   ]
 }

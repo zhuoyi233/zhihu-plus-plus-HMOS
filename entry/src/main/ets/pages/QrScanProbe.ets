@@ -51,12 +51,6 @@ export struct QrScanProbePage {
   build() {
     Scroll() {
       Column({ space: 16 }) {
-        Blank().height(64)
-        Button('返回')
-          .backgroundColor($r('app.color.control_background'))
-          .fontColor($r('app.color.primary_text'))
-          .id('qr_scan_back')
-          .onClick(() => this.onBack())
 
         Text('Scan Kit 二维码原型')
           .fontSize(24)

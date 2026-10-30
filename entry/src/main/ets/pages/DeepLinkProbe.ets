@@ -147,12 +147,6 @@ export struct DeepLinkProbePage {
   build() {
     Scroll() {
       Column({ space: 16 }) {
-        Blank().height(64)
-        Button('返回')
-          .backgroundColor($r('app.color.control_background'))
-          .fontColor($r('app.color.primary_text'))
-          .id('deep_link_back')
-          .onClick(() => this.onBack())
 
         Text('知乎 URL 与深链解析')
           .fontSize(24)

@@ -1,3 +1,17 @@
+/**
+ * 顶栏「背景策略」集中表（docs/top-bars-immersive-material-plan.md §3.2）。
+ *
+ * 背景策略与按钮材质分别管理：本文件只决定标题栏背后的遮挡层（首屏轻量、滚动过渡、
+ * 常驻可读、几何驱动、不透明、由页面自管），顶部圆按钮的材质路径见 TopBarMaterial.ets。
+ * 页面只选择策略与状态，不再自建背板层：
+ * - getRootChromeTitleBarStyle：根页滚动背景（首页/关注/热榜/日报/一级历史）
+ * - getImmersiveTitleBarStyle：普通滚动背景（设置及管理页、搜索、列表、详情）
+ * - getPersistentImmersiveTitleBarStyle：常驻可读背景（评论等首帧即遮挡的页面）
+ * - getAnswerTitleBarStyle：正文几何驱动（回答/文章身份与标题折叠）
+ * - getContinuousAnswerTitleBarStyle：连续阅读（API 23 背景归页面渐变层）
+ * - getChatTitleBarStyle：不透明背景（私信、诊断原型）
+ * 全屏媒体与覆盖层（视频、图片预览、扫码、风控）由页面自管工具栏，不在本表内。
+ */
 import { LengthMetrics } from '@kit.ArkUI';
 import { BlurStrategy, hdsMaterial, ScrollEffectType, TitleBarStyleOptions } from '@kit.UIDesignKit';
 import { ImmersiveMaterialMode } from 'data';

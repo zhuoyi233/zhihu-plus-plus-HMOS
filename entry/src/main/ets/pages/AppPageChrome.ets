@@ -6,6 +6,12 @@
  */
 import { DEFAULT_THEME_COLOR, onThemeColor } from 'data';
 import { ComponentContent, UIContext } from '@kit.ArkUI';
+import {
+  TOP_BAR_AREA_HEIGHT_VP,
+  TOP_BAR_CONTENT_ROW_HEIGHT_VP,
+  topBarFeedStartOffsetVp,
+  topBarStartOffsetVp
+} from '../common/style/TopBarMaterial';
 
 export enum AppPageStatusKind {
   LOADING = 'loading',
@@ -30,19 +36,33 @@ export enum AppPageStatusKind {
  */
 export const FLOATING_TITLE_BAR_OFFSET: number = 94;
 
-/** HDS 标题栏自身高度（vp）：首屏让位 = 状态栏高度 + 该值。 */
-export const ROOT_TITLE_BAR_CONTENT_HEIGHT: number = 56;
+/** HDS 标题栏内容区域高度（vp）：首屏让位 = 状态栏高度 + 该值；取自共享顶栏几何。 */
+export const ROOT_TITLE_BAR_CONTENT_HEIGHT: number = TOP_BAR_AREA_HEIGHT_VP;
+
+/** 当前状态栏高度（vp）：由 AppShell 广播，读数未就绪时按 0 处理（走 94vp 下限）。 */
+function currentStatusBarHeightVp(): number {
+  const statusBar: number = AppStorage.get<number>('statusBarHeightVp') ?? 0;
+  return statusBar > 0 ? statusBar : 0;
+}
 
 /**
- * 顶栏让位高度（vp）：状态栏高度 + HDS 标题栏自身高度（56vp），按固定常量兜底。
+ * 顶栏让位高度（vp）：状态栏高度 + 顶栏内容区域高度（56vp），并按 94vp 下限兜底。
  *
  * 根顶栏已按华为官方样例改成「透明底 + HDS 自带滚动模糊」，玻璃只在标题栏自身
  * 高度内生效，因此让位不再跟随标题栏下方那段模糊蒙层（maskExtraHeight，默认
  * 32vp），内容可以像系统应用一样紧贴顶栏下沿。
  */
 export function floatingTitleBarOffset(): number {
-  const statusBar: number = AppStorage.get<number>('statusBarHeightVp') ?? 0;
-  return Math.max(FLOATING_TITLE_BAR_OFFSET, statusBar + ROOT_TITLE_BAR_CONTENT_HEIGHT);
+  return topBarStartOffsetVp(currentStatusBarHeightVp());
+}
+
+/**
+ * 自绘顶栏的顶部内缩（vp）：把 48vp 内容行放进与 HDS 托管标题栏同一条 56vp 带里居中，
+ * 跨页跳转时标题与圆按钮不再上下跳动（用户主页、想法/回答编辑器共用）。
+ */
+export function floatingTitleBarContentTopVp(): number {
+  const barTopVp: number = Math.max(floatingTitleBarOffset() - TOP_BAR_AREA_HEIGHT_VP, 0);
+  return barTopVp + (TOP_BAR_AREA_HEIGHT_VP - TOP_BAR_CONTENT_ROW_HEIGHT_VP) / 2;
 }
 
 /**
@@ -54,8 +74,7 @@ export const FEED_TOP_CONTENT_OVERLAP_VP: number = 10;
 
 /** 信息流首个内容条目的让位高度（vp）：标题栏下沿再上浮上一条的幅度。 */
 export function feedTopContentInset(): number {
-  return Math.max(ROOT_TITLE_BAR_CONTENT_HEIGHT,
-    floatingTitleBarOffset() - FEED_TOP_CONTENT_OVERLAP_VP);
+  return topBarFeedStartOffsetVp(currentStatusBarHeightVp(), FEED_TOP_CONTENT_OVERLAP_VP);
 }
 
 /**

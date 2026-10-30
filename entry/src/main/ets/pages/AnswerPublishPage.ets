@@ -23,6 +23,9 @@ import {
 import { takeAnswerEditSeed } from './AnswerEditSeedStore';
 import { ImagePickerPanel } from './ImagePickerPanel';
 import { PreparedPickedImage } from '../platform/MediaPickerCoordinator';
+import { TopBarBackMode, TopBarContent } from './components/TopBarContent';
+import { floatingTitleBarContentTopVp } from './AppPageChrome';
+import { TOP_BAR_BUTTON_DIAMETER_VP } from '../common/style/TopBarMaterial';
 
 export enum AnswerPublishPagePhase {
   PREPARING = 'preparing',
@@ -432,8 +435,6 @@ export class SystemAnswerPublishTraceIdFactory implements AnswerPublishTraceIdFa
 export struct AnswerPublishPage {
   /** 当前生效主题色（AppShell 广播），驱动强调色控件。 */
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
-  /** 系统状态栏高度（vp）：隐藏注入标题栏后，页面头部需自行让出状态栏并留出呼吸空间。 */
-  @StorageProp('statusBarHeight') private statusBarHeightVp: number = 0;
   questionId: string = '';
   answerId?: string = undefined;
   session: LoginSessionGateway | undefined = undefined;
@@ -465,33 +466,17 @@ export struct AnswerPublishPage {
 
   build() {
     Column({ space: $r('app.float.spacing_medium') }) {
-      Row({ space: $r('app.float.spacing_small') }) {
-        Button({ type: ButtonType.Normal, stateEffect: true }) {
-          SymbolGlyph($r('sys.symbol.chevron_left'))
-            .fontSize(20)
-            .fontColor([$r('app.color.primary_text')])
-        }
-          .id('answer_page_exit')
-          .width(40)
-          .height(40)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .accessibilityText('返回')
-          .onClick((): void => this.exitEditor())
-        Text(this.viewState.answerId === undefined ? '撰写回答' : '编辑回答')
-          .id('answer_page_title')
-          .layoutWeight(1)
-          .fontSize($r('app.float.heading_font_size'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.primary_text'))
-        Button('发布')
-          .backgroundColor(this.resolvedThemeColor)
-          .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id('answer_page_publish')
-          .enabled(this.viewState.canPublish)
-          .onClick((): void => this.requestPublishConfirmation())
-      }
-      .width('100%')
+      TopBarContent({
+        backMode: TopBarBackMode.CUSTOM,
+        title: this.viewState.answerId === undefined ? '撰写回答' : '编辑回答',
+        titleId: 'answer_page_title',
+        backId: 'answer_page_exit',
+        onBack: (): void => {
+          this.exitEditor();
+        },
+        hasTrailingSlot: true,
+        trailingSlot: (): void => this.publishAction()
+      })
 
       Text(this.viewState.statusMessage)
         .id('answer_page_status')
@@ -561,10 +546,26 @@ export struct AnswerPublishPage {
     .padding({
       left: $r('app.float.card_padding'),
       right: $r('app.float.card_padding'),
-      top: Math.max(this.statusBarHeightVp, 0) + 12,
+      // 自绘顶栏与 HDS 托管标题栏同带同基线：48vp 内容行在 56vp 顶栏区内居中。
+      top: floatingTitleBarContentTopVp(),
       bottom: $r('app.float.card_padding')
     })
     .backgroundColor($r('app.color.page_background'))
+  }
+
+  /** 发布是编辑器的文字主操作：保留文字语义与主题色底，不改成中性圆图标。 */
+  @Builder
+  private publishAction() {
+    Button('发布')
+      .height(TOP_BAR_BUTTON_DIAMETER_VP)
+      .id('answer_page_publish')
+      .fontColor(onThemeColor(this.resolvedThemeColor))
+      .backgroundColor(this.resolvedThemeColor)
+      .enabled(this.viewState.canPublish)
+      .accessibilityText('发布回答')
+      .onClick((): void => {
+        this.requestPublishConfirmation();
+      })
   }
 
   private exitEditor(): void {

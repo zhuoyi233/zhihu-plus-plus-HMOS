@@ -20,6 +20,8 @@ import {
   PublishPinTopic,
   SessionStatus
 } from 'data';
+import { TopBarBackMode, TopBarContent } from './components/TopBarContent';
+import { TOP_BAR_BUTTON_DIAMETER_VP } from '../common/style/TopBarMaterial';
 import {
   PinPublishOperation,
   PinPublishImageUploader,
@@ -34,6 +36,7 @@ import {
 import { isSafeLocalDraftId } from 'core';
 import { PreparedPickedImage } from '../platform/MediaPickerCoordinator';
 import { ImagePickerPanel } from './ImagePickerPanel';
+import { floatingTitleBarContentTopVp } from './AppPageChrome';
 
 export type PinPublishPageBackCallback = () => void;
 export type PinPublishPageLoginCallback = () => void;
@@ -304,6 +307,7 @@ export struct PinPublishPage {
 
   build() {
     Column({ space: $r('app.float.spacing_medium') }) {
+      this.header()
       if (this.viewState.phase === PinPublishPagePhase.SETUP) {
         Blank()
       } else if (this.viewState.requiresLogin) {
@@ -325,44 +329,45 @@ export struct PinPublishPage {
     .alignItems(HorizontalAlign.Start)
     .width('100%')
     .height('100%')
+    // 自绘顶栏与 HDS 托管标题栏同带同基线：48vp 内容行在 56vp 顶栏区内居中。
     .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
-      top: 94, bottom: $r('app.float.page_padding') })
+      top: floatingTitleBarContentTopVp(), bottom: $r('app.float.page_padding') })
     .backgroundColor($r('app.color.page_background'))
   }
 
   @Builder
   private header() {
-    Row({ space: $r('app.float.spacing_small') }) {
-      Button({ type: ButtonType.Normal, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(20)
-          .fontColor([$r('app.color.primary_text')])
-      }
-        .id('pin_publish_cancel')
-        .width(40)
-        .height(40)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .accessibilityText('返回')
-        .enabled(this.viewState.phase !== PinPublishPagePhase.RELEASED)
-        .onClick((): void => {
-          this.controller?.cancel();
-          this.onBack();
-        })
-      Text('发想法')
-        .fontSize($r('app.float.heading_font_size'))
-        .fontWeight(FontWeight.Medium)
-        .layoutWeight(1)
-      Button(this.publishLabel())
-        .id('pin_publish_submit')
-        .fontColor(onThemeColor(this.resolvedThemeColor))
-        .backgroundColor(this.resolvedThemeColor)
-        .enabled(this.viewState.canPublish)
-        .onClick((): void => {
-          this.requestPublishConfirmation();
-        })
-    }
-    .width('100%')
+    TopBarContent({
+      backMode: TopBarBackMode.CUSTOM,
+      title: '发想法',
+      // 顶栏标题与正文标题输入框（pin_publish_title）分开，避免 id 冲突。
+      titleId: 'pin_publish_top_title',
+      backId: 'pin_publish_cancel',
+      backLabel: '退出编辑',
+      onBack: (): void => {
+        this.controller?.cancel();
+        this.onBack();
+      },
+      // 已发布状态下退出编辑动作失效，返回键随之禁用（状态不只靠颜色表达）。
+      backDisabled: this.viewState.phase === PinPublishPagePhase.RELEASED,
+      hasTrailingSlot: true,
+      trailingSlot: (): void => this.publishAction()
+    })
+  }
+
+  /** 发布保留文字与主题色，作为编辑器的唯一主操作。 */
+  @Builder
+  private publishAction() {
+    Button(this.publishLabel())
+      .height(TOP_BAR_BUTTON_DIAMETER_VP)
+      .id('pin_publish_submit')
+      .fontColor(onThemeColor(this.resolvedThemeColor))
+      .backgroundColor(this.resolvedThemeColor)
+      .enabled(this.viewState.canPublish)
+      .accessibilityText('发布想法')
+      .onClick((): void => {
+        this.requestPublishConfirmation();
+      })
   }
 
   @Builder
