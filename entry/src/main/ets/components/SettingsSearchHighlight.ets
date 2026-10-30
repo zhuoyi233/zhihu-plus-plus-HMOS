@@ -178,6 +178,9 @@ export struct SettingsHighlightGroup {
           .borderRadius(8)
           .border({ width: 2, color: this.strokeColor() })
           .backgroundColor(this.fillColor())
+          // HitTestMode.None 只让容器自身退出命中测试，子节点仍会吞掉其覆盖区域的点击；
+          // 提醒矩形铺满分组建模，必须同样置 None，否则分组内开关/按钮全部点不动。
+          .hitTestBehavior(HitTestMode.None)
       } else {
         Column()
           .width(this.groupWidth)
@@ -188,6 +191,7 @@ export struct SettingsHighlightGroup {
             color: this.strokeColor()
           })
           .backgroundColor(this.fillColor())
+          .hitTestBehavior(HitTestMode.None)
       }
     }
     .width(this.groupWidth)
