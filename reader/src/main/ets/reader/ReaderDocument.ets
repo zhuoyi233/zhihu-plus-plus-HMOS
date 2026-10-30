@@ -756,6 +756,24 @@ export function parseZhihuHtml(html: string): Array<ReaderBlock> {
         }
         return;
       }
+      // 没有 figure 包裹的裸图片：想法正文的图片直接跟在正文 div 之后（`</div><img><img>…`），
+      // 文章里也有 `<p><img></p>` 形态。片段只剩图片时必须逐张成块，不能按空文本丢弃。
+      if (imageTags !== null && visibleContent.replace(IMAGE_PATTERN, '').trim().length === 0) {
+        imageTags.forEach((tag: string, index: number): void => {
+          const sourceUrl = preferredImageSource(tag);
+          if (sourceUrl.length === 0) {
+            return;
+          }
+          blocks.push({
+            id: imageTags.length > 1 ? `${blockId}-img${index}` : blockId,
+            kind: ReaderBlockKind.IMAGE,
+            text: decodeHtml(attributeValue(tag, 'alt')).trim(),
+            sourceUrl: sourceUrl,
+            inlineRuns: []
+          });
+        });
+        return;
+      }
 
       const text = plainText(content);
       if (text.length === 0) {

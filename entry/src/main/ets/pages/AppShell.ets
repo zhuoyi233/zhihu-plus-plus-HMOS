@@ -1015,6 +1015,15 @@ export struct AppShell {
         );
       }
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '想法' }, divider: { showType: DividerShowType.OFF } } })
+      // 想法正文图片可打开全屏查看器：查看时隐藏顶栏，返回键优先关查看器再退出想法。
+      .hideTitleBar(this.imagePreviewUrl.length > 0)
+      .onBackPressed((): boolean => {
+        if (this.imagePreviewUrl.length > 0) {
+          AppStorage.setOrCreate('imagePreviewUrl', '');
+          return true;
+        }
+        return false;
+      })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.COLLECTIONS) {

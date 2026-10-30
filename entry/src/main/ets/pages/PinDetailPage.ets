@@ -34,7 +34,7 @@ import {
 import { PinDetailController, PinDetailViewState, ReadOnlyDetailPhase } from './PeoplePinDetailState';
 import { PinLikeController, PinLikeViewState } from './ContentInteractionState';
 import { ReadOnlyDetailStatusPanel } from './PeoplePinDetailPages';
-import { NativeContentDocument } from './NativeContentDocument';
+import { ContentImagePreview, NativeContentDocument } from './NativeContentDocument';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { createSystemShareService } from '../platform/SystemShareService';
 import { SharePayloadKind, ShareTextPayload } from '../platform/ShareContracts';
@@ -111,6 +111,8 @@ export struct PinDetailPage {
   @StorageProp('feedCardStyle') private feedCardStyle: string = FeedCardStyle.DIVIDER;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   @StorageProp('answerDoubleTapAction') private doubleTapAction: AnswerDoubleTapAction = AnswerDoubleTapAction.ASK;
+  /** 全屏图片查看器地址（正文图片点击后写入）：查看时页面根叠层渲染，顶栏由 AppShell 隐藏。 */
+  @StorageProp('imagePreviewUrl') private imagePreviewUrl: string = '';
   private doubleTapMenuShown: boolean = false;
   private controller?: PinDetailController;
   private likeController?: PinLikeController;
@@ -219,6 +221,10 @@ export struct PinDetailPage {
     this.shareStatus = '';
     this.userBlockDialogShown = false;
     this.keywordBlockDialogShown = false;
+    // 离开页面时收起共享的图片查看器，避免叠层留着上次打开的地址。
+    if (this.imagePreviewUrl.length > 0) {
+      AppStorage.setOrCreate('imagePreviewUrl', '');
+    }
   }
 
   build() {
@@ -239,6 +245,23 @@ export struct PinDetailPage {
       // 中间空白与整层都不拦截正文的滚动、点链接与选字。
       if (this.phase === ReadOnlyDetailPhase.READY && this.pin !== undefined) {
         this.bottomActionBar(this.pin)
+      }
+
+      // 全屏图片查看器：想法正文图片点击后由页面根叠层渲染，盖住正文与底栏。
+      if (this.imagePreviewUrl.length > 0) {
+        Stack({ alignContent: Alignment.Center }) {
+          ContentImagePreview({
+            url: this.imagePreviewUrl,
+            onClose: (): void => {
+              AppStorage.setOrCreate('imagePreviewUrl', '');
+            }
+          })
+        }
+        .id('pin_image_preview_overlay')
+        .width('100%')
+        .height('100%')
+        // 高于底栏（zIndex 2）：查看图片时胶囊不压在全屏图上。
+        .zIndex(3)
       }
     }
     .id('pin_detail_page')

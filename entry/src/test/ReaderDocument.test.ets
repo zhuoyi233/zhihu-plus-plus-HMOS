@@ -350,6 +350,35 @@ export default function readerDocumentTest(): void {
       expect(fallback[0].text).assertEqual('替代文字');
     });
 
+    it('keepsBareImagesOutsideFigureInDocumentOrder', 0, () => {
+      // 想法正文的典型形态：正文在 div 里，图片直接跟在 div 之后，没有 figure 包裹。
+      const blocks = parseZhihuHtml('<div><p>AI 看山有新衣服啦</p><p>第二段</p></div>' +
+        '<img src="https://picx.zhimg.com/50/a_b.jpg" ' +
+        'data-original="https://picx.zhimg.com/a.jpg?source=e3d01f54" alt="装扮一">' +
+        '<img src="https://pic3.zhimg.com/50/b_b.jpg" ' +
+        'data-original="https://pic1.zhimg.com/b.jpg?source=e3d01f54">');
+      expect(blocks.length).assertEqual(4);
+      expect(blocks[0].kind).assertEqual(ReaderBlockKind.PARAGRAPH);
+      expect(blocks[1].kind).assertEqual(ReaderBlockKind.PARAGRAPH);
+      expect(blocks[2].kind).assertEqual(ReaderBlockKind.IMAGE);
+      expect(blocks[2].sourceUrl).assertEqual('https://picx.zhimg.com/a.jpg?source=e3d01f54');
+      expect(blocks[2].text).assertEqual('装扮一');
+      expect(blocks[3].kind).assertEqual(ReaderBlockKind.IMAGE);
+      expect(blocks[3].sourceUrl).assertEqual('https://pic1.zhimg.com/b.jpg?source=e3d01f54');
+      // 连续图片必须各自成块，块 id 互不重复（LazyForEach 以 id 作键）。
+      expect(blocks[2].id).assertEqual('block-2-img0');
+      expect(blocks[3].id).assertEqual('block-2-img1');
+    });
+
+    it('keepsSingleBareImageWithoutFigure', 0, () => {
+      const blocks = parseZhihuHtml('<p>前文</p><p><img src="https://pic1.zhimg.com/single.jpg"></p><p>后文</p>');
+      expect(blocks.length).assertEqual(3);
+      expect(blocks[1].kind).assertEqual(ReaderBlockKind.IMAGE);
+      expect(blocks[1].sourceUrl).assertEqual('https://pic1.zhimg.com/single.jpg');
+      expect(blocks[1].id).assertEqual('block-1');
+      expect(blocks[2].kind).assertEqual(ReaderBlockKind.PARAGRAPH);
+    });
+
     it('parsesEmbeddedZhihuVideoCard', 0, () => {
       const blocks = parseZhihuHtml('<p>视频如下</p>' +
         '<a class="video-box content-box" data-lens-id="1944534197600511075" ' +
