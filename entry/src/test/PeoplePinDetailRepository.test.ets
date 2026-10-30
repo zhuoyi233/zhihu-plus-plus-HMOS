@@ -209,6 +209,7 @@ export default function peoplePinDetailRepositoryTest(): void {
       expect(pin.likeCount).assertEqual(56);
       expect(pin.topics.length).assertEqual(1);
       expect(pin.topics[0].name).assertEqual('HarmonyOS');
+      expect(pin.ipInfo).assertEqual('北京');
       expect(pin.url).assertEqual('https://www.zhihu.com/pin/9007199254740993');
     });
 
@@ -353,7 +354,7 @@ const PEOPLE_JSON = '{"id":"member-hash","url_token":"alice-token","name":"Alice
   '"follower_count":78,"following_count":12,"answer_count":34,"articles_count":5,' +
   '"is_following":true,"is_org":false}';
 const PIN_JSON = '{"id":9007199254740993,"content_html":"<p>想法正文</p>",' +
-  '"like_count":56,"comment_count":7,"created":1,"updated":2,' +
+  '"like_count":56,"comment_count":7,"created":1,"updated":2,"ip_info":"北京",' +
   '"author":{"id":"pin-author","url_token":"pin-author-token","name":"Pin Author",' +
   '"headline":"作者签名","avatar_url":"https://pic1.zhimg.com/author.png"},' +
   '"topics":[{"id":19551275,"name":"HarmonyOS"}]}';

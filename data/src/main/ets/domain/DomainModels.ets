@@ -45,6 +45,8 @@ export interface PinDetail {
   commentCount: number;
   createdAt: number;
   updatedAt: number;
+  /** 发布地 IP 属地（接口有值时才展示，与网页「IP 属地」一致）。 */
+  ipInfo?: string;
   author: UserProfile;
   topics: Array<PinTopic>;
 }
