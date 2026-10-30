@@ -997,7 +997,14 @@ export struct NativeContentDocument {
           if (this.empty) {
             ListItem() {
               Text(this.emptyMessage).id('content_document_empty')
-                .fontColor($r('app.color.secondary_text')).padding(12)
+                .fontColor($r('app.color.secondary_text'))
+                // 阅读布局下列表已提供正文左右留白，提示不再额外内缩，与正文左缘对齐。
+                .padding({
+                  top: 12,
+                  bottom: 12,
+                  left: this.readingLayout ? 0 : 12,
+                  right: this.readingLayout ? 0 : 12
+                })
             }
           }
           if (this.collapsibleActive) {
