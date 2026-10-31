@@ -25,14 +25,14 @@ export function removeQuestionTitle(id: string): void {
 }
 
 /**
- * 问题页顶栏：首屏显示「问题」，正文标题滚出可视区后交叉淡入具体标题，回顶还原。
- * 三个按钮（返回／日志／分享）走共享悬浮圆按钮，标题切换状态仍由正文广播驱动。
+ * 问题页顶栏内容：HDS 原生返回右侧的左对齐标题 + 日志／分享两个 40vp 圆动作（10vp 间距）。
+ *
+ * 首屏显示「问题」，正文标题滚出可视区后交叉淡入具体标题，回顶还原——标题切换仍由正文
+ * 广播驱动，与 main 行为一致；返回键不在这里绘制，由 HdsNavDestination 的 backIcon 承载。
  */
 @Component
 export struct QuestionTitleBar {
   questionId: string = '';
-  onBack: () => void = (): void => {
-  };
   @StorageProp('questionTitleStates') private states: QuestionTitleState[] = [];
 
   private state(): QuestionTitleState | undefined {
@@ -66,20 +66,6 @@ export struct QuestionTitleBar {
     }
   }
 
-  build() {
-    TopBarContent({
-      backMode: TopBarBackMode.CUSTOM,
-      backId: 'question_back',
-      onBack: (): void => {
-        this.onBack();
-      },
-      hasTitleSlot: true,
-      titleSlot: (): void => this.questionTitleSlot(),
-      hasTrailingSlot: true,
-      trailingSlot: (): void => this.questionActions()
-    })
-  }
-
   @Builder
   private questionTitleSlot() {
     Stack({ alignContent: Alignment.Start }) {
@@ -87,7 +73,6 @@ export struct QuestionTitleBar {
       Text('问题')
         .fontSize($r('app.float.heading_font_size'))
         .id('question_top_label')
-        .maxFontScale(1.3)
         .fontColor($r('app.color.primary_text'))
         .fontWeight(FontWeight.Medium)
         .opacity(this.state()?.scrolled ? 0 : 1)
@@ -95,7 +80,6 @@ export struct QuestionTitleBar {
       Text(this.state()?.title ?? '')
         .fontSize($r('app.float.heading_font_size'))
         .id('question_top_title')
-        .maxFontScale(1.3)
         .fontColor($r('app.color.primary_text'))
         .fontWeight(FontWeight.Medium)
         .maxLines(1)
@@ -127,6 +111,16 @@ export struct QuestionTitleBar {
       onAction: (): void => {
         void this.share();
       }
+    })
+  }
+
+  build() {
+    TopBarContent({
+      backMode: TopBarBackMode.HDS,
+      hasTitleSlot: true,
+      titleSlot: (): void => this.questionTitleSlot(),
+      hasTrailingSlot: true,
+      trailingSlot: (): void => this.questionActions()
     })
   }
 }

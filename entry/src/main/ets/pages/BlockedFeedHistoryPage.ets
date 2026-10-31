@@ -1,6 +1,9 @@
 import { CenteredOverlayDialog } from './CenteredOverlayDialog';
-import { TopBarActionButton } from './components/TopBarActionButton';
-import { TopBarBackMode, TopBarContent } from './components/TopBarContent';
+import {
+  consumeTopBarAction,
+  publishTopBarActionState,
+  removeTopBarActionState
+} from '../common/style/TopBarActionBus';
 import {
   onThemeColor,
   BlockedFeedHistoryGateway,
@@ -18,6 +21,9 @@ import { adaptiveOverlayWidth, isWideOverlayContainer, ADAPTIVE_OVERLAY_MENU_WID
 import { settingsGroupBackground, settingsGroupRadius } from './AccountSettingsLayout';
 import { floatingTitleBarOffset } from './AppPageChrome';
 
+/** 本页在顶栏动作通道里的注册 id（独立路由实例）。 */
+const BLOCKED_FEED_HISTORY_TOP_BAR_ID: string = 'blocked_feed_history';
+
 /**
  * 屏蔽记录：说明、状态与记录共用一个主列表，嵌入设置右栏时由宿主画标题并提供“更多”。
  */
@@ -30,6 +36,8 @@ export struct BlockedFeedHistoryPage {
   /** 宿主动作槽登记：嵌入时把“更多”菜单交给宿主标题栏渲染。 */
   onRegisterHeaderActions: (handler: () => void) => void = (_handler: () => void): void => {};
   onReleaseHeaderActions: () => void = (): void => {};
+  /** 独立路由（非嵌入）时向宿主 AppShell 注册顶栏“更多”动作。 */
+  @StorageProp('topBarActionTick') @Watch('onTopBarActionTick') private topBarActionTick: number = 0;
   @State private viewState: BlockedFeedHistoryViewState = {
     phase: BlockedFeedHistoryPhase.LOADING,
     records: [],
@@ -66,6 +74,9 @@ export struct BlockedFeedHistoryPage {
       this.onRegisterHeaderActions((): void => {
         this.historyActionsSheetShown = true;
       });
+    } else {
+      // 独立路由：标题与返回由宿主 HDS 标题栏承载，本页只注册“更多”动作。
+      publishTopBarActionState({ id: BLOCKED_FEED_HISTORY_TOP_BAR_ID, available: true, title: '', text: '', enabled: true });
     }
     // P3-7：返回栈重显（页面实例与状态保留）时 aboutToAppear 可能再次触发；
     // 控制器仍存活时直接复用，避免重建控制器并重载记录导致滚动位置丢失。
@@ -92,6 +103,8 @@ export struct BlockedFeedHistoryPage {
   aboutToDisappear(): void {
     if (this.embedded) {
       this.onReleaseHeaderActions();
+    } else {
+      removeTopBarActionState(BLOCKED_FEED_HISTORY_TOP_BAR_ID);
     }
     this.controller?.deactivate();
     this.controller = undefined;
@@ -108,15 +121,8 @@ export struct BlockedFeedHistoryPage {
       this.historyList()
 
       if (!this.embedded) {
-        Column() {
-          this.pageHeader()
-        }
-        .width('100%')
-        // 横向留白由共享顶栏负责；48vp 内容行在 56vp 顶栏区内居中（上下各 4vp），
-        // 与 HDS 托管标题栏同基线，跨页跳转时标题不跳动。
-        .padding({ top: 4 })
-        .position({ x: 0, y: Math.max(this.statusBarHeightVp, 0) })
-        .zIndex(2)
+        // 独立入口：标题、返回与“更多”全部由宿主 HDS 标题栏承载，页面不再自绘顶栏。
+        Blank().height(0)
       } else if (this.historyActionsSheetShown) {
         // 嵌入时不用全屏 sheet：动作限定在右栏内的覆盖容器，背景设置目录同时被遮罩阻断。
         this.embeddedActionsOverlay()
@@ -215,46 +221,11 @@ export struct BlockedFeedHistoryPage {
     })
   }
 
-  @Builder
-  private pageHeader() {
-    TopBarContent({
-      backMode: TopBarBackMode.CUSTOM,
-      title: '屏蔽记录',
-      titleId: 'blocked_feed_history_title',
-      backId: 'blocked_feed_history_back',
-      onBack: (): void => {
-        this.onBack();
-      },
-      hasTrailingSlot: true,
-      trailingSlot: (): void => this.historyActionsEntry()
-    })
-  }
-
-  @Builder
-  private historyActionsEntry() {
-    TopBarActionButton({
-      icon: $r('sys.symbol.ellipsis_circle'),
-      elementId: 'blocked_feed_history_actions',
-      label: '屏蔽记录操作',
-      onAction: (): void => {
-        this.historyActionsSheetShown = true;
-      }
-    })
-      .bindSheet(this.historyActionsSheetShown, this.historyActionsSheet(), {
-        preferType: isWideOverlayContainer(this.overlayWidthVp) ? SheetType.POPUP : SheetType.BOTTOM,
-        width: isWideOverlayContainer(this.overlayWidthVp)
-          ? adaptiveOverlayWidth(this.overlayWidthVp, ADAPTIVE_OVERLAY_MENU_WIDTH_VP) : '100%',
-        height: SheetSize.FIT_CONTENT,
-        dragBar: !isWideOverlayContainer(this.overlayWidthVp),
-        showClose: false,
-        maskColor: '#99000000',
-        backgroundColor: $r('app.color.surface_background'),
-        onDisappear: (): void => {
-          if (this.historyActionsSheetShown) {
-            this.historyActionsSheetShown = false;
-          }
-        }
-      })
+  /** 顶栏“更多”被宿主点击：转调本页操作弹层（嵌入/独立两种入口同一实现）。 */
+  private onTopBarActionTick(): void {
+    if (consumeTopBarAction(BLOCKED_FEED_HISTORY_TOP_BAR_ID)) {
+      this.historyActionsSheetShown = true;
+    }
   }
 
   @Builder

@@ -1,6 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { util } from '@kit.ArkTS';
 import { image } from '@kit.ImageKit';
+import { floatingTitleBarOffset } from './AppPageChrome';
 import { getAppSessionOwner, getGuestDeviceCookieManager, toCookieHeader } from 'data';
 import {
   blockFormulaDisplayAspectRatio,
@@ -330,7 +331,8 @@ export struct ReaderProbe {
           .layoutWeight(1)
         }
         .width('100%')
-        .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+        // 沉浸顶栏覆盖式呈现：状态行与列表首屏从栏下沿起排，滚动时穿过顶栏。
+        .padding({ left: 16, right: 16, top: floatingTitleBarOffset() + 12, bottom: 12 })
 
         Divider()
 

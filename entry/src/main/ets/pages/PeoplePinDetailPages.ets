@@ -1,7 +1,10 @@
 import { CenteredOverlayDialog } from './CenteredOverlayDialog';
-import { TopBarActionButton } from './components/TopBarActionButton';
-import { TopBarBackMode, TopBarContent } from './components/TopBarContent';
-import { floatingTitleBarContentTopVp, floatingTitleBarOffset } from './AppPageChrome';
+import {
+  consumeTopBarAction,
+  publishTopBarActionState,
+  removeTopBarActionState
+} from '../common/style/TopBarActionBus';
+import { floatingTitleBarOffset } from './AppPageChrome';
 import { AppDestination, AppDestinationName } from 'core';
 import {
   BlockedFeedHistoryGateway,
@@ -34,6 +37,9 @@ import {
   BlockingUserCandidate
 } from './BlockingActionState';
 import { adaptiveOverlayWidth, isWideOverlayContainer, ADAPTIVE_OVERLAY_MENU_WIDTH_VP } from '../common/style/AdaptiveOverlayLayout';
+
+/** 本页在顶栏动作通道里的注册 id（与 AppShell 常量一致）。 */
+const PEOPLE_DETAIL_TOP_BAR_ID: string = 'people_detail';
 
 /**
  * 只读详情的统一加载/错误面板（用户主页与想法详情共用）。
@@ -134,6 +140,8 @@ export struct PeopleDetailPage {
   @State private followErrorMessage: string = '';
   @State private followRequiresLogin: boolean = false;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  /** 顶栏“更多”请求：标题与返回由宿主 HDS 标题栏承载，本页只响应动作点击。 */
+  @StorageProp('topBarActionTick') @Watch('onTopBarActionTick') private topBarActionTick: number = 0;
   private controller?: PeopleDetailController;
   private contentController?: PeopleContentController;
   private readonly contentScroller: Scroller = new Scroller();
@@ -163,6 +171,8 @@ export struct PeopleDetailPage {
   }
 
   aboutToAppear(): void {
+    // 顶栏动作：加载完成前“更多”不可用，失败/未登录状态也保持可返回（返回由 HDS 承载）。
+    publishTopBarActionState({ id: PEOPLE_DETAIL_TOP_BAR_ID, available: false, title: '', text: '', enabled: true });
     // P3-7：返回栈重显（页面实例与状态保留）时 aboutToAppear 可能再次触发；
     // 控制器仍存活时直接复用，避免重建控制器并重载内容导致滚动位置丢失。
     if (this.controller !== undefined) {
@@ -186,6 +196,7 @@ export struct PeopleDetailPage {
   }
 
   aboutToDisappear(): void {
+    removeTopBarActionState(PEOPLE_DETAIL_TOP_BAR_ID);
     removePeopleTitle(this.identifier);
     this.controller?.deactivate();
     this.contentController?.deactivate();
@@ -212,59 +223,61 @@ export struct PeopleDetailPage {
   }
 
   build() {
-    Stack({ alignContent: Alignment.Top }) {
-      Column() {
-        if (this.phase === ReadOnlyDetailPhase.IDLE || this.phase === ReadOnlyDetailPhase.LOADING) {
-          ReadOnlyDetailStatusPanel({
-            kind: 'people',
-            message: '正在加载用户主页…',
-            loading: true,
-            topInsetVp: floatingTitleBarOffset(),
-            navigate: this.navigate
-          })
-        } else if (this.phase === ReadOnlyDetailPhase.ERROR) {
-          ReadOnlyDetailStatusPanel({
-            kind: 'people',
-            message: this.errorMessage,
-            requiresLogin: this.requiresLogin,
-            topInsetVp: floatingTitleBarOffset(),
-            onRetry: (): void => {
-              this.controller?.load(this.identifier);
-            },
-            navigate: this.navigate
-          })
-        } else if (this.profile !== undefined) {
-          Column() {
-            this.loadedProfile(this.profile)
-          }
-          .width('100%')
-          .layoutWeight(1)
-        }
-      }
-      .width('100%')
-      .height('100%')
-
-      if (this.tabsPinned && this.profile !== undefined) {
-        // 吸顶后的选项卡条：贴在覆盖式顶栏下沿，列表卡片从其下方透明穿过
-        Column() {
-          this.contentSectionTabs()
-          if (this.contentPhase === PeopleContentPhase.IDLE || this.contentPhase === PeopleContentPhase.LOADING) {
-            this.pinnedContentLoading()
+    Column() {
+      if (this.phase === ReadOnlyDetailPhase.IDLE || this.phase === ReadOnlyDetailPhase.LOADING) {
+        ReadOnlyDetailStatusPanel({
+          kind: 'people',
+          message: '正在加载用户主页…',
+          loading: true,
+          topInsetVp: floatingTitleBarOffset(),
+          navigate: this.navigate
+        })
+      } else if (this.phase === ReadOnlyDetailPhase.ERROR) {
+        ReadOnlyDetailStatusPanel({
+          kind: 'people',
+          message: this.errorMessage,
+          requiresLogin: this.requiresLogin,
+          topInsetVp: floatingTitleBarOffset(),
+          onRetry: (): void => {
+            this.controller?.load(this.identifier);
+          },
+          navigate: this.navigate
+        })
+      } else if (this.profile !== undefined) {
+        Stack({ alignContent: Alignment.Top }) {
+          this.loadedProfile(this.profile)
+          if (this.tabsPinned) {
+            // 吸顶后的选项卡条：贴在 HDS 标题栏下沿，列表卡片从其下方透明穿过
+            Column() {
+              this.contentSectionTabs()
+              if (this.contentPhase === PeopleContentPhase.IDLE || this.contentPhase === PeopleContentPhase.LOADING) {
+                this.pinnedContentLoading()
+              }
+            }
+            .margin({ top: floatingTitleBarOffset() })
+            .width('100%')
           }
         }
-        .margin({ top: floatingTitleBarOffset() })
         .width('100%')
-        .zIndex(2)
+        .layoutWeight(1)
       }
-
-      // 顶栏常驻在所有状态之上：加载、失败、未登录同样能返回（Issue #118 验收点）。
-      Column() {
-        this.pageHeader()
-      }
-      .width('100%')
-      // 48vp 内容行在 56vp 顶栏区内居中，与 HDS 托管的页面同一基线（差值一半 = 4vp）。
-      .padding({ top: floatingTitleBarContentTopVp() })
-      .zIndex(3)
+      // 独立路由的更多菜单：动作按钮在宿主 HDS 标题栏，弹层仍由本页承载。
+      Column()
+        .bindSheet(this.profileActionsSheetShown, this.profileActionsSheet(), {
+          preferType: isWideOverlayContainer(this.overlayWidthVp) ? SheetType.POPUP : SheetType.BOTTOM,
+          width: isWideOverlayContainer(this.overlayWidthVp)
+            ? adaptiveOverlayWidth(this.overlayWidthVp, ADAPTIVE_OVERLAY_MENU_WIDTH_VP) : '100%',
+          height: SheetSize.FIT_CONTENT,
+          dragBar: !isWideOverlayContainer(this.overlayWidthVp),
+          showClose: false,
+          maskColor: '#99000000',
+          backgroundColor: $r('app.color.surface_background'),
+          onDisappear: (): void => {
+            if (this.profileActionsSheetShown) {
+              this.profileActionsSheetShown = false;
+            }
+          }
+        })
     }
     .id('people_detail_page')
     .width('100%')
@@ -278,47 +291,11 @@ export struct PeopleDetailPage {
     .backgroundColor($r('app.color.page_background'))
   }
 
-  @Builder
-  private pageHeader() {
-    TopBarContent({
-      backMode: TopBarBackMode.CUSTOM,
-      title: this.titleScrolled ? (this.profile?.name ?? '用户主页') : '用户主页',
-      titleId: 'people_detail_page_title',
-      backId: 'people_detail_back',
-      onBack: (): void => {
-        this.onBack();
-      },
-      hasTrailingSlot: true,
-      trailingSlot: (): void => this.peopleDetailActions()
-    })
-  }
-
-  @Builder
-  private peopleDetailActions() {
-    TopBarActionButton({
-      icon: $r('sys.symbol.ellipsis_circle'),
-      elementId: 'people_detail_actions',
-      label: '用户主页操作',
-      disabled: this.profile === undefined,
-      onAction: (): void => {
-        this.profileActionsSheetShown = true;
-      }
-    })
-      .bindSheet(this.profileActionsSheetShown, this.profileActionsSheet(), {
-        preferType: isWideOverlayContainer(this.overlayWidthVp) ? SheetType.POPUP : SheetType.BOTTOM,
-        width: isWideOverlayContainer(this.overlayWidthVp)
-          ? adaptiveOverlayWidth(this.overlayWidthVp, ADAPTIVE_OVERLAY_MENU_WIDTH_VP) : '100%',
-        height: SheetSize.FIT_CONTENT,
-        dragBar: !isWideOverlayContainer(this.overlayWidthVp),
-        showClose: false,
-        maskColor: '#99000000',
-        backgroundColor: $r('app.color.surface_background'),
-        onDisappear: (): void => {
-          if (this.profileActionsSheetShown) {
-            this.profileActionsSheetShown = false;
-          }
-        }
-      })
+  /** 顶栏“更多”：转调本页操作弹层。 */
+  private onTopBarActionTick(): void {
+    if (consumeTopBarAction(PEOPLE_DETAIL_TOP_BAR_ID) && this.profile !== undefined) {
+      this.profileActionsSheetShown = true;
+    }
   }
 
   @Builder
@@ -537,6 +514,14 @@ export struct PeopleDetailPage {
   private applyState(state: PeopleDetailViewState): void {
     this.phase = state.phase;
     this.profile = state.profile;
+    // “更多”可用性随加载结果更新（加载中/失败时宿主只画标题，不留无效动作）。
+    publishTopBarActionState({
+      id: PEOPLE_DETAIL_TOP_BAR_ID,
+      available: state.profile !== undefined,
+      title: '',
+      text: '',
+      enabled: true
+    });
     this.errorMessage = state.errorMessage ?? '';
     this.requiresLogin = state.requiresLogin;
     if (state.phase === ReadOnlyDetailPhase.READY && this.contentController === undefined) {

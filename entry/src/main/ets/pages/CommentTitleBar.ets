@@ -28,14 +28,13 @@ export function removeCommentTitle(id: string): void {
 }
 
 /**
- * 评论页 HDS 标题栏内容：标题栏的滚动态材质由 HdsNavDestination 承载，返回键走共享
- * 悬浮圆按钮，根评论/子评论标题经 AppStorage 跨构建树更新。
+ * 评论页标题栏内容：main 设置页同款左对齐标题（随根评论/子评论切换文案），
+ * 返回键由 HDS 原生 backIcon 承载（含"返回评论/返回详情"的层级回调由宿主绑定）。
+ * 标题栏的常驻可读背景仍由 HdsNavDestination 的 getPersistentImmersiveTitleBarStyle 承担。
  */
 @Component
 export struct CommentTitleBar {
   stateId: string = '';
-  onBack: () => void = (): void => {
-  };
   @StorageProp('commentTitleStates') private states: CommentTitleState[] = [];
 
   private replying(): boolean {
@@ -44,14 +43,9 @@ export struct CommentTitleBar {
 
   build() {
     TopBarContent({
-      backMode: TopBarBackMode.CUSTOM,
+      backMode: TopBarBackMode.HDS,
       title: this.replying() ? '回复' : '评论',
-      titleId: 'comments_title',
-      backId: 'comments_back',
-      centerTitle: true,
-      onBack: (): void => {
-        this.onBack();
-      }
+      titleId: 'comments_title'
     })
   }
 }

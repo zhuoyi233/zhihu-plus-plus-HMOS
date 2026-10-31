@@ -205,13 +205,9 @@ export struct AnswerTitleBar {
 
   build() {
     // 顶栏背景由 HdsNavDestination 的材质策略统一承担（见 NavStyles.getAnswerTitleBarStyle），
-    // 本行不再叠第二层模糊，避免同一控件重复采样正文。
+    // 本行不再叠第二层模糊，避免同一控件重复采样正文；返回键由 HDS 原生 backIcon 承载。
     TopBarContent({
-      backMode: TopBarBackMode.CUSTOM,
-      backId: 'answer_back',
-      onBack: (): void => {
-        this.onBack();
-      },
+      backMode: TopBarBackMode.HDS,
       hasTitleSlot: true,
       titleSlot: (): void => this.identitySlot()
     })

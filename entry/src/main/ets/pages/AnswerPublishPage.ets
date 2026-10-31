@@ -23,9 +23,16 @@ import {
 import { takeAnswerEditSeed } from './AnswerEditSeedStore';
 import { ImagePickerPanel } from './ImagePickerPanel';
 import { PreparedPickedImage } from '../platform/MediaPickerCoordinator';
-import { TopBarBackMode, TopBarContent } from './components/TopBarContent';
-import { floatingTitleBarContentTopVp } from './AppPageChrome';
-import { TOP_BAR_BUTTON_DIAMETER_VP } from '../common/style/TopBarMaterial';
+import {
+  consumeTopBarAction,
+  consumeTopBarBack,
+  publishTopBarActionState,
+  removeTopBarActionState
+} from '../common/style/TopBarActionBus';
+import { floatingTitleBarOffset } from './AppPageChrome';
+
+/** 本页在顶栏通道里的注册 id（与 AppShell 常量一致）：标题、发布动作与退出编辑都由它承载。 */
+const ANSWER_PUBLISH_TOP_BAR_ID: string = 'write_answer';
 
 export enum AnswerPublishPagePhase {
   PREPARING = 'preparing',
@@ -435,6 +442,8 @@ export class SystemAnswerPublishTraceIdFactory implements AnswerPublishTraceIdFa
 export struct AnswerPublishPage {
   /** 当前生效主题色（AppShell 广播），驱动强调色控件。 */
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  /** 宿主顶栏请求：动作（发布）与 HDS 返回都经这里回到页面自己的流程。 */
+  @StorageProp('topBarActionTick') @Watch('onTopBarActionTick') private topBarActionTick: number = 0;
   questionId: string = '';
   answerId?: string = undefined;
   session: LoginSessionGateway | undefined = undefined;
@@ -454,30 +463,38 @@ export struct AnswerPublishPage {
     this.coordinator = new AnswerPublishPageCoordinator(this.session, this.controllerFactory, this.traceIds,
       (state: AnswerPublishPageViewState): void => {
         this.viewState = state;
+        // 标题与「发布」可用性都随编辑状态广播给宿主顶栏（计划 §3.7 主操作）。
+        publishTopBarActionState({
+          id: ANSWER_PUBLISH_TOP_BAR_ID,
+          available: true,
+          title: state.answerId === undefined ? '撰写回答' : '编辑回答',
+          text: '发布',
+          enabled: state.canPublish
+        });
       }, this.imageUploaderFactory);
     this.coordinator.activate(this.questionId, this.answerId);
   }
 
   aboutToDisappear(): void {
+    removeTopBarActionState(ANSWER_PUBLISH_TOP_BAR_ID);
     this.publishConfirmationVisible = false;
     this.coordinator?.deactivate();
     this.coordinator = undefined;
   }
 
+  /** 宿主顶栏请求：发布入口与 HDS 返回都走页面自己的流程，不绕过草稿与确认。 */
+  private onTopBarActionTick(): void {
+    if (consumeTopBarBack(ANSWER_PUBLISH_TOP_BAR_ID)) {
+      this.exitEditor();
+      return;
+    }
+    if (consumeTopBarAction(ANSWER_PUBLISH_TOP_BAR_ID)) {
+      this.requestPublishConfirmation();
+    }
+  }
+
   build() {
     Column({ space: $r('app.float.spacing_medium') }) {
-      TopBarContent({
-        backMode: TopBarBackMode.CUSTOM,
-        title: this.viewState.answerId === undefined ? '撰写回答' : '编辑回答',
-        titleId: 'answer_page_title',
-        backId: 'answer_page_exit',
-        onBack: (): void => {
-          this.exitEditor();
-        },
-        hasTrailingSlot: true,
-        trailingSlot: (): void => this.publishAction()
-      })
-
       Text(this.viewState.statusMessage)
         .id('answer_page_status')
         .fontSize($r('app.float.secondary_font_size'))
@@ -546,26 +563,11 @@ export struct AnswerPublishPage {
     .padding({
       left: $r('app.float.card_padding'),
       right: $r('app.float.card_padding'),
-      // 自绘顶栏与 HDS 托管标题栏同带同基线：48vp 内容行在 56vp 顶栏区内居中。
-      top: floatingTitleBarContentTopVp(),
+      // HDS 标题栏是覆盖式：首屏内容从栏下沿起排（与其它二级页同一让位口径）。
+      top: floatingTitleBarOffset(),
       bottom: $r('app.float.card_padding')
     })
     .backgroundColor($r('app.color.page_background'))
-  }
-
-  /** 发布是编辑器的文字主操作：保留文字语义与主题色底，不改成中性圆图标。 */
-  @Builder
-  private publishAction() {
-    Button('发布')
-      .height(TOP_BAR_BUTTON_DIAMETER_VP)
-      .id('answer_page_publish')
-      .fontColor(onThemeColor(this.resolvedThemeColor))
-      .backgroundColor(this.resolvedThemeColor)
-      .enabled(this.viewState.canPublish)
-      .accessibilityText('发布回答')
-      .onClick((): void => {
-        this.requestPublishConfirmation();
-      })
   }
 
   private exitEditor(): void {

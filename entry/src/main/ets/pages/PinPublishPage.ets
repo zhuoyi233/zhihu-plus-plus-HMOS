@@ -20,8 +20,12 @@ import {
   PublishPinTopic,
   SessionStatus
 } from 'data';
-import { TopBarBackMode, TopBarContent } from './components/TopBarContent';
-import { TOP_BAR_BUTTON_DIAMETER_VP } from '../common/style/TopBarMaterial';
+import {
+  consumeTopBarAction,
+  consumeTopBarBack,
+  publishTopBarActionState,
+  removeTopBarActionState
+} from '../common/style/TopBarActionBus';
 import {
   PinPublishOperation,
   PinPublishImageUploader,
@@ -36,7 +40,10 @@ import {
 import { isSafeLocalDraftId } from 'core';
 import { PreparedPickedImage } from '../platform/MediaPickerCoordinator';
 import { ImagePickerPanel } from './ImagePickerPanel';
-import { floatingTitleBarContentTopVp } from './AppPageChrome';
+import { floatingTitleBarOffset } from './AppPageChrome';
+
+/** 本页在顶栏通道里的注册 id（与 AppShell 常量一致）。 */
+const PIN_PUBLISH_TOP_BAR_ID: string = 'write_pin';
 
 export type PinPublishPageBackCallback = () => void;
 export type PinPublishPageLoginCallback = () => void;
@@ -210,10 +217,14 @@ export struct PinPublishPage {
   @State private viewState: PinPublishPageViewState = initialViewState();
   @State private topicQuery: string = '';
   @State private publishConfirmationVisible: boolean = false;
+  /** 宿主顶栏请求：发布与退出编辑都经这里回到页面自己的流程。 */
+  @StorageProp('topBarActionTick') @Watch('onTopBarActionTick') private topBarActionTick: number = 0;
   private controller: PinPublishPageController | undefined = undefined;
   private configurationGeneration: number = 0;
 
+  /** HDS 标题栏是覆盖式的：进入即广播标题与发布动作，避免宿主沿用上一页状态。 */
   aboutToAppear(): void {
+    this.publishTitleBarState();
     if (this.controller !== undefined) {
       return;
     }
@@ -290,6 +301,8 @@ export struct PinPublishPage {
       configuration.identity, configuration.traceIds, configuration.topicScheduler,
       (state: PinPublishPageViewState): void => {
         this.viewState = state;
+        // 标题与「发布」可用性随状态广播给宿主 HDS 顶栏。
+        this.publishTitleBarState();
       }, this.onPublished, configuration.imageUploaders);
     if (savedDraft !== undefined) {
       this.controller.restoreSavedDraft(savedDraft);
@@ -298,6 +311,7 @@ export struct PinPublishPage {
   }
 
   aboutToDisappear(): void {
+    removeTopBarActionState(PIN_PUBLISH_TOP_BAR_ID);
     this.configurationGeneration += 1;
     this.publishConfirmationVisible = false;
     this.controller?.deactivate();
@@ -305,9 +319,39 @@ export struct PinPublishPage {
     this.topicQuery = '';
   }
 
+  /** 宿主顶栏请求：发布与退出编辑都走页面自己的流程（草稿、确认、已发布状态）。 */
+  private onTopBarActionTick(): void {
+    if (consumeTopBarBack(PIN_PUBLISH_TOP_BAR_ID)) {
+      this.exitEditor();
+      return;
+    }
+    if (consumeTopBarAction(PIN_PUBLISH_TOP_BAR_ID)) {
+      this.requestPublishConfirmation();
+    }
+  }
+
+  /** 与顶栏返回一致的退出路径：取消进行中的发布，再回到上一页。 */
+  private exitEditor(): void {
+    if (this.viewState.phase === PinPublishPagePhase.RELEASED) {
+      return;
+    }
+    this.controller?.cancel();
+    this.onBack();
+  }
+
+  /** 标题与发布可用性广播给宿主 HDS 顶栏（文字主操作保留主题色）。 */
+  private publishTitleBarState(): void {
+    publishTopBarActionState({
+      id: PIN_PUBLISH_TOP_BAR_ID,
+      available: true,
+      title: '发想法',
+      text: this.publishLabel(),
+      enabled: this.viewState.canPublish
+    });
+  }
+
   build() {
     Column({ space: $r('app.float.spacing_medium') }) {
-      this.header()
       if (this.viewState.phase === PinPublishPagePhase.SETUP) {
         Blank()
       } else if (this.viewState.requiresLogin) {
@@ -329,45 +373,10 @@ export struct PinPublishPage {
     .alignItems(HorizontalAlign.Start)
     .width('100%')
     .height('100%')
-    // 自绘顶栏与 HDS 托管标题栏同带同基线：48vp 内容行在 56vp 顶栏区内居中。
+    // HDS 标题栏是覆盖式：首屏内容从栏下沿起排（与其它二级页同一让位口径）。
     .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
-      top: floatingTitleBarContentTopVp(), bottom: $r('app.float.page_padding') })
+      top: floatingTitleBarOffset(), bottom: $r('app.float.page_padding') })
     .backgroundColor($r('app.color.page_background'))
-  }
-
-  @Builder
-  private header() {
-    TopBarContent({
-      backMode: TopBarBackMode.CUSTOM,
-      title: '发想法',
-      // 顶栏标题与正文标题输入框（pin_publish_title）分开，避免 id 冲突。
-      titleId: 'pin_publish_top_title',
-      backId: 'pin_publish_cancel',
-      backLabel: '退出编辑',
-      onBack: (): void => {
-        this.controller?.cancel();
-        this.onBack();
-      },
-      // 已发布状态下退出编辑动作失效，返回键随之禁用（状态不只靠颜色表达）。
-      backDisabled: this.viewState.phase === PinPublishPagePhase.RELEASED,
-      hasTrailingSlot: true,
-      trailingSlot: (): void => this.publishAction()
-    })
-  }
-
-  /** 发布保留文字与主题色，作为编辑器的唯一主操作。 */
-  @Builder
-  private publishAction() {
-    Button(this.publishLabel())
-      .height(TOP_BAR_BUTTON_DIAMETER_VP)
-      .id('pin_publish_submit')
-      .fontColor(onThemeColor(this.resolvedThemeColor))
-      .backgroundColor(this.resolvedThemeColor)
-      .enabled(this.viewState.canPublish)
-      .accessibilityText('发布想法')
-      .onClick((): void => {
-        this.requestPublishConfirmation();
-      })
   }
 
   @Builder

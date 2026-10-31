@@ -5,6 +5,7 @@ import {
   resolveZhihuLink
 } from 'core';
 import { DEFAULT_THEME_COLOR, onThemeColor } from 'data';
+import { floatingTitleBarOffset } from './AppPageChrome';
 
 interface DeepLinkProbeCase {
   name: string;
@@ -195,6 +196,8 @@ export struct DeepLinkProbePage {
       .width('100%')
       .padding(24)
     }
+    // 沉浸顶栏覆盖式呈现：首屏从栏下沿起排，滚动时穿过顶栏。
+    .contentStartOffset(floatingTitleBarOffset())
     .scrollBar(BarState.Off)
     .width('100%')
     .height('100%')

@@ -60,9 +60,6 @@ export struct SearchTitleBar {
   @StorageProp('searchSortOption') private sortOption: string = SearchSortOption.DEFAULT;
   @StorageProp('searchTimeRange') private timeRange: string = SearchTimeRange.ALL;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
-  /** 返回语义由宿主注入（栈内返回）。 */
-  onBack: () => void = (): void => {
-  };
   private lastEntryTick: number = -1;
 
   aboutToAppear(): void {
@@ -138,11 +135,8 @@ export struct SearchTitleBar {
 
   build() {
     TopBarContent({
-      backMode: TopBarBackMode.CUSTOM,
-      backId: 'search_back',
-      onBack: (): void => {
-        this.onBack();
-      },
+      // 返回键由 HDS 原生 backIcon 承载；这里只从它右侧起排（80vp 预留）。
+      backMode: TopBarBackMode.HDS,
       hasTitleSlot: true,
       titleSlot: (): void => this.inputPillSlot(),
       hasTrailingSlot: true,

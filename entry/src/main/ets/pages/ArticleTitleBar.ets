@@ -138,11 +138,8 @@ export struct ArticleTitleBar {
 
   build() {
     TopBarContent({
-      backMode: TopBarBackMode.CUSTOM,
-      backId: 'article_back',
-      onBack: (): void => {
-        this.onBack();
-      },
+      // 返回键由 HDS 原生 backIcon 承载，标题从其右侧 80vp 预留后起排。
+      backMode: TopBarBackMode.HDS,
       hasTitleSlot: true,
       titleSlot: (): void => this.identitySlot()
     })

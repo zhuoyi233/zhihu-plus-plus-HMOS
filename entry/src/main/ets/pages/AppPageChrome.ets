@@ -8,7 +8,6 @@ import { DEFAULT_THEME_COLOR, onThemeColor } from 'data';
 import { ComponentContent, UIContext } from '@kit.ArkUI';
 import {
   TOP_BAR_AREA_HEIGHT_VP,
-  TOP_BAR_CONTENT_ROW_HEIGHT_VP,
   topBarFeedStartOffsetVp,
   topBarStartOffsetVp
 } from '../common/style/TopBarMaterial';
@@ -54,15 +53,6 @@ function currentStatusBarHeightVp(): number {
  */
 export function floatingTitleBarOffset(): number {
   return topBarStartOffsetVp(currentStatusBarHeightVp());
-}
-
-/**
- * 自绘顶栏的顶部内缩（vp）：把 48vp 内容行放进与 HDS 托管标题栏同一条 56vp 带里居中，
- * 跨页跳转时标题与圆按钮不再上下跳动（用户主页、想法/回答编辑器共用）。
- */
-export function floatingTitleBarContentTopVp(): number {
-  const barTopVp: number = Math.max(floatingTitleBarOffset() - TOP_BAR_AREA_HEIGHT_VP, 0);
-  return barTopVp + (TOP_BAR_AREA_HEIGHT_VP - TOP_BAR_CONTENT_ROW_HEIGHT_VP) / 2;
 }
 
 /**

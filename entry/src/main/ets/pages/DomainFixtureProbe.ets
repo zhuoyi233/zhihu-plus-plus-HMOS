@@ -6,6 +6,7 @@ import {
   DomainFixtureValidator
 } from '../fixtures/DomainFixtureValidator';
 import { DEFAULT_THEME_COLOR, onThemeColor } from 'data';
+import { floatingTitleBarOffset } from './AppPageChrome';
 
 const DOMAIN_FIXTURE_COUNT = DOMAIN_FIXTURE_SPECS.length;
 
@@ -97,6 +98,8 @@ export struct DomainFixtureProbe {
       .width('100%')
       .padding($r('app.float.page_padding'))
     }
+    // 沉浸顶栏覆盖式呈现：首屏从栏下沿起排，滚动时穿过顶栏。
+    .contentStartOffset(floatingTitleBarOffset())
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.page_background'))

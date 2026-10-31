@@ -6,6 +6,7 @@ import {
   ZhihuWorkload
 } from 'core';
 import { DEFAULT_THEME_COLOR, onThemeColor } from 'data';
+import { floatingTitleBarOffset } from './AppPageChrome';
 
 class BackgroundProbeFailure extends Error {
   readonly code: number;
@@ -91,6 +92,8 @@ export struct BackgroundTaskProbePage {
       .width('100%')
       .padding(24)
     }
+    // 沉浸顶栏覆盖式呈现：首屏从栏下沿起排，滚动时穿过顶栏。
+    .contentStartOffset(floatingTitleBarOffset())
     .scrollBar(BarState.Off)
     .width('100%')
     .height('100%')
