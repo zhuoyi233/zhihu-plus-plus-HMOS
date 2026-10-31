@@ -1,4 +1,8 @@
 import {
+  TOP_BAR_BUTTON_DIAMETER_VP,
+  TOP_BAR_ICON_FONT_SIZE
+} from '../common/style/TopBarMaterial';
+import {
   UnavailableVideoSourceResolver,
   VideoPlaybackController,
   VideoPlaybackPageViewState,
@@ -75,28 +79,30 @@ export struct VideoPlaybackPage {
         Column() {
           Row({ space: $r('app.float.spacing_small') }) {
             Blank()
+            // 视频覆盖层保留自管工具栏与实色暗底（保证任意画面上可读），
+            // 但轮廓与尺寸对齐顶栏统一规则：可见 40vp、图标 20vp。
             Button({ type: ButtonType.Circle, stateEffect: true }) {
               SymbolGlyph(this.landscapeFullScreen
                 ? $r('sys.symbol.arrow_down_right_and_arrow_up_left')
                 : $r('sys.symbol.arrow_up_left_and_arrow_down_right'))
-                .fontSize(21)
+                .fontSize(TOP_BAR_ICON_FONT_SIZE)
                 .fontColor([Color.White])
             }
+              .width(TOP_BAR_BUTTON_DIAMETER_VP)
+              .height(TOP_BAR_BUTTON_DIAMETER_VP)
               .id('video_fullscreen')
-              .width(44)
-              .height(44)
               .padding(0)
               .backgroundColor('#80000000')
               .accessibilityText(this.landscapeFullScreen ? '退出横屏全屏' : '横屏全屏')
               .onClick((): void => this.toggleLandscapeFullScreen())
             Button({ type: ButtonType.Circle, stateEffect: true }) {
               SymbolGlyph($r('sys.symbol.xmark'))
-                .fontSize(21)
+                .fontSize(TOP_BAR_ICON_FONT_SIZE)
                 .fontColor([Color.White])
             }
+              .width(TOP_BAR_BUTTON_DIAMETER_VP)
+              .height(TOP_BAR_BUTTON_DIAMETER_VP)
               .id('video_back')
-              .width(44)
-              .height(44)
               .padding(0)
               .backgroundColor('#80000000')
               .accessibilityText('退出播放')

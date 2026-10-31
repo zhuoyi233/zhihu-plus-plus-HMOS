@@ -105,6 +105,7 @@ import identitySpeechSettingsTest from './IdentitySpeechSettings.test';
 import themeColorsTest from './ThemeColors.test';
 import immersiveMaterialPreferencesTest from './ImmersiveMaterialPreferences.test';
 import immersiveMaterialStylesTest from './ImmersiveMaterialStyles.test';
+import topBarMaterialTest from './TopBarMaterial.test';
 import draftImageReferenceScanTest from './DraftImageReferenceScan.test';
 import readHistoryUploadRepositoryTest from './ReadHistoryUploadRepository.test';
 import lastReadTouchRepositoryTest from './LastReadTouchRepository.test';
@@ -228,6 +229,7 @@ export default function testsuite(): void {
   themeColorsTest();
   immersiveMaterialPreferencesTest();
   immersiveMaterialStylesTest();
+  topBarMaterialTest();
   draftImageReferenceScanTest();
   readHistoryUploadRepositoryTest();
   lastReadTouchRepositoryTest();

@@ -11,11 +11,6 @@ export struct DatabaseProbePage {
 
   build() {
     Column({ space: 20 }) {
-      Button('返回')
-        .backgroundColor($r('app.color.control_background'))
-        .fontColor($r('app.color.primary_text'))
-        .id('database_back')
-        .onClick(() => this.onBack())
 
       Text('RDB Schema 与迁移验证')
         .fontSize(24)

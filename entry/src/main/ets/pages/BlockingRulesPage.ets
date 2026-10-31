@@ -1,4 +1,9 @@
 import { CenteredOverlayDialog } from './CenteredOverlayDialog';
+import {
+  consumeTopBarAction,
+  publishTopBarActionState,
+  removeTopBarActionState
+} from '../common/style/TopBarActionBus';
 import { pasteboard, BusinessError } from '@kit.BasicServicesKit';
 import {
   BlockedKeywordRule,
@@ -29,6 +34,9 @@ import { readLocationRequest, SettingsPaneId, SettingsSearchLocationRequest } fr
 
 import { floatingTitleBarOffset } from './AppPageChrome';
 
+/** 本页在顶栏动作通道里的注册 id（独立路由实例）。 */
+const BLOCKING_RULES_TOP_BAR_ID: string = 'blocking_rules';
+
 /**
  * 内容屏蔽：开关组、分类、计数与规则行共用一个主滚动，嵌入设置右栏时由宿主画标题。
  *
@@ -44,6 +52,8 @@ export struct BlockingRulesPage {
   @Prop embedded: boolean = false;
   onRegisterHeaderActions: (handler: () => void) => void = (_handler: () => void): void => {};
   onReleaseHeaderActions: () => void = (): void => {};
+  /** 独立路由（非嵌入）时向宿主 AppShell 注册顶栏“更多”动作；嵌入设置时走宿主注册协议。 */
+  @StorageProp('topBarActionTick') @Watch('onTopBarActionTick') private topBarActionTick: number = 0;
   @State private viewState: BlockingRulesViewState = {
     phase: BlockingRulesPhase.LOADING,
     selectedKind: BlockingRuleKind.KEYWORD,
@@ -133,6 +143,9 @@ export struct BlockingRulesPage {
       this.onRegisterHeaderActions((): void => {
         this.actionsSheetShown = true;
       });
+    } else {
+      // 独立路由：标题与返回由宿主 HDS 标题栏承载，本页只注册“更多”动作。
+      publishTopBarActionState({ id: BLOCKING_RULES_TOP_BAR_ID, available: true, title: '', text: '', enabled: true });
     }
     const rules = this.rules;
     const preferences = this.preferences;
@@ -164,8 +177,10 @@ export struct BlockingRulesPage {
     if (this.embedded) {
       this.onReleaseHeaderActions();
       this.locator?.cancel(false);
-    this.locator = undefined;
-  }
+      this.locator = undefined;
+    } else {
+      removeTopBarActionState(BLOCKING_RULES_TOP_BAR_ID);
+    }
     this.controller?.deactivate();
     this.controller = undefined;
     this.keywordInput = '';
@@ -227,14 +242,7 @@ export struct BlockingRulesPage {
       .backgroundColor($r('app.color.page_background'))
 
       if (!this.embedded) {
-        Column() {
-          this.pageHeader()
-        }
-        .width('100%')
-        .padding({ left: 12, right: 12, top: 8 })
-        .position({ x: 0, y: Math.max(this.statusBarHeightVp, 0) })
-        .zIndex(2)
-
+        // 独立入口：标题、返回与“更多”全部由宿主 HDS 标题栏承载，页面不再自绘顶栏。
         // 独立路由沿用系统 sheet；嵌入模式改在右栏内做覆盖容器（见下）。
         Column()
           .bindSheet(this.addRuleSheetShown, this.addRuleSheet(), {
@@ -347,57 +355,11 @@ export struct BlockingRulesPage {
     this.exportSheetShown = false;
   }
 
-  @Builder
-  private pageHeader() {
-    Row({ space: $r('app.float.spacing_small') }) {
-      Button({ type: ButtonType.Normal, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(20)
-          .fontColor([$r('app.color.primary_text')])
-      }
-        .id('blocking_rules_back')
-        .width(40)
-        .height(40)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .accessibilityText('返回')
-        .onClick((): void => this.onBack())
-      Text('内容屏蔽')
-        .fontSize($r('app.float.heading_font_size'))
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.primary_text'))
-        .layoutWeight(1)
-      Button({ type: ButtonType.Normal, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.ellipsis_circle'))
-          .fontSize(20)
-          .fontColor([$r('app.color.primary_text')])
-      }
-        .id('blocking_rules_actions')
-        .width(40)
-        .height(40)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .accessibilityText('内容屏蔽操作')
-        .bindSheet(this.actionsSheetShown, this.actionsSheet(), {
-          preferType: isWideOverlayContainer(this.overlayWidthVp) ? SheetType.POPUP : SheetType.BOTTOM,
-          width: isWideOverlayContainer(this.overlayWidthVp)
-            ? adaptiveOverlayWidth(this.overlayWidthVp, ADAPTIVE_OVERLAY_MENU_WIDTH_VP) : '100%',
-          height: SheetSize.FIT_CONTENT,
-          dragBar: !isWideOverlayContainer(this.overlayWidthVp),
-          showClose: false,
-          maskColor: '#99000000',
-          backgroundColor: $r('app.color.surface_background'),
-          onDisappear: (): void => {
-            if (this.actionsSheetShown) {
-              this.actionsSheetShown = false;
-            }
-          }
-        })
-        .onClick((): void => {
-          this.actionsSheetShown = true;
-        })
+  /** 顶栏“更多”被宿主点击：转调本页操作弹层（嵌入/独立两种入口同一实现）。 */
+  private onTopBarActionTick(): void {
+    if (consumeTopBarAction(BLOCKING_RULES_TOP_BAR_ID)) {
+      this.actionsSheetShown = true;
     }
-    .width('100%')
   }
 
   @Builder

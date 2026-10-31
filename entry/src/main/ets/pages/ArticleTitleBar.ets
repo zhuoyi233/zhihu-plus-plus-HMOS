@@ -1,5 +1,4 @@
-import { hdsMaterial } from '@kit.UIDesignKit';
-import { materialCanvas } from './components/MaterialCanvas';
+import { TopBarBackMode, TopBarContent } from './components/TopBarContent';
 
 /** 文章页顶栏状态：文章标题 + 作者摘要 + 滚动折叠信号。
  * 跨页面经 AppStorage 广播（同 AnswerTitleBar 模式，HDS 标题栏 stackBuilder 树下
@@ -45,53 +44,19 @@ export struct ArticleTitleBar {
     return this.states.find((item: ArticleTitleState): boolean => item.id === this.articleId);
   }
 
-  private supportsImmersiveMaterial(): boolean {
-    try {
-      return hdsMaterial.getSystemMaterialTypes().includes(hdsMaterial.MaterialType.IMMERSIVE);
-    } catch (_error) {
-      return false;
-    }
-  }
-
   private scrolled(): boolean {
     return this.state()?.scrolled ?? false;
   }
 
-  build() {
-    Row({ space: $r('app.float.spacing_small') }) {
-      Stack({ alignContent: Alignment.Center }) {
-        if (this.supportsImmersiveMaterial()) {
-          materialCanvas(52, 52)
-        }
-        Button({ type: ButtonType.Normal, stateEffect: true }) {
-          SymbolGlyph($r('sys.symbol.chevron_left'))
-            .fontSize(20)
-            .fontColor([$r('app.color.primary_text')])
-        }
-          .width(40)
-          .height(40)
-          .padding(0)
-          .borderRadius(20)
-          .backgroundColor(this.supportsImmersiveMaterial()
-            ? Color.Transparent
-            : $r('app.color.surface_background'))
-          .accessibilityText('返回')
-          .onClick((): void => {
-            this.onBack();
-          })
-      }
-        .width(44)
-        .height(44)
-        .borderRadius(22)
-        .clip(true)
-
-      // 标题区：未折叠显示"文章"占位；折叠后交叉淡入文章标题 + 作者摘要两行
-      // （对齐 AnswerTitleBar 折叠态的过渡方式）。
+  /** 标题区：未折叠显示"文章"占位；折叠后交叉淡入文章标题 + 作者摘要两行
+   * （对齐 AnswerTitleBar 折叠态的过渡方式）。 */
+  @Builder
+  private identitySlot() {
       Stack({ alignContent: Alignment.Start }) {
         Column() {
           Text('文章')
-            .id('article_top_label')
             .fontSize($r('app.float.heading_font_size'))
+            .id('article_top_label')
             .maxFontScale(1.3)
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.primary_text'))
@@ -103,8 +68,8 @@ export struct ArticleTitleBar {
 
         Column({ space: 2 }) {
           Text(this.state()?.title ?? '')
-            .id('article_top_title')
             .fontSize($r('app.float.body_font_size'))
+            .id('article_top_title')
             .maxFontScale(1.3)
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.primary_text'))
@@ -137,8 +102,8 @@ export struct ArticleTitleBar {
             // 名称 + 徽章同组：名称 flexShrink 收缩省略，徽章紧跟名字右侧（对齐上游）。
             Row({ space: 4 }) {
               Text(this.state()?.authorName ?? '')
-                .id('article_top_author')
                 .fontSize($r('app.float.caption_font_size'))
+                .id('article_top_author')
                 .maxFontScale(1.3)
                 .fontColor($r('app.color.secondary_text'))
                 .maxLines(1)
@@ -166,17 +131,17 @@ export struct ArticleTitleBar {
         .opacity(this.scrolled() ? 1 : 0)
         .translate({ y: this.scrolled() ? 0 : 8 })
       }
-        .layoutWeight(1)
-        .height(48)
+        .width('100%')
+        .height('100%')
         .clip(true)
-    }
-    .width('100%')
-    .height(48)
-    .padding({
-      left: $r('app.float.page_padding'),
-      right: $r('app.float.page_padding')
+  }
+
+  build() {
+    TopBarContent({
+      // 返回键由 HDS 原生 backIcon 承载，标题从其右侧 80vp 预留后起排。
+      backMode: TopBarBackMode.HDS,
+      hasTitleSlot: true,
+      titleSlot: (): void => this.identitySlot()
     })
-    .alignItems(VerticalAlign.Center)
-    .hitTestBehavior(HitTestMode.Transparent)
   }
 }

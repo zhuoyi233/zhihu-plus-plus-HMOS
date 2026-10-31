@@ -7,6 +7,7 @@ import {
   ReaderInlineRun
 } from 'reader';
 import { ContentBlockFormula, ContentInlineFormula } from './ReaderBlockView';
+import { floatingTitleBarOffset } from './AppPageChrome';
 import { DEFAULT_THEME_COLOR, onThemeColor } from 'data';
 import {
   readerBlockSpacing,
@@ -806,13 +807,6 @@ export struct ContinuousReadingPrototype {
   private controlBar() {
     Column({ space: 6 }) {
       Row({ space: 8 }) {
-        Button('返回')
-          .id('cont_btn_back')
-          .height(32)
-          .fontSize(13)
-          .backgroundColor($r('app.color.control_background'))
-          .fontColor($r('app.color.primary_text'))
-          .onClick((): void => this.onBack())
         Button('回顶')
           .id('cont_btn_top')
           .height(32)
@@ -851,9 +845,9 @@ export struct ContinuousReadingPrototype {
         .maxLines(2)
     }
     .width('100%')
-    // 沉浸式标题栏（含聊天样式）都是覆盖层，内容不自动避让（whats-new 页先例）：
-    // 原型页给控制栏让出标题栏高度（API 23 模拟器实测 ≈72vp，含状态栏区让位）。
-    .padding({ left: 16, right: 16, top: 80, bottom: 4 })
+    // 覆盖式标题栏不参与内容避让：控制栏按共享动态起始让位（状态栏 + 顶栏 + 12vp 间距）排在栏下，
+    // 不写死旧模拟器的 80vp——API 26 顶栏更高，写死值会让控制行被栏底压住。
+    .padding({ left: 16, right: 16, top: floatingTitleBarOffset() + 12, bottom: 4 })
   }
 
   @Builder

@@ -1,4 +1,6 @@
 import { DEFAULT_THEME_COLOR, SearchSortOption, SearchTimeRange } from 'data';
+import { TopBarActionButton } from './components/TopBarActionButton';
+import { TopBarBackMode, TopBarContent, TopBarGlassPill } from './components/TopBarContent';
 
 /**
  * 搜索页 HDS 标题栏注入内容：返回键 + 搜索框 + 排序方式菜单。
@@ -59,6 +61,10 @@ export struct SearchTitleBar {
   @StorageProp('searchTimeRange') private timeRange: string = SearchTimeRange.ALL;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   private lastEntryTick: number = -1;
+
+  aboutToAppear(): void {
+    this.resetForEntry();
+  }
 
   private onEntryTick(): void {
     this.resetForEntry();
@@ -128,69 +134,85 @@ export struct SearchTitleBar {
   }
 
   build() {
-    Row({ space: 8 }) {
-      // 返回键由 HDS 标题栏默认 backIcon 承载（AppShell 传入 action），这里从其右侧起排，
-      // 避免自绘返回键与默认返回键重叠（28vp 错位的双箭头）。
-      Row({ space: 4 }) {
-        SymbolGlyph($r('sys.symbol.magnifyingglass'))
-          .fontSize(18)
-          .fontColor([$r('app.color.secondary_text')])
-        TextInput({ text: this.inputValue, placeholder: '搜索知乎内容', controller: this.textController })
-          .id('search_input')
-          .layoutWeight(1)
-          .fontSize($r('app.float.body_font_size'))
-          .maxLength(200)
-          .enterKeyType(EnterKeyType.Search)
-          .backgroundColor(Color.Transparent)
-          .padding(0)
-          .onChange((value: string): void => {
-            this.writeInput(value);
-          })
-          .onSubmit((): void => {
-            this.submitInput();
-          })
+    TopBarContent({
+      // 返回键由 HDS 原生 backIcon 承载；这里只从它右侧起排（80vp 预留）。
+      backMode: TopBarBackMode.HDS,
+      hasTitleSlot: true,
+      titleSlot: (): void => this.inputPillSlot(),
+      hasTrailingSlot: true,
+      trailingSlot: (): void => this.filterAction()
+    })
+  }
 
-        if (this.inputValue.length > 0) {
-          Button({ type: ButtonType.Normal, stateEffect: true }) {
-            SymbolGlyph($r('sys.symbol.xmark'))
-              .fontSize(14)
-              .fontColor([$r('app.color.secondary_text')])
-          }
-          .id('search_clear')
-          .width(28)
-          .height(28)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .accessibilityText('清除搜索内容')
-          .onClick((): void => {
-            this.writeInput('');
-          })
+  /** 输入胶囊：清除按钮属于胶囊内部操作，不再套第二层玻璃。 */
+  @Builder
+  private inputPillSlot() {
+    TopBarGlassPill({
+      content: (): void => this.inputPillContent(),
+      elementId: 'search_input_container',
+      label: '搜索知乎内容',
+      interactive: false,
+      contentPadding: { left: 12, right: 6, top: 0, bottom: 0 }
+    })
+  }
+
+  @Builder
+  private inputPillContent() {
+    Row({ space: 4 }) {
+      SymbolGlyph($r('sys.symbol.magnifyingglass'))
+        .fontSize(18)
+        .fontColor([$r('app.color.secondary_text')])
+      TextInput({ text: this.inputValue, placeholder: '搜索知乎内容', controller: this.textController })
+        .id('search_input')
+        .layoutWeight(1)
+        .fontSize($r('app.float.body_font_size'))
+        .maxLength(200)
+        .enterKeyType(EnterKeyType.Search)
+        .backgroundColor(Color.Transparent)
+        .padding(0)
+        .onChange((value: string): void => {
+          this.writeInput(value);
+        })
+        .onSubmit((): void => {
+          this.submitInput();
+        })
+
+      if (this.inputValue.length > 0) {
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          SymbolGlyph($r('sys.symbol.xmark'))
+            .fontSize(14)
+            .fontColor([$r('app.color.secondary_text')])
         }
+        .width(28)
+        .height(28)
+        .padding(0)
+        .id('search_clear')
+        .backgroundColor(Color.Transparent)
+        .accessibilityText('清除搜索内容')
+        .onClick((): void => {
+          this.writeInput('');
+        })
       }
-      .id('search_input_container')
-      .layoutWeight(1)
-      .height(40)
-      .padding({ left: 12, right: 6 })
-      .backgroundColor($r('app.color.control_background'))
-      .borderRadius(20)
-      .alignItems(VerticalAlign.Center)
+    }
+    .width('100%')
+    .alignItems(VerticalAlign.Center)
+  }
 
-      Button({ type: ButtonType.Normal, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.line_3_horizontal'))
-          .fontSize(20)
-          .fontColor([$r('app.color.primary_text')])
-          .opacity(this.filterEnabled ? 1 : 0.35)
-      }
-      .id('search_filter')
-      .width(40)
-      .height(40)
-      .padding(0)
-      .backgroundColor(Color.Transparent)
-      .enabled(this.filterEnabled)
-      .accessibilityText('排序方式')
-      .onClick((): void => {
-        this.menuVisible = !this.menuVisible;
+  @Builder
+  private filterAction() {
+    // 菜单必须绑在内置节点上：绑到自定义组件实例收不到触发（标题栏按钮实测无响应），
+    // 用尺寸随内容的 Row 作锚点，视觉位置与按钮一致。
+    Row() {
+      TopBarActionButton({
+        icon: $r('sys.symbol.line_3_horizontal'),
+        elementId: 'search_filter',
+        label: '排序方式',
+        disabled: !this.filterEnabled,
+        onAction: (): void => {
+          this.menuVisible = !this.menuVisible;
+        }
       })
+    }
       // isShow 为单向控制：点菜单外部（或返回键）关闭时不会回写 menuVisible，残留的 true 会让
       // 图标再点无响应、并在标题栏重绘时自己重新弹出——必须在 onDisappear 里复位。
       .bindMenu(this.menuVisible, this.filterMenu(), {
@@ -198,15 +220,5 @@ export struct SearchTitleBar {
           this.menuVisible = false;
         }
       })
-    }
-    .id('search_title_bar')
-    .width('100%')
-    .height(48)
-    // 左侧 64vp 让出 HDS 默认返回键的区域（实测 36/48 会压到其触摸区）。
-    .padding({ left: 64, right: 8 })
-    .alignItems(VerticalAlign.Center)
-    .onAppear((): void => {
-      this.resetForEntry();
-    })
   }
 }

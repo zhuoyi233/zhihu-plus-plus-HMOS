@@ -148,12 +148,6 @@ export struct QrDesktopLoginScanPage {
           .lineHeight(22)
           .fontColor($r('app.color.secondary_text'))
 
-        Button('返回')
-          .backgroundColor($r('app.color.control_background'))
-          .fontColor($r('app.color.primary_text'))
-          .id('qr_desktop_login_back')
-          .width('100%')
-          .onClick((): void => this.onBack())
       }
       .alignItems(HorizontalAlign.Start)
       .width('100%')

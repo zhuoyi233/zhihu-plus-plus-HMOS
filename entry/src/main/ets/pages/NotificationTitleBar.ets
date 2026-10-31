@@ -1,10 +1,15 @@
 import { AppDestination, AppDestinationName } from 'core';
+import { TopBarActionButton } from './components/TopBarActionButton';
+import { TopBarBackMode, TopBarContent } from './components/TopBarContent';
 
 /**
- * 消息中心 HDS 标题栏注入内容：标题 + 右上角「已读/设置」（对齐上游
- * CenterAlignedTopAppBar 的 actions）。与 NotificationPage 分属
- * HdsNavDestination 的 stackBuilder 与内容两棵子树，经 AppStorage 键通信
+ * 消息中心标题栏内容：左对齐标题「消息」+ 右上角「全部已读／设置」（对齐 main 的
+ * CenterAlignedTopAppBar actions，动作按计划 §3.7 排列）。
+ *
+ * 与 NotificationPage 分属 HdsNavDestination 的 stackBuilder 与内容两棵子树，经 AppStorage 键通信
  * （同 HistoryTitleBar 模式）：已读可见性/忙碌态由页面发布，动作只发 tick。
+ * 返回键由 HDS 原生 backIcon 承载；「全部已读」仅在确有未读时出现，忙碌时只禁用该动作，
+ * 设置入口保持可点击（不带入 feature 的联动禁用或加载图标）。
  */
 export const NOTIFICATION_HUB_UNREAD_TOTAL_KEY = 'notificationHubUnreadTotal';
 export const NOTIFICATION_TIMELINE_REFRESH_TICK_KEY = 'notificationTimelineRefreshTick';
@@ -17,56 +22,39 @@ export const NOTIFICATION_HUB_MARK_READ_TICK_KEY = 'notificationHubMarkReadTick'
 export struct NotificationTitleBar {
   @StorageProp(NOTIFICATION_HUB_UNREAD_TOTAL_KEY) unreadTotal: number = 0;
   @StorageProp(NOTIFICATION_HUB_BUSY_KEY) busy: boolean = false;
-  navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {};
+  @Prop backMode: TopBarBackMode = TopBarBackMode.HDS;
+  navigate: (destination: AppDestination) => void = (_destination: AppDestination): void => {
+  };
 
   build() {
-    Row({ space: 8 }) {
-      // 返回键由 HDS 标题栏默认 backIcon 承载（AppShell 传入 action），这里从其右侧起排。
-      Text('消息')
-        .id('notifications_title')
-        .fontSize($r('app.float.heading_font_size'))
-        .fontWeight(FontWeight.Bold)
-        .fontColor($r('app.color.primary_text'))
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .layoutWeight(1)
+    TopBarContent({
+      backMode: this.backMode,
+      title: '消息',
+      titleId: 'notifications_title',
+      hasTrailingSlot: true,
+      trailingSlot: (): void => this.notificationActions()
+    })
+  }
 
-      if (this.unreadTotal > 0) {
-        Button({ type: ButtonType.Normal, stateEffect: true }) {
-          SymbolGlyph($r('sys.symbol.checkmark'))
-            .fontSize(20)
-            .fontColor([$r('app.color.primary_text')])
-        }
-          .id('notifications_mark_all_read')
-          .width(40)
-          .height(40)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .accessibilityText('全部标记为已读')
-          .enabled(!this.busy)
-          .onClick((): void => this.publishMarkRead())
-      }
-
-      Button({ type: ButtonType.Normal, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.gearshape'))
-          .fontSize(20)
-          .fontColor([$r('app.color.primary_text')])
-      }
-        .id('notifications_settings_entry')
-        .width(40)
-        .height(40)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .accessibilityText('打开通知设置')
-        .onClick((): void => {
-          this.navigate({ name: AppDestinationName.NOTIFICATION_SETTINGS });
-        })
+  @Builder
+  private notificationActions() {
+    if (this.unreadTotal > 0) {
+      TopBarActionButton({
+        icon: $r('sys.symbol.checkmark'),
+        elementId: 'notifications_mark_all_read',
+        label: '全部标记为已读',
+        disabled: this.busy,
+        onAction: (): void => this.publishMarkRead()
+      })
     }
-    .width('100%')
-    .height(48)
-    // 左侧 64vp 让出 HDS 默认返回键的区域（同 HistoryTitleBar）。
-    .padding({ left: 64, right: 8 })
-    .alignItems(VerticalAlign.Center)
+    TopBarActionButton({
+      icon: $r('sys.symbol.gearshape'),
+      elementId: 'notifications_settings_entry',
+      label: '打开通知设置',
+      onAction: (): void => {
+        this.navigate({ name: AppDestinationName.NOTIFICATION_SETTINGS });
+      }
+    })
   }
 
   private publishMarkRead(): void {
