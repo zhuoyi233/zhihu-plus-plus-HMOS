@@ -7,6 +7,7 @@ import { ContentImagePreview } from './NativeContentDocument';
 import { publishQuestionTitle } from './QuestionTitleBar';
 import { publishAnswerTitle } from './AnswerTitleBar';
 import { AnswerTitleGeometry } from './AnswerTitleGeometry';
+import { HarmonyOSCapabilities } from '../common/platform/HarmonyOSCapabilities';
 import { publishArticleTitle } from './ArticleTitleBar';
 import { FeedContentSummary } from './components/FeedContentSummary';
 import { HotCommentSection } from './components/HotCommentSection';
@@ -214,6 +215,7 @@ struct ContentDetailPage {
   private questionScrolled: boolean = false;
   /** 回答页顶栏折叠：问题标题已滚出视口（经 AppStorage 驱动 HDS 标题栏折叠态）。 */
   @State private answerQuestionScrolled: boolean = false;
+  @State private answerTitleMaterialVisible: boolean = false;
   /** 文章页顶栏折叠：文章标题已滚出视口（经 AppStorage 驱动 HDS 标题栏折叠态）。 */
   private articleTitleScrolled: boolean = false;
   /** 详情页滚动信息头中主标题实测高度（vp）：折叠阈值的动态基准；未测得前按单行估算。 */
@@ -754,6 +756,21 @@ struct ContentDetailPage {
     });
   }
 
+  @Builder
+  private answerTitleBlurMask() {
+    Column()
+      .width('100%')
+      .height('100%')
+      .linearGradient({
+        direction: GradientDirection.Bottom,
+        colors: [['#FFFFFFFF', 0],
+          ['#FFFFFFFF', this.contentTopInsetVp() / (this.contentTopInsetVp() + 40)],
+          ['#00FFFFFF', 1]]
+      })
+      .blendMode(BlendMode.DST_IN, BlendApplyType.OFFSCREEN)
+      .hitTestBehavior(HitTestMode.None)
+  }
+
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       Column() {
@@ -811,6 +828,23 @@ struct ContentDetailPage {
       // 沉浸阅读隐藏顶栏后仅保留状态栏高度（对齐上游 topBar={}）。
       .padding({ top: this.immersiveReading ? Math.max(this.statusBarHeightVp, 0) : 0 })
       .backgroundColor($r('app.color.page_background'))
+
+      // API 23 用实际背景采样模糊 + 30% 主题底兜底，HDS 仅绘制标题/返回键。
+      // 遮罩只作用于装饰层，下沿 40vp 渐隐；不参与正文让位、过滑平移或手势命中。
+      if (this.kind === ContentDetailKind.ANSWER && this.answerTitleMaterialVisible &&
+        !HarmonyOSCapabilities.supportsImmersiveTitleBarStyle() && !this.immersiveReading &&
+        !(this.titleAutoHide && this.chromeHiddenByScroll) && this.imagePreviewUrl.length === 0) {
+        Column()
+          .id('answer_title_fallback_blur')
+          .width('100%')
+          .height(this.contentTopInsetVp() + 40)
+          .backgroundEffect({ radius: 24, saturation: 1, brightness: 1,
+            color: $r('app.color.answer_title_fallback_background') })
+          .overlay(this.answerTitleBlurMask())
+          .blendMode(BlendMode.SRC_OVER, BlendApplyType.OFFSCREEN)
+          .hitTestBehavior(HitTestMode.None)
+          .accessibilityLevel('no')
+      }
 
       // 正文未就绪时只展示明确等待区；不会用摘要伪装目标全文。
       // 提示贴在两页接缝一侧（上一答贴下缘、下一答贴上缘），只露出窄条时也不会落到屏外。
@@ -1823,6 +1857,7 @@ struct ContentDetailPage {
       this.contentTopInsetVp(), this.immersiveReading || (this.titleAutoHide && this.chromeHiddenByScroll)
         ? 0 : this.contentTopInsetVp(), this.questionInTitleBar, contentAuthorName(content).length > 0);
     this.answerQuestionScrolled = state.compact;
+    this.answerTitleMaterialVisible = state.materialVisible;
     publishAnswerTitle({
       id: this.contentId,
       activeAnswerId: content.value.id,

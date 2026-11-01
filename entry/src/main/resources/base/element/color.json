@@ -29,6 +29,10 @@
       "value": "#D9FFFFFF"
     },
     {
+      "name": "answer_title_fallback_background",
+      "value": "#4DFFFFFF"
+    },
+    {
       "name": "root_chrome_background",
       "value": "#B3FFFFFF"
     },
