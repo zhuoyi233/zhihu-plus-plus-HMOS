@@ -1762,6 +1762,8 @@ export struct AppShell {
         TopBarContent({
           backMode: TopBarBackMode.NONE,
           hasTitleSlot: true,
+          // 胶囊自身负责圆角裁切，外层不裁切材质阴影，避免底部出现矩形边缘。
+          clipTitleSlot: false,
           titleSlot: (): void => this.homeSearchPillSlot(),
           hasTrailingSlot: true,
           trailingSlot: (): void => this.homeNotificationAction()

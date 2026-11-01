@@ -40,6 +40,8 @@ export struct TopBarContent {
   /** 标题被省略时仍要能被完整朗读。 */
   @Prop titleAccessibility: string = '';
   @Prop hasTitleSlot: boolean = false;
+  /** 悬浮材质需要在槽位外绘制阴影；正文身份等普通槽位仍保留裁切。 */
+  @Prop clipTitleSlot: boolean = true;
   @BuilderParam titleSlot: () => void = this.emptySlot;
   @Prop hasTrailingSlot: boolean = false;
   @BuilderParam trailingSlot: () => void = this.emptySlot;
@@ -102,7 +104,7 @@ export struct TopBarContent {
         .height(TOP_BAR_CONTENT_ROW_HEIGHT_VP)
         .layoutWeight(1)
         .alignItems(VerticalAlign.Center)
-        .clip(true)
+        .clip(this.clipTitleSlot)
       } else if (this.subtitle.length > 0) {
         this.titleWithSubtitle()
       } else {
