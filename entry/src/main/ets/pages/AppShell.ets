@@ -1772,11 +1772,8 @@ export struct AppShell {
         // #48：历史配置为底栏页时，“我的”入口也复用此页，必须保留本地历史菜单。
         HistoryTitleBar({ backMode: TopBarBackMode.NONE })
       } else if (this.activeTopLevelTab() === TopLevelTab.FOLLOWING) {
-        TopBarContent({
-          backMode: TopBarBackMode.NONE,
-          hasTitleSlot: true,
-          titleSlot: (): void => this.followingSwitcherSlot()
-        })
+        // 整组胶囊按顶栏全宽居中，避开普通标题行的右侧动作占位及矩形裁切。
+        this.followingSwitcherSlot()
       } else if (this.activeTopLevelTab() === TopLevelTab.HOT) {
         TopBarContent({
           backMode: TopBarBackMode.NONE,
