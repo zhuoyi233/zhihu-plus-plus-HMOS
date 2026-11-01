@@ -2,12 +2,13 @@ import { setFeedScrollOwner } from './FeedScrollOwnership';
 import { updateStatusBarAppearance } from '../platform/SystemBars';
 import { QuestionTitleBar } from './QuestionTitleBar';
 import { SearchTitleBar } from './SearchTitleBar';
-import { HistoryTitleBar } from './HistoryTitleBar';
+import { publishReadHistoryOpenLocal, publishReadHistoryClear } from './HistoryTitleBar';
 import { AnswerTitleBar, AnswerTitleState } from './AnswerTitleBar';
 import { ArticleTitleBar } from './ArticleTitleBar';
 import { peopleTitleText, PeopleTitleState } from './PeopleTitleBar';
-import { CommentTitleBar, CommentTitleState, commentTitleStateId } from './CommentTitleBar';
-import { NotificationTitleBar, NOTIFICATION_HUB_REFRESH_TICK_KEY,
+import { CommentTitleState, commentTitleStateId } from './CommentTitleBar';
+import { NOTIFICATION_HUB_REFRESH_TICK_KEY, NOTIFICATION_HUB_UNREAD_TOTAL_KEY,
+  NOTIFICATION_HUB_BUSY_KEY, NOTIFICATION_HUB_MARK_READ_TICK_KEY,
   NOTIFICATION_TIMELINE_REFRESH_TICK_KEY, NOTIFICATION_TIMELINE_ENTRY_KEY } from './NotificationTitleBar';
 import {
   onThemeColor,
@@ -77,7 +78,8 @@ import {
   TopLevelTab,
   topLevelTabForDestination
 } from './TopLevelTabs';
-import { DividerShowType, hdsMaterial, HdsNavDestination, HdsNavigation, HdsNavigationAttribute, HdsNavigationTitleMode, HdsTabsController } from '@kit.UIDesignKit';
+import { DividerShowType, hdsMaterial, HdsNavDestination, HdsNavigation, HdsNavigationAttribute, HdsNavigationTitleMode, HdsTabsController,
+  HdsNavigationTitle, HdsNavigationMenuContentOptions, HdsNavigationMenuItemOptions } from '@kit.UIDesignKit';
 import { ContinuousAnswerTitleState, continuousAnswerRouteId, continuousAnswerTitle } from './ContinuousAnswerRouteState';
 import { getAnswerTitleBarStyle, getContinuousAnswerTitleBarStyle, getChatTitleBarStyle, getImmersiveTitleBarStyle, getPersistentImmersiveTitleBarStyle, getRootChromeTitleBarStyle } from '../common/style/NavStyles';
 import {
@@ -217,6 +219,9 @@ export struct AppShell {
   @StorageProp('commentTitleStates') private commentTitleStates: CommentTitleState[] = [];
   /** 全屏图片查看器打开中（详情页广播）：同样隐藏顶栏，使查看器真全屏。 */
   @StorageProp('imagePreviewUrl') private imagePreviewUrl: string = '';
+  /** 消息页广播未读数与忙碌态，原生菜单据此显示和禁用“全部已读”。 */
+  @StorageProp(NOTIFICATION_HUB_UNREAD_TOTAL_KEY) private notificationUnreadTotal: number = 0;
+  @StorageProp(NOTIFICATION_HUB_BUSY_KEY) private notificationBusy: boolean = false;
   /** 设置宿主广播的顶栏状态：标题、当前是否处于二级页、二级页是否注册了“更多”动作。 */
   @StorageProp('settingsHomeTitle') private settingsHomeTitle: string = '设置';
   @StorageProp('settingsHomeDetailBackActive') private settingsHomeDetailBackActive: boolean = false;
@@ -569,7 +574,8 @@ export struct AppShell {
         style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()),
         avoidLayoutSafeArea: true,
         content: {
-          stackBuilder: (): void => this.settingsTitleBar(),
+          title: { mainTitle: this.settingsHomeTitle, mainTitleId: 'settings_detail_title' },
+          menu: this.settingsTitleMenu(),
           backIcon: {
             componentId: 'settings_detail_back',
             label: this.settingsHomeDetailBackActive ? '返回上一级设置' : '返回我的',
@@ -659,13 +665,13 @@ export struct AppShell {
           this.pathStack.pop();
         }, false, (): void => {}, (): void => {});
       }
-      // 独立入口：HDS 原生返回承载导航，页面注册的「更多」由 stackBuilder 画成 main 同款圆按钮。
+      // 独立入口：标题、返回与“更多”均由 HDS 布局，动作仍交给页面处理。
       .titleBar({
         style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()),
         avoidLayoutSafeArea: true,
         content: {
-          stackBuilder: (): void => this.actionOnlyTitleBar('内容屏蔽', 'blocking_rules_title',
-            BLOCKING_RULES_TOP_BAR_ID, '内容屏蔽操作'),
+          title: { mainTitle: '内容屏蔽', mainTitleId: 'blocking_rules_title' },
+          menu: this.registeredTitleMenu(BLOCKING_RULES_TOP_BAR_ID, '内容屏蔽操作'),
           divider: { showType: DividerShowType.OFF }
         }
       })
@@ -681,8 +687,8 @@ export struct AppShell {
         style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()),
         avoidLayoutSafeArea: true,
         content: {
-          stackBuilder: (): void => this.actionOnlyTitleBar('屏蔽记录', 'blocked_feed_history_title',
-            BLOCKED_FEED_HISTORY_TOP_BAR_ID, '屏蔽记录操作'),
+          title: { mainTitle: '屏蔽记录', mainTitleId: 'blocked_feed_history_title' },
+          menu: this.registeredTitleMenu(BLOCKED_FEED_HISTORY_TOP_BAR_ID, '屏蔽记录操作'),
           divider: { showType: DividerShowType.OFF }
         }
       })
@@ -697,9 +703,10 @@ export struct AppShell {
       .titleBar({
         style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()),
         avoidLayoutSafeArea: true,
-        // 返回键与选项菜单都由顶栏内容承载（共享自绘返回），与其余栈内页面同一条顶栏结构。
+        // 原生标题与溢出菜单负责几何，历史操作仍通过广播交给内容页。
         content: {
-          stackBuilder: (): void => this.readHistoryTitleBar(),
+          title: { mainTitle: '历史记录', mainTitleId: 'history_title' },
+          menu: this.historyTitleMenu(),
           divider: { showType: DividerShowType.OFF }
         }
       })
@@ -770,7 +777,8 @@ export struct AppShell {
         style: getPersistentImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()),
         avoidLayoutSafeArea: true,
         content: {
-          stackBuilder: (): void => this.commentTitleBar(destination.contentType, destination.contentId),
+          title: { mainTitle: this.commentTitleText(destination.contentType, destination.contentId),
+            mainTitleId: 'comments_title' },
           divider: { showType: DividerShowType.OFF }
         }
       })
@@ -1017,7 +1025,9 @@ export struct AppShell {
       }
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: {
-          stackBuilder: (): void => this.peopleTitleBar(destination.id),
+          title: { mainTitle: peopleTitleText(this.peopleTitleStates, destination.id),
+            mainTitleId: 'people_detail_page_title' },
+          menu: this.registeredTitleMenu(PEOPLE_DETAIL_TOP_BAR_ID, '用户主页操作'),
           divider: { showType: DividerShowType.OFF }
         } })
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
@@ -1083,10 +1093,11 @@ export struct AppShell {
         const tick = AppStorage.get<number>(NOTIFICATION_HUB_REFRESH_TICK_KEY) ?? 0;
         AppStorage.setOrCreate(NOTIFICATION_HUB_REFRESH_TICK_KEY, tick + 1);
       })
-      // 消息中心标题栏对齐上游：标题「消息」+ 右上角已读/设置动作（返回键由顶栏内容自绘）。
+      // HDS 统一布局标题“消息”、返回及已读/设置动作。
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: {
-          stackBuilder: (): void => this.notificationTitleBar(),
+          title: { mainTitle: '消息', mainTitleId: 'notifications_title' },
+          menu: this.notificationTitleMenu(),
           divider: { showType: DividerShowType.OFF }
         }
       })
@@ -1337,6 +1348,8 @@ export struct AppShell {
                   this.immersiveMaterialSupportState()),
                 avoidLayoutSafeArea: true,
                 content: {
+                  title: this.rootNativeTitle(tab as TopLevelTab),
+                  menu: this.rootNativeMenu(tab as TopLevelTab),
                   stackBuilder: (): void => this.rootTitleBarContent(),
                   divider: { showType: DividerShowType.OFF }
                 }
@@ -1555,9 +1568,9 @@ export struct AppShell {
     QuestionTitleBar({ questionId: id })
   }
 
-  @Builder
-  private commentTitleBar(contentType: string, contentId: string) {
-    CommentTitleBar({ stateId: commentTitleStateId(contentType, contentId) })
+  private commentTitleText(contentType: string, contentId: string): string {
+    return this.commentTitleStates.find((state: CommentTitleState): boolean =>
+      state.id === commentTitleStateId(contentType, contentId))?.replying ? '回复' : '评论';
   }
 
   private requestCommentPageBack(contentType: string, contentId: string): void {
@@ -1571,18 +1584,6 @@ export struct AppShell {
   @Builder
   private searchTitleBar() {
     SearchTitleBar()
-  }
-
-  /** 历史记录页标题栏内容：标题 + 右上角溢出菜单（查看本地历史记录/清除历史记录）。 */
-  @Builder
-  private readHistoryTitleBar() {
-    HistoryTitleBar()
-  }
-
-  /** 消息中心标题栏：标题「消息」+ 右上角已读/设置（对齐上游 CenterAlignedTopAppBar actions）。 */
-  @Builder
-  private notificationTitleBar() {
-    NotificationTitleBar({ navigate: (destination: AppDestination): void => this.navigate(destination) })
   }
 
   /** 回答页标题栏：滚动折叠时在返回键右侧显示问题单行 + 答主摘要（对齐上游折叠顶栏）。
@@ -1603,58 +1604,47 @@ export struct AppShell {
     ArticleTitleBar({ articleId: id })
   }
 
-  /**
-   * 用户主页顶栏内容：标题随昵称滚动切换（PeopleTitleBar 广播），右侧动作由页面注册。
-   * 返回键由 HDS 原生 backIcon 承载，加载/失败状态同样可返回。
-   */
-  @Builder
-  private peopleTitleBar(id: string) {
-    TopBarContent({
-      backMode: TopBarBackMode.HDS,
-      title: peopleTitleText(this.peopleTitleStates, id),
-      titleId: 'people_detail_page_title',
-      hasTrailingSlot: topBarActionAvailable(this.topBarActionStates, PEOPLE_DETAIL_TOP_BAR_ID),
-      trailingSlot: (): void => this.registeredAction(PEOPLE_DETAIL_TOP_BAR_ID, '用户主页操作')
-    })
+  /** 原生 HDS 菜单负责测量操作宽度，标题不再手动预留返回键或空白动作区。 */
+  private titleMenuItem(icon: Resource, id: string, label: string, action: () => void,
+    enabled: boolean = true): HdsNavigationMenuItemOptions {
+    return { content: { icon: new SymbolGlyphModifier(icon), componentId: id, label: label,
+      isEnabled: enabled, action: action } };
   }
 
-  /**
-   * 设置顶栏内容（main 基线，计划 §3.1）：只画当前分类标题与二级页「更多」，
-   * 左侧 80vp 让出 HDS 原生返回键区域；无动作时保留 main 同款 40×40vp 空占位。
-   */
-  @Builder
-  private settingsTitleBar() {
-    Row({ space: $r('app.float.spacing_small') }) {
-      Text(this.settingsHomeTitle)
-        .fontSize($r('app.float.heading_font_size'))
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.primary_text'))
-        .layoutWeight(1)
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .accessibilityText(this.settingsHomeTitle)
+  private settingsTitleMenu(): HdsNavigationMenuContentOptions {
+    return { value: this.settingsHomeActionsAvailable ? [this.titleMenuItem($r('sys.symbol.ellipsis_circle'),
+      'settings_detail_actions', this.settingsHomeTitle + '更多操作',
+      (): void => this.onSettingsTitleActions())] : [] };
+  }
 
-      if (this.settingsHomeActionsAvailable) {
-        TopBarActionButton({
-          icon: $r('sys.symbol.ellipsis_circle'),
-          elementId: 'settings_detail_actions',
-          label: `${this.settingsHomeTitle}更多操作`,
-          onAction: (): void => {
-            this.onSettingsTitleActions();
-          }
-        })
-      } else {
-        // 无动作时保留 main 同款 40×40vp 空占位（不删除尾部区域扩展标题）。
-        Blank()
-          .width(40)
-          .height(40)
-      }
+  private registeredTitleMenu(actionId: string, label: string): HdsNavigationMenuContentOptions {
+    return { value: topBarActionAvailable(this.topBarActionStates, actionId)
+      ? [this.titleMenuItem($r('sys.symbol.ellipsis_circle'), actionId + '_actions', label,
+        (): void => requestTopBarAction(actionId))] : [] };
+  }
+
+  private historyTitleMenu(): HdsNavigationMenuContentOptions {
+    // 两个操作折叠为一个原生“更多”入口；0 会隐藏整个菜单区。
+    return { maxCount: 1, value: [
+      { content: { label: '查看本地历史记录', componentId: 'history_open_local',
+        action: (): void => publishReadHistoryOpenLocal() } },
+      { content: { label: '清除历史记录', componentId: 'history_clear',
+        action: (): void => publishReadHistoryClear() } }
+    ] };
+  }
+
+  private notificationTitleMenu(): HdsNavigationMenuContentOptions {
+    const actions: HdsNavigationMenuItemOptions[] = [];
+    if (this.notificationUnreadTotal > 0) {
+      actions.push(this.titleMenuItem($r('sys.symbol.checkmark'), 'notifications_mark_all_read',
+        '全部标记为已读', (): void => {
+          AppStorage.setOrCreate(NOTIFICATION_HUB_MARK_READ_TICK_KEY,
+            (AppStorage.get<number>(NOTIFICATION_HUB_MARK_READ_TICK_KEY) ?? 0) + 1);
+        }, !this.notificationBusy));
     }
-    .width('100%')
-    .height(48)
-    // stackBuilder 覆盖整条标题栏，标题必须避开系统返回键及其点击区域（main 同款 80vp）。
-    .padding({ left: 80, right: $r('app.float.page_padding') })
-    .hitTestBehavior(HitTestMode.Transparent)
+    actions.push(this.titleMenuItem($r('sys.symbol.gearshape'), 'notifications_settings_entry',
+      '打开通知设置', (): void => this.navigate({ name: AppDestinationName.NOTIFICATION_SETTINGS })));
+    return { value: actions };
   }
 
   /** 顶栏返回：二级页回上一级（交给宿主），目录页退出设置。 */
@@ -1671,33 +1661,6 @@ export struct AppShell {
   private onSettingsTitleActions(): void {
     AppStorage.setOrCreate('settingsHomeActionTick',
       (AppStorage.get<number>('settingsHomeActionTick') ?? 0) + 1);
-  }
-
-  /**
-   * 独立路由页顶栏内容：HDS 原生返回 + main 同款标题 + 页面注册的「更多」。
-   * 页面只注册可用性（TopBarActionBus），这里负责绘制并转发点击。
-   */
-  @Builder
-  private actionOnlyTitleBar(title: string, titleId: string, actionId: string, actionLabel: string) {
-    TopBarContent({
-      backMode: TopBarBackMode.HDS,
-      title: title,
-      titleId: titleId,
-      hasTrailingSlot: topBarActionAvailable(this.topBarActionStates, actionId),
-      trailingSlot: (): void => this.registeredAction(actionId, actionLabel)
-    })
-  }
-
-  @Builder
-  private registeredAction(actionId: string, actionLabel: string) {
-    TopBarActionButton({
-      icon: $r('sys.symbol.ellipsis_circle'),
-      elementId: `${actionId}_actions`,
-      label: actionLabel,
-      onAction: (): void => {
-        requestTopBarAction(actionId);
-      }
-    })
   }
 
   /** 注册式标题：页面未注册或注册为空串时回退到路由固定标题。 */
@@ -1755,6 +1718,39 @@ export struct AppShell {
     }
   }
 
+  private rootNativeTitle(tab: TopLevelTab): HdsNavigationTitle | undefined {
+    if (tab === TopLevelTab.HOT) {
+      return { mainTitle: '热榜', mainTitleId: 'hot_titlebar_title' };
+    }
+    if (tab === TopLevelTab.DAILY) {
+      return { mainTitle: '知乎日报', mainTitleId: 'daily_titlebar_title',
+        subTitle: this.dailyViewingDate.length > 0 ? formatDailyDate(this.dailyViewingDate) : '',
+        subTitleId: 'daily_titlebar_current_date' };
+    }
+    if (tab === TopLevelTab.HISTORY) {
+      return { mainTitle: '历史记录', mainTitleId: 'history_title' };
+    }
+    return undefined;
+  }
+
+  private rootNativeMenu(tab: TopLevelTab): HdsNavigationMenuContentOptions | undefined {
+    if (tab === TopLevelTab.HOT) {
+      return { value: [this.titleMenuItem($r('sys.symbol.arrow_clockwise'), 'hot_titlebar_refresh',
+        '刷新热榜', (): void => {
+          this.hotReloadToken += 1;
+          this.channelFeedInteractionBridge.refreshHot();
+        })] };
+    }
+    if (tab === TopLevelTab.DAILY) {
+      return { value: [this.titleMenuItem($r('sys.symbol.calendar'), 'daily_titlebar_date',
+        '选择日报日期', (): void => this.openDailyDatePicker())] };
+    }
+    if (tab === TopLevelTab.HISTORY) {
+      return this.historyTitleMenu();
+    }
+    return undefined;
+  }
+
   @Builder
   private rootTitleBarContent() {
     Stack({ alignContent: Alignment.Center }) {
@@ -1768,30 +1764,9 @@ export struct AppShell {
           hasTrailingSlot: true,
           trailingSlot: (): void => this.homeNotificationAction()
         })
-      } else if (this.activeTopLevelTab() === TopLevelTab.HISTORY) {
-        // #48：历史配置为底栏页时，“我的”入口也复用此页，必须保留本地历史菜单。
-        HistoryTitleBar({ backMode: TopBarBackMode.NONE })
       } else if (this.activeTopLevelTab() === TopLevelTab.FOLLOWING) {
         // 整组胶囊按顶栏全宽居中，避开普通标题行的右侧动作占位及矩形裁切。
         this.followingSwitcherSlot()
-      } else if (this.activeTopLevelTab() === TopLevelTab.HOT) {
-        TopBarContent({
-          backMode: TopBarBackMode.NONE,
-          title: '热榜',
-          titleId: 'hot_titlebar_title',
-          hasTrailingSlot: true,
-          trailingSlot: (): void => this.hotRefreshAction()
-        })
-      } else if (this.activeTopLevelTab() === TopLevelTab.DAILY) {
-        TopBarContent({
-          backMode: TopBarBackMode.NONE,
-          title: '知乎日报',
-          titleId: 'daily_titlebar_title',
-          subtitle: this.dailyViewingDate.length > 0 ? formatDailyDate(this.dailyViewingDate) : '',
-          subtitleId: 'daily_titlebar_current_date',
-          hasTrailingSlot: true,
-          trailingSlot: (): void => this.dailyDateAction()
-        })
       }
     }
     .id('root_titlebar_content')
@@ -1839,31 +1814,6 @@ export struct AppShell {
       label: '打开通知',
       onAction: (): void => {
         this.navigate({ name: AppDestinationName.NOTIFICATION });
-      }
-    })
-  }
-
-  @Builder
-  private hotRefreshAction() {
-    TopBarActionButton({
-      icon: $r('sys.symbol.arrow_clockwise'),
-      elementId: 'hot_titlebar_refresh',
-      label: '刷新热榜',
-      onAction: (): void => {
-        this.hotReloadToken += 1;
-        this.channelFeedInteractionBridge.refreshHot();
-      }
-    })
-  }
-
-  @Builder
-  private dailyDateAction() {
-    TopBarActionButton({
-      icon: $r('sys.symbol.calendar'),
-      elementId: 'daily_titlebar_date',
-      label: '选择日报日期',
-      onAction: (): void => {
-        this.openDailyDatePicker();
       }
     })
   }

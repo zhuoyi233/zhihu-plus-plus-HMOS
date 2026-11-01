@@ -5,7 +5,8 @@
  * 材质对象是否创建成功由调用方提供，见 TopBarGlass.ets 与各顶栏组件。
  * 规则来源：docs/top-bars-immersive-material-plan.md §3.1、§3.7、§4.1。
  *
- * 整条普通顶栏以 main 设置页为唯一样板：HDS 原生返回、左对齐 20fp Medium 标题、
+ * 普通文字标题交给 HDS 原生 title/menu；下列几何仅用于需要自定义内容的顶栏：
+ * HDS 原生返回、左对齐 20fp Medium 标题、
  * 40vp 圆形动作、10vp 间距、右侧 12vp 与无动作时的单个 40vp 空占位。
  * 返回键不由本层绘制，因此这里没有自绘返回的画布／裁剪几何。
  */
@@ -33,8 +34,8 @@ export const TOP_BAR_SEARCH_PILL_HEIGHT_VP: number = 40;
 
 /**
  * HDS 原生返回键在标题栏中占用的横向预留（vp）。
- * 返回由 HDS 承载，stackBuilder 只负责标题与动作，因此普通二级栏统一让出这一段，
- * 与 main 设置页一致（不保留其他页面旧的 64vp 起点）。
+ * 返回由 HDS 承载，stackBuilder 只负责自定义内容与动作，需手动让出这一段。
+ * 普通文字标题使用 HDS title/menu 原生测量，不使用此占位值。
  */
 export const TOP_BAR_HDS_BACK_RESERVE_VP: number = 80;
 

@@ -15,12 +15,13 @@ import { TOP_BAR_GLASS_MATERIAL } from '../../common/style/TopBarGlass';
 export enum TopBarBackMode {
   /** 一级页：没有返回键，标题从 12vp 基础留白起排。 */
   NONE = 'none',
-  /** HDS 自带返回键：标题让出 main 设置页同款 80vp 预留（不再自绘按钮）。 */
+  /** HDS 自带返回键：自定义内容让出 80vp 预留（普通文字标题使用原生 title）。 */
   HDS = 'hds'
 }
 
 /**
- * 顶栏内容行：main 设置页的等价封装。
+ * 自定义顶栏内容行：用于搜索、身份摘要、可点击问题标题及编辑器操作。
+ * 普通文字标题与菜单使用 HDS 原生 title/menu，不经此布局手动避让。
  *
  * 48vp 内容行、左对齐 20fp Medium 标题（单行省略、`layoutWeight(1)`、跟随系统字号、
  * 不设 1.3 倍上限）、标题与动作之间 10vp、右侧 12vp；没有可见动作时保留一个 40×40vp
