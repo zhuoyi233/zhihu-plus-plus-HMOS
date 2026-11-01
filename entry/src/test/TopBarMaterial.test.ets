@@ -37,12 +37,12 @@ export default function topBarMaterialTest(): void {
       expect(resolveTopBarMaterialPath(withoutMaterial)).assertEqual(TopBarMaterialPath.FALLBACK_BLUR);
     });
 
-    it('keepsMainSettingsGeometryConstants', 0, () => {
-      // main 设置页样板：40vp 圆形动作、10vp 间距、右侧 12vp、80vp 返回预留。
+    it('alignsCustomContentWithNativeTitleGeometry', 0, () => {
+      // 自定义内容与原生标题对齐：16vp 页边距 + 40vp 返回键 + 8vp 间距。
       expect(TOP_BAR_BUTTON_DIAMETER_VP).assertEqual(40);
       expect(TOP_BAR_ACTION_SPACING_VP).assertEqual(10);
       expect(TOP_BAR_HORIZONTAL_PADDING_VP).assertEqual(12);
-      expect(TOP_BAR_HDS_BACK_RESERVE_VP).assertEqual(80);
+      expect(TOP_BAR_HDS_BACK_RESERVE_VP).assertEqual(64);
     });
 
     it('spacesMultipleActionsByMainSettingsRule', 0, () => {

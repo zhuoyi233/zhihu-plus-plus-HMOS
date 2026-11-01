@@ -135,9 +135,10 @@ export struct SearchTitleBar {
 
   build() {
     TopBarContent({
-      // 返回键由 HDS 原生 backIcon 承载；这里只从它右侧起排（80vp 预留）。
+      // 输入胶囊使用共享的原生标题起点，外层不矩形裁切材质阴影。
       backMode: TopBarBackMode.HDS,
       hasTitleSlot: true,
+      clipTitleSlot: false,
       titleSlot: (): void => this.inputPillSlot(),
       hasTrailingSlot: true,
       trailingSlot: (): void => this.filterAction()

@@ -2,14 +2,14 @@ import { setFeedScrollOwner } from './FeedScrollOwnership';
 import { updateStatusBarAppearance } from '../platform/SystemBars';
 import { QuestionTitleBar } from './QuestionTitleBar';
 import { SearchTitleBar } from './SearchTitleBar';
-import { publishReadHistoryOpenLocal, publishReadHistoryClear } from './HistoryTitleBar';
+import { publishReadHistoryOpenLocal, publishReadHistoryClear } from './HistoryTitleActions';
 import { AnswerTitleBar, AnswerTitleState } from './AnswerTitleBar';
 import { ArticleTitleBar } from './ArticleTitleBar';
 import { peopleTitleText, PeopleTitleState } from './PeopleTitleBar';
-import { CommentTitleState, commentTitleStateId } from './CommentTitleBar';
+import { CommentTitleState, commentTitleStateId } from './CommentTitleState';
 import { NOTIFICATION_HUB_REFRESH_TICK_KEY, NOTIFICATION_HUB_UNREAD_TOTAL_KEY,
   NOTIFICATION_HUB_BUSY_KEY, NOTIFICATION_HUB_MARK_READ_TICK_KEY,
-  NOTIFICATION_TIMELINE_REFRESH_TICK_KEY, NOTIFICATION_TIMELINE_ENTRY_KEY } from './NotificationTitleBar';
+  NOTIFICATION_TIMELINE_REFRESH_TICK_KEY, NOTIFICATION_TIMELINE_ENTRY_KEY } from './NotificationTitleState';
 import {
   onThemeColor,
   AppearancePreferences,

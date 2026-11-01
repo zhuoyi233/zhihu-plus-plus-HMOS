@@ -138,7 +138,7 @@ export struct ArticleTitleBar {
 
   build() {
     TopBarContent({
-      // 返回键由 HDS 原生 backIcon 承载，标题从其右侧 80vp 预留后起排。
+      // 返回键由 HDS 原生 backIcon 承载，身份摘要使用共享的原生标题起点。
       backMode: TopBarBackMode.HDS,
       hasTitleSlot: true,
       titleSlot: (): void => this.identitySlot()

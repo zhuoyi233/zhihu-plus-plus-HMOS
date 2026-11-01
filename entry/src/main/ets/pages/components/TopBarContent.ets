@@ -15,7 +15,7 @@ import { TOP_BAR_GLASS_MATERIAL } from '../../common/style/TopBarGlass';
 export enum TopBarBackMode {
   /** 一级页：没有返回键，标题从 12vp 基础留白起排。 */
   NONE = 'none',
-  /** HDS 自带返回键：自定义内容让出 80vp 预留（普通文字标题使用原生 title）。 */
+  /** HDS 自带返回键：自定义内容对齐原生标题的 64vp 起点。 */
   HDS = 'hds'
 }
 

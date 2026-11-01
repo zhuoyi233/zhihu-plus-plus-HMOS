@@ -20,7 +20,7 @@ import {
 } from 'data';
 import { NotificationController, NotificationPhase, NotificationViewState } from './NotificationState';
 import { NOTIFICATION_HUB_REFRESH_TICK_KEY, NOTIFICATION_HUB_BUSY_KEY, NOTIFICATION_HUB_MARK_READ_TICK_KEY,
-  NOTIFICATION_HUB_UNREAD_TOTAL_KEY } from './NotificationTitleBar';
+  NOTIFICATION_HUB_UNREAD_TOTAL_KEY } from './NotificationTitleState';
 import { timelineItemDestination } from './NotificationLinkResolver';
 import {
   FeedPullDownIndicatorHost,

@@ -33,11 +33,11 @@ export const TOP_BAR_ACTION_SPACING_VP: number = 10;
 export const TOP_BAR_SEARCH_PILL_HEIGHT_VP: number = 40;
 
 /**
- * HDS 原生返回键在标题栏中占用的横向预留（vp）。
- * 返回由 HDS 承载，stackBuilder 只负责自定义内容与动作，需手动让出这一段。
+ * 自定义顶栏内容对齐 HDS 原生标题的起点（vp）：16vp 页边距 + 40vp 返回键 + 8vp 间距。
+ * 返回由 HDS 承载，stackBuilder 中的身份摘要、输入胶囊与编辑器统一使用此值。
  * 普通文字标题使用 HDS title/menu 原生测量，不使用此占位值。
  */
-export const TOP_BAR_HDS_BACK_RESERVE_VP: number = 80;
+export const TOP_BAR_HDS_BACK_RESERVE_VP: number = 64;
 
 /** 顶部圆按钮的渲染路径：系统材质 / 普通模糊兜底，两者互斥。 */
 export enum TopBarMaterialPath {
