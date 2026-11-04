@@ -26,7 +26,7 @@ import {
   commentTitleStateId,
   publishCommentTitle,
   removeCommentTitle
-} from './CommentTitleBar';
+} from './CommentTitleState';
 import { materialCanvas } from './components/MaterialCanvas';
 import { commentAvatarUrl, commentImageUrls, stripCommentHtml } from './CommentText';
 

@@ -23,6 +23,16 @@ import {
 import { takeAnswerEditSeed } from './AnswerEditSeedStore';
 import { ImagePickerPanel } from './ImagePickerPanel';
 import { PreparedPickedImage } from '../platform/MediaPickerCoordinator';
+import {
+  consumeTopBarAction,
+  consumeTopBarBack,
+  publishTopBarActionState,
+  removeTopBarActionState
+} from '../common/style/TopBarActionBus';
+import { floatingTitleBarOffset } from './AppPageChrome';
+
+/** 本页在顶栏通道里的注册 id（与 AppShell 常量一致）：标题、发布动作与退出编辑都由它承载。 */
+const ANSWER_PUBLISH_TOP_BAR_ID: string = 'write_answer';
 
 export enum AnswerPublishPagePhase {
   PREPARING = 'preparing',
@@ -432,8 +442,8 @@ export class SystemAnswerPublishTraceIdFactory implements AnswerPublishTraceIdFa
 export struct AnswerPublishPage {
   /** 当前生效主题色（AppShell 广播），驱动强调色控件。 */
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
-  /** 系统状态栏高度（vp）：隐藏注入标题栏后，页面头部需自行让出状态栏并留出呼吸空间。 */
-  @StorageProp('statusBarHeight') private statusBarHeightVp: number = 0;
+  /** 宿主顶栏请求：动作（发布）与 HDS 返回都经这里回到页面自己的流程。 */
+  @StorageProp('topBarActionTick') @Watch('onTopBarActionTick') private topBarActionTick: number = 0;
   questionId: string = '';
   answerId?: string = undefined;
   session: LoginSessionGateway | undefined = undefined;
@@ -453,46 +463,38 @@ export struct AnswerPublishPage {
     this.coordinator = new AnswerPublishPageCoordinator(this.session, this.controllerFactory, this.traceIds,
       (state: AnswerPublishPageViewState): void => {
         this.viewState = state;
+        // 标题与「发布」可用性都随编辑状态广播给宿主顶栏（计划 §3.7 主操作）。
+        publishTopBarActionState({
+          id: ANSWER_PUBLISH_TOP_BAR_ID,
+          available: true,
+          title: state.answerId === undefined ? '撰写回答' : '编辑回答',
+          text: '发布',
+          enabled: state.canPublish
+        });
       }, this.imageUploaderFactory);
     this.coordinator.activate(this.questionId, this.answerId);
   }
 
   aboutToDisappear(): void {
+    removeTopBarActionState(ANSWER_PUBLISH_TOP_BAR_ID);
     this.publishConfirmationVisible = false;
     this.coordinator?.deactivate();
     this.coordinator = undefined;
   }
 
+  /** 宿主顶栏请求：发布入口与 HDS 返回都走页面自己的流程，不绕过草稿与确认。 */
+  private onTopBarActionTick(): void {
+    if (consumeTopBarBack(ANSWER_PUBLISH_TOP_BAR_ID)) {
+      this.exitEditor();
+      return;
+    }
+    if (consumeTopBarAction(ANSWER_PUBLISH_TOP_BAR_ID)) {
+      this.requestPublishConfirmation();
+    }
+  }
+
   build() {
     Column({ space: $r('app.float.spacing_medium') }) {
-      Row({ space: $r('app.float.spacing_small') }) {
-        Button({ type: ButtonType.Normal, stateEffect: true }) {
-          SymbolGlyph($r('sys.symbol.chevron_left'))
-            .fontSize(20)
-            .fontColor([$r('app.color.primary_text')])
-        }
-          .id('answer_page_exit')
-          .width(40)
-          .height(40)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .accessibilityText('返回')
-          .onClick((): void => this.exitEditor())
-        Text(this.viewState.answerId === undefined ? '撰写回答' : '编辑回答')
-          .id('answer_page_title')
-          .layoutWeight(1)
-          .fontSize($r('app.float.heading_font_size'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.primary_text'))
-        Button('发布')
-          .backgroundColor(this.resolvedThemeColor)
-          .fontColor(onThemeColor(this.resolvedThemeColor))
-          .id('answer_page_publish')
-          .enabled(this.viewState.canPublish)
-          .onClick((): void => this.requestPublishConfirmation())
-      }
-      .width('100%')
-
       Text(this.viewState.statusMessage)
         .id('answer_page_status')
         .fontSize($r('app.float.secondary_font_size'))
@@ -561,7 +563,8 @@ export struct AnswerPublishPage {
     .padding({
       left: $r('app.float.card_padding'),
       right: $r('app.float.card_padding'),
-      top: Math.max(this.statusBarHeightVp, 0) + 12,
+      // HDS 标题栏是覆盖式：首屏内容从栏下沿起排（与其它二级页同一让位口径）。
+      top: floatingTitleBarOffset(),
       bottom: $r('app.float.card_padding')
     })
     .backgroundColor($r('app.color.page_background'))

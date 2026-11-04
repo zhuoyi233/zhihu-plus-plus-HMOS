@@ -5,6 +5,7 @@ import {
   resolveZhihuLink
 } from 'core';
 import { DEFAULT_THEME_COLOR, onThemeColor } from 'data';
+import { floatingTitleBarOffset } from './AppPageChrome';
 
 interface DeepLinkProbeCase {
   name: string;
@@ -147,12 +148,6 @@ export struct DeepLinkProbePage {
   build() {
     Scroll() {
       Column({ space: 16 }) {
-        Blank().height(64)
-        Button('返回')
-          .backgroundColor($r('app.color.control_background'))
-          .fontColor($r('app.color.primary_text'))
-          .id('deep_link_back')
-          .onClick(() => this.onBack())
 
         Text('知乎 URL 与深链解析')
           .fontSize(24)
@@ -201,6 +196,8 @@ export struct DeepLinkProbePage {
       .width('100%')
       .padding(24)
     }
+    // 沉浸顶栏覆盖式呈现：首屏从栏下沿起排，滚动时穿过顶栏。
+    .contentStartOffset(floatingTitleBarOffset())
     .scrollBar(BarState.Off)
     .width('100%')
     .height('100%')

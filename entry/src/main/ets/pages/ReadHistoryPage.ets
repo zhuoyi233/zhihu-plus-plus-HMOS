@@ -47,7 +47,7 @@ export struct ReadHistoryPage {
   @State @Watch('syncRefreshIndicator') private refreshing: boolean = false;
   @State @Watch('clearDialogChanged') private confirmClear: boolean = false;
   // 标题栏溢出菜单在 stackBuilder 子树内，动作经 AppStorage tick 广播到本页（同 loginFeedReloadTick 模式）。
-  // @StorageProp 键用字面量（装饰器要求编译期常量），值与 HistoryTitleBar.ets 导出常量一一对应。
+  // @StorageProp 键用字面量（装饰器要求编译期常量），值与 HistoryTitleActions.ets 导出常量一一对应。
   @StorageProp('readHistoryOpenLocalTick') @Watch('onOpenLocalTick') private openLocalTick: number = 0;
   @StorageProp('readHistoryClearTick') @Watch('onClearTick') private clearTick: number = 0;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;

@@ -15,7 +15,7 @@ import {
   NotificationSettingsGateway,
   themeColorContainerColor
 } from 'data';
-import { NOTIFICATION_TIMELINE_REFRESH_TICK_KEY, NOTIFICATION_TIMELINE_ENTRY_KEY } from './NotificationTitleBar';
+import { NOTIFICATION_TIMELINE_REFRESH_TICK_KEY, NOTIFICATION_TIMELINE_ENTRY_KEY } from './NotificationTitleState';
 import { EmojiText } from './EmojiText';
 import { contentLinkDestination, timelineItemDestination } from './NotificationLinkResolver';
 import { notificationPlainText } from './PrivateMessageContent';

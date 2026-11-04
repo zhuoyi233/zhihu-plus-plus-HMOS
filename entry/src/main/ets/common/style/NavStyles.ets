@@ -1,3 +1,17 @@
+/**
+ * 顶栏「背景策略」集中表（docs/top-bars-immersive-material-plan.md §3.2）。
+ *
+ * 背景策略与按钮材质分别管理：本文件只决定标题栏背后的遮挡层（首屏轻量、滚动过渡、
+ * 常驻可读、几何驱动、不透明、由页面自管），顶部圆按钮的材质路径见 TopBarMaterial.ets。
+ * 页面只选择策略与状态，不再自建背板层：
+ * - getRootChromeTitleBarStyle：根页滚动背景（首页/关注/热榜/日报/一级历史）
+ * - getImmersiveTitleBarStyle：普通滚动背景（设置及管理页、搜索、列表、详情）
+ * - getPersistentImmersiveTitleBarStyle：常驻可读背景（评论等首帧即遮挡的页面）
+ * - getAnswerTitleBarStyle：正文几何驱动（API 23 背景归页面渐变模糊层）
+ * - getContinuousAnswerTitleBarStyle：连续阅读（API 23 背景归页面渐变层）
+ * - getChatTitleBarStyle：不透明背景（私信、诊断原型）
+ * 全屏媒体与覆盖层（视频、图片预览、扫码、风控）由页面自管工具栏，不在本表内。
+ */
 import { LengthMetrics } from '@kit.ArkUI';
 import { BlurStrategy, hdsMaterial, ScrollEffectType, TitleBarStyleOptions } from '@kit.UIDesignKit';
 import { ImmersiveMaterialMode } from 'data';
@@ -273,14 +287,20 @@ export function getChatTitleBarStyle(): TitleBarStyleOptions {
 /** 回答 Native 列表嵌套在候选树中，HDS 无法可靠观察其滚动；由正文几何显式选择材质态。 */
 export function getAnswerTitleBarStyle(materialMode: ImmersiveMaterialMode,
   materialSupport: ImmersiveMaterialSupportState, materialVisible: boolean): TitleBarStyleOptions {
-  const style = getPersistentImmersiveTitleBarStyle(materialMode, materialSupport);
-  // 不再让 HDS 的第二套滚动阈值改变身份折叠。模拟器/无材质设备用实色保持文字可读。
-  style.blurStrategy = BlurStrategy.ENABLE;
-  style.scrollEffectOpts = { enableScrollEffect: false, scrollEffectType: ScrollEffectType.COMMON_BLUR };
-  const background: ResourceColor = !materialVisible ? Color.Transparent :
-    (materialSupport === ImmersiveMaterialSupportState.SUPPORTED
-      ? $r('app.color.immersive_title_background') : $r('app.color.page_background'));
-  style.originalStyle = { backgroundStyle: { backgroundColor: background } };
-  style.scrollEffectStyle = { backgroundStyle: { backgroundColor: background } };
+  if (!HarmonyOSCapabilities.supportsImmersiveTitleBarStyle()) {
+    // 候选列表的滚动无法激活 API 23 HDS 的背景模糊，由正文上方的独立层采样。
+    return getContinuousAnswerTitleBarStyle(materialMode, materialSupport);
+  }
+  // 背景、渐变模糊、图标颜色与原生返回键材质均复用设置页策略，
+  // 包括 API 23 降级及手动材质挡位的按钮黑底规避。
+  const style = getImmersiveTitleBarStyle(materialMode, materialSupport);
+  if (style.scrollEffectOpts !== undefined) {
+    // 回答页的候选列表不由 HDS 直接观察；继续由正文几何广播控制显隐，
+    // 不引入第二套滚动阈值，也不改变正文让位、问题折叠与答主接管时机。
+    style.scrollEffectOpts.enableScrollEffect = false;
+  }
+  const presentation = materialVisible ? style.scrollEffectStyle : style.originalStyle;
+  style.originalStyle = presentation;
+  style.scrollEffectStyle = presentation;
   return style;
 }

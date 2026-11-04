@@ -1,5 +1,5 @@
-import { hdsMaterial } from '@kit.UIDesignKit';
-import { materialCanvas } from './components/MaterialCanvas';
+import { TopBarActionButton } from './components/TopBarActionButton';
+import { TopBarBackMode, TopBarContent } from './components/TopBarContent';
 
 /** 回答页顶栏状态：问题标题 + 答主摘要 + 滚动折叠信号。
  * 跨页面经 AppStorage 广播（同 QuestionTitleBar 模式，HDS 标题栏 stackBuilder 树下
@@ -97,14 +97,6 @@ export struct AnswerTitleBar {
     return this.states.find((item: AnswerTitleState): boolean => item.id === this.answerId);
   }
 
-  private supportsImmersiveMaterial(): boolean {
-    try {
-      return hdsMaterial.getSystemMaterialTypes().includes(hdsMaterial.MaterialType.IMMERSIVE);
-    } catch (_error) {
-      return false;
-    }
-  }
-
   /** 顶栏是否展示问题标题：滚动折叠后始终展示；设置开启时常驻（未滚动最多两行）。 */
   private showsTitle(): boolean {
     return this.folded || this.questionInTitleBar;
@@ -119,42 +111,17 @@ export struct AnswerTitleBar {
     this.onOpenQuestion(questionId);
   }
 
-  build() {
-    Row({ space: $r('app.float.spacing_small') }) {
-      Stack({ alignContent: Alignment.Center }) {
-        if (this.supportsImmersiveMaterial()) {
-          materialCanvas(52, 52)
-        }
-        Button({ type: ButtonType.Normal, stateEffect: true }) {
-          SymbolGlyph($r('sys.symbol.chevron_left'))
-            .fontSize(20)
-            .fontColor([$r('app.color.primary_text')])
-        }
-          .width(40)
-          .height(40)
-          .padding(0)
-          .borderRadius(20)
-          .backgroundColor(this.supportsImmersiveMaterial()
-            ? Color.Transparent
-            : $r('app.color.surface_background'))
-          .accessibilityText('返回')
-          .onClick((): void => {
-            this.onBack();
-          })
-      }
-        .width(44)
-        .height(44)
-        .borderRadius(22)
-        .clip(true)
-
+  /** 折叠态身份行：问题标题（点击进入问题）与答主摘要，受正文几何状态控制。 */
+  @Builder
+  private identitySlot() {
       // 标题压缩与作者摘要分别受几何状态控制。
       // 设置开启后未滚动也渲染：问题两行（过长省略），答主摘要仍只在折叠态出现。
       if (this.showsTitle()) {
         Column({ space: 2 }) {
           Text(this.state()?.questionTitle || '回答')
-            .id('answer_top_question')
             // 16fp、22vp 行高在固定栏高内容纳两行，允许系统字号放大至 1.3 倍。
             .fontSize(16)
+            .id('answer_top_question')
             .lineHeight(22)
             .maxFontScale(1.3)
             .fontWeight(FontWeight.Medium)
@@ -193,8 +160,8 @@ export struct AnswerTitleBar {
               // 名称 + 徽章同组：名称 flexShrink 收缩省略，徽章紧跟名字右侧（对齐上游）。
               Row({ space: 4 }) {
                 Text(this.state()?.authorName ?? '')
-                  .id('answer_top_author')
                   .fontSize($r('app.float.caption_font_size'))
+                  .id('answer_top_author')
                   .maxFontScale(1.3)
                   .fontColor($r('app.color.secondary_text'))
                   .maxLines(1)
@@ -225,8 +192,8 @@ export struct AnswerTitleBar {
         .transition(TransitionEffect.OPACITY)
       } else {
         Text('回答')
-          .id('answer_top_placeholder')
           .fontSize(20)
+          .id('answer_top_placeholder')
           .maxFontScale(1.3)
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.primary_text'))
@@ -234,16 +201,17 @@ export struct AnswerTitleBar {
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
       }
-    }
-    .width('100%')
-    .height(48)
-    .backgroundBlurStyle(this.state()?.materialVisible ? BlurStyle.COMPONENT_ULTRA_THIN : BlurStyle.NONE)
-    .padding({
-      left: $r('app.float.page_padding'),
-      right: $r('app.float.page_padding')
+  }
+
+  build() {
+    // 顶栏背景由 HdsNavDestination 的材质策略统一承担（见 NavStyles.getAnswerTitleBarStyle），
+    // 本行不再叠第二层模糊，避免同一控件重复采样正文；返回键由 HDS 原生 backIcon 承载。
+    TopBarContent({
+      backMode: TopBarBackMode.HDS,
+      hasTitleSlot: true,
+      titleSlot: (): void => this.identitySlot()
     })
-    .alignItems(VerticalAlign.Center)
-    // 过滑切换进行中：关闭整栏命中，避免移动中的返回键仍可点。
-    .hitTestBehavior(this.overscrollActive ? HitTestMode.None : HitTestMode.Transparent)
+      // 过滑切换进行中：关闭整栏命中，避免移动中的返回键仍可点。
+      .hitTestBehavior(this.overscrollActive ? HitTestMode.None : HitTestMode.Transparent)
   }
 }

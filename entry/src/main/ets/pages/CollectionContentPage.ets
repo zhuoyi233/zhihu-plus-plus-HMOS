@@ -138,31 +138,6 @@ export struct CollectionContentPage {
   }
 
   @Builder
-  private pageHeader() {
-    Row({ space: $r('app.float.spacing_small') }) {
-      Button({ type: ButtonType.Normal, stateEffect: true }) {
-        SymbolGlyph($r('sys.symbol.chevron_left'))
-          .fontSize(20)
-          .fontColor([$r('app.color.primary_text')])
-      }
-        .id('collection_content_back')
-        .width(40)
-        .height(40)
-        .padding(0)
-        .backgroundColor(Color.Transparent)
-        .accessibilityText('返回')
-        .onClick((): void => this.onBack())
-      Text('收藏夹内容')
-        .id('collection_content_page_title')
-        .fontSize($r('app.float.heading_font_size'))
-        .fontWeight(FontWeight.Medium)
-        .fontColor($r('app.color.primary_text'))
-        .layoutWeight(1)
-    }
-    .width('100%')
-  }
-
-  @Builder
   private header() {
     Column({ space: $r('app.float.spacing_small') }) {
       Text(this.collection?.title ?? '收藏夹')

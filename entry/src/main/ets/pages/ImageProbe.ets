@@ -1,5 +1,6 @@
 import { ImagePickerPanel } from './ImagePickerPanel';
 import { DEFAULT_THEME_COLOR, onThemeColor } from 'data';
+import { floatingTitleBarOffset } from './AppPageChrome';
 
 const STATIC_IMAGE_URL = 'https://picx.zhimg.com/v2-7f36f391170ca2319d6b61239694e0ef_1440w.jpg';
 const GIF_IMAGE_URL = 'https://pic2.zhimg.com/v2-5e25b72ea793eb39f3709e89e56b2513_1440w.gif';
@@ -22,11 +23,6 @@ export struct ImageProbe {
         Column({ space: 20 }) {
           Blank().height(64)
           Row({ space: 12 }) {
-            Button('返回')
-              .backgroundColor($r('app.color.control_background'))
-              .fontColor($r('app.color.primary_text'))
-              .id('image_back')
-              .onClick(() => this.onBack())
             Column({ space: 4 }) {
               Text('图片与 GIF 验证')
                 .fontSize(22)
@@ -123,6 +119,8 @@ export struct ImageProbe {
         .padding(20)
         .alignItems(HorizontalAlign.Start)
       }
+      // 沉浸顶栏覆盖式呈现：首屏从栏下沿起排，滚动时穿过顶栏。
+      .contentStartOffset(floatingTitleBarOffset())
       .scrollBar(BarState.Off)
       .width('100%')
       .height('100%')

@@ -1,6 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { util } from '@kit.ArkTS';
 import { image } from '@kit.ImageKit';
+import { floatingTitleBarOffset } from './AppPageChrome';
 import { getAppSessionOwner, getGuestDeviceCookieManager, toCookieHeader } from 'data';
 import {
   blockFormulaDisplayAspectRatio,
@@ -311,11 +312,6 @@ export struct ReaderProbe {
     Stack({ alignContent: Alignment.Center }) {
       Column() {
         Row({ space: 12 }) {
-          Button('返回')
-            .backgroundColor($r('app.color.control_background'))
-            .fontColor($r('app.color.primary_text'))
-            .id('reader_back')
-            .onClick(() => this.onBack())
 
           Column({ space: 4 }) {
             Text('原生长正文验证')
@@ -335,7 +331,8 @@ export struct ReaderProbe {
           .layoutWeight(1)
         }
         .width('100%')
-        .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+        // 沉浸顶栏覆盖式呈现：状态行与列表首屏从栏下沿起排，滚动时穿过顶栏。
+        .padding({ left: 16, right: 16, top: floatingTitleBarOffset() + 12, bottom: 12 })
 
         Divider()
 

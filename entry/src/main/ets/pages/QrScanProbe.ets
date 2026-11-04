@@ -5,6 +5,7 @@ import { QrScanner } from '../platform/PlatformServices';
 import { SystemQrScanner } from '../platform/SystemQrScanner';
 import { QR_FIXTURE_VALUE, writeQrScanFixture } from '../scan/QrScanFixture';
 import { DEFAULT_THEME_COLOR, onThemeColor } from 'data';
+import { floatingTitleBarOffset } from './AppPageChrome';
 
 class QrScanServiceFailure extends Error {
   readonly code: number;
@@ -51,12 +52,6 @@ export struct QrScanProbePage {
   build() {
     Scroll() {
       Column({ space: 16 }) {
-        Blank().height(64)
-        Button('返回')
-          .backgroundColor($r('app.color.control_background'))
-          .fontColor($r('app.color.primary_text'))
-          .id('qr_scan_back')
-          .onClick(() => this.onBack())
 
         Text('Scan Kit 二维码原型')
           .fontSize(24)
@@ -118,6 +113,8 @@ export struct QrScanProbePage {
       .width('100%')
       .padding(24)
     }
+    // 沉浸顶栏覆盖式呈现：首屏从栏下沿起排，滚动时穿过顶栏。
+    .contentStartOffset(floatingTitleBarOffset())
     .scrollBar(BarState.Off)
     .width('100%')
     .height('100%')
