@@ -37,6 +37,7 @@ import {
 } from './components/ReadingProgressBar';
 import { readerBlockSpacing } from './ReaderTypography';
 import { readerHorizontalPaddingVp } from './ReaderViewportLayout';
+import { contentCenteredPaddingVp } from './FeedWaterfallLayout';
 import {
   readerBlockSignature,
   readerPositionBlockIndex,
@@ -472,6 +473,16 @@ export struct NativeContentDocument {
   @Prop bottomInsetVp: number = 100;
   /** 回答/文章阅读布局：独立正文边距，信息头到正文至少留 24vp；其他宿主沿用原布局。 */
   readingLayout: boolean = false;
+  /**
+   * 宽屏内容上限（vp，0 表示不启用）：视口超过该宽度后 List 横向 padding 改为居中公式
+   * （max(12, (视口宽 − 上限) / 2)），整页内容居中而滚动视口仍通铺。问题页传 1120。
+   */
+  contentMaxWidthVp: number = 0;
+  /**
+   * 正文块限宽（vp，0 表示不启用）：>0 时正文块（含折叠视口）收窄到该宽度并随
+   * ListItemAlign.Center 居中，长文不在宽屏无限拉长。问题页传 720（信息头/尾部各自限宽）。
+   */
+  bodyMaxWidthVp: number = 0;
   /** 问题页正文折叠预览：正文超阈值（纯文本≥100 字或含图）时收起为 180vp 视口。 */
   collapsible: boolean = false;
   @State private detailExpanded: boolean = false;
@@ -1012,11 +1023,13 @@ export struct NativeContentDocument {
               this.collapsibleBodyViewport()
             }
             .width('100%')
+            .constraintSize({ maxWidth: this.bodyBlockMaxWidthVp() })
           } else {
             LazyForEach(this.dataSource, (item: ReaderBlock) => {
               ListItem() {
                 this.readerBlock(item)
               }
+              .constraintSize({ maxWidth: this.bodyBlockMaxWidthVp() })
               .onAreaChange((_oldArea: Area, newArea: Area): void => {
                 this.reportBlockHeight(item.id, newArea);
               })
@@ -1061,9 +1074,12 @@ export struct NativeContentDocument {
         .width('100%')
         .height('100%')
         .scrollBar(BarState.Off)
+        // 正文块限宽（问题页 720）时收窄的条目随交叉轴居中；未启用时保持默认左对齐，
+        // 全宽条目不受对齐方式影响。
+        .alignListItem(this.bodyMaxWidthVp > 0 ? ListItemAlign.Center : ListItemAlign.Start)
         .padding({
-          left: this.readingLayout ? readerHorizontalPaddingVp(this.viewportWidthVp) : $r('app.float.page_padding'),
-          right: this.readingLayout ? readerHorizontalPaddingVp(this.viewportWidthVp) : $r('app.float.page_padding'),
+          left: this.documentHorizontalPaddingVp(),
+          right: this.documentHorizontalPaddingVp(),
           top: 16
         })
         // 末尾避让随正文滚动，避免底部 padding 压缩视口、在悬浮操作栏下方形成固定留白。
@@ -1213,6 +1229,25 @@ export struct NativeContentDocument {
   /** 段间距/块间距（vp，`List({ space })` 传 number 即 vp）：12 × 段间距%，默认 12 == 改造前。 */
   private blockSpacing(): number {
     return readerBlockSpacing(this.blockSpacingPercent, this.typographyPreset);
+  }
+
+  /**
+   * List 横向 padding：阅读布局走 720vp 口径；启用宽屏居中限宽（contentMaxWidthVp）走居中公式；
+   * 其余保持常规页边距（app.float.page_padding）。
+   */
+  private documentHorizontalPaddingVp(): Length {
+    if (this.readingLayout) {
+      return readerHorizontalPaddingVp(this.viewportWidthVp);
+    }
+    if (this.contentMaxWidthVp > 0) {
+      return contentCenteredPaddingVp(this.viewportWidthVp, this.contentMaxWidthVp);
+    }
+    return $r('app.float.page_padding');
+  }
+
+  /** 正文块限宽：未启用（0）时返回 undefined 等价无约束，条目按原样渲染。 */
+  private bodyBlockMaxWidthVp(): Length {
+    return this.bodyMaxWidthVp > 0 ? this.bodyMaxWidthVp : '100%';
   }
 
   /** 正文行键：renderRevision 随排版/主题整体重建；卡片元数据回填只递增对应 url 版本。 */

@@ -1,14 +1,20 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
   buildFeedFlowLayout,
+  buildRowGroups,
+  cardWidthForColumns,
+  contentCenteredPaddingVp,
   feedAnchorFlowIndex,
   feedColumnCandidates,
   feedMinCardWidthVp,
   FeedFlowLayout,
   feedSectionSignature,
   feedFlowItemIndex,
+  fitColumnsForContentWidth,
   homeFeedInitialItemTarget,
-  resolveFeedColumnSpec
+  resolveFeedColumnSpec,
+  READER_TEXT_MAX_WIDTH_VP,
+  WIDE_CONTENT_MAX_WIDTH_VP
 } from '../main/ets/pages/FeedWaterfallLayout';
 
 export default function feedWaterfallLayoutTest(): void {
@@ -142,6 +148,49 @@ export default function feedWaterfallLayoutTest(): void {
       expect(feedAnchorFlowIndex(wide, 9)).assertEqual(3);
       expect(feedAnchorFlowIndex(wide, -1)).assertEqual(-1);
       expect(feedAnchorFlowIndex(buildFeedFlowLayout([], [], 2, 0, false, 14), 0)).assertEqual(-1);
+    });
+    it('centersContentPaddingOnlyBeyondWideContentCap', 0, () => {
+      // 未超上限/入参非法时保持常规页边距 12vp；超出后按 (视口宽 − 上限)/2 居中
+      expect(contentCenteredPaddingVp(800, WIDE_CONTENT_MAX_WIDTH_VP)).assertEqual(12);
+      expect(contentCenteredPaddingVp(1144, WIDE_CONTENT_MAX_WIDTH_VP)).assertEqual(12);
+      expect(contentCenteredPaddingVp(1400, WIDE_CONTENT_MAX_WIDTH_VP)).assertEqual(140);
+      expect(contentCenteredPaddingVp(0, WIDE_CONTENT_MAX_WIDTH_VP)).assertEqual(12);
+      expect(contentCenteredPaddingVp(800, 0)).assertEqual(12);
+      expect(contentCenteredPaddingVp(Number.NaN, WIDE_CONTENT_MAX_WIDTH_VP)).assertEqual(12);
+    });
+    it('fitsColumnsFromContentWidthWithMinCardProtection', 0, () => {
+      // 内容宽口径与 resolveFeedColumnSpec 同一公式：600/840/1440 断点扣边距后等价验证
+      expect(fitColumnsForContentWidth(resolveFeedColumnSpec(600).contentWidth, 280)).assertEqual(2);
+      expect(fitColumnsForContentWidth(resolveFeedColumnSpec(900).contentWidth, 280)).assertEqual(3);
+      expect(fitColumnsForContentWidth(resolveFeedColumnSpec(940).contentWidth, 280)).assertEqual(3);
+      expect(fitColumnsForContentWidth(resolveFeedColumnSpec(1440).contentWidth, 280)).assertEqual(4);
+      // 容不下最小卡宽回退单列；非法最小卡宽走默认 280；列数受 4 列上限钳制
+      expect(fitColumnsForContentWidth(300, 400)).assertEqual(1);
+      expect(fitColumnsForContentWidth(1000, 0)).assertEqual(3);
+      expect(fitColumnsForContentWidth(4000, 280)).assertEqual(4);
+    });
+    it('splitsCardWidthEvenlyAcrossColumns', 0, () => {
+      expect(cardWidthForColumns(566, 1)).assertEqual(566);
+      expect(cardWidthForColumns(1166, 2)).assertEqual(576);
+      expect(Math.round(cardWidthForColumns(1166, 3) * 100)).assertEqual(37933);
+      // 非法输入钳制：列数向下取整且 ≥1，负内容宽不产生负卡宽
+      expect(cardWidthForColumns(1166, 2.9)).assertEqual(576);
+      expect(cardWidthForColumns(1166, 0)).assertEqual(1166);
+      expect(cardWidthForColumns(-10, 2)).assertEqual(0);
+    });
+    it('groupsItemsIntoRowsOfColumnSize', 0, () => {
+      expect(buildRowGroups(['a', 'b', 'c', 'd', 'e'], 2).length).assertEqual(3);
+      expect(buildRowGroups(['a', 'b', 'c', 'd', 'e'], 2)[2].length).assertEqual(1);
+      expect(buildRowGroups(['a', 'b', 'c'], 3)[0].join(',')).assertEqual('a,b,c');
+      // 单列每行一条与原布局一致；空列表无行；非法列数按 1 处理
+      expect(buildRowGroups(['a', 'b'], 1).length).assertEqual(2);
+      expect(buildRowGroups([], 3).length).assertEqual(0);
+      expect(buildRowGroups(['a'], 0).length).assertEqual(1);
+    });
+    it('keepsReaderTextCapNarrowerThanWideContentCap', 0, () => {
+      // 问题页双层限宽口径：内容上限 1120，长文 720
+      expect(WIDE_CONTENT_MAX_WIDTH_VP).assertEqual(1120);
+      expect(READER_TEXT_MAX_WIDTH_VP).assertEqual(720);
     });
   });
 }
