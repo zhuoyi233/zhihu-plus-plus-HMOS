@@ -37,6 +37,14 @@ import {
   BlockingUserCandidate
 } from './BlockingActionState';
 import { adaptiveOverlayWidth, isWideOverlayContainer, ADAPTIVE_OVERLAY_MENU_WIDTH_VP } from '../common/style/AdaptiveOverlayLayout';
+import {
+  buildRowGroups,
+  FEED_COLUMN_GAP_VP,
+  feedMinCardWidthVp,
+  READER_TEXT_MAX_WIDTH_VP,
+  resolveWideColumnSpec,
+  WideColumnSpec
+} from './FeedWaterfallLayout';
 
 /** 本页在顶栏动作通道里的注册 id（与 AppShell 常量一致）。 */
 const PEOPLE_DETAIL_TOP_BAR_ID: string = 'people_detail';
@@ -142,7 +150,18 @@ export struct PeopleDetailPage {
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   /** 顶栏“更多”请求：标题与返回由宿主 HDS 标题栏承载，本页只响应动作点击。 */
   @StorageProp('topBarActionTick') @Watch('onTopBarActionTick') private topBarActionTick: number = 0;
+  @StorageProp('systemFontSizeScale') private systemFontSizeScale: number = 1;
   private controller?: PeopleDetailController;
+
+  /** 宽屏多列规格：内容 1120vp 居中，资料头限 720，内容卡按信息流断点分列。 */
+  private wideSpec(): WideColumnSpec {
+    return resolveWideColumnSpec(this.overlayWidthVp, feedMinCardWidthVp(this.systemFontSizeScale));
+  }
+
+  /** 资料头/内容列自带 12vp 页边距；宽屏居中时由 List 补足差值，窄屏差值≤0 不加。 */
+  private listEdgePaddingVp(): number {
+    return Math.max(0, this.wideSpec().paddingVp - 12);
+  }
   private contentController?: PeopleContentController;
   private readonly contentScroller: Scroller = new Scroller();
   private titleAnchorVp: number = 0;
@@ -255,6 +274,8 @@ export struct PeopleDetailPage {
               }
             }
             .margin({ top: floatingTitleBarOffset() })
+            // 与流内选项卡条同一居中口径（列表 padding 差值 + 自带 12vp）
+            .padding({ left: this.listEdgePaddingVp(), right: this.listEdgePaddingVp() })
             .width('100%')
           }
         }
@@ -417,6 +438,8 @@ export struct PeopleDetailPage {
         }
         .alignItems(HorizontalAlign.Center)
         .width('100%')
+        // 宽屏资料头限 720（长文不无限拉宽），随列表交叉轴居中
+        .constraintSize({ maxWidth: READER_TEXT_MAX_WIDTH_VP })
         // 顶栏覆盖式透明：静止时资料区从顶栏下方起排，滚动时整块内容从其下穿过
         .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
           top: floatingTitleBarOffset(), bottom: $r('app.float.page_padding') })
@@ -444,6 +467,9 @@ export struct PeopleDetailPage {
     .scrollBar(BarState.Off)
     .width('100%')
     .height('100%')
+    // 宽屏居中限宽：资料头/内容列自带 12vp 页边距，列表补足差值；资料头收窄后随交叉轴居中
+    .alignListItem(ListItemAlign.Center)
+    .padding({ left: this.listEdgePaddingVp(), right: this.listEdgePaddingVp() })
     .onAreaChange((_oldArea: Area, newArea: Area): void => {
       const height = Number(newArea.height);
       if (height > 0 && Math.abs(height - this.listViewportVp) > 1) {
@@ -623,9 +649,20 @@ export struct PeopleDetailPage {
           .fontSize($r('app.float.body_font_size'))
           .fontColor($r('app.color.secondary_text'))
       } else {
-        ForEach(this.contentItems, (item: PeopleContentItem) => {
-          this.contentCard(item)
-        }, (item: PeopleContentItem): string => `${item.kind}:${item.id}`)
+        ForEach(buildRowGroups(this.contentItems, this.wideSpec().columns),
+          (row: Array<PeopleContentItem>) => {
+            Row({ space: FEED_COLUMN_GAP_VP }) {
+              ForEach(row, (item: PeopleContentItem) => {
+                Column() {
+                  this.contentCard(item)
+                }
+                .width(this.wideSpec().cardWidth)
+              }, (item: PeopleContentItem): string => `${item.kind}:${item.id}`)
+            }
+            .alignItems(VerticalAlign.Top)
+            .width('100%')
+          }, (row: Array<PeopleContentItem>): string =>
+            row.map((item: PeopleContentItem): string => `${item.kind}:${item.id}`).join(','))
         if (this.contentErrorMessage.length > 0) {
           this.contentStatus(false)
         }
