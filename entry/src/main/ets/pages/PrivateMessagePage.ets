@@ -235,6 +235,7 @@ export struct PrivateMessagePage {
         })
         .id('private_message_list')
         .width('100%')
+        // 唯一的 padding 调用（ArkUI 链式后者覆盖前者）：横向为宽屏 720 居中差值
         .padding({
           left: this.chatEdgePaddingVp(),
           right: this.chatEdgePaddingVp(),
@@ -246,7 +247,6 @@ export struct PrivateMessagePage {
         .layoutWeight(1)
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring)
-        .padding({ top: 12, bottom: 12 })
         .onReachStart(() => {
           if (this.initialScrollSettled) {
             this.controller?.loadMore();
