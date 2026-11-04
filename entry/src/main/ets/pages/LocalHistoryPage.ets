@@ -1,5 +1,12 @@
 import { onThemeColor, DEFAULT_THEME_COLOR, ReadHistoryGateway } from 'data';
 import {
+  buildRowGroups,
+  FEED_COLUMN_GAP_VP,
+  feedMinCardWidthVp,
+  resolveWideColumnSpec,
+  WideColumnSpec
+} from './FeedWaterfallLayout';
+import {
   FLOATING_TITLE_BAR_OFFSET,
   FeedPullDownIndicatorHost,
   PULL_REFRESH_PULL_DOWN_RATIO,
@@ -32,7 +39,14 @@ export struct LocalHistoryPage {
   };
   @State @Watch('syncRefreshIndicator') private refreshing: boolean = false;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  @StorageProp('systemFontSizeScale') private systemFontSizeScale: number = 1;
+  @State private pageWidthVp: number = 0;
   private controller?: LocalHistoryController;
+
+  /** 宽屏多列规格：内容 1120vp 居中，本地历史卡按信息流断点分列。 */
+  private wideSpec(): WideColumnSpec {
+    return resolveWideColumnSpec(this.pageWidthVp, feedMinCardWidthVp(this.systemFontSizeScale));
+  }
   // 下拉刷新自定义加载圆圈（refreshingContent 需 ComponentContent，随页面销毁释放）
   private indicator?: FeedPullDownIndicatorHost = undefined;
 
@@ -119,12 +133,23 @@ export struct LocalHistoryPage {
             refreshingContent: this.indicator?.view()
           }) {
             List({ space: 12 }) {
-              ForEach(this.viewState.items, (item: ReadHistoryItem) => {
-                ListItem() {
-                  this.localHistoryCard(item)
-                }
-                .width('100%')
-              }, (item: ReadHistoryItem): string => item.contentKey)
+              ForEach(buildRowGroups(this.viewState.items, this.wideSpec().columns),
+                (row: Array<ReadHistoryItem>) => {
+                  ListItem() {
+                    Row({ space: FEED_COLUMN_GAP_VP }) {
+                      ForEach(row, (item: ReadHistoryItem) => {
+                        Column() {
+                          this.localHistoryCard(item)
+                        }
+                        .width(this.wideSpec().cardWidth)
+                      }, (item: ReadHistoryItem): string => item.contentKey)
+                    }
+                    .alignItems(VerticalAlign.Top)
+                    .width('100%')
+                  }
+                  .width('100%')
+                }, (row: Array<ReadHistoryItem>): string =>
+                  row.map((item: ReadHistoryItem): string => item.contentKey).join(','))
             }
             .id('local_history_list')
             .width('100%')
@@ -146,9 +171,15 @@ export struct LocalHistoryPage {
       .height('100%')
       // 让位统一约定：内容容器 padding top = FLOATING_TITLE_BAR_OFFSET，刷新指示区域
       // 从悬浮标题栏下沿开始（对齐上游 FeedPullToRefresh 的 indicator padding）
-      .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
+      .padding({ left: this.wideSpec().paddingVp, right: this.wideSpec().paddingVp,
         top: FLOATING_TITLE_BAR_OFFSET, bottom: $r('app.float.page_padding') })
       .backgroundColor($r('app.color.page_background'))
+      .onAreaChange((_oldArea: Area, area: Area): void => {
+        const width: number = Number(area.width);
+        if (width > 0 && Math.abs(width - this.pageWidthVp) > 0.5) {
+          this.pageWidthVp = width;
+        }
+      })
     }
     .id('local_history_page')
     .width('100%')

@@ -1,4 +1,11 @@
 import { notificationItemRenderKey } from './NotificationItemRenderKey';
+import {
+  buildRowGroups,
+  FEED_COLUMN_GAP_VP,
+  feedMinCardWidthVp,
+  resolveWideColumnSpec,
+  WideColumnSpec
+} from './FeedWaterfallLayout';
 import { AppDestination, AppDestinationName } from 'core';
 import {
   onThemeColor,
@@ -87,7 +94,14 @@ export struct NotificationPage {
   @StorageProp(NOTIFICATION_HUB_MARK_READ_TICK_KEY) @Watch('onMarkReadTick') markReadTick: number = 0;
   @StorageProp(NOTIFICATION_HUB_REFRESH_TICK_KEY) @Watch('onRefreshTick') refreshTick: number = 0;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  @StorageProp('systemFontSizeScale') private systemFontSizeScale: number = 1;
+  @State private pageWidthVp: number = 0;
   private controller?: NotificationController;
+
+  /** 宽屏多列规格：内容 1120vp 居中，会话行按信息流断点分列（多列时行内容卡片化）。 */
+  private wideSpec(): WideColumnSpec {
+    return resolveWideColumnSpec(this.pageWidthVp, feedMinCardWidthVp(this.systemFontSizeScale));
+  }
 
   private indicator?: FeedPullDownIndicatorHost;
   private refreshInFlight: boolean = false;
@@ -206,12 +220,33 @@ export struct NotificationPage {
               }
             }
 
-            ForEach(this.items, (item: MobileNotificationTimelineItem) => {
-              ListItem() {
-                this.conversationRow(item)
-              }
-            }, (item: MobileNotificationTimelineItem): string =>
-              notificationItemRenderKey(item))
+            ForEach(buildRowGroups(this.items, this.wideSpec().columns),
+              (row: Array<MobileNotificationTimelineItem>) => {
+                ListItem() {
+                  if (this.wideSpec().columns <= 1) {
+                    this.conversationRow(row[0])
+                  } else {
+                    Row({ space: FEED_COLUMN_GAP_VP }) {
+                      ForEach(row, (item: MobileNotificationTimelineItem) => {
+                        Column() {
+                          this.conversationRow(item)
+                        }
+                        .width(this.wideSpec().cardWidth)
+                        // 多列时行内容卡片化（表面 + 圆角），单列保持现有通栏行样式。
+                        .backgroundColor($r('app.color.card_background'))
+                        .borderRadius($r('app.float.card_radius'))
+                        .clip(true)
+                      }, (item: MobileNotificationTimelineItem): string =>
+                        notificationItemRenderKey(item))
+                    }
+                    .alignItems(VerticalAlign.Top)
+                    .width('100%')
+                  }
+                }
+                .width('100%')
+              }, (row: Array<MobileNotificationTimelineItem>): string =>
+                row.map((item: MobileNotificationTimelineItem): string =>
+                  notificationItemRenderKey(item)).join(','))
 
             if (this.loadingMore) {
               ListItem() {
@@ -245,6 +280,11 @@ export struct NotificationPage {
           }
           .id('notifications_list')
           .width('100%')
+          // 行自带 16vp 内缩；宽屏居中限宽时由列表补足差值，窄屏保持现状（差值≤0 不加）。
+          .padding({
+            left: Math.max(0, this.wideSpec().paddingVp - 16),
+            right: Math.max(0, this.wideSpec().paddingVp - 16)
+          })
           // 顶栏让位：内缩滚动内容起点，未滚动时首屏内容仍从标题栏下沿开始
           .contentStartOffset(FLOATING_TITLE_BAR_OFFSET)
           .height('100%')
@@ -267,6 +307,12 @@ export struct NotificationPage {
     // 覆盖式顶栏：容器不设 top padding，滚动视口延伸到屏幕顶；
     // 首屏起始位置由列表的 contentStartOffset 内缩（见 AppPageChrome 约定）
     .backgroundColor($r('app.color.page_background'))
+    .onAreaChange((_oldArea: Area, area: Area): void => {
+      const width: number = Number(area.width);
+      if (width > 0 && Math.abs(width - this.pageWidthVp) > 0.5) {
+        this.pageWidthVp = width;
+      }
+    })
   }
 
   /** 四分类宫格（图标 36 + 未读角标 + 标题，均匀分布，圆角 12 点击区）。 */

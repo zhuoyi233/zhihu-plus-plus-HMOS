@@ -1,4 +1,12 @@
 import { notificationItemRenderKey } from './NotificationItemRenderKey';
+import {
+  buildMixedRowGroups,
+  FEED_COLUMN_GAP_VP,
+  feedMinCardWidthVp,
+  MixedRowGroup,
+  resolveWideColumnSpec,
+  WideColumnSpec
+} from './FeedWaterfallLayout';
 import { isSafeDecimalContentId, AppDestination, AppDestinationName } from 'core';
 import {
   onThemeColor,
@@ -84,7 +92,27 @@ export struct NotificationTimelinePage {
   @State private preferences?: NotificationPreferences = undefined;
   @StorageProp(NOTIFICATION_TIMELINE_REFRESH_TICK_KEY) @Watch('onRefreshTick') refreshTick: number = 0;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  @StorageProp('systemFontSizeScale') private systemFontSizeScale: number = 1;
+  @State private pageWidthVp: number = 0;
   private controller?: NotificationTimelineController;
+
+  /** 宽屏多列规格：内容 1120vp 居中；邀请回答页保持单列通栏行（行结构不适合分列）。 */
+  private wideSpec(): WideColumnSpec {
+    return resolveWideColumnSpec(this.pageWidthVp, feedMinCardWidthVp(this.systemFontSizeScale));
+  }
+
+  private timelineColumns(): number {
+    return this.entryName === 'invite' ? 1 : this.wideSpec().columns;
+  }
+
+  /** 时间线行分组：empty 提示行打断分组独占通栏；单列返回空数组走原渲染路径。 */
+  private timelineRowGroups(): Array<MixedRowGroup<MobileNotificationTimelineItem>> {
+    if (this.timelineColumns() <= 1) {
+      return [];
+    }
+    return buildMixedRowGroups(this.items, this.timelineColumns(),
+      (item: MobileNotificationTimelineItem): boolean => item.type === 'empty');
+  }
 
   private indicator?: FeedPullDownIndicatorHost;
   private refreshInFlight: boolean = false;
@@ -175,18 +203,48 @@ export struct NotificationTimelinePage {
               }
             }
 
-            ForEach(this.items, (item: MobileNotificationTimelineItem) => {
-              ListItem() {
-                if (item.type === 'empty') {
-                  this.emptyRow(item)
-                } else if (this.entryName === 'invite') {
-                  this.invitationAnswerItem(item)
-                } else {
-                  this.timelineItemRow(item)
+            if (this.timelineColumns() > 1) {
+              ForEach(this.timelineRowGroups(),
+                (group: MixedRowGroup<MobileNotificationTimelineItem>) => {
+                  ListItem() {
+                    if (group.fullWidth) {
+                      this.emptyRow(group.items[0])
+                    } else {
+                      Row({ space: FEED_COLUMN_GAP_VP }) {
+                        ForEach(group.items, (item: MobileNotificationTimelineItem) => {
+                          Column() {
+                            this.timelineItemRow(item)
+                          }
+                          .width(this.wideSpec().cardWidth)
+                          // 多列时行内容卡片化（表面 + 圆角）；未读高亮仍由行自身底色承担。
+                          .backgroundColor($r('app.color.card_background'))
+                          .borderRadius($r('app.float.card_radius'))
+                          .clip(true)
+                        }, (item: MobileNotificationTimelineItem): string =>
+                          notificationItemRenderKey(item))
+                      }
+                      .alignItems(VerticalAlign.Top)
+                      .width('100%')
+                    }
+                  }
+                  .width('100%')
+                }, (group: MixedRowGroup<MobileNotificationTimelineItem>): string =>
+                  group.items.map((item: MobileNotificationTimelineItem): string =>
+                    notificationItemRenderKey(item)).join(','))
+            } else {
+              ForEach(this.items, (item: MobileNotificationTimelineItem) => {
+                ListItem() {
+                  if (item.type === 'empty') {
+                    this.emptyRow(item)
+                  } else if (this.entryName === 'invite') {
+                    this.invitationAnswerItem(item)
+                  } else {
+                    this.timelineItemRow(item)
+                  }
                 }
-              }
-            }, (item: MobileNotificationTimelineItem): string =>
-              notificationItemRenderKey(item))
+              }, (item: MobileNotificationTimelineItem): string =>
+                notificationItemRenderKey(item))
+            }
 
             if (this.loadingMore) {
               ListItem() {
@@ -209,6 +267,11 @@ export struct NotificationTimelinePage {
           }
           .id('notification_timeline_list')
           .width('100%')
+          // 行自带 16vp 内缩；宽屏居中限宽时由列表补足差值，窄屏保持现状（差值≤0 不加）。
+          .padding({
+            left: Math.max(0, this.wideSpec().paddingVp - 16),
+            right: Math.max(0, this.wideSpec().paddingVp - 16)
+          })
           // 顶栏让位：内缩滚动内容起点，未滚动时首屏内容仍从标题栏下沿开始
           .contentStartOffset(FLOATING_TITLE_BAR_OFFSET)
           .height('100%')
@@ -231,6 +294,12 @@ export struct NotificationTimelinePage {
     // 覆盖式顶栏：容器不设 top padding，滚动视口延伸到屏幕顶；
     // 首屏起始位置由列表的 contentStartOffset 内缩（见 AppPageChrome 约定）
     .backgroundColor($r('app.color.page_background'))
+    .onAreaChange((_oldArea: Area, area: Area): void => {
+      const width: number = Number(area.width);
+      if (width > 0 && Math.abs(width - this.pageWidthVp) > 0.5) {
+        this.pageWidthVp = width;
+      }
+    })
   }
 
   /** 时间线卡片（未读点 + 头像 + 标题/副标题/正文 + 相对时间 + 来源框）。 */

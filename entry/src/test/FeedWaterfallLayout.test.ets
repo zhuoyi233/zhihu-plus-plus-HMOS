@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
   buildFeedFlowLayout,
+  buildMixedRowGroups,
   buildRowGroups,
   cardWidthForColumns,
   contentCenteredPaddingVp,
@@ -13,6 +14,7 @@ import {
   fitColumnsForContentWidth,
   homeFeedInitialItemTarget,
   resolveFeedColumnSpec,
+  resolveWideColumnSpec,
   READER_TEXT_MAX_WIDTH_VP,
   WIDE_CONTENT_MAX_WIDTH_VP
 } from '../main/ets/pages/FeedWaterfallLayout';
@@ -191,6 +193,43 @@ export default function feedWaterfallLayoutTest(): void {
       // 问题页双层限宽口径：内容上限 1120，长文 720
       expect(WIDE_CONTENT_MAX_WIDTH_VP).assertEqual(1120);
       expect(READER_TEXT_MAX_WIDTH_VP).assertEqual(720);
+    });
+    it('resolvesWideColumnSpecForManagementPages', 0, () => {
+      // 未测量（0）时按常规页边距单列；窄窗单列；宽窗居中并按内容宽求列数
+      const unmeasured = resolveWideColumnSpec(0, 280);
+      expect(unmeasured.columns).assertEqual(1);
+      expect(unmeasured.paddingVp).assertEqual(12);
+      const narrow = resolveWideColumnSpec(500, 280);
+      expect(narrow.columns).assertEqual(1);
+      expect(narrow.paddingVp).assertEqual(12);
+      expect(narrow.contentWidth).assertEqual(476);
+      const wide = resolveWideColumnSpec(1400, 280);
+      expect(wide.paddingVp).assertEqual(140);
+      expect(wide.contentWidth).assertEqual(1120);
+      expect(wide.columns).assertEqual(3);
+      expect(Math.round(wide.cardWidth)).assertEqual(364);
+      // 字号放大抬高最小卡宽自动减列（对齐信息流口径）：560 最小卡宽下 1120 只容 1 列
+      expect(resolveWideColumnSpec(1400, feedMinCardWidthVp(2.0)).columns).assertEqual(1);
+    });
+    it('splitsMixedRowsAroundFullWidthItems', 0, () => {
+      const isHead = (value: string): boolean => value.startsWith('#');
+      const items: Array<string> = ['a', 'b', '#d1', 'c', 'd', 'e', 'f', '#d2', 'g'];
+      const groups = buildMixedRowGroups(items, 2, isHead);
+      // 通栏行独占一行并打断分组；普通行按 2 列切分
+      expect(groups.length).assertEqual(6);
+      expect(groups[0].items.join(',')).assertEqual('a,b');
+      expect(groups[0].fullWidth).assertFalse();
+      expect(groups[1].items.join(',')).assertEqual('#d1');
+      expect(groups[1].fullWidth).assertTrue();
+      expect(groups[2].items.join(',')).assertEqual('c,d');
+      expect(groups[3].items.join(',')).assertEqual('e,f');
+      expect(groups[4].items.join(',')).assertEqual('#d2');
+      expect(groups[4].fullWidth).assertTrue();
+      expect(groups[5].items.join(',')).assertEqual('g');
+      // 连续通栏行各自独占；单列时每条一行（不打组）
+      expect(buildMixedRowGroups(['#x', '#y'], 2, isHead).length).assertEqual(2);
+      expect(buildMixedRowGroups(['a', 'b'], 1, isHead).length).assertEqual(2);
+      expect(buildMixedRowGroups([], 3, isHead).length).assertEqual(0);
     });
   });
 }

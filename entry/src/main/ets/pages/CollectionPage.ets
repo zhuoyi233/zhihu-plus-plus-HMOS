@@ -1,4 +1,11 @@
 import { CenteredOverlayDialog } from './CenteredOverlayDialog';
+import {
+  buildRowGroups,
+  FEED_COLUMN_GAP_VP,
+  feedMinCardWidthVp,
+  resolveWideColumnSpec,
+  WideColumnSpec
+} from './FeedWaterfallLayout';
 import { AppDestination, AppDestinationName } from 'core';
 import {
   onThemeColor,
@@ -38,7 +45,14 @@ export struct CollectionPage {
   @State @Watch('deleteDialogChanged') private showDeleteSheet: boolean = false;
   @StorageProp('bottomRectHeight') private bottomRectHeightVp: number = 0;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  @StorageProp('systemFontSizeScale') private systemFontSizeScale: number = 1;
+  @State private pageWidthVp: number = 0;
   private controller?: CollectionController;
+
+  /** 宽屏多列规格：内容 1120vp 居中，收藏夹卡按信息流断点分列（最小卡宽随字号缩放）。 */
+  private wideSpec(): WideColumnSpec {
+    return resolveWideColumnSpec(this.pageWidthVp, feedMinCardWidthVp(this.systemFontSizeScale));
+  }
 
   private deleteDialog: CustomDialogController = new CustomDialogController({
     builder: CenteredOverlayDialog({ content: (): void => { this.deleteConfirmation(); } }),
@@ -127,11 +141,22 @@ export struct CollectionPage {
           }
 
           List({ space: 10 }) {
-            ForEach(this.items, (collection: CollectionSummary) => {
-              ListItem() {
-                this.collectionCard(collection)
-              }
-            }, (collection: CollectionSummary): string => collection.id)
+            ForEach(buildRowGroups(this.items, this.wideSpec().columns),
+              (row: Array<CollectionSummary>) => {
+                ListItem() {
+                  Row({ space: FEED_COLUMN_GAP_VP }) {
+                    ForEach(row, (collection: CollectionSummary) => {
+                      Column() {
+                        this.collectionCard(collection)
+                      }
+                      .width(this.wideSpec().cardWidth)
+                    }, (collection: CollectionSummary): string => collection.id)
+                  }
+                  .alignItems(VerticalAlign.Top)
+                  .width('100%')
+                }
+                .width('100%')
+              }, (row: Array<CollectionSummary>): string => row.map((c: CollectionSummary): string => c.id).join(','))
 
             if (this.loadingMore || this.canLoadMore) {
               ListItem() {
@@ -159,12 +184,18 @@ export struct CollectionPage {
       .width('100%')
       .height('100%')
       .padding({
-        left: $r('app.float.page_padding'),
-        right: $r('app.float.page_padding'),
+        left: this.wideSpec().paddingVp,
+        right: this.wideSpec().paddingVp,
         top: 94,
         bottom: $r('app.float.page_padding')
       })
       .backgroundColor($r('app.color.page_background'))
+      .onAreaChange((_oldArea: Area, area: Area): void => {
+        const width: number = Number(area.width);
+        if (width > 0 && Math.abs(width - this.pageWidthVp) > 0.5) {
+          this.pageWidthVp = width;
+        }
+      })
 
       if (this.phase === CollectionPhase.READY || this.phase === CollectionPhase.EMPTY) {
         // FAB 悬浮在 AppShell 底部页签之上：页签 barHeight 64 + barBottomMargin（bottomRectHeight）

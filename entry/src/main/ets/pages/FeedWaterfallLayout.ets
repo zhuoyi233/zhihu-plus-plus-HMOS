@@ -102,6 +102,73 @@ export function buildRowGroups<T>(items: Array<T>, columns: number): Array<Array
   return rows;
 }
 
+/** 混合列表的一行：fullWidth 为真表示通栏行（单条独占一行，不参与多列分组）。 */
+export interface MixedRowGroup<T> {
+  items: Array<T>;
+  fullWidth: boolean;
+}
+
+/**
+ * 混合列表的行分组：isFullWidth 判定为真的条目（日期分隔/提示行等）打断分组并独占一行，
+ * 其余连续条目按列数切行；列数 ≤1 时每条一行且 fullWidth 恒为 false（调用方走原渲染路径）。
+ */
+export function buildMixedRowGroups<T>(items: Array<T>, columns: number,
+  isFullWidth: (item: T) => boolean): Array<MixedRowGroup<T>> {
+  const groups: Array<MixedRowGroup<T>> = [];
+  const columnsEffective: number = Math.max(1, Math.floor(columns));
+  let run: Array<T> = [];
+  const flush = (): void => {
+    if (columnsEffective > 1) {
+      buildRowGroups(run, columnsEffective).forEach((row: Array<T>): void => {
+        if (row.length > 0) {
+          groups.push({ items: row, fullWidth: false });
+        }
+      });
+    } else {
+      run.forEach((item: T): void => {
+        groups.push({ items: [item], fullWidth: false });
+      });
+    }
+    run = [];
+  };
+  for (let index = 0; index < items.length; index += 1) {
+    const item: T = items[index];
+    if (isFullWidth(item)) {
+      flush();
+      groups.push({ items: [item], fullWidth: true });
+    } else {
+      run.push(item);
+    }
+  }
+  flush();
+  return groups;
+}
+
+/** 宽屏内容列规格：居中限宽后的横向 padding、内容宽、列数与等宽卡宽一次求齐。 */
+export interface WideColumnSpec {
+  columns: number;
+  cardWidth: number;
+  contentWidth: number;
+  paddingVp: number;
+}
+
+/**
+ * 管理类列表页（收藏/历史/消息/个人主页）的宽屏列规格：视口超 1120vp 后内容居中，
+ * 列数按内容宽与最小卡宽（含字号缩放）钳制；未测量（0）时按常规页边距单列。
+ */
+export function resolveWideColumnSpec(viewportWidthVp: number, minCardWidthVp: number,
+  columnGapVp?: number): WideColumnSpec {
+  const paddingVp: number = contentCenteredPaddingVp(viewportWidthVp, WIDE_CONTENT_MAX_WIDTH_VP);
+  const contentWidth: number = Math.max(0, viewportWidthVp - paddingVp * 2);
+  const columns: number = fitColumnsForContentWidth(contentWidth, minCardWidthVp, columnGapVp);
+  return {
+    columns: columns,
+    cardWidth: cardWidthForColumns(contentWidth, columns, columnGapVp),
+    contentWidth: contentWidth,
+    paddingVp: paddingVp
+  };
+}
+
 export interface FeedColumnSpec {
   /** 最终列数（1～4）：断点候选、用户期望与最小卡宽保护共同决定。 */
   columns: number;

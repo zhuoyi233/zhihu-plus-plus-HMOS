@@ -1,5 +1,12 @@
 import { CenteredOverlayDialog } from './CenteredOverlayDialog';
 import {
+  buildRowGroups,
+  FEED_COLUMN_GAP_VP,
+  feedMinCardWidthVp,
+  resolveWideColumnSpec,
+  WideColumnSpec
+} from './FeedWaterfallLayout';
+import {
   onThemeColor,
   DEFAULT_THEME_COLOR,
   LoginSessionGateway,
@@ -51,7 +58,14 @@ export struct ReadHistoryPage {
   @StorageProp('readHistoryOpenLocalTick') @Watch('onOpenLocalTick') private openLocalTick: number = 0;
   @StorageProp('readHistoryClearTick') @Watch('onClearTick') private clearTick: number = 0;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  @StorageProp('systemFontSizeScale') private systemFontSizeScale: number = 1;
+  @State private pageWidthVp: number = 0;
   private controller?: ReadHistoryController;
+
+  /** 宽屏多列规格：内容 1120vp 居中，历史卡按信息流断点分列（最小卡宽随字号缩放）。 */
+  private wideSpec(): WideColumnSpec {
+    return resolveWideColumnSpec(this.pageWidthVp, feedMinCardWidthVp(this.systemFontSizeScale));
+  }
   // 下拉刷新自定义加载圆圈（refreshingContent 需 ComponentContent，随页面销毁释放）
   private indicator?: FeedPullDownIndicatorHost = undefined;
 
@@ -174,12 +188,23 @@ export struct ReadHistoryPage {
             refreshingContent: this.indicator?.view()
           }) {
             List({ space: 12 }) {
-              ForEach(this.viewState.items, (item: ReadHistoryItem) => {
-                ListItem() {
-                  this.historyCard(item)
-                }
-                .width('100%')
-              }, (item: ReadHistoryItem): string => item.contentKey)
+              ForEach(buildRowGroups(this.viewState.items, this.wideSpec().columns),
+                (row: Array<ReadHistoryItem>) => {
+                  ListItem() {
+                    Row({ space: FEED_COLUMN_GAP_VP }) {
+                      ForEach(row, (item: ReadHistoryItem) => {
+                        Column() {
+                          this.historyCard(item)
+                        }
+                        .width(this.wideSpec().cardWidth)
+                      }, (item: ReadHistoryItem): string => item.contentKey)
+                    }
+                    .alignItems(VerticalAlign.Top)
+                    .width('100%')
+                  }
+                  .width('100%')
+                }, (row: Array<ReadHistoryItem>): string =>
+                  row.map((item: ReadHistoryItem): string => item.contentKey).join(','))
 
               if (this.viewState.loadingMore) {
                 ListItem() {
@@ -226,9 +251,15 @@ export struct ReadHistoryPage {
       .height('100%')
       // 让位统一约定：内容容器 padding top = FLOATING_TITLE_BAR_OFFSET，刷新指示区域
       // 从悬浮标题栏下沿开始（对齐上游 FeedPullToRefresh 的 indicator padding）
-      .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
+      .padding({ left: this.wideSpec().paddingVp, right: this.wideSpec().paddingVp,
         top: FLOATING_TITLE_BAR_OFFSET, bottom: $r('app.float.page_padding') })
       .backgroundColor($r('app.color.page_background'))
+      .onAreaChange((_oldArea: Area, area: Area): void => {
+        const width: number = Number(area.width);
+        if (width > 0 && Math.abs(width - this.pageWidthVp) > 0.5) {
+          this.pageWidthVp = width;
+        }
+      })
 
     }
     .id('read_history_page')

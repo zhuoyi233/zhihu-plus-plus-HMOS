@@ -14,6 +14,7 @@ import { PrivateMessageController, PrivateMessagePhase, PrivateMessageViewState 
 import { parsePrivateMessageSegments, PrivateMessageSegment, privateMessageDisplaySource } from './PrivateMessageContent';
 import { contentLinkDestination } from './NotificationLinkResolver';
 import { FLOATING_TITLE_BAR_OFFSET } from './AppPageChrome';
+import { contentCenteredPaddingVp, READER_TEXT_MAX_WIDTH_VP } from './FeedWaterfallLayout';
 
 class PrivateMessageApplicationCallback extends ApplicationStateChangeCallback {
   private readonly change: (foreground: boolean) => void;
@@ -96,6 +97,15 @@ export struct PrivateMessagePage {
   /** 每轮静默刷新递增，驱动相对时间重算（见 messageTimeLabel），不触发消息行重建。 */
   @State private timeTick: number = 0;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  @State private pageWidthVp: number = 0;
+
+  /**
+   * 私信会话不做多列（聊天流）；宽屏仅居中限宽 720：行内自带 14vp 内缩，
+   * 列表与输入栏补足差值，窄屏差值≤0 保持现状。
+   */
+  private chatEdgePaddingVp(): number {
+    return Math.max(0, contentCenteredPaddingVp(this.pageWidthVp, READER_TEXT_MAX_WIDTH_VP) - 14);
+  }
   private controller?: PrivateMessageController;
   private scroller: Scroller = new Scroller();
   private lastStableId: string = '';
@@ -225,6 +235,12 @@ export struct PrivateMessagePage {
         })
         .id('private_message_list')
         .width('100%')
+        .padding({
+          left: this.chatEdgePaddingVp(),
+          right: this.chatEdgePaddingVp(),
+          top: 12,
+          bottom: 12
+        })
         // 顶栏让位：内缩滚动内容起点，未滚动时首屏内容仍从标题栏下沿开始
         .contentStartOffset(FLOATING_TITLE_BAR_OFFSET)
         .layoutWeight(1)
@@ -274,7 +290,12 @@ export struct PrivateMessagePage {
             .onClick((): void => this.sendDraft())
         }
         .width('100%')
-        .padding({ left: 16, right: 16, top: 10, bottom: 10 })
+        .padding({
+          left: 16 + this.chatEdgePaddingVp(),
+          right: 16 + this.chatEdgePaddingVp(),
+          top: 10,
+          bottom: 10
+        })
         .alignItems(VerticalAlign.Center)
       }
     }
@@ -289,6 +310,12 @@ export struct PrivateMessagePage {
     // 首屏起始位置由列表的 contentStartOffset 内缩（见 AppPageChrome 约定）
     .backgroundColor($r('app.color.page_background'))
     .alignItems(HorizontalAlign.Start)
+    .onAreaChange((_oldArea: Area, area: Area): void => {
+      const width: number = Number(area.width);
+      if (width > 0 && Math.abs(width - this.pageWidthVp) > 0.5) {
+        this.pageWidthVp = width;
+      }
+    })
   }
 
   /** 气泡行（收件左对齐带头像，发件右对齐主色气泡带本人头像）。 */

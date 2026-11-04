@@ -1,3 +1,10 @@
+import {
+  buildRowGroups,
+  FEED_COLUMN_GAP_VP,
+  feedMinCardWidthVp,
+  resolveWideColumnSpec,
+  WideColumnSpec
+} from './FeedWaterfallLayout';
 import { AppDestination, AppDestinationName } from 'core';
 import {
   onThemeColor,
@@ -30,7 +37,14 @@ export struct CollectionContentPage {
   @State private requiresLogin: boolean = false;
   @State private errorMessage: string = '';
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  @StorageProp('systemFontSizeScale') private systemFontSizeScale: number = 1;
+  @State private pageWidthVp: number = 0;
   private controller?: CollectionContentController;
+
+  /** 宽屏多列规格：内容 1120vp 居中，收藏内容卡按信息流断点分列。 */
+  private wideSpec(): WideColumnSpec {
+    return resolveWideColumnSpec(this.pageWidthVp, feedMinCardWidthVp(this.systemFontSizeScale));
+  }
 
   aboutToAppear(): void {
     // P3-7：返回栈重显（页面实例与状态保留）时 aboutToAppear 可能再次触发；
@@ -97,11 +111,23 @@ export struct CollectionContentPage {
         }
 
         List({ space: 10 }) {
-          ForEach(this.items, (item: CollectionContentItem) => {
-            ListItem() {
-              this.contentCard(item)
-            }
-          }, (item: CollectionContentItem): string => `${item.kind}:${item.id}`)
+          ForEach(buildRowGroups(this.items, this.wideSpec().columns),
+            (row: Array<CollectionContentItem>) => {
+              ListItem() {
+                Row({ space: FEED_COLUMN_GAP_VP }) {
+                  ForEach(row, (item: CollectionContentItem) => {
+                    Column() {
+                      this.contentCard(item)
+                    }
+                    .width(this.wideSpec().cardWidth)
+                  }, (item: CollectionContentItem): string => `${item.kind}:${item.id}`)
+                }
+                .alignItems(VerticalAlign.Top)
+                .width('100%')
+              }
+              .width('100%')
+            }, (row: Array<CollectionContentItem>): string =>
+              row.map((item: CollectionContentItem): string => `${item.kind}:${item.id}`).join(','))
 
           if (this.loadingMore || this.canLoadMore) {
             ListItem() {
@@ -129,12 +155,18 @@ export struct CollectionContentPage {
     .width('100%')
     .height('100%')
     .padding({
-      left: $r('app.float.page_padding'),
-      right: $r('app.float.page_padding'),
+      left: this.wideSpec().paddingVp,
+      right: this.wideSpec().paddingVp,
       top: 94,
       bottom: $r('app.float.page_padding')
     })
     .backgroundColor($r('app.color.page_background'))
+    .onAreaChange((_oldArea: Area, area: Area): void => {
+      const width: number = Number(area.width);
+      if (width > 0 && Math.abs(width - this.pageWidthVp) > 0.5) {
+        this.pageWidthVp = width;
+      }
+    })
   }
 
   @Builder
