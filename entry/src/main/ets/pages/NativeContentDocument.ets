@@ -19,7 +19,9 @@ import {
   ReaderPositionRepository,
   LinkCardMeta,
   LinkCardMetaRepository,
-  SegmentInfoParagraph
+  SegmentInfoParagraph,
+  ScrollFeelPreset,
+  decodeScrollFeelPreset
 } from 'data';
 import {
   clearFormulaByteCache,
@@ -36,6 +38,7 @@ import {
   ReadingProgressBar
 } from './components/ReadingProgressBar';
 import { readerBlockSpacing } from './ReaderTypography';
+import { scrollFeelAdjustedOffset, scrollFeelProfile } from './ReadingTweaks';
 import { readerHorizontalPaddingVp } from './ReaderViewportLayout';
 import {
   readerBlockSignature,
@@ -524,6 +527,7 @@ export struct NativeContentDocument {
   @StorageProp('contentLineHeight') @Watch('onTypographyChanged') private lineHeightPercent: number = 160;
   @StorageProp('contentBlockSpacing') @Watch('onTypographyChanged') private blockSpacingPercent: number = 100;
   @StorageProp('contentTypographyPreset') @Watch('onTypographyChanged') private typographyPreset: string = 'comfortable';
+  @StorageProp('scrollFeelPreset') private scrollFeelPreset: string = ScrollFeelPreset.SMOOTH;
   @StorageProp('systemFontSizeScale') @Watch('onTypographyChanged') private systemFontSizeScale: number = 1;
   @StorageProp('showPageTurnFab') private showPageTurnFab: boolean = false;
   @StorageProp('volumeKeyPageTurn') @Watch('onVolumeKeyPageTurnChanged') private volumeKeyPageTurn: boolean = false;
@@ -1072,6 +1076,17 @@ export struct NativeContentDocument {
         // 未滚动时正文仍从顶栏下方开始，滚动后正文从玻璃顶栏背后穿过。
         .cachedCount(6)
         .edgeEffect(this.disableEdgeSpring ? EdgeEffect.None : EdgeEffect.Spring)
+        // 滚动手感：摩擦系数决定松手后的滑行距离，onScrollFrameBegin 只换算手指拖动阶段的位移，
+        // 惯性帧原样放行（档位含义见 ScrollFeel）。
+        .friction(scrollFeelProfile(decodeScrollFeelPreset(this.scrollFeelPreset)).friction)
+        .onScrollFrameBegin((offset: number, state: ScrollState) => {
+          if (state !== ScrollState.Scroll) {
+            return { offsetRemain: offset };
+          }
+          return {
+            offsetRemain: scrollFeelAdjustedOffset(scrollFeelProfile(decodeScrollFeelPreset(this.scrollFeelPreset)), offset)
+          };
+        })
         .onAreaChange((_oldArea: Area, newArea: Area): void => {
           const height = Number(newArea.height);
           if (height >= 0 && Math.abs(height - this.viewportHeightVp) > 0.5) {
