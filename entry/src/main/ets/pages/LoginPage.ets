@@ -1,4 +1,6 @@
 import { ApplicationStateChangeCallback, common, Want } from '@kit.AbilityKit';
+import { KeyboardAvoidMode } from '@kit.ArkUI';
+import { applyLoginKeyboardResize, restoreKeyboardAvoidMode } from './LoginKeyboardAvoidance';
 import {
   onThemeColor,
   DEFAULT_THEME_COLOR,
@@ -91,8 +93,11 @@ export struct LoginPage {
   private abilityContext?: common.UIAbilityContext;
   private applicationContext?: common.ApplicationContext;
   private applicationStateCallback?: LoginApplicationStateCallback;
+  /** 进入登录页前的键盘避让模式；离开时还原，避免带到其他页面。 */
+  private previousKeyboardAvoidMode?: KeyboardAvoidMode;
 
   aboutToAppear(): void {
+    this.previousKeyboardAvoidMode = applyLoginKeyboardResize(this.getUIContext());
     const context = this.getUIContext().getHostContext();
     if (context === undefined) {
       this.viewState = {
@@ -138,6 +143,8 @@ export struct LoginPage {
   }
 
   aboutToDisappear(): void {
+    restoreKeyboardAvoidMode(this.getUIContext(), this.previousKeyboardAvoidMode);
+    this.previousKeyboardAvoidMode = undefined;
     const applicationContext = this.applicationContext;
     const callback = this.applicationStateCallback;
     this.applicationContext = undefined;
