@@ -1,10 +1,4 @@
-/**
- * 阅读与首页相关的两个 UI 组件（本轮新增）：
- * 1. HomeSearchBar：首页顶部搜索栏三档皮肤（默认蓝细边白底）；
- * 2. AnswerCommentComposer：回答底部独立评论框。
- *
- * 二者都不改动上游组件：搜索栏替换 AppShell 里的内联胶囊，评论框与 HotCommentSection 并列。
- */
+/** 首页搜索栏（三档皮肤）与回答底部独立评论框；均不改动上游组件。 */
 
 import { DEFAULT_THEME_COLOR, decodeHomeSearchBarStyle, HomeSearchBarStyle, onThemeColor } from 'data';
 import { TOP_BAR_GLASS_MATERIAL } from '../../common/style/TopBarGlass';

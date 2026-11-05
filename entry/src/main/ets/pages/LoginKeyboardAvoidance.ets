@@ -1,14 +1,8 @@
 import { KeyboardAvoidMode, UIContext } from '@kit.ArkUI';
 
 /**
- * 登录页的键盘避让：临时把页面切成「压缩（RESIZE）」，离开时还原。
- *
- * 默认的上抬（OFFSET）模式会把整页顶起：手机号卡片里的协议勾选与登录按钮被键盘盖住，
- * 上方的登录方式页签被顶出屏幕。压缩模式只挤压内容区高度，配合页面内的 Scroll，输入框
- * 获得焦点时系统会把光标滚进可视区，用户在键盘上方就能继续勾选协议、点登录。
- *
- * 弹层（国家/地区选择）不受影响，仍走各自的 SheetKeyboardAvoidMode。
- * 返回的旧模式供 `restoreKeyboardAvoidMode` 还原，避免带到其他页面。
+ * 登录页键盘避让：进入时切到「压缩（RESIZE）」，离开时还原。
+ * 默认的上抬（OFFSET）会把整页顶起，键盘遮挡协议勾选与登录按钮；压缩只挤压内容区。
  */
 export function applyLoginKeyboardResize(uiContext: UIContext): KeyboardAvoidMode | undefined {
   try {

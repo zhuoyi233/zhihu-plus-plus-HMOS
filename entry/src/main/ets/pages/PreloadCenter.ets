@@ -1,11 +1,6 @@
 /**
- * 预加载中心（本轮新增的唯一预加载实现文件）。
- *
- * 包含四部分：
- * 1. PreloadService：预取队列（四档优先级、同档后进先出、任务互不打断、BUSY 重试）；
- * 2. HotFeedPending：热榜首屏「已取回但未生效」的那一份；
- * 3. HomePendingFeed：主页双缓冲的待提交页；
- * 4. applyPreloadOptimization / consumeHotFeedPending：开关落地与切热榜时的一次性生效。
+ * 预加载中心：预取队列（PreloadService）、热榜首屏（HotFeedPending）、
+ * 主页双缓冲（HomePendingFeed）与开关落地（applyPreloadOptimization）。
  */
 
 import {
@@ -84,17 +79,11 @@ function isBusyFailure(error: Object): boolean {
 }
 
 /**
- * 「预加载优化」的预取队列：单线程串行执行，**任务之间互不打断**。
+ * 预取队列：单线程串行，任务之间互不打断。
  *
- * 排序规则：
- * - 四个优先级档依次执行：URGENT > NORMAL > HOT_FEED > HOME_PENDING；
- * - 同一档内**后进先出**（最新入队的批次先跑）；一个批次内部的顺序保持不变
- *   （例如回答页固定「热评 → 下一个回答 → 当前回答评论 → 下一个回答评论」）；
- * - 主页缓冲（还没显示的那一页）无论何时入队都追加到**整条队列最后**；
- * - 已经在跑的任务不会被打断，也不取消请求；只有关闭「预加载优化」才整体清空并取消；
- * - BUSY（client 单飞被占）不是真失败：退到本档队尾延迟重试，最多 3 次。
- *
- * 缓存读写由仓库层完成（命中即返回、未命中回填），这里只负责顺序与重试。
+ * 四档依次执行：URGENT > NORMAL > HOT_FEED > HOME_PENDING；同档后进先出（批内顺序不变）；
+ * 主页缓冲永远追加到队尾；只有关闭「预加载优化」才清空并取消。
+ * BUSY（client 单飞被占）不算失败，退到本档队尾延迟重试，最多 3 次。
  */
 export class PreloadService {
   private answerRepositoryFactory?: () => ContentRepository | undefined;
@@ -132,30 +121,19 @@ export class PreloadService {
     return this.enabled;
   }
 
-  /**
-   * 主页当前显示页：把这一页回答的正文与热评排进 NORMAL（最新一批最优先）。
-   * 冷启动从快照直出后也走这里。
-   */
+  /** 主页当前显示页：回答正文 + 热评排进 NORMAL（最新一批最优先）。 */
   prefetchFeedAnswers(items: Array<FeedItem>): void {
     this.enqueueBlock(this.feedAnswerTasks(items, PreloadPriority.NORMAL));
   }
 
-  /**
-   * 主页双缓冲：还没显示的那一页，回答正文与热评全部排进 HOME_PENDING（整条队列最后）。
-   * 用户下拉提交后这一页成为可见内容时，这批请求通常已经跑完。
-   */
+  /** 主页双缓冲那一页：回答正文 + 热评排进 HOME_PENDING（整队最后）。 */
   prefetchPendingFeedAnswers(items: Array<FeedItem>): void {
     this.enqueueBlock(this.feedAnswerTasks(items, PreloadPriority.HOME_PENDING));
   }
 
   /**
-   * 打开回答后的预取顺序（批次内部顺序，不会被 LIFO 打乱）：
-   * 1. 当前回答热评（首屏，同时也填了评论页首屏）；
-   * 2. 下一个回答正文；
-   * 3. 当前回答评论（此时已在缓存里，直接命中，不再发请求）；
-   * 4. 下一个回答的评论首屏。
-   *
-   * 不预取上一个回答与所属问题：上一个回答靠缓存回溯（未命中时由页面按需加载）。
+   * 打开回答后按批次顺序预取：热评 → 下一个回答 → 当前回答评论 → 下一个回答评论。
+   * 不预取上一个回答与所属问题（上一个回答靠缓存回溯，未命中时按需加载）。
    */
   prefetchOnAnswerOpened(answerId: string, nextAnswerId: string | undefined): void {
     if (!this.enabled || answerId.length === 0) {
@@ -278,13 +256,7 @@ export class PreloadService {
     return tasks;
   }
 
-  /**
-   * 入队一个批次（批内顺序保持不变）。
-   *
-   * - 同档 LIFO：插在同一档已有任务之前；
-   * - `HOME_PENDING`：追加到整条队列最后（它只在用户真正下拉前后才有价值）；
-   * - 同一内容已在队列里：用新任务替换旧任务（相当于“这次要看的是最新那次请求”）。
-   */
+  /** 入队一个批次：同档 LIFO、HOME_PENDING 追加到队尾；同键任务用新的替换旧的。 */
   private enqueueBlock(tasks: Array<PreloadTask>): void {
     if (tasks.length === 0) {
       return;
@@ -505,18 +477,7 @@ export function preloadService(): PreloadService {
 }
 
 
-/**
- * 热榜首屏预取（「预加载优化」开启时生效）。
- *
- * 规则：
- * - 启动进入主页后，把「取热榜首屏」排进预取队列的热榜档（不改变当前界面）；
- * - 之后只在「应用回到前台」或「切换到热榜页」时更新；
- * - 切到热榜时若 pending 新鲜（10 分钟）则直接生效（首屏零等待），生效后立即重置并重新预取；
- * - 在 app 内切到其他页再切回热榜同样走"生效一次 + 重新预取"，不会反复使用同一份旧数据。
- *
- * 真正的网络请求走 PreloadService 的队列（后进先出、不打断其它预取），这里只持有
- * 「已取回但还没生效」的那一份，以及它落进 PreloadCache 的 `feed:hot` 副本。
- */
+/** 热榜首屏：请求走队列的 HOT_FEED 档，这里只持有「已取回但未生效」的一份（10 分钟新鲜度）。 */
 export const HOT_PENDING_TTL_MS: number = 10 * 60 * 1000;
 
 export class HotFeedPending {
@@ -567,11 +528,8 @@ const PENDING_PAGE_TTL_MS: number = 10 * 60 * 1000;
 const PENDING_MIN_ITEMS: number = 3;
 
 /**
- * 首页「双缓冲」预取页。
- *
- * 与页面控制器完全隔离：用独立的 FeedRepository（不共享游标与 cancel 状态）提前把下一页
- * 首页结果拿在手里，用户下拉刷新时直接提交，零等待。预取只写内部字段，不改变当前显示的
- * 内容——不生效、不回滚，规则简单到不会和下拉手势抢状态。
+ * 首页双缓冲预取页：用独立 FeedRepository（不共享游标与 cancel）提前取下一页，
+ * 下拉时直接提交；只写内部字段，不改变当前显示内容。
  */
 export class HomePendingFeed {
   private pending?: FeedPage;
@@ -579,12 +537,7 @@ export class HomePendingFeed {
   private loading: boolean = false;
   private repository?: FeedRepository;
 
-  /**
-   * 预取一页：已有新鲜 pending 或正在请求时直接跳过（挂载、点页签都会调用）。
-   *
-   * @param factory 独立仓库工厂，与控制器用的仓库隔离
-   * @param enabled 预加载优化是否开启；关闭时完全不发请求
-   */
+  /** 预取一页：已有新鲜 pending 或正在请求时跳过。 */
   prefetch(factory: () => FeedRepository | undefined, enabled: boolean,
     onReady: (page: FeedPage) => void = (_page: FeedPage): void => {
     }): void {
@@ -621,10 +574,7 @@ export class HomePendingFeed {
     this.pendingAtMs = 0;
   }
 
-  /**
-   * 取走可提交的 pending：过期、或明显小于当前列表时返回 undefined（调用方走原刷新）。
-   * 成功取走即清空，调用方随后应再预取一次。
-   */
+  /** 取走可提交的 pending：过期或明显小于当前列表时返回 undefined（走原刷新）。 */
   take(currentItemCount: number): FeedPage | undefined {
     const page: FeedPage | undefined = this.pending;
     if (page === undefined) {
@@ -644,14 +594,7 @@ export class HomePendingFeed {
 }
 
 
-/**
- * 「预加载优化」开关落地：把设置里的两态开关同步到缓存与调度器。
- *
- * - 开启：启用统一内存缓存与逐级预加载，并立刻在后台预取热榜首屏（不改变当前界面）；
- * - 关闭：两层缓存全部清空、调度器停止，完全回到项目原有的按需加载。
- *
- * 只改内存状态，不写偏好；偏好由设置页负责持久化，这里在启动与开关变化时各调用一次。
- */
+/** 开关落地：开启即启用缓存与队列并后台预取热榜；关闭即清空并回到原有加载。只改内存状态。 */
 export function applyPreloadOptimization(mode: string): void {
   const enabled: boolean = decodePreloadOptimization(mode) === PreloadOptimizationMode.ON;
   preloadCache().setEnabled(enabled);
@@ -663,10 +606,7 @@ export function applyPreloadOptimization(mode: string): void {
   }
 }
 
-/**
- * 页签切到热榜时调用：把预取的热榜首屏「生效一次」并立刻重新预取。
- * 返回 true 表示这份 pending 还新鲜（页面重载即可命中缓存，首屏零等待）。
- */
+/** 切到热榜时调用：pending「生效一次」并重新预取；返回是否新鲜。 */
 export function consumeHotFeedPending(): boolean {
   return hotFeedPending().consumeForDisplay();
 }

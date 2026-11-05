@@ -8,16 +8,8 @@ import {
 } from 'data';
 
 /**
- * 冷启动预加载（本轮新增的唯一冷启动文件）。
- *
- * 目标：开机进主页时**先出内容、后台再验证与刷新**，避免"先转圈加载、再出首页"的可见等待。
- *
- * 流程：
- * 1. `EntryAbility.onCreate` 调 `warmHomeStartupFeed(context)`：把硬盘里的首页快照解码进内存暂存；
- * 2. `HomeFeedPage` 首帧 `takeHomeStartupFeedItems()` 直接渲染这批条目（一次性语义，取走即清空）；
- * 3. 页面随后按「启动时自动刷新首页」静默刷新一次，并开始正常预取。
- *
- * 预热失败或没有快照时保持原有异步加载路径，不影响启动。
+ * 冷启动预加载：EntryAbility 把硬盘快照解码进内存，首页首帧直接渲染，
+ * 随后按「启动时自动刷新首页」静默刷新；没有快照或解码失败时走原有异步加载。
  */
 let startupItems: Array<FeedItem> | undefined = undefined;
 
