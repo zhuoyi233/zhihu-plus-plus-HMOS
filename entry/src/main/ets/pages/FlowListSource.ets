@@ -32,7 +32,7 @@ export function flowListChrome(key: string, label: string): FlowListItem {
 
 /**
  * 瀑布流渲染数据源：与 WaterFlowSections 消费同一份 entries 快照。
- * replace 全量替换并通知重载（追加/删除/整组替换统一走此路径，与首页一致）。
+ * replace 保留整表重载语义；applyLayout 用于分页等需要保留可见节点的增量更新。
  */
 export class FlowListSource implements IDataSource {
   private entries: FlowListItem[] = [];
@@ -49,6 +49,45 @@ export class FlowListSource implements IDataSource {
   replace(items: FlowListItem[]): void {
     this.entries = items;
     this.listeners.forEach((listener: DataChangeListener): void => listener.onDataReloaded());
+  }
+
+  /** 保留公共前后缀，只通知中间增删；同键负载变化单独更新，分页不重建已有卡片。 */
+  applyLayout(next: FlowListItem[]): void {
+    const old = this.entries.slice();
+    let prefix: number = 0;
+    while (prefix < old.length && prefix < next.length && old[prefix].key === next[prefix].key) {
+      prefix += 1;
+    }
+    let suffix: number = 0;
+    while (suffix < old.length - prefix && suffix < next.length - prefix &&
+      old[old.length - 1 - suffix].key === next[next.length - 1 - suffix].key) {
+      suffix += 1;
+    }
+    const removed: number = old.length - prefix - suffix;
+    const added: number = next.length - prefix - suffix;
+    for (let index = removed - 1; index >= 0; index -= 1) {
+      const position: number = prefix + index;
+      this.entries.splice(position, 1);
+      this.listeners.forEach((listener: DataChangeListener): void => listener.onDataDelete(position));
+    }
+    for (let index = 0; index < added; index += 1) {
+      const position: number = prefix + index;
+      this.entries.splice(position, 0, next[position]);
+      this.listeners.forEach((listener: DataChangeListener): void => listener.onDataAdd(position));
+    }
+    // 前缀/后缀的 key 不变，但刷新资料或同键内容时仍须通知实际负载变化。
+    this.entries = next;
+    for (let index = 0; index < next.length; index += 1) {
+      const oldIndex: number = index < prefix ? index : index >= next.length - suffix
+        ? index - added + removed : -1;
+      if (oldIndex < 0) { continue; }
+      const previous: FlowListItem = old[oldIndex];
+      const current: FlowListItem = next[index];
+      if (previous.payload !== current.payload || previous.sourceIndex !== current.sourceIndex ||
+        previous.label !== current.label || previous.fullWidth !== current.fullWidth) {
+        this.listeners.forEach((listener: DataChangeListener): void => listener.onDataChange(index));
+      }
+    }
   }
 
   registerDataChangeListener(listener: DataChangeListener): void {

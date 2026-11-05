@@ -163,6 +163,7 @@ export struct PeopleDetailPage {
   @StorageProp('systemFontSizeScale') @Watch('onLayoutDriverChanged') private systemFontSizeScale: number = 1;
   private readonly flowSource: FlowListSource = new FlowListSource();
   @State private flowSections: WaterFlowSections = new WaterFlowSections();
+  private flowSectionSnapshot: SectionOptions[] = [];
   private controller?: PeopleDetailController;
 
   /** 宽屏多列规格：内容 1120vp 居中，资料头限 720，内容卡按信息流断点分列。 */
@@ -224,14 +225,21 @@ export struct PeopleDetailPage {
         entries.push({ key: 'people_content_status_retry', fullWidth: true, label: 'contentStatus',
           sourceIndex: -1, payload: 'retry' });
       }
-      if (this.contentLoadingMore || this.contentCanLoadMore) {
-        entries.push(flowListChrome('people_content_load_more', 'footer'));
-      }
+      // 加载指示只改变可见性，不增删尾部占位，避免末页/空页完成后列表收缩钳位。
+      entries.push(flowListChrome('people_content_footer', 'footer'));
     }
-    this.flowSource.replace(entries);
     const gap = 10;
-    this.flowSections.splice(0, this.flowSections.length(),
-      buildFlowListSections(entries, this.wideSpec().columns, gap, 0));
+    const nextSections = buildFlowListSections(entries, this.wideSpec().columns, gap, 0);
+    let unchanged: number = 0;
+    while (unchanged < this.flowSectionSnapshot.length && unchanged < nextSections.length &&
+      JSON.stringify(this.flowSectionSnapshot[unchanged]) === JSON.stringify(nextSections[unchanged])) {
+      unchanged += 1;
+    }
+    if (unchanged < this.flowSectionSnapshot.length || unchanged < nextSections.length) {
+      this.flowSections.splice(unchanged, this.flowSectionSnapshot.length - unchanged, nextSections.slice(unchanged));
+      this.flowSectionSnapshot = nextSections;
+    }
+    this.flowSource.applyLayout(entries);
   }
   private contentController?: PeopleContentController;
   private readonly contentScroller: Scroller = new Scroller();
@@ -561,13 +569,19 @@ export struct PeopleDetailPage {
               .width('100%')
               .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding') })
           } else if (entry.label === 'footer') {
-            Button(this.contentLoadingMore ? '正在加载更多…' : '加载更多')
-              .backgroundColor(this.resolvedThemeColor)
-              .fontColor(onThemeColor(this.resolvedThemeColor))
-              .id('people_content_load_more')
+            Row() {
+              if (this.contentLoadingMore) {
+                LoadingProgress()
+                  .id('people_content_loading_more')
+                  .width(40)
+                  .height(40)
+                  .color(this.resolvedThemeColor)
+              }
+            }
               .width('100%')
-              .enabled(!this.contentLoadingMore)
-              .onClick((): void => { this.contentController?.loadMore(); })
+              .height(64)
+              .justifyContent(FlexAlign.Center)
+              .padding({ top: 12, bottom: 12 })
           } else {
             this.contentCard(entry.payload as PeopleContentItem)
           }
@@ -587,6 +601,15 @@ export struct PeopleDetailPage {
     // 资料头收窄后随交叉轴居中（对齐 Column 承担，WaterFlow 无 alignListItem）。
     .padding({ left: this.wideContentPaddingVp(), right: this.wideContentPaddingVp() })
     .cachedCount(Math.max(6, this.wideSpec().columns * 2))
+    .onScrollIndex((_start: number, end: number): void => {
+      const lastItem = this.flowSource.getData(end)?.sourceIndex ?? -1;
+      // 与首页一致：按列数预留两行，宽屏首屏容纳整页时也能继续加载。
+      if (this.contentCanLoadMore && this.contentItems.length > 0 &&
+        lastItem >= this.contentItems.length - Math.max(3, this.wideSpec().columns * 2)) {
+        this.contentController?.loadMore();
+      }
+    })
+    .onReachEnd((): void => { this.contentController?.loadMore(); })
     .onAreaChange((_oldArea: Area, newArea: Area): void => {
       const height = Number(newArea.height);
       if (height > 0 && Math.abs(height - this.listViewportVp) > 1) {

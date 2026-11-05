@@ -5,6 +5,7 @@ import answerPanePreparationTest from './AnswerPanePreparation.test';
 import answerPaneLayoutTest from './AnswerPaneLayout.test';
 import answerSwitchPrefetchTest from './AnswerSwitchPrefetch.test';
 import feedWaterfallLayoutTest from './FeedWaterfallLayout.test';
+import flowListSourceTest from './FlowListSource.test';
 import feedFlowDataSourceTest from './FeedFlowDataSource.test';
 import continuousAnswerLifecycleTest from './ContinuousAnswerLifecycle.test';
 import continuousReferenceNavigatorTest from './ContinuousReferenceNavigator.test';
@@ -126,6 +127,7 @@ import pinMetaTextTest from './PinMetaText.test';
 
 export default function testsuite(): void {
   feedWaterfallLayoutTest();
+  flowListSourceTest();
   feedFlowDataSourceTest();
   apiLevelTest();
   backgroundWorkPolicyTest();

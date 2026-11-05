@@ -300,6 +300,45 @@ export default function peoplePinDetailStateTest(): void {
       expect(controller.snapshot().canLoadMore).assertFalse();
     });
 
+    it('coalescesAutomaticPaginationTriggersAndStopsAtTheLastPage', 0, async () => {
+      const repository = new FixedPeopleContentRepository();
+      repository.pages = [
+        peopleContentPage([peopleAnswer('101')], false, 'next'),
+        peopleContentPage([peopleAnswer('102')], true)
+      ];
+      const controller = new PeopleContentController('alice-token', PeopleContentSection.ARTICLES, repository);
+      controller.activate();
+      await controller.loadInitial();
+      const pending = controller.loadMore();
+      expect(controller.snapshot().loadingMore).assertTrue();
+      await controller.loadMore();
+      await pending;
+      await controller.loadMore();
+      expect(repository.requestCount).assertEqual(2);
+      expect(controller.snapshot().items.length).assertEqual(2);
+      expect(controller.snapshot().loadingMore).assertFalse();
+      expect(controller.snapshot().canLoadMore).assertFalse();
+    });
+
+    it('blocksAutomaticPaginationAfterFailureUntilExplicitRetry', 0, async () => {
+      const repository = new FixedPeopleContentRepository();
+      repository.pages = [peopleContentPage([peopleAnswer('101')], false, 'next')];
+      const controller = new PeopleContentController('alice-token', PeopleContentSection.ACTIVITIES, repository);
+      controller.activate();
+      await controller.loadInitial();
+      await controller.loadMore();
+      expect(controller.snapshot().loadingMore).assertFalse();
+      expect(controller.snapshot().canLoadMore).assertFalse();
+      expect(controller.snapshot().items.length).assertEqual(1);
+      await controller.loadMore();
+      expect(repository.requestCount).assertEqual(2);
+      repository.pages = [peopleContentPage([peopleAnswer('102')], true)];
+      await controller.retry();
+      expect(repository.requestCount).assertEqual(3);
+      expect(controller.snapshot().items.length).assertEqual(2);
+      expect(controller.snapshot().errorMessage).assertUndefined();
+    });
+
     it('cancelsPeopleContentWhenLeavingPage', 0, async () => {
       const repository = new FixedPeopleContentRepository();
       repository.pages = [peopleContentPage([peopleAnswer('101')], true)];
