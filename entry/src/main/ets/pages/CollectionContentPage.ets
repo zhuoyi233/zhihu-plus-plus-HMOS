@@ -1,6 +1,11 @@
 import {
-  buildRowGroups,
-  FEED_COLUMN_GAP_VP,
+  buildFlowListSections,
+  flowListCard,
+  flowListChrome,
+  FlowListItem,
+  FlowListSource
+} from './FlowListSource';
+import {
   feedMinCardWidthVp,
   resolveWideColumnSpec,
   WideColumnSpec
@@ -37,13 +42,35 @@ export struct CollectionContentPage {
   @State private requiresLogin: boolean = false;
   @State private errorMessage: string = '';
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
-  @StorageProp('systemFontSizeScale') private systemFontSizeScale: number = 1;
-  @State private pageWidthVp: number = 0;
+  @StorageProp('systemFontSizeScale') @Watch('onLayoutDriverChanged') private systemFontSizeScale: number = 1;
+  @State @Watch('onLayoutDriverChanged') private pageWidthVp: number = 0;
+  private readonly flowSource: FlowListSource = new FlowListSource();
+  @State private flowSections: WaterFlowSections = new WaterFlowSections();
   private controller?: CollectionContentController;
 
   /** 宽屏多列规格：内容 1120vp 居中，收藏内容卡按信息流断点分列。 */
   private wideSpec(): WideColumnSpec {
     return resolveWideColumnSpec(this.pageWidthVp, feedMinCardWidthVp(this.systemFontSizeScale));
+  }
+
+  private onLayoutDriverChanged(): void {
+    this.rebuildFlowLayout();
+  }
+
+  /** 瀑布流布局快照：内容卡进内容列 section，加载尾通栏。 */
+  private rebuildFlowLayout(): void {
+    const entries: FlowListItem[] = [];
+    for (let index = 0; index < this.items.length; index += 1) {
+      const item: CollectionContentItem = this.items[index];
+      entries.push(flowListCard(`collection_content_${item.kind}_${item.id}`, index, item));
+    }
+    if (this.loadingMore || this.canLoadMore) {
+      entries.push(flowListChrome('collection_content_load_more', 'footer'));
+    }
+    this.flowSource.replace(entries);
+    const gap = 10;
+    this.flowSections.splice(0, this.flowSections.length(),
+      buildFlowListSections(entries, this.wideSpec().columns, gap));
   }
 
   aboutToAppear(): void {
@@ -110,42 +137,30 @@ export struct CollectionContentPage {
           .backgroundColor($r('app.color.surface_background'))
         }
 
-        List({ space: 10 }) {
-          ForEach(buildRowGroups(this.items, this.wideSpec().columns),
-            (row: Array<CollectionContentItem>) => {
-              ListItem() {
-                Row({ space: FEED_COLUMN_GAP_VP }) {
-                  ForEach(row, (item: CollectionContentItem) => {
-                    Column() {
-                      this.contentCard(item)
-                    }
-                    .width(this.wideSpec().cardWidth)
-                  }, (item: CollectionContentItem): string => `${item.kind}:${item.id}`)
-                }
-                .alignItems(VerticalAlign.Top)
-                .width('100%')
+        WaterFlow({ sections: this.flowSections, layoutMode: WaterFlowLayoutMode.SLIDING_WINDOW }) {
+          LazyForEach(this.flowSource, (entry: FlowListItem) => {
+            FlowItem() {
+              if (entry.label === 'footer') {
+                Button(this.loadingMore ? '正在加载更多…' : '加载更多')
+                  .backgroundColor(this.resolvedThemeColor)
+                  .fontColor(onThemeColor(this.resolvedThemeColor))
+                  .id('collection_content_load_more')
+                  .width('100%')
+                  .fontSize($r('app.float.secondary_font_size'))
+                  .enabled(!this.loadingMore)
+                  .onClick(() => this.controller?.loadMore())
+              } else {
+                this.contentCard(entry.payload as CollectionContentItem)
               }
-              .width('100%')
-            }, (row: Array<CollectionContentItem>): string =>
-              row.map((item: CollectionContentItem): string => `${item.kind}:${item.id}`).join(','))
-
-          if (this.loadingMore || this.canLoadMore) {
-            ListItem() {
-              Button(this.loadingMore ? '正在加载更多…' : '加载更多')
-                .backgroundColor(this.resolvedThemeColor)
-                .fontColor(onThemeColor(this.resolvedThemeColor))
-                .id('collection_content_load_more')
-                .width('100%')
-                .fontSize($r('app.float.secondary_font_size'))
-                .enabled(!this.loadingMore)
-                .onClick(() => this.controller?.loadMore())
             }
-          }
+            .width('100%')
+          }, (entry: FlowListItem): string => entry.key)
         }
         .id('collection_content_list')
         .width('100%')
         .scrollBar(BarState.Off)
         .layoutWeight(1)
+        .cachedCount(Math.max(6, this.wideSpec().columns * 2))
         .edgeEffect(EdgeEffect.Spring)
         .onReachEnd(() => this.controller?.loadMore())
       }
@@ -289,6 +304,7 @@ export struct CollectionContentPage {
     this.canLoadMore = state.canLoadMore;
     this.requiresLogin = state.requiresLogin;
     this.errorMessage = state.errorMessage ?? '';
+    this.rebuildFlowLayout();
   }
 }
 

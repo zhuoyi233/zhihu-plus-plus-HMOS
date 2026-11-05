@@ -37,7 +37,7 @@ import {
 } from './components/ReadingProgressBar';
 import { readerBlockSpacing } from './ReaderTypography';
 import { readerHorizontalPaddingVp } from './ReaderViewportLayout';
-import { contentCenteredPaddingVp } from './FeedWaterfallLayout';
+import { contentCenteredPaddingVp, FEED_COLUMN_GAP_VP } from './FeedWaterfallLayout';
 import {
   readerBlockSignature,
   readerPositionBlockIndex,
@@ -449,7 +449,17 @@ export struct NativeContentDocument {
   /** 问题详情页在正文末尾追加的 section（回答信息流）；未传入时渲染空。 */
   @BuilderParam documentHeader: () => void = this.emptyFooter;
   @BuilderParam documentBodyFooter: () => void = this.emptyFooter;
-  @BuilderParam documentItems: () => void = this.emptyFooter;
+  /**
+   * 宿主注入的瀑布流条目段（问题页回答信息流）：数据源逐条渲染为内容列 FlowItem，
+   * 多列时由 WaterFlow 按最短列放置（与首页信息流同款的高度不齐瀑布流）。
+   * 未提供时不渲染该段；提供时 documentFlowItem/documentFlowKey 必须一并传入。
+   */
+  documentFlowSource?: IDataSource = undefined;
+  /** 内容段列数：≤1 时全部单列，视觉与原列表等价。 */
+  @Prop @Watch('onFlowLayoutInvalidated') documentFlowColumns: number = 1;
+  /** 条目稳定身份键（回答卡用 feedItemIdentity）。 */
+  documentFlowKey?: (item: Object) => string;
+  @BuilderParam documentFlowItem: (item: Object) => void = this.emptyFooter;
   @BuilderParam documentFooter: () => void = this.emptyFooter;
   /** 列表触底回调：问题详情页用于回答信息流分页加载。 */
   onListReachEnd?: () => void;
@@ -552,6 +562,9 @@ export struct NativeContentDocument {
   /** 正文视口高度（vp）：List 的 onAreaChange 回填，供阅读进度条换算拇指高度。 */
   @State private viewportHeightVp: number = 0;
   @State private viewportWidthVp: number = 0;
+  /** 瀑布流 sections：正文段/回答段/尾部段的条目计数与列距，随内容与列数变化重算。 */
+  @State private documentSections: WaterFlowSections = new WaterFlowSections();
+  private flowSectionsListenerAttached: boolean = false;
   /** 正文内容总高（vp）：本页 SDK 无最大滚动距离 API，按实测块高估算、触底时校准。 */
   @State private contentHeightVp: number = 0;
   /** 当前滚动偏移（vp）：onDidScroll 回填，驱动阅读进度条拇指位置。 */
@@ -567,6 +580,86 @@ export struct NativeContentDocument {
 
   @Builder
   private emptyFooter(): void {
+  }
+
+  private flowListener: DataChangeListener = {
+    onDataReloaded: (): void => {
+      // 宿主数据源整组替换（分页/刷新）：FlowItem 数量变化，sections 随之重算。
+      this.rebuildFlowSections();
+    },
+    onDataAdded: (_index: number): void => this.rebuildFlowSections(),
+    onDataAdd: (_index: number): void => this.rebuildFlowSections(),
+    onDataDeleted: (_index: number): void => this.rebuildFlowSections(),
+    onDataDelete: (_index: number): void => this.rebuildFlowSections(),
+    onDataChanged: (_index: number): void => this.rebuildFlowSections(),
+    onDataChange: (_index: number): void => this.rebuildFlowSections(),
+    onDataMoved: (_from: number, _to: number): void => this.rebuildFlowSections(),
+    onDataMove: (_from: number, _to: number): void => this.rebuildFlowSections(),
+    onDatasetChange: (_operations: DataOperation[]): void => this.rebuildFlowSections()
+  };
+
+  private onFlowLayoutInvalidated(): void {
+    this.rebuildFlowSections();
+  }
+
+  /**
+   * 重算正文瀑布流 sections：单列时整段一个 crossCount=1 的 section（rowsGap=段间距，
+   * 与原列表 space 语义完全等价）；多列时拆为 [正文段][回答瀑布段][尾部段] 三段，
+   * 段间 margin=段间距，回答段列距用信息流列距（14vp）。
+   */
+  private rebuildFlowSections(): void {
+    const spacing = this.blockSpacing();
+    const flowSource = this.documentFlowSource;
+    const flowTotal = flowSource !== undefined ? flowSource.totalCount() : 0;
+    const flowColumns = flowSource !== undefined ? Math.max(1, Math.floor(this.documentFlowColumns)) : 1;
+    const leadingCount = 1 + (this.empty ? 1 : 0)
+      + (this.collapsibleActive ? 1 : this.dataSource.totalCount()) + 1;
+    const trailingCount = (this.contentNotice.length > 0 ? 1 : 0)
+      + (this.showContentEndMarker && !this.empty ? 1 : 0) + 1;
+    const sections: SectionOptions[] = [];
+    if (flowColumns <= 1) {
+      // 单列：与原列表逐条线性排布等价；间距全部由 rowsGap 承担。
+      sections.push({
+        itemsCount: leadingCount + flowTotal + trailingCount,
+        crossCount: 1,
+        rowsGap: spacing
+      });
+    } else {
+      sections.push({ itemsCount: leadingCount, crossCount: 1, rowsGap: spacing });
+      sections.push({
+        itemsCount: flowTotal,
+        crossCount: flowColumns,
+        rowsGap: spacing,
+        columnsGap: FEED_COLUMN_GAP_VP,
+        margin: { top: spacing }
+      });
+      sections.push({
+        itemsCount: trailingCount,
+        crossCount: 1,
+        rowsGap: spacing,
+        margin: { top: spacing }
+      });
+    }
+    this.documentSections.splice(0, this.documentSections.length(), sections);
+  }
+
+  private attachFlowSourceListener(): void {
+    // 正文块数据源（html 更新会整组替换、改变条目计数）始终监听；
+    // 宿主瀑布流段按需监听。任一来源重载都重算 sections。
+    this.dataSource.registerDataChangeListener(this.flowListener);
+    if (this.documentFlowSource !== undefined && !this.flowSectionsListenerAttached) {
+      this.documentFlowSource.registerDataChangeListener(this.flowListener);
+      this.flowSectionsListenerAttached = true;
+    }
+    this.rebuildFlowSections();
+  }
+
+  private detachFlowSourceListener(): void {
+    this.dataSource.unregisterDataChangeListener(this.flowListener);
+    if (this.flowSectionsListenerAttached && this.documentFlowSource !== undefined) {
+      this.documentFlowSource.unregisterDataChangeListener(this.flowListener);
+      this.flowSectionsListenerAttached = false;
+    }
   }
 
   /**
@@ -681,6 +774,8 @@ export struct NativeContentDocument {
       this.previousBlocks.set(blocks[index].id, blocks[index - 1]);
     }
     this.dataSource.replace(blocks);
+    // 宿主瀑布流段（问题页回答）监听：数据源整组替换时重算 sections。
+    this.attachFlowSourceListener();
     if (this.answerDocumentKey.length === 0 || this.positionIsActive()) {
       this.loadLinkCardMetas(blocks);
     }
@@ -977,6 +1072,7 @@ export struct NativeContentDocument {
     if (this.positionWasActive) { this.persistReaderPosition(true); }
     this.positionMounted = false;
     this.positionWasActive = false;
+    this.detachFlowSourceListener();
     if (this.focusRequestTimer >= 0) { clearTimeout(this.focusRequestTimer); }
     this.focusRequestTimer = -1;
     this.reportViewportPrepared();
@@ -996,20 +1092,29 @@ export struct NativeContentDocument {
   build() {
     // TopEnd：正文 List 为 100%×100% 不受影响，进度条靠右缘对齐。
     Stack({ alignContent: Alignment.TopEnd }) {
-      List({ space: this.blockSpacing(), scroller: this.scroller }) {
-          ListItem() { this.documentHeader() }
-            // List.space 已含段间距，仅补足信息头与正文之间的留白；大段间距偏好不被压缩。
-            .padding({ top: this.topInsetVp, bottom: this.readingLayout ? Math.max(0, 24 - this.blockSpacing()) : 0 })
-            .onAreaChange((_oldArea: Area, newArea: Area): void => {
-              this.reportChromeHeight('header', newArea);
-              this.headerHasLayout = Number(newArea.width) > 0 && Number(newArea.height) > 0;
-              this.reportViewportPrepared();
-            })
+      WaterFlow({ scroller: this.scroller, sections: this.documentSections,
+        layoutMode: WaterFlowLayoutMode.SLIDING_WINDOW }) {
+          FlowItem() {
+            // 限宽（问题页 720）时收窄内容随交叉轴居中；未启用时保持起始对齐，
+            // 全宽条目不受对齐方式影响。
+            Column() { this.documentHeader() }
+              .width('100%')
+              .alignItems(this.bodyMaxWidthVp > 0 ? HorizontalAlign.Center : HorizontalAlign.Start)
+          }
+          .width('100%')
+          // 段间距由 sections 的 rowsGap 承担（等价原列表 space），这里仅补足信息头与
+          // 正文之间的留白；大段间距偏好不被压缩。
+          .padding({ top: this.topInsetVp, bottom: this.readingLayout ? Math.max(0, 24 - this.blockSpacing()) : 0 })
+          .onAreaChange((_oldArea: Area, newArea: Area): void => {
+            this.reportChromeHeight('header', newArea);
+            this.headerHasLayout = Number(newArea.width) > 0 && Number(newArea.height) > 0;
+            this.reportViewportPrepared();
+          })
           if (this.empty) {
-            ListItem() {
+            FlowItem() {
               Text(this.emptyMessage).id('content_document_empty')
                 .fontColor($r('app.color.secondary_text'))
-                // 阅读布局下列表已提供正文左右留白，提示不再额外内缩，与正文左缘对齐。
+                // 阅读布局下正文已提供左右留白，提示不再额外内缩，与正文左缘对齐。
                 .padding({
                   top: 12,
                   bottom: 12,
@@ -1017,31 +1122,54 @@ export struct NativeContentDocument {
                   right: this.readingLayout ? 0 : 12
                 })
             }
+            .width('100%')
           }
           if (this.collapsibleActive) {
-            ListItem() {
-              this.collapsibleBodyViewport()
+            FlowItem() {
+              Column() {
+                Column() { this.collapsibleBodyViewport() }
+                  .width('100%')
+                  .constraintSize({ maxWidth: this.bodyBlockMaxWidthVp() })
+              }
+              .width('100%')
+              .alignItems(this.bodyMaxWidthVp > 0 ? HorizontalAlign.Center : HorizontalAlign.Start)
             }
             .width('100%')
-            .constraintSize({ maxWidth: this.bodyBlockMaxWidthVp() })
           } else {
             LazyForEach(this.dataSource, (item: ReaderBlock) => {
-              ListItem() {
-                this.readerBlock(item)
+              FlowItem() {
+                Column() {
+                  Column() { this.readerBlock(item) }
+                    .width('100%')
+                    .constraintSize({ maxWidth: this.bodyBlockMaxWidthVp() })
+                }
+                .width('100%')
+                .alignItems(this.bodyMaxWidthVp > 0 ? HorizontalAlign.Center : HorizontalAlign.Start)
               }
-              .constraintSize({ maxWidth: this.bodyBlockMaxWidthVp() })
+              .width('100%')
               .onAreaChange((_oldArea: Area, newArea: Area): void => {
                 this.reportBlockHeight(item.id, newArea);
               })
             }, (item: ReaderBlock): string => this.blockRowKey(item))
           }
-          ListItem() { this.documentBodyFooter() }
-            .onAreaChange((_oldArea: Area, newArea: Area): void => {
-              this.reportChromeHeight('bodyFooter', newArea);
-            })
-          this.documentItems()
+          FlowItem() {
+            Column() { this.documentBodyFooter() }
+              .width('100%')
+              .alignItems(this.bodyMaxWidthVp > 0 ? HorizontalAlign.Center : HorizontalAlign.Start)
+          }
+          .width('100%')
+          .onAreaChange((_oldArea: Area, newArea: Area): void => {
+            this.reportChromeHeight('bodyFooter', newArea);
+          })
+          if (this.documentFlowSource !== undefined) {
+            LazyForEach(this.documentFlowSource, (item: Object) => {
+              FlowItem() { this.documentFlowItem(item) }
+                .width('100%')
+            }, (item: Object): string =>
+              this.documentFlowKey !== undefined ? this.documentFlowKey(item) : '')
+          }
           if (this.contentNotice.length > 0) {
-            ListItem() {
+            FlowItem() {
               Text(this.contentNotice)
                 .id('content_document_notice')
                 .fontSize($r('app.float.secondary_font_size'))
@@ -1052,7 +1180,7 @@ export struct NativeContentDocument {
             .width('100%')
           }
           if (this.showContentEndMarker && !this.empty) {
-            ListItem() {
+            FlowItem() {
               Text('— 内容结束 —')
                 .id('content_end_marker')
                 .fontSize($r('app.float.secondary_font_size'))
@@ -1061,9 +1189,12 @@ export struct NativeContentDocument {
                 .textAlign(TextAlign.Center)
                 .padding({ top: 24, bottom: 12 })
             }
+            .width('100%')
           }
-          ListItem() {
-            this.documentFooter()
+          FlowItem() {
+            Column() { this.documentFooter() }
+              .width('100%')
+              .alignItems(this.bodyMaxWidthVp > 0 ? HorizontalAlign.Center : HorizontalAlign.Start)
           }
           .width('100%')
           .onAreaChange((_oldArea: Area, newArea: Area): void => {
@@ -1074,9 +1205,6 @@ export struct NativeContentDocument {
         .width('100%')
         .height('100%')
         .scrollBar(BarState.Off)
-        // 正文块限宽（问题页 720）时收窄的条目随交叉轴居中；未启用时保持默认左对齐，
-        // 全宽条目不受对齐方式影响。
-        .alignListItem(this.bodyMaxWidthVp > 0 ? ListItemAlign.Center : ListItemAlign.Start)
         .padding({
           left: this.documentHorizontalPaddingVp(),
           right: this.documentHorizontalPaddingVp(),
@@ -1301,6 +1429,8 @@ export struct NativeContentDocument {
     this.exactContentHeightVp = 0;
     this.rebuildRenderedBlocks();
     this.refreshContentHeightEstimate();
+    // 段间距偏好变化会改变 sections 的 rowsGap/段间 margin。
+    this.rebuildFlowSections();
   }
 
   private onAppearanceChanged(): void {

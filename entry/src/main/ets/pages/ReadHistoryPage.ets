@@ -1,7 +1,12 @@
 import { CenteredOverlayDialog } from './CenteredOverlayDialog';
 import {
-  buildRowGroups,
-  FEED_COLUMN_GAP_VP,
+  buildFlowListSections,
+  flowListCard,
+  flowListChrome,
+  FlowListItem,
+  FlowListSource
+} from './FlowListSource';
+import {
   feedMinCardWidthVp,
   resolveWideColumnSpec,
   WideColumnSpec
@@ -58,13 +63,37 @@ export struct ReadHistoryPage {
   @StorageProp('readHistoryOpenLocalTick') @Watch('onOpenLocalTick') private openLocalTick: number = 0;
   @StorageProp('readHistoryClearTick') @Watch('onClearTick') private clearTick: number = 0;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
-  @StorageProp('systemFontSizeScale') private systemFontSizeScale: number = 1;
-  @State private pageWidthVp: number = 0;
+  @StorageProp('systemFontSizeScale') @Watch('onLayoutDriverChanged') private systemFontSizeScale: number = 1;
+  @State @Watch('onLayoutDriverChanged') private pageWidthVp: number = 0;
+  private readonly flowSource: FlowListSource = new FlowListSource();
+  @State private flowSections: WaterFlowSections = new WaterFlowSections();
   private controller?: ReadHistoryController;
 
   /** 宽屏多列规格：内容 1120vp 居中，历史卡按信息流断点分列（最小卡宽随字号缩放）。 */
   private wideSpec(): WideColumnSpec {
     return resolveWideColumnSpec(this.pageWidthVp, feedMinCardWidthVp(this.systemFontSizeScale));
+  }
+
+  private onLayoutDriverChanged(): void {
+    this.rebuildFlowLayout();
+  }
+
+  /** 瀑布流布局快照：历史卡进内容列 section，加载圈/到底提示通栏。 */
+  private rebuildFlowLayout(): void {
+    const entries: FlowListItem[] = [];
+    for (let index = 0; index < this.viewState.items.length; index += 1) {
+      const item: ReadHistoryItem = this.viewState.items[index];
+      entries.push(flowListCard(`read_history_${item.contentKey}`, index, item));
+    }
+    if (this.viewState.loadingMore) {
+      entries.push(flowListChrome('read_history_loading_more', 'loading'));
+    } else if (!this.viewState.canLoadMore) {
+      entries.push(flowListChrome('read_history_end', 'end'));
+    }
+    this.flowSource.replace(entries);
+    const gap = 12;
+    this.flowSections.splice(0, this.flowSections.length(),
+      buildFlowListSections(entries, this.wideSpec().columns, gap));
   }
   // 下拉刷新自定义加载圆圈（refreshingContent 需 ComponentContent，随页面销毁释放）
   private indicator?: FeedPullDownIndicatorHost = undefined;
@@ -116,6 +145,7 @@ export struct ReadHistoryPage {
         // Refresh 必须用 $$ 双向绑定：手势触发的 refreshing=true 会回写到本状态，
         // 单向绑定时手势不回写、这里的赋值因值未变化而不生效，刷新圈会永远卡住。
         this.refreshing = state.busy && state.phase === ReadHistoryPhase.LOADING;
+        this.rebuildFlowLayout();
       });
     this.indicator = new FeedPullDownIndicatorHost(this.getUIContext(), 0);
     this.controller.activate();
@@ -187,50 +217,34 @@ export struct ReadHistoryPage {
             builder: pullDownRefreshPlaceholder,
             refreshingContent: this.indicator?.view()
           }) {
-            List({ space: 12 }) {
-              ForEach(buildRowGroups(this.viewState.items, this.wideSpec().columns),
-                (row: Array<ReadHistoryItem>) => {
-                  ListItem() {
-                    Row({ space: FEED_COLUMN_GAP_VP }) {
-                      ForEach(row, (item: ReadHistoryItem) => {
-                        Column() {
-                          this.historyCard(item)
-                        }
-                        .width(this.wideSpec().cardWidth)
-                      }, (item: ReadHistoryItem): string => item.contentKey)
-                    }
-                    .alignItems(VerticalAlign.Top)
-                    .width('100%')
+            WaterFlow({ sections: this.flowSections, layoutMode: WaterFlowLayoutMode.SLIDING_WINDOW }) {
+              LazyForEach(this.flowSource, (entry: FlowListItem) => {
+                FlowItem() {
+                  if (entry.label === 'loading') {
+                    LoadingProgress()
+                      .id('read_history_load_more')
+                      .width(40)
+                      .height(40)
+                      .color(this.resolvedThemeColor)
+                  } else if (entry.label === 'end') {
+                    Text('已经到底啦')
+                      .id('read_history_end')
+                      .fontSize($r('app.float.secondary_font_size'))
+                      .fontColor($r('app.color.secondary_text'))
+                      .textAlign(TextAlign.Center)
+                      .width('100%')
+                      .padding({ top: 12, bottom: 12 })
+                  } else {
+                    this.historyCard(entry.payload as ReadHistoryItem)
                   }
-                  .width('100%')
-                }, (row: Array<ReadHistoryItem>): string =>
-                  row.map((item: ReadHistoryItem): string => item.contentKey).join(','))
-
-              if (this.viewState.loadingMore) {
-                ListItem() {
-                  LoadingProgress()
-                    .id('read_history_load_more')
-                    .width(40)
-                    .height(40)
-                    .color(this.resolvedThemeColor)
                 }
                 .width('100%')
-                .padding({ top: 12, bottom: 12 })
-              } else if (!this.viewState.canLoadMore) {
-                ListItem() {
-                  Text('已经到底啦')
-                    .id('read_history_end')
-                    .fontSize($r('app.float.secondary_font_size'))
-                    .fontColor($r('app.color.secondary_text'))
-                    .textAlign(TextAlign.Center)
-                    .width('100%')
-                    .padding({ top: 12, bottom: 12 })
-                }
-              }
+              }, (entry: FlowListItem): string => entry.key)
             }
             .id('read_history_list')
             .width('100%')
             .scrollBar(BarState.Off)
+            .cachedCount(Math.max(6, this.wideSpec().columns * 2))
             .edgeEffect(EdgeEffect.Spring)
             .onReachEnd((): void => {
               void this.controller?.loadMore();

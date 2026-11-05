@@ -1,8 +1,6 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
   buildFeedFlowLayout,
-  buildMixedRowGroups,
-  buildRowGroups,
   cardWidthForColumns,
   contentCenteredPaddingVp,
   feedAnchorFlowIndex,
@@ -18,6 +16,12 @@ import {
   READER_TEXT_MAX_WIDTH_VP,
   WIDE_CONTENT_MAX_WIDTH_VP
 } from '../main/ets/pages/FeedWaterfallLayout';
+import {
+  buildFlowListSections,
+  flowListCard,
+  flowListChrome,
+  FlowListItem
+} from '../main/ets/pages/FlowListSource';
 
 export default function feedWaterfallLayoutTest(): void {
   describe('feedWaterfallLayoutTest', () => {
@@ -180,15 +184,6 @@ export default function feedWaterfallLayoutTest(): void {
       expect(cardWidthForColumns(1166, 0)).assertEqual(1166);
       expect(cardWidthForColumns(-10, 2)).assertEqual(0);
     });
-    it('groupsItemsIntoRowsOfColumnSize', 0, () => {
-      expect(buildRowGroups(['a', 'b', 'c', 'd', 'e'], 2).length).assertEqual(3);
-      expect(buildRowGroups(['a', 'b', 'c', 'd', 'e'], 2)[2].length).assertEqual(1);
-      expect(buildRowGroups(['a', 'b', 'c'], 3)[0].join(',')).assertEqual('a,b,c');
-      // 单列每行一条与原布局一致；空列表无行；非法列数按 1 处理
-      expect(buildRowGroups(['a', 'b'], 1).length).assertEqual(2);
-      expect(buildRowGroups([], 3).length).assertEqual(0);
-      expect(buildRowGroups(['a'], 0).length).assertEqual(1);
-    });
     it('keepsReaderTextCapNarrowerThanWideContentCap', 0, () => {
       // 问题页双层限宽口径：内容上限 1120，长文 720
       expect(WIDE_CONTENT_MAX_WIDTH_VP).assertEqual(1120);
@@ -211,25 +206,43 @@ export default function feedWaterfallLayoutTest(): void {
       // 字号放大抬高最小卡宽自动减列（对齐信息流口径）：560 最小卡宽下 1120 只容 1 列
       expect(resolveWideColumnSpec(1400, feedMinCardWidthVp(2.0)).columns).assertEqual(1);
     });
-    it('splitsMixedRowsAroundFullWidthItems', 0, () => {
-      const isHead = (value: string): boolean => value.startsWith('#');
-      const items: Array<string> = ['a', 'b', '#d1', 'c', 'd', 'e', 'f', '#d2', 'g'];
-      const groups = buildMixedRowGroups(items, 2, isHead);
-      // 通栏行独占一行并打断分组；普通行按 2 列切分
-      expect(groups.length).assertEqual(6);
-      expect(groups[0].items.join(',')).assertEqual('a,b');
-      expect(groups[0].fullWidth).assertFalse();
-      expect(groups[1].items.join(',')).assertEqual('#d1');
-      expect(groups[1].fullWidth).assertTrue();
-      expect(groups[2].items.join(',')).assertEqual('c,d');
-      expect(groups[3].items.join(',')).assertEqual('e,f');
-      expect(groups[4].items.join(',')).assertEqual('#d2');
-      expect(groups[4].fullWidth).assertTrue();
-      expect(groups[5].items.join(',')).assertEqual('g');
-      // 连续通栏行各自独占；单列时每条一行（不打组）
-      expect(buildMixedRowGroups(['#x', '#y'], 2, isHead).length).assertEqual(2);
-      expect(buildMixedRowGroups(['a', 'b'], 1, isHead).length).assertEqual(2);
-      expect(buildMixedRowGroups([], 3, isHead).length).assertEqual(0);
+    it('buildsFlowSectionsMergingCardRunsAndSplittingAtChrome', 0, () => {
+      const entries: FlowListItem[] = [
+        flowListChrome('header', 'header'),
+        flowListCard('a', 0, 'p'),
+        flowListCard('b', 1, 'p'),
+        flowListChrome('banner', 'banner'),
+        flowListCard('c', 2, 'p'),
+        flowListCard('d', 3, 'p'),
+        flowListCard('e', 4, 'p')
+      ];
+      // 通栏项独占单列 section 并打断卡片分组；连续卡片合并为 crossCount=2 的 section
+      const sections = buildFlowListSections(entries, 2, 10);
+      expect(sections.length).assertEqual(4);
+      expect(sections[0].itemsCount).assertEqual(1);
+      expect(sections[0].crossCount).assertEqual(1);
+      expect(JSON.stringify(sections[0].margin)).assertEqual('{"top":0}');
+      expect(sections[1].itemsCount).assertEqual(2);
+      expect(sections[1].crossCount).assertEqual(2);
+      expect(sections[1].columnsGap).assertEqual(10);
+      expect(sections[1].rowsGap).assertEqual(10);
+      expect(JSON.stringify(sections[1].margin)).assertEqual('{"top":10}');
+      expect(sections[2].itemsCount).assertEqual(1);
+      expect(sections[2].crossCount).assertEqual(1);
+      expect(JSON.stringify(sections[2].margin)).assertEqual('{"top":10}');
+      expect(sections[3].itemsCount).assertEqual(3);
+      expect(sections[3].crossCount).assertEqual(2);
+      // 段间距可与行间距解耦（个人主页：槽位间无间距、卡片间 10vp）
+      const decoupled = buildFlowListSections(entries, 2, 10, 0);
+      expect(JSON.stringify(decoupled[1].margin)).assertEqual('{"top":0}');
+      expect(decoupled[1].rowsGap).assertEqual(10);
+      // 单列与非法列数按 1 处理；空列表无 section
+      const single = buildFlowListSections([flowListCard('a', 0, 'p')], 1, 12);
+      expect(single.length).assertEqual(1);
+      expect(single[0].crossCount).assertEqual(1);
+      expect(single[0].rowsGap).assertEqual(12);
+      expect(buildFlowListSections([flowListCard('a', 0, 'p')], 0, 12).length).assertEqual(1);
+      expect(buildFlowListSections([], 3, 12).length).assertEqual(0);
     });
   });
 }

@@ -1,7 +1,11 @@
 import { onThemeColor, DEFAULT_THEME_COLOR, ReadHistoryGateway } from 'data';
 import {
-  buildRowGroups,
-  FEED_COLUMN_GAP_VP,
+  buildFlowListSections,
+  flowListCard,
+  FlowListItem,
+  FlowListSource
+} from './FlowListSource';
+import {
   feedMinCardWidthVp,
   resolveWideColumnSpec,
   WideColumnSpec
@@ -39,13 +43,32 @@ export struct LocalHistoryPage {
   };
   @State @Watch('syncRefreshIndicator') private refreshing: boolean = false;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
-  @StorageProp('systemFontSizeScale') private systemFontSizeScale: number = 1;
-  @State private pageWidthVp: number = 0;
+  @StorageProp('systemFontSizeScale') @Watch('onLayoutDriverChanged') private systemFontSizeScale: number = 1;
+  @State @Watch('onLayoutDriverChanged') private pageWidthVp: number = 0;
+  private readonly flowSource: FlowListSource = new FlowListSource();
+  @State private flowSections: WaterFlowSections = new WaterFlowSections();
   private controller?: LocalHistoryController;
 
   /** 宽屏多列规格：内容 1120vp 居中，本地历史卡按信息流断点分列。 */
   private wideSpec(): WideColumnSpec {
     return resolveWideColumnSpec(this.pageWidthVp, feedMinCardWidthVp(this.systemFontSizeScale));
+  }
+
+  private onLayoutDriverChanged(): void {
+    this.rebuildFlowLayout();
+  }
+
+  /** 瀑布流布局快照：本地历史卡进内容列 section（无分页尾）。 */
+  private rebuildFlowLayout(): void {
+    const entries: FlowListItem[] = [];
+    for (let index = 0; index < this.viewState.items.length; index += 1) {
+      const item: ReadHistoryItem = this.viewState.items[index];
+      entries.push(flowListCard(`local_history_${item.contentKey}`, index, item));
+    }
+    this.flowSource.replace(entries);
+    const gap = 12;
+    this.flowSections.splice(0, this.flowSections.length(),
+      buildFlowListSections(entries, this.wideSpec().columns, gap));
   }
   // 下拉刷新自定义加载圆圈（refreshingContent 需 ComponentContent，随页面销毁释放）
   private indicator?: FeedPullDownIndicatorHost = undefined;
@@ -73,6 +96,7 @@ export struct LocalHistoryPage {
       // 对齐上游 FeedPullToRefresh：指示器 = 下拉触发 && 加载中，加载结束（无论成败）才停。
       // Refresh 需 $$ 双向绑定让手势回写生效，否则刷新圈会永远卡住（见 ReadHistoryPage 注释）。
       this.refreshing = state.busy && state.phase === ReadHistoryPhase.LOADING;
+      this.rebuildFlowLayout();
     });
     this.indicator = new FeedPullDownIndicatorHost(this.getUIContext(), 0);
     this.controller.activate();
@@ -132,28 +156,18 @@ export struct LocalHistoryPage {
             builder: pullDownRefreshPlaceholder,
             refreshingContent: this.indicator?.view()
           }) {
-            List({ space: 12 }) {
-              ForEach(buildRowGroups(this.viewState.items, this.wideSpec().columns),
-                (row: Array<ReadHistoryItem>) => {
-                  ListItem() {
-                    Row({ space: FEED_COLUMN_GAP_VP }) {
-                      ForEach(row, (item: ReadHistoryItem) => {
-                        Column() {
-                          this.localHistoryCard(item)
-                        }
-                        .width(this.wideSpec().cardWidth)
-                      }, (item: ReadHistoryItem): string => item.contentKey)
-                    }
-                    .alignItems(VerticalAlign.Top)
-                    .width('100%')
-                  }
-                  .width('100%')
-                }, (row: Array<ReadHistoryItem>): string =>
-                  row.map((item: ReadHistoryItem): string => item.contentKey).join(','))
+            WaterFlow({ sections: this.flowSections, layoutMode: WaterFlowLayoutMode.SLIDING_WINDOW }) {
+              LazyForEach(this.flowSource, (entry: FlowListItem) => {
+                FlowItem() {
+                  this.localHistoryCard(entry.payload as ReadHistoryItem)
+                }
+                .width('100%')
+              }, (entry: FlowListItem): string => entry.key)
             }
             .id('local_history_list')
             .width('100%')
             .scrollBar(BarState.Off)
+            .cachedCount(Math.max(6, this.wideSpec().columns * 2))
             .edgeEffect(EdgeEffect.Spring)
           }
           .id('local_history_pull_refresh')

@@ -38,8 +38,13 @@ import {
 } from './BlockingActionState';
 import { adaptiveOverlayWidth, isWideOverlayContainer, ADAPTIVE_OVERLAY_MENU_WIDTH_VP } from '../common/style/AdaptiveOverlayLayout';
 import {
-  buildRowGroups,
-  FEED_COLUMN_GAP_VP,
+  buildFlowListSections,
+  flowListCard,
+  flowListChrome,
+  FlowListItem,
+  FlowListSource
+} from './FlowListSource';
+import {
   feedMinCardWidthVp,
   READER_TEXT_MAX_WIDTH_VP,
   resolveWideColumnSpec,
@@ -139,7 +144,7 @@ export struct PeopleDetailPage {
   @State private pendingUserBlock?: BlockingUserCandidate = undefined;
   @State private profileActionsSheetShown: boolean = false;
   @State @Watch('userBlockDialogControllerChanged') private userBlockSheetShown: boolean = false;
-  @State private overlayWidthVp: number = 0;
+  @State @Watch('onLayoutDriverChanged') private overlayWidthVp: number = 0;
   @State private blockingMessage: string = '';
   @State private blockingBusy: boolean = false;
   @State private following: boolean = false;
@@ -150,7 +155,9 @@ export struct PeopleDetailPage {
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   /** 顶栏“更多”请求：标题与返回由宿主 HDS 标题栏承载，本页只响应动作点击。 */
   @StorageProp('topBarActionTick') @Watch('onTopBarActionTick') private topBarActionTick: number = 0;
-  @StorageProp('systemFontSizeScale') private systemFontSizeScale: number = 1;
+  @StorageProp('systemFontSizeScale') @Watch('onLayoutDriverChanged') private systemFontSizeScale: number = 1;
+  private readonly flowSource: FlowListSource = new FlowListSource();
+  @State private flowSections: WaterFlowSections = new WaterFlowSections();
   private controller?: PeopleDetailController;
 
   /** 宽屏多列规格：内容 1120vp 居中，资料头限 720，内容卡按信息流断点分列。 */
@@ -158,9 +165,48 @@ export struct PeopleDetailPage {
     return resolveWideColumnSpec(this.overlayWidthVp, feedMinCardWidthVp(this.systemFontSizeScale));
   }
 
-  /** 资料头/内容列自带 12vp 页边距；宽屏居中时由 List 补足差值，窄屏差值≤0 不加。 */
-  private listEdgePaddingVp(): number {
-    return Math.max(0, this.wideSpec().paddingVp - 12);
+  /** 宽屏内容内缩：资料头/选项卡条/内容卡统一由瀑布流 padding 内缩到内容宽（1120 上限）。 */
+  private wideContentPaddingVp(): number {
+    return this.wideSpec().paddingVp;
+  }
+
+  private onLayoutDriverChanged(): void {
+    this.rebuildFlowLayout();
+  }
+
+  /**
+   * 瀑布流布局快照：资料头/选项卡条通栏，内容卡进内容列 section（高度不齐瀑布流），
+   * 加载占位/状态面板/加载尾通栏。内容状态或列数变化时重建。
+   */
+  private rebuildFlowLayout(): void {
+    const entries: FlowListItem[] = [];
+    entries.push({ key: 'people_detail_header', fullWidth: true, label: 'header',
+      sourceIndex: -1, payload: this.profile });
+    entries.push(flowListChrome('people_content_tabs_slot', 'tabs'));
+    if (this.contentPhase === PeopleContentPhase.IDLE || this.contentPhase === PeopleContentPhase.LOADING) {
+      entries.push(flowListChrome('people_content_loading_slot', 'contentLoading'));
+    } else if (this.contentPhase === PeopleContentPhase.ERROR) {
+      entries.push({ key: 'people_content_status_initial', fullWidth: true, label: 'contentStatus',
+        sourceIndex: -1, payload: 'initial' });
+    } else if (this.contentPhase === PeopleContentPhase.EMPTY) {
+      entries.push(flowListChrome('people_content_empty', 'contentEmpty'));
+    } else {
+      for (let index = 0; index < this.contentItems.length; index += 1) {
+        const item: PeopleContentItem = this.contentItems[index];
+        entries.push(flowListCard(`people_content_${item.kind}_${item.id}`, index, item));
+      }
+      if (this.contentErrorMessage.length > 0) {
+        entries.push({ key: 'people_content_status_retry', fullWidth: true, label: 'contentStatus',
+          sourceIndex: -1, payload: 'retry' });
+      }
+      if (this.contentLoadingMore || this.contentCanLoadMore) {
+        entries.push(flowListChrome('people_content_load_more', 'footer'));
+      }
+    }
+    this.flowSource.replace(entries);
+    const gap = 10;
+    this.flowSections.splice(0, this.flowSections.length(),
+      buildFlowListSections(entries, this.wideSpec().columns, gap, 0));
   }
   private contentController?: PeopleContentController;
   private readonly contentScroller: Scroller = new Scroller();
@@ -264,7 +310,7 @@ export struct PeopleDetailPage {
         })
       } else if (this.profile !== undefined) {
         Stack({ alignContent: Alignment.Top }) {
-          this.loadedProfile(this.profile)
+          this.loadedProfile()
           if (this.tabsPinned) {
             // 吸顶后的选项卡条：贴在 HDS 标题栏下沿，列表卡片从其下方透明穿过
             Column() {
@@ -275,7 +321,7 @@ export struct PeopleDetailPage {
             }
             .margin({ top: floatingTitleBarOffset() })
             // 与流内选项卡条同一居中口径（列表 padding 差值 + 自带 12vp）
-            .padding({ left: this.listEdgePaddingVp(), right: this.listEdgePaddingVp() })
+            .padding({ left: this.wideContentPaddingVp(), right: this.wideContentPaddingVp() })
             .width('100%')
           }
         }
@@ -319,157 +365,184 @@ export struct PeopleDetailPage {
     }
   }
 
+  /** 资料头内容（头像/昵称/统计/关注）：原资料头 ListItem 内容原样迁出，供瀑布流通栏条目渲染。 */
   @Builder
-  private loadedProfile(profile: PeopleProfile) {
-    List({ scroller: this.contentScroller }) {
-      ListItem() {
-        Column({ space: $r('app.float.spacing_large') }) {
-          if (profile.avatarUrl !== undefined) {
-            Image(profile.avatarUrl)
-              .id('people_detail_avatar')
-              .width(88)
-              .height(88)
-              .borderRadius(44)
-              .objectFit(ImageFit.Cover)
-          } else {
-            Text(profile.name.charAt(0))
-              .id('people_detail_avatar_fallback')
-              .width(88)
-              .height(88)
-              .borderRadius(44)
-              .backgroundColor($r('app.color.surface_background'))
-              .fontSize($r('app.float.display_font_size'))
-              .fontColor(this.resolvedThemeColor)
-              .textAlign(TextAlign.Center)
-          }
-
-          Column({ space: $r('app.float.spacing_small') }) {
-            Text(profile.name)
-              .id('people_detail_name')
-              .fontSize($r('app.float.display_font_size'))
-              .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.primary_text'))
-              .textAlign(TextAlign.Center)
-            if (profile.isOrganization) {
-              Text('机构账号')
-                .id('people_detail_organization')
-                .fontSize($r('app.float.secondary_font_size'))
-                .fontColor(this.resolvedThemeColor)
-            }
-            if (profile.headline.length > 0) {
-              Text(profile.headline)
-                .id('people_detail_headline')
-                .fontSize($r('app.float.body_font_size'))
-                .fontColor($r('app.color.secondary_text'))
-                .textAlign(TextAlign.Center)
-                .width('100%')
-            }
-          }
-          .alignItems(HorizontalAlign.Center)
-          .width('100%')
-          // 顶栏联动阈值：昵称块相对资料列的 y+height 即其底边滚到顶栏下沿所需的偏移（vp）
-          .onAreaChange((_oldArea: Area, newArea: Area): void => {
-            const bottom = Number(newArea.position.y) + Number(newArea.height);
-            if (bottom > 0 && Math.abs(bottom - this.titleAnchorVp) > 1) {
-              this.titleAnchorVp = bottom;
-            }
-          })
-
-          Row() {
-            this.profileStatistic('回答', profile.answerCount, 'answers')
-            this.profileStatistic('文章', profile.articleCount, 'articles')
-            this.profileStatistic('关注', profile.followingCount, 'following')
-            this.profileStatistic('粉丝', this.followerCount, 'followers')
-          }
-          .id('people_detail_statistics')
-          .width('100%')
-          .justifyContent(FlexAlign.SpaceEvenly)
-          .padding($r('app.float.spacing_medium'))
+  private profileHeader(profile: PeopleProfile) {
+    Column({ space: $r('app.float.spacing_large') }) {
+      if (profile.avatarUrl !== undefined) {
+        Image(profile.avatarUrl)
+          .id('people_detail_avatar')
+          .width(88)
+          .height(88)
+          .borderRadius(44)
+          .objectFit(ImageFit.Cover)
+      } else {
+        Text(profile.name.charAt(0))
+          .id('people_detail_avatar_fallback')
+          .width(88)
+          .height(88)
+          .borderRadius(44)
           .backgroundColor($r('app.color.surface_background'))
-          .borderRadius(16)
+          .fontSize($r('app.float.display_font_size'))
+          .fontColor(this.resolvedThemeColor)
+          .textAlign(TextAlign.Center)
+      }
 
-          if (this.followController !== undefined) {
-            Row({ space: $r('app.float.spacing_small') }) {
-              Button(this.following ? '已关注' : '关注', { type: ButtonType.Capsule })
-                .id('people_follow')
-                .width('100%')
-                .fontSize($r('app.float.body_font_size'))
-                .fontColor(this.following ? this.resolvedThemeColor : onThemeColor(this.resolvedThemeColor))
-                .backgroundColor(this.following
-                  ? themeColorContainerColor(this.resolvedThemeColor)
-                  : this.resolvedThemeColor)
-                .enabled(!this.followPending)
-                .onClick((): void => {
-                  this.followController?.toggleFollow();
-                })
-            }
-            .id('people_action_row')
-            .width('100%')
-          }
-
-          if (this.followErrorMessage.length > 0) {
-            Row({ space: $r('app.float.spacing_small') }) {
-              Text(this.followErrorMessage)
-                .id('people_follow_status')
-                .fontSize($r('app.float.secondary_font_size'))
-                .fontColor($r('app.color.error_text'))
-                .layoutWeight(1)
-              if (this.followRequiresLogin) {
-                Button('去登录')
-                  .backgroundColor(this.resolvedThemeColor)
-                  .fontColor(onThemeColor(this.resolvedThemeColor))
-                  .id('people_follow_login')
-                  .fontSize($r('app.float.secondary_font_size'))
-                  .onClick((): void => {
-                    this.navigate({ name: AppDestinationName.LOGIN });
-                  })
-              }
-            }
-            .width('100%')
-          }
-
-          if (this.blockingMessage.length > 0) {
-            Text(this.blockingMessage)
-              .id('people_detail_blocking_status')
-              .fontSize($r('app.float.secondary_font_size'))
-              .fontColor($r('app.color.secondary_text'))
-              .width('100%')
-          }
+      Column({ space: $r('app.float.spacing_small') }) {
+        Text(profile.name)
+          .id('people_detail_name')
+          .fontSize($r('app.float.display_font_size'))
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.primary_text'))
+          .textAlign(TextAlign.Center)
+        if (profile.isOrganization) {
+          Text('机构账号')
+            .id('people_detail_organization')
+            .fontSize($r('app.float.secondary_font_size'))
+            .fontColor(this.resolvedThemeColor)
         }
-        .alignItems(HorizontalAlign.Center)
+        if (profile.headline.length > 0) {
+          Text(profile.headline)
+            .id('people_detail_headline')
+            .fontSize($r('app.float.body_font_size'))
+            .fontColor($r('app.color.secondary_text'))
+            .textAlign(TextAlign.Center)
+            .width('100%')
+        }
+      }
+      .alignItems(HorizontalAlign.Center)
+      .width('100%')
+      // 顶栏联动阈值：昵称块相对资料列的 y+height 即其底边滚到顶栏下沿所需的偏移（vp）
+      .onAreaChange((_oldArea: Area, newArea: Area): void => {
+        const bottom = Number(newArea.position.y) + Number(newArea.height);
+        if (bottom > 0 && Math.abs(bottom - this.titleAnchorVp) > 1) {
+          this.titleAnchorVp = bottom;
+        }
+      })
+
+      Row() {
+        this.profileStatistic('回答', profile.answerCount, 'answers')
+        this.profileStatistic('文章', profile.articleCount, 'articles')
+        this.profileStatistic('关注', profile.followingCount, 'following')
+        this.profileStatistic('粉丝', this.followerCount, 'followers')
+      }
+      .id('people_detail_statistics')
+      .width('100%')
+      .justifyContent(FlexAlign.SpaceEvenly)
+      .padding($r('app.float.spacing_medium'))
+      .backgroundColor($r('app.color.surface_background'))
+      .borderRadius(16)
+
+      if (this.followController !== undefined) {
+        Row({ space: $r('app.float.spacing_small') }) {
+          Button(this.following ? '已关注' : '关注', { type: ButtonType.Capsule })
+            .id('people_follow')
+            .width('100%')
+            .fontSize($r('app.float.body_font_size'))
+            .fontColor(this.following ? this.resolvedThemeColor : onThemeColor(this.resolvedThemeColor))
+            .backgroundColor(this.following
+              ? themeColorContainerColor(this.resolvedThemeColor)
+              : this.resolvedThemeColor)
+            .enabled(!this.followPending)
+            .onClick((): void => {
+              this.followController?.toggleFollow();
+            })
+        }
+        .id('people_action_row')
         .width('100%')
-        // 宽屏资料头限 720（长文不无限拉宽），随列表交叉轴居中
-        .constraintSize({ maxWidth: READER_TEXT_MAX_WIDTH_VP })
-        // 顶栏覆盖式透明：静止时资料区从顶栏下方起排，滚动时整块内容从其下穿过
-        .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding'),
-          top: floatingTitleBarOffset(), bottom: $r('app.float.page_padding') })
-        // 选项卡条吸顶阈值：资料块高度即其内容起始位置，滚到顶栏下沿时改由覆盖层承载
-        .onAreaChange((_oldArea: Area, newArea: Area): void => {
-          const height = Number(newArea.height);
-          if (height > 0 && Math.abs(height - this.headerHeightVp) > 1) {
-            this.headerHeightVp = height;
+      }
+
+      if (this.followErrorMessage.length > 0) {
+        Row({ space: $r('app.float.spacing_small') }) {
+          Text(this.followErrorMessage)
+            .id('people_follow_status')
+            .fontSize($r('app.float.secondary_font_size'))
+            .fontColor($r('app.color.error_text'))
+            .layoutWeight(1)
+          if (this.followRequiresLogin) {
+            Button('去登录')
+              .backgroundColor(this.resolvedThemeColor)
+              .fontColor(onThemeColor(this.resolvedThemeColor))
+              .id('people_follow_login')
+              .fontSize($r('app.float.secondary_font_size'))
+              .onClick((): void => {
+                this.navigate({ name: AppDestinationName.LOGIN });
+              })
           }
-        })
-      }
-
-      ListItem() {
-        if (this.tabsPinned) {
-          Column().width('100%').height(44)
-        } else {
-          this.contentSectionTabs()
         }
+        .width('100%')
       }
 
-      ListItem() {
-        this.contentList()
+      if (this.blockingMessage.length > 0) {
+        Text(this.blockingMessage)
+          .id('people_detail_blocking_status')
+          .fontSize($r('app.float.secondary_font_size'))
+          .fontColor($r('app.color.secondary_text'))
+          .width('100%')
       }
     }
+    .alignItems(HorizontalAlign.Center)
+    .width('100%')
+    // 宽屏资料头限 720（长文不无限拉宽），随瀑布流交叉轴居中；
+    // 页面级横向内缩已由 WaterFlow padding 承担，这里不再叠加。
+    .constraintSize({ maxWidth: READER_TEXT_MAX_WIDTH_VP })
+    // 顶栏覆盖式透明：静止时资料区从顶栏下方起排，滚动时整块内容从其下穿过
+    .padding({ top: floatingTitleBarOffset(), bottom: $r('app.float.page_padding') })
+    // 选项卡条吸顶阈值：资料块高度即其内容起始位置，滚到顶栏下沿时改由覆盖层承载
+    .onAreaChange((_oldArea: Area, newArea: Area): void => {
+      const height = Number(newArea.height);
+      if (height > 0 && Math.abs(height - this.headerHeightVp) > 1) {
+        this.headerHeightVp = height;
+      }
+    })
+  }
+
+  @Builder
+  private loadedProfile() {
+    WaterFlow({ scroller: this.contentScroller, sections: this.flowSections,
+      layoutMode: WaterFlowLayoutMode.SLIDING_WINDOW }) {
+      LazyForEach(this.flowSource, (entry: FlowListItem) => {
+        FlowItem() {
+          if (entry.label === 'header') {
+            Column() { this.profileHeader(entry.payload as PeopleProfile) }
+              .width('100%')
+              .alignItems(HorizontalAlign.Center)
+          } else if (entry.label === 'tabs') {
+            if (this.tabsPinned) {
+              Column().width('100%').height(44)
+            } else {
+              this.contentSectionTabs()
+            }
+          } else if (entry.label === 'contentLoading') {
+            Column() { this.contentListLoadingPlaceholder() }
+              .width('100%')
+              .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding') })
+          } else if (entry.label === 'contentStatus') {
+            Column() { this.contentStatus(entry.payload === 'initial') }
+              .width('100%')
+              .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding') })
+          } else if (entry.label === 'contentEmpty') {
+            Text('暂时没有可展示的内容')
+              .id('people_content_empty')
+              .fontSize($r('app.float.body_font_size'))
+              .fontColor($r('app.color.secondary_text'))
+              .width('100%')
+              .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding') })
+          } else {
+            this.contentCard(entry.payload as PeopleContentItem)
+          }
+        }
+        .width('100%')
+      }, (entry: FlowListItem): string => entry.key)
+    }
+    .id('people_content_flow')
     .scrollBar(BarState.Off)
     .width('100%')
     .height('100%')
-    // 宽屏居中限宽：资料头/内容列自带 12vp 页边距，列表补足差值；资料头收窄后随交叉轴居中
-    .alignListItem(ListItemAlign.Center)
-    .padding({ left: this.listEdgePaddingVp(), right: this.listEdgePaddingVp() })
+    // 宽屏居中限宽：资料头/选项卡条/内容卡统一由列表内缩到内容宽（1120vp 上限），
+    // 资料头收窄后随交叉轴居中（对齐 Column 承担，WaterFlow 无 alignListItem）。
+    .padding({ left: this.wideContentPaddingVp(), right: this.wideContentPaddingVp() })
+    .cachedCount(Math.max(6, this.wideSpec().columns * 2))
     .onAreaChange((_oldArea: Area, newArea: Area): void => {
       const height = Number(newArea.height);
       if (height > 0 && Math.abs(height - this.listViewportVp) > 1) {
@@ -561,6 +634,8 @@ export struct PeopleDetailPage {
         scrolled: this.titleScrolled
       });
     }
+    // 资料头条目负载（头像/昵称/统计）随 profile 刷新进瀑布流快照。
+    this.rebuildFlowLayout();
   }
 
   private activateFollow(profile: PeopleProfile): void {
@@ -605,7 +680,7 @@ export struct PeopleDetailPage {
     // 吸顶后不铺色、也不用 COMPONENT_* 材质（自带白纱会把穿过的卡片糊成一条白带）：
     // backgroundEffect 的蒙版色默认透明，只留纯高斯模糊，卡片从选项卡下方透光穿过。
     // uiMaterial 为 API 26 专属，禁止引入。
-    .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding') })
+    // 横向内缩已由瀑布流/吸顶层 padding 统一承担（原 page_padding 不再叠加）。
     .backgroundColor(Color.Transparent)
     .backgroundEffect({ radius: this.tabsPinned ? 24 : 0 })
     .width('100%')
@@ -630,59 +705,17 @@ export struct PeopleDetailPage {
   }
 
   @Builder
-  private contentList() {
-    Column({ space: $r('app.float.spacing_small') }) {
-      if (this.contentPhase === PeopleContentPhase.IDLE || this.contentPhase === PeopleContentPhase.LOADING) {
-        if (this.tabsPinned) {
-          // 转圈改挂到选项卡条覆盖层下方；这里只占位，避免列表塌缩把滚动偏移钳回顶部
-          Column()
-            .width('100%')
-            .height(this.listViewportVp > 0 ? this.listViewportVp : 360)
-        } else {
-          this.contentLoadingIndicator()
-        }
-      } else if (this.contentPhase === PeopleContentPhase.ERROR) {
-        this.contentStatus(true)
-      } else if (this.contentPhase === PeopleContentPhase.EMPTY) {
-        Text('暂时没有可展示的内容')
-          .id('people_content_empty')
-          .fontSize($r('app.float.body_font_size'))
-          .fontColor($r('app.color.secondary_text'))
-      } else {
-        ForEach(buildRowGroups(this.contentItems, this.wideSpec().columns),
-          (row: Array<PeopleContentItem>) => {
-            Row({ space: FEED_COLUMN_GAP_VP }) {
-              ForEach(row, (item: PeopleContentItem) => {
-                Column() {
-                  this.contentCard(item)
-                }
-                .width(this.wideSpec().cardWidth)
-              }, (item: PeopleContentItem): string => `${item.kind}:${item.id}`)
-            }
-            .alignItems(VerticalAlign.Top)
-            .width('100%')
-          }, (row: Array<PeopleContentItem>): string =>
-            row.map((item: PeopleContentItem): string => `${item.kind}:${item.id}`).join(','))
-        if (this.contentErrorMessage.length > 0) {
-          this.contentStatus(false)
-        }
-        if (this.contentLoadingMore || this.contentCanLoadMore) {
-          Button(this.contentLoadingMore ? '正在加载更多…' : '加载更多')
-            .backgroundColor(this.resolvedThemeColor)
-            .fontColor(onThemeColor(this.resolvedThemeColor))
-            .id('people_content_load_more')
-            .width('100%')
-            .enabled(!this.contentLoadingMore)
-            .onClick((): void => {
-              this.contentController?.loadMore();
-            })
-        }
-      }
+  /** 加载占位：未吸顶时占满一屏（切换栏目不塌缩，滚动偏移不被钳位）；吸顶时流内只留占位。 */
+  @Builder
+  private contentListLoadingPlaceholder() {
+    if (this.tabsPinned) {
+      // 转圈改挂到选项卡条覆盖层下方；这里只占位，避免列表塌缩把滚动偏移钳回顶部
+      Column()
+        .width('100%')
+        .height(this.listViewportVp > 0 ? this.listViewportVp : 360)
+    } else {
+      this.contentLoadingIndicator()
     }
-    .id('people_content_list')
-    .alignItems(HorizontalAlign.Start)
-    .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding') })
-    .width('100%')
   }
 
   @Builder
@@ -819,6 +852,7 @@ export struct PeopleDetailPage {
     this.contentCanLoadMore = state.canLoadMore;
     this.contentRequiresLogin = state.requiresLogin;
     this.contentErrorMessage = state.errorMessage ?? '';
+    this.rebuildFlowLayout();
   }
 
   @Builder

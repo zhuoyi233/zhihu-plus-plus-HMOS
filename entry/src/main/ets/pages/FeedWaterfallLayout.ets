@@ -92,58 +92,6 @@ export function cardWidthForColumns(contentWidthVp: number, columns: number, col
   return Math.max(0, (contentWidthVp - (cols - 1) * gap) / cols);
 }
 
-/** 按列数把条目数组切成行（顺序切分，末行可不满）；单列时每行一条，与原布局一致。 */
-export function buildRowGroups<T>(items: Array<T>, columns: number): Array<Array<T>> {
-  const cols: number = Math.max(1, Math.floor(columns));
-  const rows: Array<Array<T>> = [];
-  for (let index = 0; index < items.length; index += cols) {
-    rows.push(items.slice(index, index + cols));
-  }
-  return rows;
-}
-
-/** 混合列表的一行：fullWidth 为真表示通栏行（单条独占一行，不参与多列分组）。 */
-export interface MixedRowGroup<T> {
-  items: Array<T>;
-  fullWidth: boolean;
-}
-
-/**
- * 混合列表的行分组：isFullWidth 判定为真的条目（日期分隔/提示行等）打断分组并独占一行，
- * 其余连续条目按列数切行；列数 ≤1 时每条一行且 fullWidth 恒为 false（调用方走原渲染路径）。
- */
-export function buildMixedRowGroups<T>(items: Array<T>, columns: number,
-  isFullWidth: (item: T) => boolean): Array<MixedRowGroup<T>> {
-  const groups: Array<MixedRowGroup<T>> = [];
-  const columnsEffective: number = Math.max(1, Math.floor(columns));
-  let run: Array<T> = [];
-  const flush = (): void => {
-    if (columnsEffective > 1) {
-      buildRowGroups(run, columnsEffective).forEach((row: Array<T>): void => {
-        if (row.length > 0) {
-          groups.push({ items: row, fullWidth: false });
-        }
-      });
-    } else {
-      run.forEach((item: T): void => {
-        groups.push({ items: [item], fullWidth: false });
-      });
-    }
-    run = [];
-  };
-  for (let index = 0; index < items.length; index += 1) {
-    const item: T = items[index];
-    if (isFullWidth(item)) {
-      flush();
-      groups.push({ items: [item], fullWidth: true });
-    } else {
-      run.push(item);
-    }
-  }
-  flush();
-  return groups;
-}
-
 /** 宽屏内容列规格：居中限宽后的横向 padding、内容宽、列数与等宽卡宽一次求齐。 */
 export interface WideColumnSpec {
   columns: number;
