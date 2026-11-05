@@ -7,6 +7,8 @@ import { publishReadHistoryOpenLocal, publishReadHistoryClear } from './HistoryT
 import { AnswerTitleBar, AnswerTitleState } from './AnswerTitleBar';
 import { ArticleTitleBar } from './ArticleTitleBar';
 import { peopleTitleText, PeopleTitleState } from './PeopleTitleBar';
+import { PeopleTitleTabs } from './PeopleContentTabs';
+import { PeopleTabsState, peopleTabsInTitleBar } from './PeopleContentTabsState';
 import { CommentTitleState, commentTitleStateId } from './CommentTitleState';
 import { NOTIFICATION_HUB_REFRESH_TICK_KEY, NOTIFICATION_HUB_UNREAD_TOTAL_KEY,
   NOTIFICATION_HUB_BUSY_KEY, NOTIFICATION_HUB_MARK_READ_TICK_KEY,
@@ -217,6 +219,7 @@ export struct AppShell {
   /** 连续阅读页问题标题（页面加载后广播；空串显示占位标题）。 */
   @StorageProp('continuousAnswerTitles') private continuousAnswerTitles: Array<ContinuousAnswerTitleState> = [];
   @StorageProp('peopleTitleStates') private peopleTitleStates: PeopleTitleState[] = [];
+  @StorageProp('peopleContentTabsStates') private peopleTabsStates: PeopleTabsState[] = [];
   @StorageProp('commentTitleStates') private commentTitleStates: CommentTitleState[] = [];
   /** 全屏图片查看器打开中（详情页广播）：同样隐藏顶栏，使查看器真全屏。 */
   @StorageProp('imagePreviewUrl') private imagePreviewUrl: string = '';
@@ -1041,8 +1044,11 @@ export struct AppShell {
       }
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: {
-          title: { mainTitle: peopleTitleText(this.peopleTitleStates, destination.id),
-            mainTitleId: 'people_detail_page_title' },
+          title: { mainTitle: peopleTabsInTitleBar(this.peopleTabsStates, destination.id)
+            ? '' : peopleTitleText(this.peopleTitleStates, destination.id),
+            mainTitleId: peopleTabsInTitleBar(this.peopleTabsStates, destination.id)
+              ? 'people_detail_native_title' : 'people_detail_page_title' },
+          stackBuilder: (): void => this.peopleTitleTabs(destination.id),
           menu: this.registeredTitleMenu(PEOPLE_DETAIL_TOP_BAR_ID, '用户主页操作'),
           divider: { showType: DividerShowType.OFF }
         } })
@@ -1837,6 +1843,12 @@ export struct AppShell {
         this.navigate({ name: AppDestinationName.NOTIFICATION });
       }
     })
+  }
+
+  /** 用户主页的宽屏栏目复用 HDS 原生返回与更多，中间只叠加分段控件。 */
+  @Builder
+  private peopleTitleTabs(id: string) {
+    PeopleTitleTabs({ personId: id })
   }
 
   /** 关注页签切换：一个材质胶囊承载整组，不给每个标签分别叠材质。 */

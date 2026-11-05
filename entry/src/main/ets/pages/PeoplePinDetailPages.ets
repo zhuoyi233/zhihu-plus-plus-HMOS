@@ -32,6 +32,9 @@ import {
 import { FollowController, FollowViewState } from './ContentInteractionState';
 import { PeopleContentController, PeopleContentPhase, PeopleContentViewState } from './PeopleContentState';
 import { publishPeopleTitle, removePeopleTitle } from './PeopleTitleBar';
+import { PeopleContentTabs } from './PeopleContentTabs';
+import { PeopleSectionRequest, PeopleTabsLayout, publishPeopleTabs, removePeopleTabs,
+  requestedPeopleSection, resolvePeopleTabsLayout } from './PeopleContentTabsState';
 import {
   BlockingActionController,
   BlockingActionViewState,
@@ -135,7 +138,7 @@ export struct PeopleDetailPage {
   @State private profile: PeopleProfile | undefined = undefined;
   @State private errorMessage: string = '';
   @State private requiresLogin: boolean = false;
-  @State private selectedSection: PeopleContentSection = PeopleContentSection.ANSWERS;
+  @State @Watch('publishTabsState') private selectedSection: PeopleContentSection = PeopleContentSection.ANSWERS;
   @State private contentPhase: PeopleContentPhase = PeopleContentPhase.IDLE;
   @State private contentItems: Array<PeopleContentItem> = [];
   @State private contentLoadingMore: boolean = false;
@@ -156,6 +159,7 @@ export struct PeopleDetailPage {
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   /** 顶栏“更多”请求：标题与返回由宿主 HDS 标题栏承载，本页只响应动作点击。 */
   @StorageProp('topBarActionTick') @Watch('onTopBarActionTick') private topBarActionTick: number = 0;
+  @StorageProp('peopleContentSectionTick') @Watch('onSectionRequest') private sectionRequestTick: number = 0;
   @StorageProp('systemFontSizeScale') @Watch('onLayoutDriverChanged') private systemFontSizeScale: number = 1;
   private readonly flowSource: FlowListSource = new FlowListSource();
   @State private flowSections: WaterFlowSections = new WaterFlowSections();
@@ -173,6 +177,26 @@ export struct PeopleDetailPage {
 
   private onLayoutDriverChanged(): void {
     this.rebuildFlowLayout();
+    this.publishTabsState();
+  }
+
+  private tabsLayout(): PeopleTabsLayout {
+    return resolvePeopleTabsLayout(this.overlayWidthVp, this.systemFontSizeScale);
+  }
+
+  private tabsInTitleBar(): boolean {
+    return this.tabsPinned && this.tabsLayout().inTitleBar;
+  }
+
+  private publishTabsState(): void {
+    publishPeopleTabs({ id: this.identifier, selected: this.selectedSection,
+      pinned: this.tabsPinned, inTitleBar: this.tabsLayout().inTitleBar });
+  }
+
+  private onSectionRequest(): void {
+    const section = requestedPeopleSection(AppStorage.get<PeopleSectionRequest>('peopleContentSectionRequest'),
+      this.identifier);
+    if (section !== undefined) { this.selectSection(section); }
   }
 
   /**
@@ -215,7 +239,7 @@ export struct PeopleDetailPage {
   @State private titleScrolled: boolean = false;
   private headerHeightVp: number = 0;
   private listViewportVp: number = 0;
-  @State private tabsPinned: boolean = false;
+  @State @Watch('publishTabsState') private tabsPinned: boolean = false;
   private blockingAction?: BlockingActionController;
   private followController?: FollowController;
 
@@ -237,6 +261,7 @@ export struct PeopleDetailPage {
   }
 
   aboutToAppear(): void {
+    this.publishTabsState();
     // 顶栏动作：加载完成前“更多”不可用，失败/未登录状态也保持可返回（返回由 HDS 承载）。
     publishTopBarActionState({ id: PEOPLE_DETAIL_TOP_BAR_ID, available: false, title: '', text: '', enabled: true });
     // P3-7：返回栈重显（页面实例与状态保留）时 aboutToAppear 可能再次触发；
@@ -266,6 +291,7 @@ export struct PeopleDetailPage {
       this.contentScroller);
     removeTopBarActionState(PEOPLE_DETAIL_TOP_BAR_ID);
     removePeopleTitle(this.identifier);
+    removePeopleTabs(this.identifier);
     this.controller?.deactivate();
     this.contentController?.deactivate();
     this.followController?.deactivate();
@@ -315,17 +341,20 @@ export struct PeopleDetailPage {
         Stack({ alignContent: Alignment.Top }) {
           this.loadedProfile()
           if (this.tabsPinned) {
-            // 吸顶后的选项卡条：贴在 HDS 标题栏下沿，列表卡片从其下方透明穿过
+            // 宽屏栏目已移到顶栏中央；窄窗只让胶囊自身采样，不再铺满矩形模糊。
             Column() {
-              this.contentSectionTabs()
+              if (!this.tabsInTitleBar()) {
+                PeopleContentTabs({ personId: this.identifier, presentation: 'floating',
+                  viewportWidthVp: this.overlayWidthVp })
+              }
               if (this.contentPhase === PeopleContentPhase.IDLE || this.contentPhase === PeopleContentPhase.LOADING) {
                 this.pinnedContentLoading()
               }
             }
-            .margin({ top: floatingTitleBarOffset() })
-            // 与流内选项卡条同一居中口径（列表 padding 差值 + 自带 12vp）
-            .padding({ left: this.wideContentPaddingVp(), right: this.wideContentPaddingVp() })
+            .margin({ top: floatingTitleBarOffset() + 8 })
             .width('100%')
+            .alignItems(HorizontalAlign.Center)
+            .hitTestBehavior(HitTestMode.Transparent)
           }
         }
         .width('100%')
@@ -512,7 +541,7 @@ export struct PeopleDetailPage {
               .alignItems(HorizontalAlign.Center)
           } else if (entry.label === 'tabs') {
             if (this.tabsPinned) {
-              Column().width('100%').height(44)
+              Column().width('100%').height(this.tabsLayout().height + 16)
             } else {
               this.contentSectionTabs()
             }
@@ -680,46 +709,14 @@ export struct PeopleDetailPage {
 
   @Builder
   private contentSectionTabs() {
-    Scroll() {
-      Row({ space: $r('app.float.spacing_small') }) {
-        this.contentTab('回答', PeopleContentSection.ANSWERS)
-        this.contentTab('文章', PeopleContentSection.ARTICLES)
-        this.contentTab('动态', PeopleContentSection.ACTIVITIES)
-      }
-      .padding({ left: $r('app.float.spacing_small'), right: $r('app.float.spacing_small') })
+    Row() {
+      PeopleContentTabs({ personId: this.identifier, presentation: 'inline', viewportWidthVp: this.overlayWidthVp })
     }
-    .scrollBar(BarState.Off)
-    .id('people_content_tabs')
-    .scrollable(ScrollDirection.Horizontal)
-    .scrollBar(BarState.Off)
-    // 吸顶后不铺色、也不用 COMPONENT_* 材质（自带白纱会把穿过的卡片糊成一条白带）：
-    // backgroundEffect 的蒙版色默认透明，只留纯高斯模糊，卡片从选项卡下方透光穿过。
-    // uiMaterial 为 API 26 专属，禁止引入。
-    // 横向内缩已由瀑布流/吸顶层 padding 统一承担（原 page_padding 不再叠加）。
-    .backgroundColor(Color.Transparent)
-    .backgroundEffect({ radius: this.tabsPinned ? 24 : 0 })
     .width('100%')
-    .height(44)
+    .height(this.tabsLayout().height + 16)
+    .justifyContent(FlexAlign.Center)
   }
 
-  @Builder
-  private contentTab(label: string, section: PeopleContentSection) {
-    Button(label, { type: ButtonType.Normal, stateEffect: true })
-      .id(`people_content_tab_${section}`)
-      .height(44)
-      .padding({ left: $r('app.float.spacing_medium'), right: $r('app.float.spacing_medium') })
-      .fontSize($r('app.float.body_font_size'))
-      .fontWeight(this.selectedSection === section ? FontWeight.Medium : FontWeight.Regular)
-      .fontColor(this.selectedSection === section ? this.resolvedThemeColor : $r('app.color.primary_text'))
-      .backgroundColor(Color.Transparent)
-      .border({
-        width: { bottom: this.selectedSection === section ? 2 : 0 },
-        color: this.resolvedThemeColor
-      })
-      .onClick((): void => this.selectSection(section))
-  }
-
-  @Builder
   /** 加载占位：未吸顶时占满一屏（切换栏目不塌缩，滚动偏移不被钳位）；吸顶时流内只留占位。 */
   @Builder
   private contentListLoadingPlaceholder() {
