@@ -177,14 +177,43 @@ export class HomeFeedController {
     return this.loadFirstPage(false);
   }
 
-  refresh(): Promise<void> {
+  /** background=true：启动快照渲染后的静默刷新，不显示下拉指示器。 */
+  refresh(background: boolean = false): Promise<void> {
     if (!this.active || this.refreshing || this.loadingMore || this.phase === HomeFeedPhase.INITIAL_LOADING) {
       if (this.active && (this.refreshing || this.loadingMore)) {
         this.refreshPending = true;
       }
       return Promise.resolve();
     }
-    return this.loadFirstPage(this.items.length > 0);
+    return this.loadFirstPage(this.items.length > 0, background);
+  }
+
+  /** 填充启动快照条目（首帧直出），不发请求，也不触碰分页游标。 */
+  restoreItems(items: Array<FeedItem>): void {
+    if (!this.active) {
+      return;
+    }
+    this.items = items.slice();
+    this.phase = this.items.length > 0 ? HomeFeedPhase.READY : HomeFeedPhase.EMPTY;
+    this.refreshing = false;
+    this.emit();
+  }
+
+  /**
+   * 双缓冲提交：把预取页合并进当前列表并立即发布 READY（新页在前、原有条目去重后留底），
+   * 不发起请求，也不重置分页游标（保留 nextCursor，后续 loadMore 沿用旧游标继续）。
+   */
+  applyPreparedPage(page: FeedPage): void {
+    if (!this.active) {
+      return;
+    }
+    this.items = mergeUniqueFeedItems(page.items, this.items);
+    this.phase = this.items.length > 0 ? HomeFeedPhase.READY : HomeFeedPhase.EMPTY;
+    this.refreshing = false;
+    this.errorMessage = undefined;
+    this.requiresLogin = false;
+    this.emit();
+    void this.filterUnbrowsedTail();
   }
 
   retry(): Promise<void> {
@@ -251,9 +280,9 @@ export class HomeFeedController {
     }
   }
 
-  private async loadFirstPage(keepVisibleItems: boolean): Promise<void> {
+  private async loadFirstPage(keepVisibleItems: boolean, background: boolean = false): Promise<void> {
     const generation = ++this.generation;
-    this.refreshing = keepVisibleItems;
+    this.refreshing = keepVisibleItems && !background;
     this.loadingMore = false;
     this.errorMessage = undefined;
     this.requiresLogin = false;
@@ -298,9 +327,14 @@ export class HomeFeedController {
           break;
         }
       }
-      this.items = initialItems;
-      this.browsed.clear();
-      this.visibleRangeKnown = false;
+      // 空结果保护：本轮没拿到条目（过滤全清、瞬时空页、预取页异常）时保留已显示内容，
+      // 不要退化成“没有可显示的内容”把用户已经看到的首页清空。
+      const hadItems = this.items.length > 0;
+      if (initialItems.length > 0 || !hadItems) {
+        this.items = initialItems;
+        this.browsed.clear();
+        this.visibleRangeKnown = false;
+      }
       this.remoteFilterPending = true;
       this.applyCursor(page);
       this.phase = this.items.length > 0 ? HomeFeedPhase.READY : HomeFeedPhase.EMPTY;

@@ -26,6 +26,7 @@ import {
   DefaultFeedRepository,
   feedItemIdentity,
   FeedItem,
+  FeedPage,
   FeedRepository,
   FeedTargetKind,
   FeedColumnMode,
@@ -54,6 +55,8 @@ import {
   pullDownRefreshPlaceholder
 } from './AppPageChrome';
 import { HomeFeedController, HomeFeedPhase, HomeFeedViewState } from './HomeFeedState';
+import { HomePendingFeed, preloadService } from './PreloadCenter';
+import { takeHomeStartupFeedItems } from './ColdStartPreload';
 import { HomeFeedMenuAction, HomeFeedMenuItem, homeFeedMenuItems, resolveHomeFeedBlockUser, resolveHomeFeedTopics } from './HomeFeedMenuState';
 import { HOME_FEED_SCROLL_KEY, topLevelScrollRegistry } from './TopLevelScrollRegistry';
 import { DraggableRefreshButton } from './components/DraggableRefreshButton';
@@ -65,6 +68,8 @@ const REFRESH_SETTLE_QUIET_MS: number = 500;
 export struct HomeFeedPage {
   repository: FeedRepository | undefined = new DefaultFeedRepository();
   contentRepositoryFactory: () => ContentRepository | undefined = () => undefined;
+  /** 双缓冲预取用的独立 FeedRepository 工厂：与控制器隔离，避免互相 cancel 与游标串扰。 */
+  homePrefetchRepositoryFactory: () => FeedRepository | undefined = () => undefined;
   rules: BlockingRuleGateway | undefined = undefined;
   history: BlockedFeedHistoryGateway | undefined = undefined;
   openedContentStore: OpenedContentStore | undefined = undefined;
@@ -147,6 +152,8 @@ export struct HomeFeedPage {
   private pullGestureFromTop: boolean = true;
   /** 下拉头最近一次回弹/收起的时刻：此后的短静默期内不响应下拉刷新。 */
   private lastRefreshSettleTime: number = 0;
+  /** 双缓冲预取页（独立仓库与新鲜度判断都在类内，不影响当前显示内容）。 */
+  private pendingFeed: HomePendingFeed = new HomePendingFeed();
 
   aboutToAppear(): void {
     // 登记给根 HdsNavigation 做 bindToScrollable：驱动标题栏滚动模糊。
@@ -165,12 +172,31 @@ export struct HomeFeedPage {
       this.errorMessage = '首页数据源未配置';
       return;
     }
-    this.controller = new HomeFeedController(repository, (state: HomeFeedViewState): void => {
-      this.applyState(state);
-    });
+    const controller: HomeFeedController = new HomeFeedController(repository,
+      (state: HomeFeedViewState): void => {
+        this.applyState(state);
+      });
+    this.controller = controller;
     this.updateInitialItemTarget();
-    this.controller.activate();
-    this.controller.loadInitial();
+    controller.activate();
+    // 首帧直出：EntryAbility 已把硬盘快照解码进内存时，先渲染再走网络刷新。
+    const seeded = takeHomeStartupFeedItems();
+    if (seeded !== undefined) {
+      controller.restoreItems(seeded);
+    }
+    // 挂载即并行预取待提交页：不等首屏 loadInitial 完成，用户第一次下拉时大概率已就绪。
+    this.prefetchPendingPage();
+    // 冷启动首屏可能来自硬盘快照（已先渲染）：设置允许时静默补一次网络刷新，
+    // 刷新期间预取让位，避免启动瞬间两路请求打同一接口。
+    void controller.loadInitial().then((): void => {
+      if (this.repository?.refreshAfterStartupCache?.() ?? false) {
+        void controller.refresh(true).then((): void => {
+          this.prefetchPendingPage();
+        });
+        return;
+      }
+      this.prefetchPendingPage();
+    });
     this.createBlockingAction();
   }
 
@@ -228,6 +254,19 @@ export struct HomeFeedPage {
     // 按下标对齐会把首行卡片顶到屏幕最上沿、盖住标题栏与下拉刷新圆圈。
     this.firstVisibleIndex = 0;
     this.listScroller.scrollTo({ xOffset: 0, yOffset: 0, animation: true });
+    // 点首页页签回到首页 = 顶层页签回到本页（HdsTabs 切页不广播信号，这里是最接近的现成回调）：
+    // 顺手补一次预取，pending 新鲜时由 prefetchPendingPage 内部直接跳过。
+    this.prefetchPendingPage();
+  }
+
+  /** 预取下一页到双缓冲：只在预加载优化开启时发请求。 */
+  private prefetchPendingPage(): void {
+    this.pendingFeed.prefetch(this.homePrefetchRepositoryFactory, preloadService().isEnabled(),
+      (page: FeedPage): void => {
+        // 新一页已在内存但还没显示：同步把它的回答正文与热评排进队列最后（HOME_PENDING），
+        // 用户下拉提交后点开任意一条都不必等（与冷启动快照直出走同一条路径）。
+        preloadService().prefetchPendingFeedAnswers(page.items);
+      });
   }
 
   build() {
@@ -308,6 +347,15 @@ export struct HomeFeedPage {
             }
             // 非顶部起手（回滑到顶后继续下拉的过冲）同样不刷新。
             if (!this.pullGestureFromTop) {
+              this.suppressPullRefresh();
+              return;
+            }
+            // 双缓冲提交：pending 存在且新鲜时直接显示预取页（零等待），随后立刻重新预取；
+            // 无可用 pending 时保持原来的控制器刷新。
+            const prepared: FeedPage | undefined = this.pendingFeed.take(this.items.length);
+            if (prepared !== undefined) {
+              this.controller?.applyPreparedPage(prepared);
+              this.prefetchPendingPage();
               this.suppressPullRefresh();
               return;
             }
@@ -1063,6 +1111,10 @@ export struct HomeFeedPage {
     this.canLoadMore = state.canLoadMore;
     this.errorMessage = state.errorMessage ?? '';
     this.requiresLogin = state.requiresLogin;
+    // 逐级预加载起点：首屏就绪即排队预取可见条目的回答正文与热评，重复条目由服务内部去重。
+    if (state.phase === HomeFeedPhase.READY && preloadService().isEnabled()) {
+      preloadService().prefetchFeedAnswers(state.items);
+    }
     // 数据变化（含过滤删除、屏蔽移除）后补判内容是否不足一屏
     this.maybeFillViewport();
   }

@@ -41,6 +41,7 @@ import {
   LinkCardMetaRepository,
   DefaultSegmentReactionRepository,
   DefaultSegmentCommentRepository,
+  SegmentCommentTarget,
   FeedRepository,
   FollowRepository,
   getAppDatabase,
@@ -79,6 +80,7 @@ import { DatabaseProbePage } from './DatabaseProbe';
 import { DeepLinkProbePage } from './DeepLinkProbe';
 import { DomainFixtureProbe } from './DomainFixtureProbe';
 import { AppShell } from './AppShell';
+import { preloadService } from './PreloadCenter';
 import { QrScanProbePage } from './QrScanProbe';
 import { QrDesktopLoginScanPage } from './QrDesktopLoginScanPage';
 import { ReaderProbe } from './ReaderProbe';
@@ -136,6 +138,8 @@ struct Index {
   @State private blockedFeedHistoryStore?: BlockedFeedHistoryStore = undefined;
   @State private preferencesStore?: AppPreferencesStore = undefined;
   @State private homeRepository?: FeedRepository = undefined;
+  /** 双缓冲预取专用首页仓库工厂（与控制器隔离）。 */
+  private homePrefetchRepositoryFactory: () => FeedRepository | undefined = () => undefined;
   @State private searchRepository?: SearchRepository = undefined;
   @State private followingRepository?: ChannelFeedRepository = undefined;
   @State private followingRecommendRepository?: ChannelFeedRepository = undefined;
@@ -148,7 +152,6 @@ struct Index {
   private questionAnswerFeedFactory: () => QuestionAnswerFeedRepository | undefined = () => undefined;
   @State private answerRepository?: ContentRepository = undefined;
   private hotCommentRepositoryFactory: () => CommentRepository | undefined = () => undefined;
-  private answerPrefetchRepositoryFactory: () => ContentRepository | undefined = () => undefined;
   @State private articleRepository?: ContentRepository = undefined;
   private continuousRepositoriesFactory: () => ContinuousAnswerRepositories = (): ContinuousAnswerRepositories =>
     new ContinuousAnswerRepositories();
@@ -224,6 +227,11 @@ struct Index {
       this.homeRepository = new DefaultFeedRepository(new ZhihuHttpClient(session), homeBlockingMatcher,
         preferencesStore, preferencesStore, new ZhihuMobileHttpClient(session), session, remoteHistory,
         new DefaultContentRepository(new ZhihuHttpClient(session)));
+      // 最后一个参数 skipStartupCache=true：pending 必须拿到网络新页，否则会反复读到同一份快照。
+      this.homePrefetchRepositoryFactory = (): FeedRepository => new DefaultFeedRepository(
+        new ZhihuHttpClient(session), homeBlockingMatcher, preferencesStore, preferencesStore,
+        new ZhihuMobileHttpClient(session), session, remoteHistory,
+        new DefaultContentRepository(new ZhihuHttpClient(session)), true);
       this.searchRepository = new DefaultSearchRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.followingRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.followingRecommendRepository = new DefaultChannelFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
@@ -239,8 +247,15 @@ struct Index {
       this.answerRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
       this.hotCommentRepositoryFactory = (): CommentRepository =>
         new DefaultCommentRepository(new ZhihuHttpClient(session));
-      this.answerPrefetchRepositoryFactory = (): ContentRepository =>
-        new DefaultContentRepository(new ZhihuHttpClient(session));
+      // 必须在两个工厂都赋值之后再装配预加载：传入闭包而不是当时的字段值，避免拿到默认空实现。
+      // 段评预取使用**独立** client：页面与预取共用同一个 client 会撞上单飞（rejected busy）。
+      preloadService().configure(
+        (): ContentRepository | undefined => this.hotQuestionRepositoryFactory(),
+        (): CommentRepository | undefined => this.hotCommentRepositoryFactory(),
+        (target: SegmentCommentTarget): CommentRepository | undefined =>
+          new DefaultSegmentCommentRepository(target, new ZhihuHttpClient(session)),
+        (): ChannelFeedRepository => new DefaultChannelFeedRepository(
+          new ZhihuHttpClient(session), blockingMatcher));
       this.articleRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
       this.continuousRepositoriesFactory = (): ContinuousAnswerRepositories => new ContinuousAnswerRepositories(session);
       this.peopleRepository = new DefaultPeopleRepository(new ZhihuHttpClient(session));
@@ -370,6 +385,7 @@ struct Index {
     HomeFeedPage({
       repository: this.homeRepository,
       contentRepositoryFactory: this.hotQuestionRepositoryFactory,
+      homePrefetchRepositoryFactory: this.homePrefetchRepositoryFactory,
       lastReadTouch: this.lastReadTouchRepository,
       reloadToken: reloadToken,
       navigate: navigate,
@@ -497,7 +513,6 @@ struct Index {
     AnswerDetailPage({
       contentId: id,
       repository: this.answerRepository,
-      answerPrefetchRepositoryFactory: this.answerPrefetchRepositoryFactory,
       hotCommentRepositoryFactory: this.hotCommentRepositoryFactory,
       linkCardMetaRepository: this.linkCardMetaRepository,
       openedContentStore: this.openedContentStore,

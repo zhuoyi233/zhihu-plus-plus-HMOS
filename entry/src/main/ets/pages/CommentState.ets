@@ -647,7 +647,7 @@ export function mergeComments(current: Array<CommentItem>, incoming: Array<Comme
   return result;
 }
 
-function commentActionError(error: Object, fallback: string): string {
+export function commentActionError(error: Object, fallback: string): string {
   if (error instanceof CommentRepositoryFailure &&
     error.kind === CommentRepositoryFailureKind.INVALID_CONTENT) {
     return '评论内容不能为空';

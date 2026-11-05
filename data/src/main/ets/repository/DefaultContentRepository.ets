@@ -1,3 +1,4 @@
+import { preloadAnswerKey, PreloadCacheTier, readPreloadJson, writePreloadJson } from '../cache/PreloadCache';
 import { Answer, Article, Question } from '../domain/DomainModels';
 import {
   decodeAnswerDetail,
@@ -82,8 +83,15 @@ export class DefaultContentRepository implements ContentRepository {
 
   async getAnswer(id: string): Promise<Answer> {
     const normalizedId = normalizeContentId(id);
+    const cacheKey = preloadAnswerKey(normalizedId);
+    const cached = readPreloadJson(cacheKey) as Answer | undefined;
+    if (cached !== undefined) {
+      return cached;
+    }
     const response = await this.fetch(ContentDetailKind.ANSWER, normalizedId);
-    return decodeAnswerDetail(response.body, normalizedId);
+    const answer = decodeAnswerDetail(response.body, normalizedId);
+    writePreloadJson(cacheKey, answer, PreloadCacheTier.ANSWER);
+    return answer;
   }
 
   async getArticle(id: string): Promise<Article> {

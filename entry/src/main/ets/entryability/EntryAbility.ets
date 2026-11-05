@@ -7,6 +7,7 @@ import { resourceManager } from '@kit.LocalizationKit';
 import { AppSessionOwner, AppThemeMode, closeAppDatabase, ContentDraftStore, DEFAULT_THEME_COLOR,
   formulaForegroundColorForColorMode, getAppDatabase, getAppSessionOwner, normalizeThemeColor,
   resolveThemeColorForDark } from 'data';
+import { warmHomeStartupFeed } from '../pages/ColdStartPreload';
 import { clearAbilityContext, setAbilityContext } from './AbilityContextHolder';
 import { maintainControlledImageCaches } from '../platform/ControlledImageCacheMaintenance';
 import { purgeExpiredShareTemporaryFiles } from '../platform/SystemShareTemporaryCleaner';
@@ -48,6 +49,8 @@ export default class EntryAbility extends UIAbility {
     setAbilityContext(this.context);
     this.lastObservedIsDark = this.readSystemIsDark();
     AppLogger.info(AppLogEvent.ABILITY_CREATED);
+    // 冷启动首帧预热：把硬盘首页快照解码进内存暂存，HomeFeedPage 首帧直接取用。
+    void warmHomeStartupFeed(this.context);
     this.sessionOwner = getAppSessionOwner(this.context);
     const tasks: Array<StartupTask> = [
       {

@@ -1,5 +1,7 @@
 import { setFeedScrollOwner } from './FeedScrollOwnership';
 import { updateStatusBarAppearance } from '../platform/SystemBars';
+import { applyPreloadOptimization, consumeHotFeedPending } from './PreloadCenter';
+import { HomeSearchBar } from './components/ReadingWidgets';
 import { QuestionTitleBar } from './QuestionTitleBar';
 import { SearchTitleBar } from './SearchTitleBar';
 import { publishReadHistoryOpenLocal, publishReadHistoryClear } from './HistoryTitleActions';
@@ -42,7 +44,8 @@ import {
   shouldAutoCheckForUpdate,
   shouldShowWhatsNewOnLaunch,
   getAppDatabase,
-  ChannelFeedSource
+  ChannelFeedSource,
+  PreloadOptimizationMode
 } from 'data';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import bundleManager from '@ohos.bundle.bundleManager';
@@ -270,6 +273,9 @@ export struct AppShell {
   @StorageProp('bottomBarItems') @Watch('onBottomBarItemsChanged') private bottomBarItems: string =
     'Home,Following,Hot,Daily,Settings';
   @StorageProp('tapToRefresh') private tapToRefresh: boolean = true;
+  /** 预加载优化开关（off/on）：变更即同步到缓存与调度器，关闭后回到项目原有加载机制。 */
+  @StorageProp('preloadOptimization') @Watch('onPreloadOptimizationChanged')
+  private preloadOptimization: string = PreloadOptimizationMode.ON;
   /** 当前生效主题色（启动时广播，深浅色已解析），驱动全壳强调色。 */
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   /** 状态栏时间/电量颜色（SystemBars 按主题广播），供 HdsNavigation.systemBarStyle 使用：
@@ -343,6 +349,8 @@ export struct AppShell {
 
   aboutToAppear(): void {
     this.themeMounted = true;
+    // 预加载优化默认开启：先按默认值落地，偏好读回后由 @Watch 纠正。
+    this.applyPreloadOptimizationSetting();
     topLevelScrollRegistry.register(SETTINGS_SCROLL_KEY, this.settingsScroller);
     this.refreshTabScrollerBindings();
     // 主题恢复完成前先按跟随系统广播（EntryAbility.onConfigurationUpdate 依赖该键判断是否联动公式换色）。
@@ -1775,35 +1783,14 @@ export struct AppShell {
     .monopolizeEvents(false)
   }
 
-  /** 首页搜索胶囊：40vp 高悬浮玻璃胶囊，降级前后同一轮廓；一级页不增加返回键。 */
+  /** 首页搜索胶囊：皮肤由 `homeSearchBarStyle` 决定（默认蓝细边白底），轮廓对三档一致。 */
   @Builder
   private homeSearchPillSlot() {
-    TopBarGlassPill({
-      content: (): void => this.homeSearchPillContent(),
-      elementId: 'home_titlebar_search',
-      label: '打开搜索',
-      contentPadding: { left: 14, right: 14, top: 0, bottom: 0 },
+    HomeSearchBar({
       onAction: (): void => {
         this.navigate({ name: AppDestinationName.SEARCH, query: '' });
       }
     })
-  }
-
-  @Builder
-  private homeSearchPillContent() {
-    Row({ space: $r('app.float.spacing_small') }) {
-      SymbolGlyph($r('sys.symbol.magnifyingglass'))
-        .fontSize(18)
-        .fontColor([$r('app.color.secondary_text')])
-      Text('搜索内容')
-        .fontSize($r('app.float.body_font_size'))
-        .fontColor($r('app.color.secondary_text'))
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .flexShrink(1)
-    }
-    .width('100%')
-    .alignItems(VerticalAlign.Center)
   }
 
   @Builder
@@ -2615,6 +2602,10 @@ export struct AppShell {
   private onTopLevelTabIndexChanged(): void {
     this.tabsController.changeIndex(this.topLevelTabIndex);
     this.broadcastBottomBarScrollOwner();
+    // 切到热榜：预取的首屏「生效一次」（重拉即命中缓存），随后预取自动重置重取。
+    if (this.activeTopLevelTab() === TopLevelTab.HOT && consumeHotFeedPending()) {
+      this.channelFeedInteractionBridge.refreshHot();
+    }
   }
 
   /** 底栏"滚动自动隐藏"只归属于信息流页签：切换到"我的/历史/收藏夹"等页签时
@@ -2952,6 +2943,15 @@ export struct AppShell {
     return TopLevelTab.HOME;
   }
 
+  private onPreloadOptimizationChanged(): void {
+    this.applyPreloadOptimizationSetting();
+  }
+
+  /** 开关落地（全部逻辑在 PreloadBootstrap）：开启即启用缓存与逐级预加载并后台预取热榜。 */
+  private applyPreloadOptimizationSetting(): void {
+    applyPreloadOptimization(this.preloadOptimization);
+  }
+
   private broadcastExperiencePreferences(value: ExperiencePreferences): void {
     const activeTab = this.activeTopLevelTab();
     const nextBottomBarOrder = this.decodeBottomBarOrder(value.bottomBarItems);
@@ -2986,6 +2986,11 @@ export struct AppShell {
     AppStorage.setOrCreate('gripFollowActions', value.gripFollowActions);
     AppStorage.setOrCreate('showHotComments', value.showHotComments);
     AppStorage.setOrCreate('questionInTitleBar', value.questionInTitleBar);
+    AppStorage.setOrCreate('hotCommentPreviewCount', value.hotCommentPreviewCount);
+    AppStorage.setOrCreate('preloadOptimization', value.preloadOptimization);
+    AppStorage.setOrCreate('scrollFeelPreset', value.scrollFeelPreset);
+    AppStorage.setOrCreate('homeSearchBarStyle', value.homeSearchBarStyle);
+    AppStorage.setOrCreate('answerSwitchStyle', value.answerSwitchStyle);
   }
 
   private decodeBottomBarOrder(raw: string): number[] {

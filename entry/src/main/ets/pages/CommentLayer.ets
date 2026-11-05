@@ -4,6 +4,7 @@ import {
   CommentRepository,
   CommentSortOrder,
   DEFAULT_THEME_COLOR,
+  DefaultSegmentCommentRepository,
   emojiStore,
   LoginSessionGateway,
   onThemeColor,
@@ -15,6 +16,7 @@ import {
   CommentPhase,
   CommentViewState
 } from './CommentState';
+import { preloadService } from './PreloadCenter';
 import { CommentLikeButton } from './CommentLikeButton';
 import { CommentLikeState, CommentLikeStateStore } from './CommentLikeState';
 import { CommentAvatar } from './components/CommentAvatar';
@@ -940,6 +942,13 @@ export struct CommentPage {
     }
     this.likeStateStore.sync(state.rootItems);
     this.likeStates = this.likeStateStore.snapshot();
+    if (state.phase === CommentPhase.READY && this.phase !== CommentPhase.READY) {
+      // 先排子评论（URGENT，插到队首），再排该内容的后续评论页（NORMAL，排在子评论之后）。
+      preloadService().prefetchChildCommentsFor(state.rootItems);
+      if (!(this.repository instanceof DefaultSegmentCommentRepository)) {
+        preloadService().prefetchCommentPages(this.contentType, this.contentId);
+      }
+    }
     this.phase = state.phase;
     this.rootListItems = state.rootItems;
     this.childListItems = state.activeRoot !== undefined ? state.items : [];

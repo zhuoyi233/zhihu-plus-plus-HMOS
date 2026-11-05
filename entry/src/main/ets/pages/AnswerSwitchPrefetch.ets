@@ -93,6 +93,17 @@ export class AnswerDetailPrefetcher {
     this.cache.delete(answerId);
   }
 
+  /** 页面被短暂遮挡（如打开评论页）：只作废在途结果并取消请求，**保留已缓存的邻答全文**。 */
+  cancelInFlight(): void {
+    this.generation += 1;
+    this.inFlight.clear();
+    const queued = this.queue.splice(0, this.queue.length);
+    for (let index = 0; index < queued.length; index += 1) {
+      queued[index].resolve(undefined);
+    }
+    this.repository.cancel();
+  }
+
   /** 账号/问题/排序变化：作废缓存与在途结果，取消已发出的预取请求。 */
   reset(): void {
     this.generation += 1;
