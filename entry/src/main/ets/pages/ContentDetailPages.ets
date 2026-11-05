@@ -11,6 +11,17 @@ import { HarmonyOSCapabilities } from '../common/platform/HarmonyOSCapabilities'
 import { publishArticleTitle } from './ArticleTitleBar';
 import { FeedContentSummary } from './components/FeedContentSummary';
 import { HotCommentSection } from './components/HotCommentSection';
+import { AnswerCommentComposer } from './components/ReadingWidgets';
+import {
+  answerSwitchDurationMs,
+  answerSwitchPaneOpacity,
+  answerSwitchPaneScale,
+  answerSwitchProgressRatio,
+  answerSwitchStyleValue,
+  answerSwitchTranslate
+} from './ReadingTweaks';
+import { COMMENT_LOGIN_REQUIRED_MESSAGE, commentActionError } from './CommentState';
+import { preloadService } from './PreloadCenter';
 import {
   HotCommentController,
   HotCommentPhase,
@@ -49,6 +60,7 @@ import {
   ChannelContentItem,
   CollectionRepository,
   CollectionSummary,
+  CommentContentKind,
   CommentRepository,
   ContentDetailKind,
   ContentRepository,
@@ -72,6 +84,8 @@ import {
   SegmentInfoMeta,
   SegmentInfoMark,
   effectiveSegmentMeta,
+  HOT_COMMENT_PREVIEW_DEFAULT,
+  AnswerSwitchStyle,
   Answer,
   Article,
   DEFAULT_THEME_COLOR,
@@ -272,6 +286,9 @@ struct ContentDetailPage {
     answerId: '', phase: HotCommentPhase.IDLE, comments: []
   };
   private hotCommentController?: HotCommentController;
+  /** 回答底部独立评论框的发送状态（与完整评论页互不影响）。 */
+  @State private hotCommentSubmitting: boolean = false;
+  private hotCommentSubmitRepository?: CommentRepository;
   hotCommentRepositoryFactory: () => CommentRepository | undefined = () => undefined;
   /** 详情页双击正文动作（对齐上游 answerDoubleTapAction）：AppStorage 广播跨页同步
    * （详情页 Ask 面板与设置页改动互见），默认询问并记住。 */
@@ -286,6 +303,9 @@ struct ContentDetailPage {
   @StorageProp('autoHideSkipAnswerButton') private autoHideSkipAnswerButton: boolean = true;
   /** 回答页底部热评卡片开关：关闭后不拉取也不渲染。 */
   @StorageProp('showHotComments') @Watch('onHotCommentsChanged') private showHotComments: boolean = true;
+  /** 回答底部热评条数：变更时就地重取（不改动正文）。 */
+  @StorageProp('hotCommentPreviewCount') @Watch('onHotCommentCountChanged')
+  private hotCommentPreviewCount: number = HOT_COMMENT_PREVIEW_DEFAULT;
   /** 操作跟随智感握姿（设置页广播）：开启后跳转按钮与收藏/评论/更多胶囊吸附握持侧。 */
   @StorageProp('gripFollowActions') @Watch('onGripFollowActionsChanged') private gripFollowActions: boolean = false;
   /** 原生智感握姿能力（SystemCapability.MultimodalAwareness.Motion，握持手识别 API 20+）：
@@ -297,6 +317,8 @@ struct ContentDetailPage {
   @StorageProp('pinAnswerDate') private pinAnswerDate: boolean = false;
   @StorageProp('answerSwitchMode') private answerSwitchMode: string = 'vertical';
   @StorageProp('answerSwitchSensitivity') private answerSwitchSensitivity: number = 1;
+  /** 整页切答动画样式：slide 位移跟手 / fade 淡入淡出 / stack 新页盖上。 */
+  @StorageProp('answerSwitchStyle') private answerSwitchStyle: string = AnswerSwitchStyle.SLIDE;
   @StorageProp('fabOpacity') private fabOpacity: number = 100;
   @StorageProp('shareActionMode') private shareActionMode: string = 'ask';
   @StorageProp('speechPlaybackTick') private speechPlaybackTick: number = 0;
@@ -490,6 +512,9 @@ struct ContentDetailPage {
     this.segmentSheetMarkIndex = markIndex;
     this.segmentSheetOpenedAt = Date.now();
     this.segmentSheetShown = true;
+    // 小窗出现后再预热这一段段评（只热当前段），并插到预加载队列最前。
+    const contentType: string = this.kind === ContentDetailKind.ARTICLE ? 'article' : 'answer';
+    preloadService().prefetchSegmentComments(paragraph, markIndex, contentType, this.activeContentId);
   }
 
   /** 划线面板打开后极短时间内的交互式关闭一律拦截：双击划线句的第二击会落在
@@ -785,9 +810,10 @@ struct ContentDetailPage {
               Stack() { this.loadedContent(item) }
                 .width('100%').height('100%')
                 .backgroundColor($r('app.color.page_background'))
-                .opacity(this.answerPaneVisible(item) ? 1 : 0)
+                .opacity(this.answerPaneOpacity(item))
                 .zIndex(this.isDisplayedContent(item) ? 1 : 0)
                 .translate(this.answerPaneTranslate(item))
+                .scale({ x: this.answerPaneScale(item), y: this.answerPaneScale(item) })
                 .hitTestBehavior(this.isDisplayedContent(item) ? HitTestMode.Default : HitTestMode.None)
                 .enabled(this.isDisplayedContent(item))
                 .accessibilityLevel(this.isDisplayedContent(item) ? 'auto' : 'no-hide-descendants')
@@ -1045,7 +1071,55 @@ struct ContentDetailPage {
     else { this.resetHotComments(); }
   }
 
-  /** 正式可见文档才发起请求；候选及离屏页既不请求，也不接纳迟到数据。 */
+  private onHotCommentCountChanged(): void {
+    if (this.content !== undefined && this.isDisplayedContent(this.content)) {
+      this.refreshHotComments(this.content, true);
+    }
+  }
+
+  /**
+   * 回答底部独立评论框：写一条根评论；成功后作废该正文的评论预取并原地重取热评，
+   * 让新评论立刻出现在热评区，不必等下一次进入正文。
+   */
+  private async submitHotComment(content: LoadedContentDetail, text: string): Promise<string> {
+    const session = this.session;
+    if (session === undefined || session.getState().status !== SessionStatus.AUTHENTICATED) {
+      return COMMENT_LOGIN_REQUIRED_MESSAGE;
+    }
+    const repository = this.hotCommentSubmitRepository ?? this.hotCommentRepositoryFactory();
+    if (repository === undefined) {
+      return '评论暂不可用，请稍后重试';
+    }
+    this.hotCommentSubmitRepository = repository;
+    this.hotCommentSubmitting = true;
+    const commentKind: CommentContentKind = this.commentContentKind();
+    try {
+      await repository.submitComment({
+        contentType: commentKind,
+        contentId: content.value.id,
+        content: text
+      });
+      this.refreshHotComments(content, true);
+      return '';
+    } catch (error) {
+      return commentActionError(error, '评论发送失败，请重试');
+    } finally {
+      this.hotCommentSubmitting = false;
+    }
+  }
+
+  /** 正文类型 → 评论内容类型：三个枚举值同名同值，直接按 kind 映射避免两处判断漂移。 */
+  private commentContentKind(): CommentContentKind {
+    if (this.kind === ContentDetailKind.ARTICLE) {
+      return CommentContentKind.ARTICLE;
+    }
+    if (this.kind === ContentDetailKind.QUESTION) {
+      return CommentContentKind.QUESTION;
+    }
+    return CommentContentKind.ANSWER;
+  }
+
+  /** 正文可见文档才发起热评请求；候选及离屏页既不请求，也不接纳迟到数据。 */
   private refreshHotComments(content: LoadedContentDetail, force: boolean = false): void {
     if (content.kind !== ContentDetailKind.ANSWER || !this.showHotComments) {
       this.resetHotComments();
@@ -1058,7 +1132,8 @@ struct ContentDetailPage {
     }
     const session = this.session?.getState();
     const accountKey = JSON.stringify([session?.status ?? 'guest', session?.profile?.id ?? '', this.loginTick]);
-    void this.hotCommentController.load(content.value.id, this.answerDocumentKey(content), accountKey, force);
+    void this.hotCommentController.load(content.value.id, this.answerDocumentKey(content), accountKey, force,
+      this.hotCommentPreviewCount);
   }
 
   @Builder
@@ -1707,24 +1782,36 @@ struct ContentDetailPage {
    */
   @Builder
   private answerFooter(content: LoadedContentDetail) {
-    if (content.kind === ContentDetailKind.ANSWER && this.showHotComments &&
-      this.isDisplayedContent(content) && this.hotCommentState.answerId === content.value.id &&
-      hotCommentSectionVisible(this.hotCommentState.phase)) {
-      HotCommentSection({
-        comments: this.hotCommentState.comments,
-        totalCount: contentCommentCount(content),
-        loading: this.hotCommentState.phase === HotCommentPhase.LOADING,
-        failed: this.hotCommentState.phase === HotCommentPhase.ERROR,
-        onRetry: (): void => {
-          if (this.isDisplayedContent(content)) { this.refreshHotComments(content, true); }
-        },
-        onOpenAll: (): void => {
-          if (this.isDisplayedContent(content)) { this.openComments(); }
-        },
-        onImagePreview: (url: string): void => {
-          if (this.isDisplayedContent(content)) { AppStorage.setOrCreate('imagePreviewUrl', url); }
+    if (content.kind === ContentDetailKind.ANSWER && this.isDisplayedContent(content) &&
+      this.phase === ContentDetailPhase.READY) {
+      // 必须是单一 Column：ListItem 里放多个兄弟组件会互相重叠（热评卡片会盖住评论框）。
+      Column({ space: $r('app.float.spacing_medium') }) {
+        // 热评区只在真正拿到热评时才出现（加载中/空/失败都不画框，避免先画再消失）。
+        if (this.hotCommentState.answerId === content.value.id &&
+          hotCommentSectionVisible(this.hotCommentState.phase)) {
+          HotCommentSection({
+            comments: this.hotCommentState.comments,
+            totalCount: contentCommentCount(content),
+            loading: false,
+            failed: false,
+            onOpenAll: (): void => {
+              if (this.isDisplayedContent(content)) { this.openComments(); }
+            },
+            onImagePreview: (url: string): void => {
+              if (this.isDisplayedContent(content)) { AppStorage.setOrCreate('imagePreviewUrl', url); }
+            }
+          })
         }
-      })
+        AnswerCommentComposer({
+          submitting: this.hotCommentSubmitting,
+          onSubmit: (text: string): Promise<string> => {
+            if (!this.isDisplayedContent(content)) { return Promise.resolve('当前正文已切换，请重试'); }
+            return this.submitHotComment(content, text);
+          }
+        })
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Center)
     }
   }
 
@@ -2713,7 +2800,8 @@ struct ContentDetailPage {
       }
     } else {
       this.resetHotComments();
-      this.invalidateAnswerSwitch();
+      // 页面被遮挡（打开评论/图集）：作废在途事务但保留邻答缓存，返回后切答仍零等待。
+      this.invalidateAnswerSwitch(true);
     }
   }
 
@@ -3017,6 +3105,7 @@ struct ContentDetailPage {
       this.commitAnswerPanes(prepared, direction);
       this.applyOverscrollOffset(0);
       committed = controller.commitPreparedAnswer(prepared);
+      if (committed) { performConfirmHaptic(); }
       this.publishActiveAnswerDocument();
       this.navigatorRevision += 1;
       this.answerPrefetcher?.forget(id);
@@ -3079,16 +3168,27 @@ struct ContentDetailPage {
     });
   }
 
-  private invalidateAnswerSwitch(): void {
+  /**
+   * 作废在途切答事务。
+   * `keepCache=true` 用于页面被短暂遮挡（打开评论/图集）：只取消在途请求与待提交事务，
+   * **保留已挂载的候选面板与预取缓存**，返回后上下切答仍零等待；默认会一并卸下候选与缓存。
+   */
+  private invalidateAnswerSwitch(keepCache: boolean = false): void {
     this.answerSwitchEpoch += 1;
     this.answerSwitchWaitDirection = 0;
     this.finishAnswerViewportWait(false);
     this.answerPanePreparation.cancelWait();
     this.dismissAnswerSwitchWait();
-    this.unmountAnswerCandidate();
+    if (!keepCache) {
+      this.unmountAnswerCandidate();
+    }
     this.answerNavigator?.cancelPreparedMove();
     this.controller?.cancelPreparedAnswer();
-    this.answerPrefetcher?.reset();
+    if (keepCache) {
+      this.answerPrefetcher?.cancelInFlight();
+    } else {
+      this.answerPrefetcher?.reset();
+    }
     this.navigatorBusy = false;
     this.resetAnswerOverscroll(false);
   }
@@ -3101,9 +3201,27 @@ struct ContentDetailPage {
     return this.answerViewportHeightVp > 0 ? this.answerViewportHeightVp : 800;
   }
 
-  /** 整页预览/冻结页沿切换轴的位移（横向 X、纵向 Y）。 */
+  /** 整页预览/冻结页沿切换轴的位移（横向 X、纵向 Y）；位移比例随样式变化，见 AnswerSwitchMotion。 */
   private answerSwitchPageTranslate(delta: number): TranslateOptions {
-    return this.answerSwitchMode === 'horizontal' ? { x: delta, y: 0 } : { x: 0, y: delta };
+    const horizontal: boolean = this.answerSwitchMode === 'horizontal';
+    return answerSwitchTranslate(answerSwitchStyleValue(this.answerSwitchStyle), horizontal, delta);
+  }
+
+  /** 切答过渡的跟手比例（0~1）：已过滑距离 / 一页跨度。 */
+  private answerSwitchProgress(): number {
+    return answerSwitchProgressRatio(this.answerOverscrollOffset, this.answerSwitchExtentVp());
+  }
+
+  /** 候选页缩放：只有「新页盖上」样式会变（盖卡片），其余保持 1。 */
+  private answerPaneScale(item: LoadedContentDetail): number {
+    return answerSwitchPaneScale(answerSwitchStyleValue(this.answerSwitchStyle), this.isDisplayedContent(item),
+      this.answerSwitchProgress());
+  }
+
+  /** 候选页透明度：只有「淡入淡出」样式会交接透明度；未进入可见态时恒为 0。 */
+  private answerPaneOpacity(item: LoadedContentDetail): number {
+    return answerSwitchPaneOpacity(answerSwitchStyleValue(this.answerSwitchStyle), this.answerPaneVisible(item),
+      this.isDisplayedContent(item), this.answerSwitchProgress());
   }
 
   /** 预览页问题标题占位高度（vp）：纵向切换不画标题，用正式页实测高度占位；
@@ -3114,15 +3232,16 @@ struct ContentDetailPage {
    * 页面销毁/动画被打断时也不会挂住切换流程。 */
   private animateOverscrollTo(target: number): Promise<void> {
     return new Promise<void>((resolve: () => void): void => {
+      const duration: number = answerSwitchDurationMs(answerSwitchStyleValue(this.answerSwitchStyle));
       this.getUIContext().animateTo({
-        duration: ANSWER_SWITCH_SLIDE_DURATION,
+        duration: duration,
         curve: Curve.FastOutSlowIn
       }, (): void => {
         this.applyOverscrollOffset(target);
       });
       setTimeout((): void => {
         resolve();
-      }, ANSWER_SWITCH_SLIDE_DURATION + 20);
+      }, duration + 20);
     });
   }
 
@@ -3137,8 +3256,8 @@ struct ContentDetailPage {
    * 前后两答对称准备：已挂载的跳过，仍在准备/未挂载的补拉并预挂载，供拖动时直接跟手露出。
    */
   private prefetchNeighborAnswer(previous: boolean): void {
-    if (!this.answerPageVisible() || this.kind !== ContentDetailKind.ANSWER || this.phase !== ContentDetailPhase.READY ||
-      this.interactionPending || this.navigatorBusy) { return; }
+    if (!this.answerPageVisible() || this.kind !== ContentDetailKind.ANSWER ||
+      this.phase !== ContentDetailPhase.READY || this.interactionPending || this.navigatorBusy) { return; }
     this.ensureAnswerPrefetcher();
     const direction = previous ? -1 : 1;
     const id = this.answerNavigator?.peekId(direction);
@@ -3842,6 +3961,10 @@ struct ContentDetailPage {
     if (state.phase === ContentDetailPhase.READY && state.content !== undefined) {
       this.refreshContentFavoriteState();
       this.refreshHotComments(state.content);
+      // 回答正文就绪：热评 → 下一个回答 → 当前回答评论 → 下一个回答评论；上一个回答与问题不预取。
+      if (state.content.kind === ContentDetailKind.ANSWER) {
+        preloadService().prefetchOnAnswerOpened(this.activeContentId, this.answerNavigator?.peekId(1));
+      }
       this.activateInteraction(state.content);
       if (state.content.kind === ContentDetailKind.QUESTION) {
         publishQuestionTitle({ id: this.activeContentId, title: state.content.value.title, scrolled: this.questionScrolled });
@@ -4365,8 +4488,6 @@ const ANSWER_HORIZONTAL_TRIGGER_THRESHOLD: number = 46;
 const ANSWER_OVERSCROLL_TRIGGER_THRESHOLD: number = 80;
 /** 回答下滑切换：阻尼系数，对齐上游 DAMPING_FACTOR。 */
 const ANSWER_OVERSCROLL_DAMPING_FACTOR: number = 1.2;
-/** 回答切换提交过渡：整页滑出/滑回动画时长（ms）。 */
-const ANSWER_SWITCH_SLIDE_DURATION: number = 220;
 
 /** tanh 阻尼（对齐上游 dampedOverscrollOffset）：位移趋近上限时增益渐减。 */
 function dampedOverscrollOffset(rawDelta: number, maxOverscroll: number, dampingFactor: number): number {
