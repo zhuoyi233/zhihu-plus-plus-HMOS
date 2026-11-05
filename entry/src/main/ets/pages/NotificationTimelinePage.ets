@@ -13,6 +13,7 @@ import {
   WideColumnSpec
 } from './FeedWaterfallLayout';
 import { isSafeDecimalContentId, AppDestination, AppDestinationName } from 'core';
+import { destinationScrollKey, destinationScrollRegistry } from './DestinationScrollRegistry';
 import {
   onThemeColor,
   DEFAULT_THEME_COLOR,
@@ -101,6 +102,7 @@ export struct NotificationTimelinePage {
   @State @Watch('onLayoutDriverChanged') private pageWidthVp: number = 0;
   private readonly flowSource: FlowListSource = new FlowListSource();
   @State private flowSections: WaterFlowSections = new WaterFlowSections();
+  private readonly flowScroller: Scroller = new Scroller();
   private controller?: NotificationTimelineController;
 
   /** 宽屏多列规格：内容 1120vp 居中；邀请回答页保持单列通栏行（行结构不适合分列）。 */
@@ -179,6 +181,8 @@ export struct NotificationTimelinePage {
   }
 
   aboutToDisappear(): void {
+    destinationScrollRegistry.unregister(destinationScrollKey(AppDestinationName.NOTIFICATION_ENTRY, this.entryName),
+      this.flowScroller);
     this.controller?.deactivate();
     this.controller = undefined;
     this.refreshInFlight = false;
@@ -225,7 +229,8 @@ export struct NotificationTimelinePage {
           builder: pullDownRefreshPlaceholder,
           refreshingContent: this.indicator?.view()
         }) {
-          WaterFlow({ sections: this.flowSections, layoutMode: WaterFlowLayoutMode.SLIDING_WINDOW }) {
+          WaterFlow({ scroller: this.flowScroller, sections: this.flowSections,
+            layoutMode: WaterFlowLayoutMode.SLIDING_WINDOW }) {
             LazyForEach(this.flowSource, (entry: FlowListItem) => {
               FlowItem() {
                 if (entry.label === 'list_empty') {
@@ -240,6 +245,18 @@ export struct NotificationTimelinePage {
                   this.emptyRow(entry.payload as MobileNotificationTimelineItem)
                 } else if (entry.label === 'invitation') {
                   this.invitationAnswerItem(entry.payload as MobileNotificationTimelineItem)
+                } else if (entry.label === 'loading') {
+                  Row() {
+                    LoadingProgress().width(20).height(20).color(this.resolvedThemeColor)
+                    Text('正在加载更多…')
+                      .fontSize($r('app.float.secondary_font_size'))
+                      .fontColor($r('app.color.secondary_text'))
+                      .margin({ left: 8 })
+                  }
+                  .id('notification_timeline_load_more')
+                  .justifyContent(FlexAlign.Center)
+                  .width('100%')
+                  .padding(12)
                 } else if (this.timelineColumns() <= 1) {
                   this.timelineItemRow(entry.payload as MobileNotificationTimelineItem)
                 } else {
@@ -257,6 +274,10 @@ export struct NotificationTimelinePage {
             }, (entry: FlowListItem): string => entry.key)
           }
           .id('notification_timeline_list')
+            .onAppear((): void => {
+              destinationScrollRegistry.register(destinationScrollKey(AppDestinationName.NOTIFICATION_ENTRY,
+                this.entryName), this.flowScroller);
+            })
             .width('100%')
             // 行自带 16vp 内缩；宽屏居中限宽时由列表补足差值，窄屏保持现状（差值≤0 不加）。
             .padding({

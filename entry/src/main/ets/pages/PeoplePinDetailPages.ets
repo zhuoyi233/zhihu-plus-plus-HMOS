@@ -5,6 +5,7 @@ import {
   removeTopBarActionState
 } from '../common/style/TopBarActionBus';
 import { floatingTitleBarOffset } from './AppPageChrome';
+import { destinationScrollKey, destinationScrollRegistry } from './DestinationScrollRegistry';
 import { AppDestination, AppDestinationName } from 'core';
 import {
   BlockedFeedHistoryGateway,
@@ -261,6 +262,8 @@ export struct PeopleDetailPage {
   }
 
   aboutToDisappear(): void {
+    destinationScrollRegistry.unregister(destinationScrollKey(AppDestinationName.PEOPLE, this.identifier),
+      this.contentScroller);
     removeTopBarActionState(PEOPLE_DETAIL_TOP_BAR_ID);
     removePeopleTitle(this.identifier);
     this.controller?.deactivate();
@@ -528,6 +531,14 @@ export struct PeopleDetailPage {
               .fontColor($r('app.color.secondary_text'))
               .width('100%')
               .padding({ left: $r('app.float.page_padding'), right: $r('app.float.page_padding') })
+          } else if (entry.label === 'footer') {
+            Button(this.contentLoadingMore ? '正在加载更多…' : '加载更多')
+              .backgroundColor(this.resolvedThemeColor)
+              .fontColor(onThemeColor(this.resolvedThemeColor))
+              .id('people_content_load_more')
+              .width('100%')
+              .enabled(!this.contentLoadingMore)
+              .onClick((): void => { this.contentController?.loadMore(); })
           } else {
             this.contentCard(entry.payload as PeopleContentItem)
           }
@@ -536,6 +547,10 @@ export struct PeopleDetailPage {
       }, (entry: FlowListItem): string => entry.key)
     }
     .id('people_content_flow')
+    .onAppear((): void => {
+      destinationScrollRegistry.register(destinationScrollKey(AppDestinationName.PEOPLE, this.identifier),
+        this.contentScroller);
+    })
     .scrollBar(BarState.Off)
     .width('100%')
     .height('100%')

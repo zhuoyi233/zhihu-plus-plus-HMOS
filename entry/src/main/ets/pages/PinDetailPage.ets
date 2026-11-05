@@ -60,6 +60,7 @@ import {
   pinTopContentInsetVp
 } from './PinDetailLayout';
 import { pinMetaText } from './PinMetaText';
+import { destinationScrollKey } from './DestinationScrollRegistry';
 import {
   emptyPinBlockDialogView,
   PinBlockDialogKind,
@@ -300,6 +301,7 @@ export struct PinDetailPage {
       // 与回答/文章页共用正文列表：作者区随正文滚动，首屏为悬浮 HDS 顶栏让位。
       NativeContentDocument({
         html: pin.contentHtml,
+        scrollBindingKey: destinationScrollKey(AppDestinationName.PIN, this.contentId),
         emptyMessage: '这条想法暂时没有正文',
         readingLayout: true,
         topInsetVp: pinTopContentInsetVp(this.statusBarHeightVp),

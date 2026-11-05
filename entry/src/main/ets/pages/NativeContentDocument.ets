@@ -46,6 +46,7 @@ import {
 } from './ReaderPositionAnchor';
 import { LinkCardMetaLoader, ReaderBlockView } from './ReaderBlockView';
 import { DoubleTapDetector } from './DoubleTapDetector';
+import { destinationScrollRegistry } from './DestinationScrollRegistry';
 
 /**
  * 块高缺失时的估算兜底（vp）：未渲染块按实测平均块高估，无实测值时用该值。
@@ -455,6 +456,8 @@ export struct NativeContentDocument {
    * 未提供时不渲染该段；提供时 documentFlowItem/documentFlowKey 必须一并传入。
    */
   documentFlowSource?: IDataSource = undefined;
+  /** 问题/文章路由的 HDS 滚动绑定键；回答页继续由正文几何驱动材质显隐。 */
+  scrollBindingKey: string = '';
   /** 内容段列数：≤1 时全部单列，视觉与原列表等价。 */
   @Prop @Watch('onFlowLayoutInvalidated') documentFlowColumns: number = 1;
   /** 条目稳定身份键（回答卡用 feedItemIdentity）。 */
@@ -1069,6 +1072,7 @@ export struct NativeContentDocument {
   }
 
   aboutToDisappear(): void {
+    destinationScrollRegistry.unregister(this.scrollBindingKey, this.scroller);
     if (this.positionWasActive) { this.persistReaderPosition(true); }
     this.positionMounted = false;
     this.positionWasActive = false;
@@ -1202,6 +1206,9 @@ export struct NativeContentDocument {
           })
         }
         .id('content_document_list')
+        .onAppear((): void => {
+          destinationScrollRegistry.register(this.scrollBindingKey, this.scroller);
+        })
         .width('100%')
         .height('100%')
         .scrollBar(BarState.Off)

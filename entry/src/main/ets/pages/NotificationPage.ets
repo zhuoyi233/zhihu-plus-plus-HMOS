@@ -13,6 +13,7 @@ import {
   WideColumnSpec
 } from './FeedWaterfallLayout';
 import { AppDestination, AppDestinationName } from 'core';
+import { destinationScrollKey, destinationScrollRegistry } from './DestinationScrollRegistry';
 import {
   onThemeColor,
   DEFAULT_THEME_COLOR,
@@ -104,6 +105,7 @@ export struct NotificationPage {
   @State @Watch('onLayoutDriverChanged') private pageWidthVp: number = 0;
   private readonly flowSource: FlowListSource = new FlowListSource();
   @State private flowSections: WaterFlowSections = new WaterFlowSections();
+  private readonly flowScroller: Scroller = new Scroller();
   private controller?: NotificationController;
 
   /** 宽屏多列规格：内容 1120vp 居中，会话行按信息流断点分列（多列时行内容卡片化）。 */
@@ -173,6 +175,7 @@ export struct NotificationPage {
   }
 
   aboutToDisappear(): void {
+    destinationScrollRegistry.unregister(destinationScrollKey(AppDestinationName.NOTIFICATION), this.flowScroller);
     this.controller?.deactivate();
     this.controller = undefined;
     this.refreshInFlight = false;
@@ -230,7 +233,8 @@ export struct NotificationPage {
           builder: pullDownRefreshPlaceholder,
           refreshingContent: this.indicator?.view()
         }) {
-          WaterFlow({ sections: this.flowSections, layoutMode: WaterFlowLayoutMode.SLIDING_WINDOW }) {
+          WaterFlow({ scroller: this.flowScroller, sections: this.flowSections,
+            layoutMode: WaterFlowLayoutMode.SLIDING_WINDOW }) {
             LazyForEach(this.flowSource, (entry: FlowListItem) => {
               FlowItem() {
                 if (entry.label === 'categories') {
@@ -288,6 +292,9 @@ export struct NotificationPage {
             }, (entry: FlowListItem): string => entry.key)
           }
           .id('notifications_list')
+          .onAppear((): void => {
+            destinationScrollRegistry.register(destinationScrollKey(AppDestinationName.NOTIFICATION), this.flowScroller);
+          })
           .width('100%')
           // 行自带 16vp 内缩；宽屏居中限宽时由列表补足差值，窄屏保持现状（差值≤0 不加）。
           .padding({

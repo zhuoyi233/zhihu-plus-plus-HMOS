@@ -1,6 +1,7 @@
 import { setFeedScrollOwner } from './FeedScrollOwnership';
 import { updateStatusBarAppearance } from '../platform/SystemBars';
 import { QuestionTitleBar } from './QuestionTitleBar';
+import { destinationScrollKey, destinationScrollRegistry } from './DestinationScrollRegistry';
 import { SearchTitleBar } from './SearchTitleBar';
 import { publishReadHistoryOpenLocal, publishReadHistoryClear } from './HistoryTitleActions';
 import { AnswerTitleBar, AnswerTitleState } from './AnswerTitleBar';
@@ -261,6 +262,9 @@ export struct AppShell {
   @StorageProp('topLevelScrollableTick') @Watch('refreshTabScrollerBindings')
   private topLevelScrollableTick: number = 0;
   @State private tabScrollerBindings: Map<number, Array<Scroller>> = new Map<number, Array<Scroller>>();
+  @StorageProp('destinationScrollableTick') @Watch('refreshDestinationScrollerBindings')
+  private destinationScrollableTick: number = 0;
+  @State private destinationScrollerBindings: Map<string, Scroller> = new Map<string, Scroller>();
   @State private dailyDateCursor: string = '';
   @Provide('channelFeedInteractionBridge') private channelFeedInteractionBridge: ChannelFeedInteractionBridge =
     new ChannelFeedInteractionBridge();
@@ -339,6 +343,15 @@ export struct AppShell {
   private tabScrollerBinding(tab: number): Array<Scroller> {
     const binding: Array<Scroller> | undefined = this.tabScrollerBindings.get(tab);
     return binding === undefined ? [] : binding;
+  }
+
+  private refreshDestinationScrollerBindings(): void {
+    this.destinationScrollerBindings = destinationScrollRegistry.snapshot();
+  }
+
+  private destinationScrollerBinding(name: string, id: string): Array<Scroller> {
+    const scroller = this.destinationScrollerBindings.get(destinationScrollKey(name, id));
+    return scroller === undefined ? [] : [scroller];
   }
 
   aboutToAppear(): void {
@@ -825,6 +838,7 @@ export struct AppShell {
       }
       // 同问题/文章页：沉浸顶栏（静止透明、滚动出模糊），内容延伸到顶栏之后。
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '知乎日报' }, divider: { showType: DividerShowType.OFF } } })
+      .bindToScrollable(this.destinationScrollerBinding(destination.name, destination.id))
       .hideTitleBar(this.imagePreviewUrl.length > 0)
       .onBackPressed((): boolean => {
         if (this.imagePreviewUrl.length > 0) {
@@ -848,6 +862,7 @@ export struct AppShell {
       // 与首页/我的/设置等信息流页同一套沉浸顶栏：静止透明、滚动出渐变模糊，
       // 避免详情页用常驻半透明底时在顶栏下沿形成一条"挡"住正文的实边。
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.questionTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
+      .bindToScrollable(this.destinationScrollerBinding(destination.name, destination.id))
       // 问题页正文图片同样可打开全屏查看器：隐藏顶栏，返回键优先关查看器。
       .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll || this.imagePreviewUrl.length > 0)
       .onBackPressed((): boolean => {
@@ -911,6 +926,7 @@ export struct AppShell {
       .onHidden((): void => this.setReaderRouteVisible('article', destination.id, false))
       // 同问题/回答页：走与设置/首页一致的沉浸顶栏。
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.articleTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
+      .bindToScrollable(this.destinationScrollerBinding(destination.name, destination.id))
       // 与回答页一致：沉浸式/图片查看器中隐藏顶栏，返回键优先关查看器。
       .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll || this.imagePreviewUrl.length > 0)
       .onBackPressed((): boolean => {
@@ -1030,6 +1046,7 @@ export struct AppShell {
           menu: this.registeredTitleMenu(PEOPLE_DETAIL_TOP_BAR_ID, '用户主页操作'),
           divider: { showType: DividerShowType.OFF }
         } })
+      .bindToScrollable(this.destinationScrollerBinding(destination.name, destination.id))
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.PIN) {
@@ -1043,6 +1060,7 @@ export struct AppShell {
         );
       }
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '想法' }, divider: { showType: DividerShowType.OFF } } })
+      .bindToScrollable(this.destinationScrollerBinding(destination.name, destination.id))
       // 想法正文图片可打开全屏查看器：查看时隐藏顶栏，返回键优先关查看器再退出想法。
       .hideTitleBar(this.imagePreviewUrl.length > 0)
       .onBackPressed((): boolean => {
@@ -1101,6 +1119,7 @@ export struct AppShell {
           divider: { showType: DividerShowType.OFF }
         }
       })
+      .bindToScrollable(this.destinationScrollerBinding(destination.name, ''))
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.NOTIFICATION_ENTRY) {
@@ -1120,6 +1139,8 @@ export struct AppShell {
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: { title: { mainTitle: (destination as NotificationEntryDestination).title },
           divider: { showType: DividerShowType.OFF } } })
+      .bindToScrollable(this.destinationScrollerBinding(destination.name,
+        (destination as NotificationEntryDestination).entryName))
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.PRIVATE_MESSAGE) {

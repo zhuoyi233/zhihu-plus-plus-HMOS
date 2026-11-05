@@ -2,6 +2,7 @@ import { AnswerPanePreparation } from './AnswerPanePreparation';
 import { AnswerPaneLayout } from './AnswerPaneLayout';
 import { AnswerDetailPrefetcher } from './AnswerSwitchPrefetch';
 import { QuestionAnswerDataSource } from './QuestionAnswerDataSource';
+import { destinationScrollKey } from './DestinationScrollRegistry';
 import {
   WIDE_CONTENT_MAX_WIDTH_VP,
   READER_TEXT_MAX_WIDTH_VP,
@@ -1129,6 +1130,8 @@ struct ContentDetailPage {
           linkCardMetaRepository: this.linkCardMetaRepository,
           disableEdgeSpring: this.kind === ContentDetailKind.ANSWER,
           readingLayout: true,
+          scrollBindingKey: content.kind === ContentDetailKind.ARTICLE
+            ? destinationScrollKey(AppDestinationName.ARTICLE, content.value.id) : '',
           positionKey: readerPositionKey(content.kind, content.value.id),
           positionOwnerKey: readerPositionKey(this.kind, this.contentId),
           answerDocumentKey: content.kind === ContentDetailKind.ANSWER ? this.answerDocumentKey(content) : '',
@@ -1955,6 +1958,7 @@ struct ContentDetailPage {
     }) {
       NativeContentDocument({
         html: contentHtml(content), emptyMessage: contentEmptyMessage(content), collapsible: true,
+        scrollBindingKey: destinationScrollKey(AppDestinationName.QUESTION, content.value.id),
         linkCardMetaRepository: this.linkCardMetaRepository,
         // 宽屏：整页内容 1120vp 居中，长文（信息头/正文块/尾部操作）再限 720，
         // 回答列表经 documentFlow 段进 WaterFlow（高度不齐的多列瀑布流，与首页一致）。
