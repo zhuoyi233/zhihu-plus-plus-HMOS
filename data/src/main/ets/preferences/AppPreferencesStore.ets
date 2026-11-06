@@ -160,6 +160,89 @@ export enum ShareActionMode {
   SHARE = 'share'
 }
 
+/** 正文滚动手感预设：system 跟随系统；其余档位在跟手拖动时按速度做非线性增益并调整惯性摩擦。 */
+export enum ScrollFeelPreset {
+  SYSTEM = 'system',
+  MILD = 'mild',
+  /** 标准（原顺滑）：本版本基准手感，默认值。 */
+  SMOOTH = 'smooth',
+  SWIFT = 'swift',
+  EXTREME = 'extreme',
+  STEADY = 'steady'
+}
+
+/** 首页顶部搜索栏样式：outlined 蓝细边白底（默认）/ glass 沉浸胶囊 / filled 深蓝实底。 */
+export enum HomeSearchBarStyle {
+  OUTLINED = 'outlined',
+  GLASS = 'glass',
+  FILLED = 'filled'
+}
+
+/** 回答整页切换动画样式。 */
+export enum AnswerSwitchStyle {
+  SLIDE = 'slide',
+  FADE = 'fade',
+  STACK = 'stack'
+}
+
+/** 「预加载优化」开关：关闭时完全使用项目原有加载机制，开启即启用预加载与缓存。 */
+export enum PreloadOptimizationMode {
+  OFF = 'off',
+  ON = 'on'
+}
+
+/** 预加载内存预算：默认 512MB，可在设置里切到 2GB / 4GB。 */
+export enum PreloadCacheBudget {
+  SMALL = '512m',
+  MEDIUM = '2g',
+  LARGE = '4g'
+}
+
+export function decodePreloadCacheBudget(value: preferences.ValueType): PreloadCacheBudget {
+  if (value === PreloadCacheBudget.MEDIUM) {
+    return PreloadCacheBudget.MEDIUM;
+  }
+  if (value === PreloadCacheBudget.LARGE) {
+    return PreloadCacheBudget.LARGE;
+  }
+  return PreloadCacheBudget.SMALL;
+}
+
+/** 回答底部热门评论条数：默认 3，可调 1～5。 */
+export const HOT_COMMENT_PREVIEW_DEFAULT = 3;
+export const HOT_COMMENT_PREVIEW_MIN = 1;
+export const HOT_COMMENT_PREVIEW_MAX = 5;
+
+export function decodeScrollFeelPreset(value: preferences.ValueType): ScrollFeelPreset {
+  if (value === ScrollFeelPreset.SYSTEM || value === ScrollFeelPreset.MILD || value === ScrollFeelPreset.SWIFT ||
+    value === ScrollFeelPreset.EXTREME || value === ScrollFeelPreset.STEADY) {
+    return value as ScrollFeelPreset;
+  }
+  return ScrollFeelPreset.SMOOTH;
+}
+
+export function decodeHomeSearchBarStyle(value: preferences.ValueType): HomeSearchBarStyle {
+  if (value === HomeSearchBarStyle.FILLED) {
+    return HomeSearchBarStyle.FILLED;
+  }
+  if (value === HomeSearchBarStyle.GLASS) {
+    return HomeSearchBarStyle.GLASS;
+  }
+  return HomeSearchBarStyle.OUTLINED;
+}
+
+export function decodeAnswerSwitchStyle(value: preferences.ValueType): AnswerSwitchStyle {
+  if (value === AnswerSwitchStyle.FADE || value === AnswerSwitchStyle.STACK) {
+    return value as AnswerSwitchStyle;
+  }
+  return AnswerSwitchStyle.SLIDE;
+}
+
+export function decodePreloadOptimization(value: preferences.ValueType): PreloadOptimizationMode {
+  return value === PreloadOptimizationMode.OFF
+    ? PreloadOptimizationMode.OFF : PreloadOptimizationMode.ON;
+}
+
 /** 上游外观页中不属于主题/排版/信息流的跨平台设置。 */
 export interface ExperiencePreferences {
   titleAutoHide: boolean;
@@ -190,6 +273,18 @@ export interface ExperiencePreferences {
   /** 问题标题并入顶栏：开启后回答页顶栏常驻问题标题（未滚动两行、滚动后单行），
    *  正文信息头不再重复展示；关闭时保持问题标题在信息头、滚动后才折叠进顶栏。 */
   questionInTitleBar: boolean;
+  /** 正文滚动手感预设。 */
+  scrollFeelPreset: ScrollFeelPreset;
+  /** 首页顶部搜索栏样式。 */
+  homeSearchBarStyle: HomeSearchBarStyle;
+  /** 回答整页切换动画样式。 */
+  answerSwitchStyle: AnswerSwitchStyle;
+  /** 回答底部热门评论展示条数。 */
+  hotCommentPreviewCount: number;
+  /** 预加载优化：统一内存缓存与逐级预加载的总开关。 */
+  preloadOptimization: PreloadOptimizationMode;
+  /** 预加载缓存预算：512MB（默认）/ 2GB / 4GB。 */
+  preloadCacheBudget: PreloadCacheBudget;
 }
 
 export function defaultExperiencePreferences(): ExperiencePreferences {
@@ -216,7 +311,13 @@ export function defaultExperiencePreferences(): ExperiencePreferences {
     showSearchHistory: true,
     gripFollowActions: false,
     showHotComments: true,
-    questionInTitleBar: false
+    questionInTitleBar: false,
+    scrollFeelPreset: ScrollFeelPreset.SMOOTH,
+    homeSearchBarStyle: HomeSearchBarStyle.OUTLINED,
+    answerSwitchStyle: AnswerSwitchStyle.SLIDE,
+    hotCommentPreviewCount: HOT_COMMENT_PREVIEW_DEFAULT,
+    preloadOptimization: PreloadOptimizationMode.ON,
+    preloadCacheBudget: PreloadCacheBudget.SMALL
   };
 }
 
@@ -252,7 +353,14 @@ export function normalizeExperiencePreferences(value: ExperiencePreferences): Ex
     showSearchHistory: value.showSearchHistory,
     gripFollowActions: value.gripFollowActions === true,
     showHotComments: value.showHotComments !== false,
-    questionInTitleBar: value.questionInTitleBar === true
+    questionInTitleBar: value.questionInTitleBar === true,
+    scrollFeelPreset: decodeScrollFeelPreset(value.scrollFeelPreset),
+    homeSearchBarStyle: decodeHomeSearchBarStyle(value.homeSearchBarStyle),
+    answerSwitchStyle: decodeAnswerSwitchStyle(value.answerSwitchStyle),
+    hotCommentPreviewCount: Math.min(HOT_COMMENT_PREVIEW_MAX,
+      Math.max(HOT_COMMENT_PREVIEW_MIN, Math.round(value.hotCommentPreviewCount))),
+    preloadOptimization: decodePreloadOptimization(value.preloadOptimization),
+    preloadCacheBudget: decodePreloadCacheBudget(value.preloadCacheBudget)
   };
 }
 
@@ -1354,7 +1462,15 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
         showSearchHistory: await readBoolean('showSearchHistory', defaults.showSearchHistory),
         gripFollowActions: await readBoolean('gripFollowActions', defaults.gripFollowActions),
         showHotComments: await readBoolean('showHotComments', defaults.showHotComments),
-        questionInTitleBar: await readBoolean('questionInTitleBar', defaults.questionInTitleBar)
+        questionInTitleBar: await readBoolean('questionInTitleBar', defaults.questionInTitleBar),
+        scrollFeelPreset: await readString('scrollFeelPreset', defaults.scrollFeelPreset) as ScrollFeelPreset,
+        homeSearchBarStyle: await readString('homeSearchBarStyle', defaults.homeSearchBarStyle) as HomeSearchBarStyle,
+        answerSwitchStyle: await readString('answerSwitchStyle', defaults.answerSwitchStyle) as AnswerSwitchStyle,
+        hotCommentPreviewCount: await readNumber('hotCommentPreviewCount', defaults.hotCommentPreviewCount),
+        preloadOptimization: await readString('preloadOptimization',
+          defaults.preloadOptimization) as PreloadOptimizationMode,
+        preloadCacheBudget: await readString('preloadCacheBudget',
+          defaults.preloadCacheBudget) as PreloadCacheBudget
       });
     } catch (error) {
       if (error instanceof Error) {
@@ -1400,6 +1516,12 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
       await store.put('gripFollowActions', value.gripFollowActions);
       await store.put('showHotComments', value.showHotComments);
       await store.put('questionInTitleBar', value.questionInTitleBar);
+      await store.put('scrollFeelPreset', value.scrollFeelPreset);
+      await store.put('homeSearchBarStyle', value.homeSearchBarStyle);
+      await store.put('answerSwitchStyle', value.answerSwitchStyle);
+      await store.put('hotCommentPreviewCount', value.hotCommentPreviewCount);
+      await store.put('preloadOptimization', value.preloadOptimization);
+      await store.put('preloadCacheBudget', value.preloadCacheBudget);
       await store.flush();
     } catch (error) {
       if (error instanceof Error) {

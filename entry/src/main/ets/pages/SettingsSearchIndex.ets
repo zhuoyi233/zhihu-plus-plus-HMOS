@@ -685,6 +685,78 @@ const SETTINGS_SEARCH_ENTRIES: Array<SettingsSearchEntry> = [
     fallbackAnchorId: ''
   },
   {
+    id: 'appearance_hot_comment_count',
+    title: '热评条数',
+    path: '外观与阅读体验 · 回答页',
+    keywords: '热评 条数 数量 最高赞 评论 展开',
+    visibility: SettingsEntryVisibility.ALWAYS,
+    targetKind: SettingsTargetKind.SETTING_ITEM,
+    paneId: SettingsPaneId.APPEARANCE,
+    anchorId: 'appearance_hot_comment_count',
+    highlightGroupId: 'appearance_group_answer',
+    fallbackAnchorId: ''
+  },
+  {
+    id: 'appearance_preload_optimization',
+    title: '预加载优化',
+    path: '外观与阅读体验 · 回答页',
+    keywords: '预加载 缓存 优化 内存 1GB 主页 热榜 评论 返回',
+    visibility: SettingsEntryVisibility.ALWAYS,
+    targetKind: SettingsTargetKind.SETTING_ITEM,
+    paneId: SettingsPaneId.APPEARANCE,
+    anchorId: 'appearance_preload_optimization',
+    highlightGroupId: 'appearance_group_answer',
+    fallbackAnchorId: ''
+  },
+  {
+    id: 'appearance_preload_cache_budget',
+    title: '缓存上限',
+    path: '外观与阅读体验 · 回答页',
+    keywords: '缓存 上限 内存 512MB 2GB 4GB 预加载',
+    visibility: SettingsEntryVisibility.ALWAYS,
+    targetKind: SettingsTargetKind.SETTING_ITEM,
+    paneId: SettingsPaneId.APPEARANCE,
+    anchorId: 'appearance_preload_cache_budget',
+    highlightGroupId: 'appearance_group_answer',
+    fallbackAnchorId: ''
+  },
+  {
+    id: 'appearance_answer_switch_style',
+    title: '切答动画样式',
+    path: '外观与阅读体验 · 回答页',
+    keywords: '切答 切换 动画 样式 淡入淡出 盖上 位移',
+    visibility: SettingsEntryVisibility.ALWAYS,
+    targetKind: SettingsTargetKind.SETTING_ITEM,
+    paneId: SettingsPaneId.APPEARANCE,
+    anchorId: 'appearance_answer_switch_style',
+    highlightGroupId: 'appearance_group_answer',
+    fallbackAnchorId: ''
+  },
+  {
+    id: 'appearance_scroll_feel',
+    title: '正文滚动手感',
+    path: '外观与阅读体验 · 回答页',
+    keywords: '滚动 手感 曲线 顺滑 迅捷 沉稳 惯性 摩擦',
+    visibility: SettingsEntryVisibility.ALWAYS,
+    targetKind: SettingsTargetKind.SETTING_ITEM,
+    paneId: SettingsPaneId.APPEARANCE,
+    anchorId: 'appearance_scroll_feel',
+    highlightGroupId: 'appearance_group_answer',
+    fallbackAnchorId: ''
+  },
+  {
+    id: 'appearance_home_search_bar',
+    title: '首页搜索栏样式',
+    path: '外观与阅读体验 · 搜索',
+    keywords: '首页 搜索栏 样式 蓝色 实底 玻璃 胶囊',
+    visibility: SettingsEntryVisibility.ALWAYS,
+    targetKind: SettingsTargetKind.SETTING_ITEM,
+    paneId: SettingsPaneId.APPEARANCE,
+    anchorId: 'appearance_home_search_bar',
+    highlightGroupId: 'appearance_group_search',
+    fallbackAnchorId: ''
+  },
+  {
     id: 'appearance_bottom_bar_auto_hide',
     title: '自动隐藏回答底部按钮',
     path: '外观与阅读体验 · 回答页',

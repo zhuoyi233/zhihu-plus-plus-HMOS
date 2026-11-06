@@ -76,8 +76,8 @@ export default function hotCommentStateTest(): void {
     it('hidesTheSectionOnlyWhenThereIsNothingToShow', 0, () => {
       // 有可展示热评、加载中、加载失败都占位；空结果（含评论都在但都没赞）整块隐藏。
       expect(hotCommentSectionVisible(HotCommentPhase.READY)).assertTrue();
-      expect(hotCommentSectionVisible(HotCommentPhase.LOADING)).assertTrue();
-      expect(hotCommentSectionVisible(HotCommentPhase.ERROR)).assertTrue();
+      expect(hotCommentSectionVisible(HotCommentPhase.LOADING)).assertFalse();
+      expect(hotCommentSectionVisible(HotCommentPhase.ERROR)).assertFalse();
       expect(hotCommentSectionVisible(HotCommentPhase.EMPTY)).assertFalse();
       expect(hotCommentSectionVisible(HotCommentPhase.IDLE)).assertFalse();
     });

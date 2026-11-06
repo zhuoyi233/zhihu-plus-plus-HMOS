@@ -13,6 +13,7 @@ import {
   DefaultCommentRepository,
   escapeCommentHtml
 } from './DefaultCommentRepository';
+import { preloadSegmentCommentsKey, PreloadCacheTier, readPreloadJson, writePreloadJson } from '../cache/PreloadCache';
 
 /** 划线句评论目标（对齐上游 SegmentCommentHolder）：seg_id 维度的评论流。 */
 export interface SegmentCommentTarget {
@@ -128,10 +129,21 @@ export class DefaultSegmentCommentRepository extends DefaultCommentRepository {
     if (contentType !== this.target.contentType || contentId !== this.target.contentId) {
       throw new CommentRepositoryFailure(CommentRepositoryFailureKind.INVALID_IDENTIFIER);
     }
+    // 段评也吃缓存：只有首屏 + 热度排序命中，避免把分页/时间排序页当首屏。
+    const cacheable = cursor === undefined && (orderBy ?? CommentSortOrder.SCORE) === CommentSortOrder.SCORE;
+    const cacheKey = preloadSegmentCommentsKey(this.target.contentId, this.target.segmentId);
+    const cached = cacheable ? readPreloadJson(cacheKey) as CommentPage | undefined : undefined;
+    if (cached !== undefined) {
+      return cached;
+    }
     const requestUrl = buildSegmentRootCommentsUrl(this.target, orderBy, cursor);
     const response = await this.execute(requestUrl, ZhihuHttpMethod.GET);
     const page = decodeRootCommentPage(response.body);
-    return this.deduplicate(page, cursor, requestUrl, this.deliveredSegmentIdentities);
+    const deduplicated = this.deduplicate(page, cursor, requestUrl, this.deliveredSegmentIdentities);
+    if (cacheable) {
+      writePreloadJson(cacheKey, deduplicated, PreloadCacheTier.COMMENTS);
+    }
+    return deduplicated;
   }
 
   async submitComment(input: SubmitCommentInput): Promise<CommentItem> {

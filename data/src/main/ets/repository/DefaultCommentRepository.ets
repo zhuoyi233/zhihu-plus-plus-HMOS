@@ -1,4 +1,12 @@
 import {
+  preloadChildCommentsKey,
+  preloadCommentsKey,
+  preloadCommentsPageKey,
+  PreloadCacheTier,
+  readPreloadJson,
+  writePreloadJson
+} from '../cache/PreloadCache';
+import {
   CommentContentKind,
   CommentItem,
   CommentPage,
@@ -210,12 +218,24 @@ export class DefaultCommentRepository implements CommentRepository {
     if (cursor !== undefined && this.requestedCursors.has(requestUrl)) {
       throw new CommentRepositoryFailure(CommentRepositoryFailureKind.REPEATED_CURSOR);
     }
+    // 只对默认热度排序读写缓存（分页也缓存，键带游标）；其他排序既不命中也不回填，避免串页。
+    const cacheable = (orderBy ?? CommentSortOrder.SCORE) === CommentSortOrder.SCORE;
+    const cacheKey = cursor === undefined ? preloadCommentsKey(contentType, contentId) :
+      preloadCommentsPageKey(contentType, contentId, cursor);
+    const cached = cacheable ? readPreloadJson(cacheKey) as CommentPage | undefined : undefined;
+    if (cached !== undefined) {
+      return this.deduplicate(cached, cursor, requestUrl, this.deliveredRootIdentities);
+    }
     const response = await this.execute(requestUrl, ZhihuHttpMethod.GET);
     if (requestGeneration !== this.generation) {
       throw new CommentRepositoryFailure(CommentRepositoryFailureKind.CANCELLED);
     }
     const page = decodeRootCommentPage(response.body);
-    return this.deduplicate(page, cursor, requestUrl, this.deliveredRootIdentities);
+    const result = this.deduplicate(page, cursor, requestUrl, this.deliveredRootIdentities);
+    if (cacheable) {
+      writePreloadJson(cacheKey, result, PreloadCacheTier.COMMENTS);
+    }
+    return result;
   }
 
   async getChildCommentsPage(rootCommentId: string, cursor?: string): Promise<CommentPage> {
@@ -224,12 +244,21 @@ export class DefaultCommentRepository implements CommentRepository {
     if (cursor !== undefined && this.requestedCursors.has(requestUrl)) {
       throw new CommentRepositoryFailure(CommentRepositoryFailureKind.REPEATED_CURSOR);
     }
+    const cacheKey = preloadChildCommentsKey(rootCommentId);
+    const cached = cursor === undefined ? readPreloadJson(cacheKey) as CommentPage | undefined : undefined;
+    if (cached !== undefined) {
+      return this.deduplicate(cached, cursor, requestUrl, this.deliveredChildIdentities);
+    }
     const response = await this.execute(requestUrl, ZhihuHttpMethod.GET);
     if (requestGeneration !== this.generation) {
       throw new CommentRepositoryFailure(CommentRepositoryFailureKind.CANCELLED);
     }
     const page = decodeChildCommentPage(response.body);
-    return this.deduplicate(page, cursor, requestUrl, this.deliveredChildIdentities);
+    const result = this.deduplicate(page, cursor, requestUrl, this.deliveredChildIdentities);
+    if (cursor === undefined) {
+      writePreloadJson(cacheKey, result, PreloadCacheTier.CHILD_COMMENTS);
+    }
+    return result;
   }
 
   /** 去重并更新游标集合；fresh 加载（cursor 缺省）时重置已投递集合，分页时累积。 */

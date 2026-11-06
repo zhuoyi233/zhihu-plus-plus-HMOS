@@ -129,13 +129,19 @@ export class DefaultFeedRepository implements FeedRepository {
   private deliveredItemIdentities: Set<string> = new Set<string>();
   private generation: number = 0;
   private startupLoadPending: boolean = true;
+  /** 最近一次首屏是否命中启动快照。 */
+  private startupCacheHit: boolean = false;
+  /** 命中启动快照后是否还要补一次网络刷新（沿用「启动时自动刷新首页」设置）。 */
+  private startupAutoRefresh: boolean = true;
+  /** true 时首屏不走启动快照，强制请求网络（供“下拉预取”拿到真正的新一页）。 */
+  private readonly skipStartupCache: boolean = false;
   private mixedWebCursor?: string;
   private mixedMobileCursor?: string;
 
   constructor(httpClient: ZhihuHttpClient = new ZhihuHttpClient(), blockingMatcher?: ContentBlockingMatcher,
     recommendationPreferences?: RecommendationFilterPreferencesGateway, startupCache?: HomeFeedStartupCacheGateway,
     mobileHttpClient?: ZhihuMobileHttpClient, sessionProvider?: SessionCookieProvider,
-    remoteHistory?: RemoteHistorySync, topicRepository?: ContentRepository) {
+    remoteHistory?: RemoteHistorySync, topicRepository?: ContentRepository, skipStartupCache: boolean = false) {
     this.httpClient = httpClient;
     this.blockingMatcher = blockingMatcher;
     this.recommendationPreferences = recommendationPreferences;
@@ -144,6 +150,7 @@ export class DefaultFeedRepository implements FeedRepository {
     this.sessionProvider = sessionProvider;
     this.topicRepository = topicRepository;
     this.remoteHistory = remoteHistory;
+    this.skipStartupCache = skipStartupCache;
   }
 
   subscribeRemoteReads(listener: () => void): () => void {
@@ -154,6 +161,11 @@ export class DefaultFeedRepository implements FeedRepository {
 
   async filterRemoteReads(items: Array<FeedItem>): Promise<Array<FeedItem>> {
     try { return await this.remoteHistory?.filter(items) ?? items; } catch (_error) { return items; }
+  }
+
+  /** 首屏来自快照时，页面是否应紧接着静默刷新一次（用户关掉「启动时自动刷新首页」则不刷）。 */
+  refreshAfterStartupCache(): boolean {
+    return this.startupCacheHit && this.startupAutoRefresh;
   }
 
   cancel(): void {
@@ -187,8 +199,11 @@ export class DefaultFeedRepository implements FeedRepository {
       throw new FeedRepositoryFailure(FeedRepositoryFailureKind.REPEATED_CURSOR);
     }
     let decodedPage: FeedPage | undefined;
-    if (cursor === undefined && this.startupLoadPending && !preferences.autoRefreshHomeOnStartup) {
+    // 冷启动优先读上次首页快照：先出内容，网络刷新由页面静默发起（是否补刷新沿用「启动时自动刷新首页」）。
+    if (cursor === undefined && this.startupLoadPending && !this.skipStartupCache) {
       decodedPage = await this.loadCachedPage(preferences.recommendationMode);
+      this.startupCacheHit = decodedPage !== undefined;
+      this.startupAutoRefresh = preferences.autoRefreshHomeOnStartup;
     }
     this.startupLoadPending = false;
     if (decodedPage === undefined) {

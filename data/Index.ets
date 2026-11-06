@@ -123,3 +123,6 @@ export * from './src/main/ets/emoji/EmojiStore';
 export * from './src/main/ets/preferences/ThemeColors';
 
 export * from './src/main/ets/repository/FeedTopicResolver';
+
+export * from './src/main/ets/cache/PreloadCache';
+

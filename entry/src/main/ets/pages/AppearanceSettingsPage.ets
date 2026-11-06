@@ -6,6 +6,17 @@ import {
   AppPreferencesStore,
   AppThemeMode,
   AnswerSwitchMode,
+  AnswerSwitchStyle,
+  HomeSearchBarStyle,
+  PreloadCacheBudget,
+  PreloadOptimizationMode,
+  ScrollFeelPreset,
+  decodeAnswerSwitchStyle,
+  decodeHomeSearchBarStyle,
+  decodePreloadCacheBudget,
+  decodePreloadOptimization,
+  decodeScrollFeelPreset,
+  HOT_COMMENT_PREVIEW_DEFAULT,
   contentFontSizeLevels,
   decodeContentBlockSpacing,
   decodeContentFontSize,
@@ -28,6 +39,38 @@ import {
   ShareActionMode
 } from 'data';
 import { floatingTitleBarOffset } from './AppPageChrome';
+import {
+  ANSWER_SWITCH_STYLE_DESCRIPTION,
+  answerSwitchStyleFromIndex,
+  answerSwitchStyleIndex,
+  answerSwitchStyleLabel,
+  answerSwitchStyleOptions,
+  HOME_SEARCH_BAR_DESCRIPTION,
+  homeSearchBarStyleFromIndex,
+  homeSearchBarStyleIndex,
+  homeSearchBarStyleLabel,
+  homeSearchBarStyleOptions,
+  HOT_COMMENT_COUNT_DESCRIPTION,
+  hotCommentCountFromIndex,
+  hotCommentCountIndex,
+  hotCommentCountLabel,
+  hotCommentCountOptions,
+  PRELOAD_CACHE_BUDGET_DESCRIPTION,
+  PRELOAD_OPTIMIZATION_DESCRIPTION,
+  preloadCacheBudgetFromIndex,
+  preloadCacheBudgetIndex,
+  preloadCacheBudgetLabel,
+  preloadCacheBudgetOptions,
+  preloadOptimizationFromIndex,
+  preloadOptimizationIndex,
+  preloadOptimizationLabel,
+  preloadOptimizationOptions,
+  scrollFeelPresetFromIndex,
+  scrollFeelSelectDescription,
+  scrollFeelSelectIndex,
+  scrollFeelSelectLabel,
+  scrollFeelSelectOptions
+} from './ReadingTweaks';
 
 import {
   allImmersiveMaterialModes,
@@ -116,6 +159,12 @@ export struct AppearanceSettingsPage {
   /** 回答页底部的热评预览卡片开关。 */
   @StorageProp('showHotComments') private showHotComments: boolean = true;
   @StorageProp('questionInTitleBar') private questionInTitleBar: boolean = false;
+  @StorageProp('scrollFeelPreset') private scrollFeelPreset: string = ScrollFeelPreset.SMOOTH;
+  @StorageProp('homeSearchBarStyle') private homeSearchBarStyle: string = HomeSearchBarStyle.OUTLINED;
+  @StorageProp('answerSwitchStyle') private answerSwitchStyle: string = AnswerSwitchStyle.SLIDE;
+  @StorageProp('hotCommentPreviewCount') private hotCommentPreviewCount: number = HOT_COMMENT_PREVIEW_DEFAULT;
+  @StorageProp('preloadOptimization') private preloadOptimization: string = PreloadOptimizationMode.ON;
+  @StorageProp('preloadCacheBudget') private preloadCacheBudget: string = PreloadCacheBudget.SMALL;
   @StorageProp('pinAnswerDate') private pinAnswerDate: boolean = false;
   @StorageProp('answerSwitchMode') private answerSwitchMode: string = AnswerSwitchMode.VERTICAL;
   @StorageProp('answerSwitchSensitivity') private answerSwitchSensitivity: number = 1;
@@ -329,6 +378,22 @@ export struct AppearanceSettingsPage {
             this.switchSetting('显示热评', '在回答底部展示按热度排序的前几条评论', this.showHotComments,
               'appearance_hot_comments', (value: boolean): void => this.updateExperienceBoolean('showHotComments', value))
             Divider().color($r('app.color.divider_color'))
+            this.selectSetting('预加载优化', PRELOAD_OPTIMIZATION_DESCRIPTION,
+              preloadOptimizationLabel(this.preloadOptimization), preloadOptimizationOptions(),
+              preloadOptimizationIndex(this.preloadOptimization), 'appearance_preload_optimization',
+              (index: number): void => this.updateExperienceString('preloadOptimization', preloadOptimizationFromIndex(index)))
+            Divider().color($r('app.color.divider_color'))
+            this.selectSetting('缓存上限', PRELOAD_CACHE_BUDGET_DESCRIPTION,
+              preloadCacheBudgetLabel(this.preloadCacheBudget), preloadCacheBudgetOptions(),
+              preloadCacheBudgetIndex(this.preloadCacheBudget), 'appearance_preload_cache_budget',
+              (index: number): void => this.updateExperienceString('preloadCacheBudget',
+                preloadCacheBudgetFromIndex(index)))
+            Divider().color($r('app.color.divider_color'))
+            this.selectSetting('热评条数', HOT_COMMENT_COUNT_DESCRIPTION,
+              hotCommentCountLabel(this.hotCommentPreviewCount), hotCommentCountOptions(),
+              hotCommentCountIndex(this.hotCommentPreviewCount), 'appearance_hot_comment_count',
+              (index: number): void => this.updateExperienceNumber('hotCommentPreviewCount', hotCommentCountFromIndex(index)))
+            Divider().color($r('app.color.divider_color'))
             this.selectSetting('回答切换手势', '在同一问题的回答之间切换', this.answerSwitchModeLabel(),
               this.answerSwitchModeOptions(), this.answerSwitchModeIndex(), 'appearance_answer_switch_mode',
               (index: number): void => this.updateAnswerSwitchMode(index))
@@ -342,6 +407,16 @@ export struct AppearanceSettingsPage {
                 onChange: (value: number): void => this.updateExperienceNumber('answerSwitchSensitivity', value)
               })
             }
+            Divider().color($r('app.color.divider_color'))
+            this.selectSetting('切答动画样式', ANSWER_SWITCH_STYLE_DESCRIPTION,
+              answerSwitchStyleLabel(this.answerSwitchStyle), answerSwitchStyleOptions(),
+              answerSwitchStyleIndex(this.answerSwitchStyle), 'appearance_answer_switch_style',
+              (index: number): void => this.updateExperienceString('answerSwitchStyle', answerSwitchStyleFromIndex(index)))
+            Divider().color($r('app.color.divider_color'))
+            this.selectSetting('正文滚动手感', scrollFeelSelectDescription(this.scrollFeelPreset),
+              scrollFeelSelectLabel(this.scrollFeelPreset), scrollFeelSelectOptions(),
+              scrollFeelSelectIndex(this.scrollFeelPreset), 'appearance_scroll_feel',
+              (index: number): void => this.updateExperienceString('scrollFeelPreset', scrollFeelPresetFromIndex(index)))
             Divider().color($r('app.color.divider_color'))
             this.selectSetting('双击正文动作', '详情页双击正文时执行，默认询问；可用动作取决于页面',
               answerDoubleTapActionLabel(this.answerDoubleTapAction), this.answerDoubleTapSelectOptions(),
@@ -449,6 +524,11 @@ export struct AppearanceSettingsPage {
             Divider().color($r('app.color.divider_color'))
             this.switchSetting('记录并显示搜索历史', '关闭后不再记录新的搜索关键词', this.showSearchHistory,
               'appearance_search_history', (value: boolean): void => this.updateExperienceBoolean('showSearchHistory', value))
+            Divider().color($r('app.color.divider_color'))
+            this.selectSetting('首页搜索栏样式', HOME_SEARCH_BAR_DESCRIPTION,
+              homeSearchBarStyleLabel(this.homeSearchBarStyle), homeSearchBarStyleOptions(),
+              homeSearchBarStyleIndex(this.homeSearchBarStyle), 'appearance_home_search_bar',
+              (index: number): void => this.updateExperienceString('homeSearchBarStyle', homeSearchBarStyleFromIndex(index)))
           }
           .width('100%')
           .borderRadius(settingsGroupRadius(this.feedCardStyle))
@@ -1225,7 +1305,13 @@ export struct AppearanceSettingsPage {
       showSearchHistory: this.showSearchHistory,
       gripFollowActions: this.gripFollowActions,
       showHotComments: this.showHotComments,
-      questionInTitleBar: this.questionInTitleBar
+      questionInTitleBar: this.questionInTitleBar,
+      scrollFeelPreset: decodeScrollFeelPreset(this.scrollFeelPreset),
+      homeSearchBarStyle: decodeHomeSearchBarStyle(this.homeSearchBarStyle),
+      answerSwitchStyle: decodeAnswerSwitchStyle(this.answerSwitchStyle),
+      hotCommentPreviewCount: this.hotCommentPreviewCount,
+      preloadOptimization: decodePreloadOptimization(this.preloadOptimization),
+      preloadCacheBudget: decodePreloadCacheBudget(this.preloadCacheBudget)
     });
   }
 
@@ -1255,6 +1341,7 @@ export struct AppearanceSettingsPage {
     const next = this.experiencePreferences();
     if (key === 'answerSwitchSensitivity') next.answerSwitchSensitivity = value;
     else if (key === 'pageTurnPercent') next.pageTurnPercent = value;
+    else if (key === 'hotCommentPreviewCount') next.hotCommentPreviewCount = value;
     this.persistExperience(next);
   }
 
@@ -1263,6 +1350,11 @@ export struct AppearanceSettingsPage {
     if (key === 'answerSwitchMode') next.answerSwitchMode = value as AnswerSwitchMode;
     else if (key === 'startDestination') next.startDestination = value;
     else if (key === 'shareActionMode') next.shareActionMode = value as ShareActionMode;
+    else if (key === 'scrollFeelPreset') next.scrollFeelPreset = decodeScrollFeelPreset(value);
+    else if (key === 'homeSearchBarStyle') next.homeSearchBarStyle = decodeHomeSearchBarStyle(value);
+    else if (key === 'answerSwitchStyle') next.answerSwitchStyle = decodeAnswerSwitchStyle(value);
+    else if (key === 'preloadOptimization') next.preloadOptimization = decodePreloadOptimization(value);
+    else if (key === 'preloadCacheBudget') next.preloadCacheBudget = decodePreloadCacheBudget(value);
     this.persistExperience(next);
   }
 
@@ -1291,6 +1383,11 @@ export struct AppearanceSettingsPage {
     AppStorage.setOrCreate('gripFollowActions', value.gripFollowActions);
     AppStorage.setOrCreate('showHotComments', value.showHotComments);
     AppStorage.setOrCreate('questionInTitleBar', value.questionInTitleBar);
+    AppStorage.setOrCreate('scrollFeelPreset', value.scrollFeelPreset);
+    AppStorage.setOrCreate('homeSearchBarStyle', value.homeSearchBarStyle);
+    AppStorage.setOrCreate('answerSwitchStyle', value.answerSwitchStyle);
+    AppStorage.setOrCreate('hotCommentPreviewCount', value.hotCommentPreviewCount);
+    AppStorage.setOrCreate('preloadOptimization', value.preloadOptimization);
     void this.store?.saveExperiencePreferences(value).then((): void => {
       this.statusMessage = '';
     }).catch((_error: Object): void => {

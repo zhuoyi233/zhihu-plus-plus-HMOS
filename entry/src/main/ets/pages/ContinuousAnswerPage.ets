@@ -37,6 +37,8 @@ import {
   SegmentInfoMeta,
   SegmentInfoParagraph,
   SegmentReactionRepository,
+  ScrollFeelPreset,
+  decodeScrollFeelPreset,
   UserProfile,
   VoteRepository
 } from 'data';
@@ -58,6 +60,8 @@ import { mergeSameRangeMarks } from './ContentAnnotations';
 import { LinkCardMetaLoader, ReaderBlockView } from './ReaderBlockView';
 import { SegmentPill } from './components/SegmentPill';
 import { ContentImagePreview } from './NativeContentDocument';
+import { scrollFeelAdjustedOffset, scrollFeelProfile } from './ReadingTweaks';
+import { preloadService } from './PreloadCenter';
 import { BlockingActionContext, BlockingActionController, BlockingActionPhase, BlockingActionViewState } from './BlockingActionState';
 import { getSpeechPlaybackService, SpeechPlaybackStatus } from '../platform/SpeechPlaybackService';
 import { contentDetailErrorMessage, LoadedContentDetail, recordContentOpen } from './ContentDetailState';
@@ -232,6 +236,8 @@ export struct ContinuousAnswerPage {
 
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   @StorageProp('contentBlockSpacing') private blockSpacingPercent: number = 100;
+  /** 正文滚动手感档位：只影响跟手拖动增益与惯性摩擦，不改变正文排版。 */
+  @StorageProp('scrollFeelPreset') private scrollFeelPreset: string = ScrollFeelPreset.SMOOTH;
   @StorageProp('contentTypographyPreset') private typographyPreset: string = 'comfortable';
   @StorageProp('imagePreviewUrl') @Watch('onImagePreviewChanged') private imagePreviewUrl: string = '';
   /** 沉浸阅读（与回答/文章页共用全局广播）：隐藏顶栏，返回键先退出沉浸。 */
@@ -1881,6 +1887,17 @@ export struct ContinuousAnswerPage {
         .scrollBar(BarState.Off)
         .cachedCount(6)
         .edgeEffect(EdgeEffect.Spring)
+        // 滚动手感：摩擦系数决定松手后的滑行距离，onScrollFrameBegin 只换算手指拖动阶段的位移，
+        // 惯性帧原样放行，避免二次放大导致滑行失控（档位含义见 ReadingTweaks）。
+        .friction(scrollFeelProfile(decodeScrollFeelPreset(this.scrollFeelPreset)).friction)
+        .onScrollFrameBegin((offset: number, state: ScrollState) => {
+          if (state !== ScrollState.Scroll) {
+            return { offsetRemain: offset };
+          }
+          return {
+            offsetRemain: scrollFeelAdjustedOffset(scrollFeelProfile(decodeScrollFeelPreset(this.scrollFeelPreset)), offset)
+          };
+        })
         // 沉浸式标题栏是覆盖层：首屏让出状态栏+标题行高度（P0 结论），滚动后正文穿过材质层；
         // 沉浸阅读隐藏标题栏后只保留状态栏让位。
         .padding({ left: 16, right: 16 })
@@ -2545,6 +2562,8 @@ export struct ContinuousAnswerPage {
     this.segmentSheetOpenedAt = Date.now();
     this.segmentSheetInfos = this.segmentInfosOf(answerId);
     this.segmentSheetShown = true;
+    // 小窗出现后再预热这一段段评，并插到预加载队列最前。
+    preloadService().prefetchSegmentComments(paragraph, markIndex, 'answer', answerId);
   }
 
   /** 面板打开后极短时间内的关闭一律拦截：双击划线句的第二击会落在刚弹出的面板遮罩上。 */

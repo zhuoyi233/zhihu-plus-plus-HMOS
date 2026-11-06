@@ -1,8 +1,25 @@
-import { CommentContentKind, CommentItem, CommentPage, CommentRepository, CommentSortOrder } from 'data';
+import {
+  CommentContentKind,
+  CommentItem,
+  CommentPage,
+  CommentRepository,
+  CommentSortOrder,
+  HOT_COMMENT_PREVIEW_DEFAULT,
+  HOT_COMMENT_PREVIEW_MAX,
+  HOT_COMMENT_PREVIEW_MIN
+} from 'data';
 import { commentImageUrl, stripCommentHtml } from './CommentText';
 
-/** 回答尾部「热门评论」展示条数上限。 */
-export const HOT_COMMENT_PREVIEW_LIMIT: number = 3;
+/** 回答尾部「热门评论」默认展示条数（可在设置里调整 1～5）。 */
+export const HOT_COMMENT_PREVIEW_LIMIT: number = HOT_COMMENT_PREVIEW_DEFAULT;
+
+/** 把设置里的条数收进可用区间；非法值回退默认值。 */
+export function normalizeHotCommentLimit(value: number): number {
+  if (!Number.isFinite(value)) {
+    return HOT_COMMENT_PREVIEW_DEFAULT;
+  }
+  return Math.min(HOT_COMMENT_PREVIEW_MAX, Math.max(HOT_COMMENT_PREVIEW_MIN, Math.round(value)));
+}
 
 /**
  * 从热度排序的根评论页里挑出适合在回答尾部预览的条目：
@@ -46,8 +63,8 @@ export enum HotCommentPhase {
  * 不再留一张只有「暂无热评」的空卡片。加载中与失败仍保留反馈（在文档末尾，出现/消失不推移上方正文）。
  */
 export function hotCommentSectionVisible(phase: HotCommentPhase): boolean {
-  return phase === HotCommentPhase.LOADING || phase === HotCommentPhase.ERROR ||
-    phase === HotCommentPhase.READY;
+  // 只在实际拿到热评时渲染，避免「先画一个正在加载/空态的框、随后又消失」的跳动。
+  return phase === HotCommentPhase.READY;
 }
 
 export interface HotCommentViewState {
@@ -81,8 +98,10 @@ export class HotCommentController {
     this.publish('', HotCommentPhase.IDLE, []);
   }
 
-  async load(answerId: string, documentKey: string, accountKey: string, force: boolean = false): Promise<void> {
-    const identity = JSON.stringify([answerId, documentKey, accountKey]);
+  async load(answerId: string, documentKey: string, accountKey: string, force: boolean = false,
+    limit: number = HOT_COMMENT_PREVIEW_LIMIT): Promise<void> {
+    const previewLimit = normalizeHotCommentLimit(limit);
+    const identity = JSON.stringify([answerId, documentKey, accountKey, previewLimit]);
     if (!force && this.identity === identity) { return; }
     this.reset();
     this.identity = identity;
@@ -95,7 +114,7 @@ export class HotCommentController {
       const page: CommentPage = await repository.getRootCommentsPage(
         CommentContentKind.ANSWER, answerId, CommentSortOrder.SCORE);
       if (generation !== this.generation || identity !== this.identity) { return; }
-      const comments = hotCommentPreview(page.items, HOT_COMMENT_PREVIEW_LIMIT);
+      const comments = hotCommentPreview(page.items, previewLimit);
       this.publish(answerId, comments.length > 0 ? HotCommentPhase.READY : HotCommentPhase.EMPTY, comments);
     } catch (_error) {
       if (generation === this.generation && identity === this.identity) {

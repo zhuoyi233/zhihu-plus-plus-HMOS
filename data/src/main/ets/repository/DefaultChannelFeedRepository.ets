@@ -17,6 +17,7 @@ import { HttpFailure, HttpFailureKind } from '../network/HttpFailure';
 import { ZhihuHttpClient, ZhihuHttpResponse } from '../network/ZhihuHttpClient';
 import { HOME_FEED_INCLUDE } from './DefaultFeedRepository';
 import { ChannelFeedRepository } from './ChannelFeedRepository';
+import { preloadFeedKey, readPreloadJson } from '../cache/PreloadCache';
 
 const CHANNEL_INCLUDE_QUERY = `include=${encodeURIComponent(HOME_FEED_INCLUDE).replace(/\*/g, '%2A')}`;
 export const FOLLOWING_FEED_BASE_URL = 'https://www.zhihu.com/api/v3/moments?limit=10&desktop=true';
@@ -180,6 +181,13 @@ export class DefaultChannelFeedRepository implements ChannelFeedRepository {
   }
 
   async loadPage(source: ChannelFeedSource, cursor?: string, reset: boolean = false): Promise<ChannelFeedPage> {
+    // 热榜首屏命中预取缓存时直接返回（切回热榜/回流前台即零等待）。
+    if (source === ChannelFeedSource.HOT && cursor === undefined) {
+      const cached = readPreloadJson(preloadFeedKey('hot')) as ChannelFeedPage | undefined;
+      if (cached !== undefined) {
+        return cached;
+      }
+    }
     if (cursor !== undefined && !reset && this.activeSource !== source) {
       throw new ChannelFeedRepositoryFailure(ChannelFeedRepositoryFailureKind.SOURCE_CHANGED);
     }
