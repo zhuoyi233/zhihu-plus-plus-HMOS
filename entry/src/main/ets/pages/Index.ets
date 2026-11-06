@@ -150,6 +150,8 @@ struct Index {
   @State private dailyStoryRepository?: DailyStoryRepository = undefined;
   @State private questionRepository?: ContentRepository = undefined;
   private questionAnswerFeedFactory: () => QuestionAnswerFeedRepository | undefined = () => undefined;
+  /** 回答页邻答预取专用仓库（与页面正文仓库隔离，避免互相 cancel）。 */
+  private answerPrefetchRepositoryFactory: () => ContentRepository | undefined = () => undefined;
   @State private answerRepository?: ContentRepository = undefined;
   private hotCommentRepositoryFactory: () => CommentRepository | undefined = () => undefined;
   @State private articleRepository?: ContentRepository = undefined;
@@ -245,6 +247,8 @@ struct Index {
       this.questionAnswerFeedFactory = (): QuestionAnswerFeedRepository =>
         new DefaultQuestionAnswerFeedRepository(new ZhihuHttpClient(session), blockingMatcher);
       this.answerRepository = new DefaultContentRepository(new ZhihuHttpClient(session));
+      this.answerPrefetchRepositoryFactory = (): ContentRepository =>
+        new DefaultContentRepository(new ZhihuHttpClient(session));
       this.hotCommentRepositoryFactory = (): CommentRepository =>
         new DefaultCommentRepository(new ZhihuHttpClient(session));
       // 必须在两个工厂都赋值之后再装配预加载：传入闭包而不是当时的字段值，避免拿到默认空实现。
@@ -513,6 +517,7 @@ struct Index {
     AnswerDetailPage({
       contentId: id,
       repository: this.answerRepository,
+      answerPrefetchRepositoryFactory: this.answerPrefetchRepositoryFactory,
       hotCommentRepositoryFactory: this.hotCommentRepositoryFactory,
       linkCardMetaRepository: this.linkCardMetaRepository,
       openedContentStore: this.openedContentStore,

@@ -3961,7 +3961,13 @@ struct ContentDetailPage {
     if (state.phase === ContentDetailPhase.READY && state.content !== undefined) {
       this.refreshContentFavoriteState();
       this.refreshHotComments(state.content);
-      // 回答正文就绪：热评 → 下一个回答 → 下一个回答评论；不预取上一个回答与问题，并把「当前答 ±1」设为钉住窗口。
+      // 导航器先就位再预取：信息流直达时首次 READY 还没有导航器（列表是异步拉的），
+      // 先创建它，peekId(-1)/peekId(1) 才有取值来源；列表到货后 onStateChange 里还会补一次。
+      if (state.content.kind === ContentDetailKind.ANSWER && this.answerNavigator === undefined) {
+        this.ensureAnswerNavigator(state.content.value.questionId);
+      }
+      // 回答正文就绪：下一个回答 → 当前回答评论（首屏即热评）→ 下一个回答评论；
+      // 不预取上一个回答与问题，并把「当前答 ±1」设为钉住窗口。
       if (state.content.kind === ContentDetailKind.ANSWER) {
         preloadService().prefetchOnAnswerOpened(this.answerNavigator?.peekId(-1), this.activeContentId,
           this.answerNavigator?.peekId(1));
@@ -3983,9 +3989,6 @@ struct ContentDetailPage {
           scrolled: this.articleTitleScrolled
         });
       }
-      if (state.content.kind === ContentDetailKind.ANSWER && this.answerNavigator === undefined) {
-        this.ensureAnswerNavigator(state.content.value.questionId);
-      }
       // 正文就绪后对称预取前后两答：用户停留期间后台拉完，第一次拖动即可直接跟手露出。
       if (state.content.kind === ContentDetailKind.ANSWER) {
         this.prefetchNeighborAnswers();
@@ -4000,8 +4003,12 @@ struct ContentDetailPage {
     this.answerNavigator = new QuestionAnswerNavigator(questionId, this.activeContentId, undefined, repository,
       (): void => {
         this.navigatorRevision += 1;
-        // 回答列表分页到货后才拿得到相邻回答 id，此时补一次前后邻答预取。
+        // 回答列表到货/分页后才拿得到相邻回答 id，此时补一次前后邻答预取与逐级预取。
         this.prefetchNeighborAnswers();
+        const navigator = this.answerNavigator;
+        if (navigator !== undefined) {
+          preloadService().prefetchOnAnswerOpened(navigator.peekId(-1), this.activeContentId, navigator.peekId(1));
+        }
       });
   }
 
