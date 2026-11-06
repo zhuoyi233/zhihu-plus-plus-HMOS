@@ -191,6 +191,23 @@ export enum PreloadOptimizationMode {
   ON = 'on'
 }
 
+/** 预加载内存预算：默认 512MB，可在设置里切到 2GB / 4GB。 */
+export enum PreloadCacheBudget {
+  SMALL = '512m',
+  MEDIUM = '2g',
+  LARGE = '4g'
+}
+
+export function decodePreloadCacheBudget(value: preferences.ValueType): PreloadCacheBudget {
+  if (value === PreloadCacheBudget.MEDIUM) {
+    return PreloadCacheBudget.MEDIUM;
+  }
+  if (value === PreloadCacheBudget.LARGE) {
+    return PreloadCacheBudget.LARGE;
+  }
+  return PreloadCacheBudget.SMALL;
+}
+
 /** 回答底部热门评论条数：默认 3，可调 1～5。 */
 export const HOT_COMMENT_PREVIEW_DEFAULT = 3;
 export const HOT_COMMENT_PREVIEW_MIN = 1;
@@ -266,6 +283,8 @@ export interface ExperiencePreferences {
   hotCommentPreviewCount: number;
   /** 预加载优化：统一内存缓存与逐级预加载的总开关。 */
   preloadOptimization: PreloadOptimizationMode;
+  /** 预加载缓存预算：512MB（默认）/ 2GB / 4GB。 */
+  preloadCacheBudget: PreloadCacheBudget;
 }
 
 export function defaultExperiencePreferences(): ExperiencePreferences {
@@ -297,7 +316,8 @@ export function defaultExperiencePreferences(): ExperiencePreferences {
     homeSearchBarStyle: HomeSearchBarStyle.OUTLINED,
     answerSwitchStyle: AnswerSwitchStyle.SLIDE,
     hotCommentPreviewCount: HOT_COMMENT_PREVIEW_DEFAULT,
-    preloadOptimization: PreloadOptimizationMode.ON
+    preloadOptimization: PreloadOptimizationMode.ON,
+    preloadCacheBudget: PreloadCacheBudget.SMALL
   };
 }
 
@@ -339,7 +359,8 @@ export function normalizeExperiencePreferences(value: ExperiencePreferences): Ex
     answerSwitchStyle: decodeAnswerSwitchStyle(value.answerSwitchStyle),
     hotCommentPreviewCount: Math.min(HOT_COMMENT_PREVIEW_MAX,
       Math.max(HOT_COMMENT_PREVIEW_MIN, Math.round(value.hotCommentPreviewCount))),
-    preloadOptimization: decodePreloadOptimization(value.preloadOptimization)
+    preloadOptimization: decodePreloadOptimization(value.preloadOptimization),
+    preloadCacheBudget: decodePreloadCacheBudget(value.preloadCacheBudget)
   };
 }
 
@@ -1447,7 +1468,9 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
         answerSwitchStyle: await readString('answerSwitchStyle', defaults.answerSwitchStyle) as AnswerSwitchStyle,
         hotCommentPreviewCount: await readNumber('hotCommentPreviewCount', defaults.hotCommentPreviewCount),
         preloadOptimization: await readString('preloadOptimization',
-          defaults.preloadOptimization) as PreloadOptimizationMode
+          defaults.preloadOptimization) as PreloadOptimizationMode,
+        preloadCacheBudget: await readString('preloadCacheBudget',
+          defaults.preloadCacheBudget) as PreloadCacheBudget
       });
     } catch (error) {
       if (error instanceof Error) {
@@ -1498,6 +1521,7 @@ export class AppPreferencesStore implements BlockingPreferencesGateway, Notifica
       await store.put('answerSwitchStyle', value.answerSwitchStyle);
       await store.put('hotCommentPreviewCount', value.hotCommentPreviewCount);
       await store.put('preloadOptimization', value.preloadOptimization);
+      await store.put('preloadCacheBudget', value.preloadCacheBudget);
       await store.flush();
     } catch (error) {
       if (error instanceof Error) {

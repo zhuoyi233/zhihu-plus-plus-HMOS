@@ -7,12 +7,14 @@ import {
   AnswerSwitchStyle,
   decodeAnswerSwitchStyle,
   decodeHomeSearchBarStyle,
+  decodePreloadCacheBudget,
   decodePreloadOptimization,
   decodeScrollFeelPreset,
   HomeSearchBarStyle,
   HOT_COMMENT_PREVIEW_DEFAULT,
   HOT_COMMENT_PREVIEW_MAX,
   HOT_COMMENT_PREVIEW_MIN,
+  PreloadCacheBudget,
   PreloadOptimizationMode,
   ScrollFeelPreset
 } from 'data';
@@ -214,6 +216,9 @@ export function answerSwitchPaneOpacity(style: AnswerSwitchStyle, visible: boole
 export const PRELOAD_OPTIMIZATION_DESCRIPTION: string =
   '开启后主页/热榜/回答/评论逐级预加载，相邻回答与热评常驻，返回上级不丢缓存；关闭则完全使用原有加载机制';
 
+export const PRELOAD_CACHE_BUDGET_DESCRIPTION: string =
+  '预加载内存缓存的上限；调小会立即按新配额回收，调大后随浏览逐步填充';
+
 export const HOT_COMMENT_COUNT_DESCRIPTION: string =
   '回答底部展示的最高赞评论条数；点击热评标题或评论可进入完整评论';
 
@@ -357,5 +362,39 @@ export function preloadOptimizationIndex(raw: string): number {
 
 export function preloadOptimizationFromIndex(index: number): PreloadOptimizationMode {
   return index === 1 ? PreloadOptimizationMode.ON : PreloadOptimizationMode.OFF;
+}
+
+// ---- 预加载缓存预算（三档） ----
+
+const PRELOAD_CACHE_BUDGETS: Array<PreloadCacheBudget> = [
+  PreloadCacheBudget.SMALL, PreloadCacheBudget.MEDIUM, PreloadCacheBudget.LARGE
+];
+
+function preloadCacheBudgetText(budget: PreloadCacheBudget): string {
+  if (budget === PreloadCacheBudget.MEDIUM) {
+    return '2GB';
+  }
+  return budget === PreloadCacheBudget.LARGE ? '4GB' : '512MB';
+}
+
+export function preloadCacheBudgetOptions(): SelectOption[] {
+  return [{ value: preloadCacheBudgetText(PreloadCacheBudget.SMALL) },
+    { value: preloadCacheBudgetText(PreloadCacheBudget.MEDIUM) },
+    { value: preloadCacheBudgetText(PreloadCacheBudget.LARGE) }];
+}
+
+export function preloadCacheBudgetLabel(raw: string): string {
+  return preloadCacheBudgetText(decodePreloadCacheBudget(raw));
+}
+
+export function preloadCacheBudgetIndex(raw: string): number {
+  const budget: PreloadCacheBudget = decodePreloadCacheBudget(raw);
+  const index: number = PRELOAD_CACHE_BUDGETS.indexOf(budget);
+  return index >= 0 ? index : 0;
+}
+
+export function preloadCacheBudgetFromIndex(index: number): PreloadCacheBudget {
+  return index >= 0 && index < PRELOAD_CACHE_BUDGETS.length
+    ? PRELOAD_CACHE_BUDGETS[index] : PreloadCacheBudget.SMALL;
 }
 

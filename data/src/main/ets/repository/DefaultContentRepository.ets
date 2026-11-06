@@ -1,4 +1,4 @@
-import { preloadAnswerKey, PreloadCacheTier, readPreloadJson, writePreloadJson } from '../cache/PreloadCache';
+import { preloadAnswerKey, preloadArticleKey, PreloadCacheTier, readPreloadJson, writePreloadJson } from '../cache/PreloadCache';
 import { Answer, Article, Question } from '../domain/DomainModels';
 import {
   decodeAnswerDetail,
@@ -96,8 +96,15 @@ export class DefaultContentRepository implements ContentRepository {
 
   async getArticle(id: string): Promise<Article> {
     const normalizedId = normalizeContentId(id);
+    const cacheKey = preloadArticleKey(normalizedId);
+    const cached = readPreloadJson(cacheKey) as Article | undefined;
+    if (cached !== undefined) {
+      return cached;
+    }
     const response = await this.fetch(ContentDetailKind.ARTICLE, normalizedId);
-    return decodeArticleDetail(response.body, normalizedId);
+    const article = decodeArticleDetail(response.body, normalizedId);
+    writePreloadJson(cacheKey, article, PreloadCacheTier.ANSWER);
+    return article;
   }
 
   private async fetch(kind: ContentDetailKind, id: string): Promise<ZhihuHttpResponse> {

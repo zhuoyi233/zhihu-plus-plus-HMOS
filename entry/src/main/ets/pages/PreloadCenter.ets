@@ -11,6 +11,7 @@ import {
   CommentRepository,
   CommentSortOrder,
   ContentRepository,
+  decodePreloadCacheBudget,
   decodePreloadOptimization,
   effectiveSegmentMeta,
   FeedItem,
@@ -21,7 +22,12 @@ import {
   HttpFailureKind,
   PreloadCacheTier,
   preloadAnswerKey,
+  preloadArticleKey,
   preloadCache,
+  PRELOAD_CACHE_BUDGET_2GB,
+  PRELOAD_CACHE_BUDGET_4GB,
+  PRELOAD_CACHE_BUDGET_512MB,
+  PreloadCacheBudget,
   preloadCommentsKey,
   preloadFeedKey,
   PreloadOptimizationMode,
@@ -40,10 +46,11 @@ const BUSY_MAX_RETRIES: number = 3;
 const BUSY_RETRY_BASE_DELAY_MS: number = 800;
 
 /**
- * 非豁免任务的存活上限：入队后 5s 内没跑完（还在排队或正在跑）就丢弃/中止。
- * 主页预取与「回答页的下一个回答」不设上限（`exempt`）。
+ * 任务存活上限：主页预取与「回答页的下一个回答」不设上限（`exempt`）；
+ * 评论/子评论/段评/翻页给 15s，其余（热榜）5s。到点没跑完就丢弃/中止。
  */
 const TASK_DEADLINE_MS: number = 5000;
+const COMMENT_TASK_DEADLINE_MS: number = 15000;
 
 /**
  * 任务优先级（数值越小越先执行）。
@@ -150,8 +157,8 @@ export class PreloadService {
   }
 
   /**
-   * 打开回答后按批次顺序预取：热评 → 下一个回答 → 下一个回答评论。
-   * 不预取上一个回答与所属问题（上一个回答靠缓存回溯，未命中时按需加载）。
+   * 打开回答后按批次顺序预取：下一个回答正文 → 当前回答评论（首屏含热评）→ 下一个回答评论。
+   * 热评不再单独排队，跟随评论一起取；不预取上一个回答与所属问题。
    * 同时把「当前答 ±1」设为缓存钉住窗口。
    */
   prefetchOnAnswerOpened(previousAnswerId: string | undefined, answerId: string,
@@ -160,11 +167,12 @@ export class PreloadService {
       return;
     }
     const hasNext: boolean = nextAnswerId !== undefined && nextAnswerId.length > 0;
-    const tasks: Array<PreloadTask> = [
-      this.task('hot', 'answer', answerId, PreloadPriority.NORMAL)
-    ];
+    const tasks: Array<PreloadTask> = [];
     if (hasNext) {
       tasks.push(this.task('answerOnly', 'answer', nextAnswerId as string, PreloadPriority.NORMAL, true));
+    }
+    tasks.push(this.task('comments', 'answer', answerId, PreloadPriority.NORMAL));
+    if (hasNext) {
       tasks.push(this.task('comments', 'answer', nextAnswerId as string, PreloadPriority.NORMAL));
     }
     this.pinAnswerWindow(previousAnswerId, answerId, nextAnswerId);
@@ -223,7 +231,7 @@ export class PreloadService {
       priority: PreloadPriority.URGENT,
       segment: target,
       attempt: 0,
-      deadlineAt: Date.now() + TASK_DEADLINE_MS,
+      deadlineAt: Date.now() + COMMENT_TASK_DEADLINE_MS,
       aborted: false
     };
     this.enqueueBlock([task]);
@@ -272,12 +280,20 @@ export class PreloadService {
       contentId: contentId,
       priority: priority,
       attempt: 0,
-      deadlineAt: exempt ? 0 : Date.now() + TASK_DEADLINE_MS,
+      deadlineAt: exempt ? 0 : Date.now() + this.deadlineFor(kind),
       aborted: false
     };
   }
 
-  /** 主页一页回答：只拆正文任务（不含热评），一律不设存活上限。 */
+  /** 评论/子评论/段评/翻页给 15s，其余非豁免任务 5s。 */
+  private deadlineFor(kind: string): number {
+    if (kind === 'comments' || kind === 'child' || kind === 'segment' || kind === 'commentPages') {
+      return COMMENT_TASK_DEADLINE_MS;
+    }
+    return TASK_DEADLINE_MS;
+  }
+
+  /** 主页一页内容：回答与文章都只拆正文任务（不含热评），一律不设存活上限。 */
   private feedAnswerTasks(items: Array<FeedItem>, priority: PreloadPriority): Array<PreloadTask> {
     const tasks: Array<PreloadTask> = [];
     if (!this.enabled) {
@@ -285,10 +301,11 @@ export class PreloadService {
     }
     for (let index = 0; index < items.length; index += 1) {
       const target = items[index].target;
-      if (target.kind !== FeedTargetKind.ANSWER) {
-        continue;
+      if (target.kind === FeedTargetKind.ANSWER) {
+        tasks.push(this.task('answerOnly', 'answer', target.id, priority, true));
+      } else if (target.kind === FeedTargetKind.ARTICLE) {
+        tasks.push(this.task('articleOnly', 'article', target.id, priority, true));
       }
-      tasks.push(this.task('answerOnly', 'answer', target.id, priority, true));
     }
     return tasks;
   }
@@ -485,18 +502,19 @@ export class PreloadService {
       await this.loadCommentPages(repository, task.contentType, task.contentId);
       return;
     }
-    if (task.kind === 'answerOnly') {
-      const answers = this.answerRepository ?? this.answerRepositoryFactory?.();
-      if (answers === undefined) {
+    if (task.kind === 'answerOnly' || task.kind === 'articleOnly') {
+      const content = this.answerRepository ?? this.answerRepositoryFactory?.();
+      if (content === undefined) {
         return;
       }
-      this.answerRepository = answers;
-      await answers.getAnswer(task.contentId);
-      this.pinIfInWindow(preloadAnswerKey(task.contentId));
-      return;
-    }
-    if (task.kind === 'hot') {
-      await this.loadHotComments(task.contentType, task.contentId);
+      this.answerRepository = content;
+      if (task.kind === 'answerOnly') {
+        await content.getAnswer(task.contentId);
+        this.pinIfInWindow(preloadAnswerKey(task.contentId));
+      } else {
+        await content.getArticle(task.contentId);
+        this.pinIfInWindow(preloadArticleKey(task.contentId));
+      }
       return;
     }
     const comments = this.commentRepository ?? this.commentRepositoryFactory?.();
@@ -567,16 +585,7 @@ export class PreloadService {
     }
   }
 
-  /** 取一次热度排序的根评论首屏（热评区与评论页首屏共用同一份缓存）。 */
-  private async loadHotComments(contentType: string, contentId: string): Promise<void> {
-    const comments = this.commentRepository ?? this.commentRepositoryFactory?.();
-    if (comments === undefined) {
-      return;
-    }
-    this.commentRepository = comments;
-    await comments.getRootCommentsPage(contentType, contentId, CommentSortOrder.SCORE);
-    this.pinIfInWindow(preloadCommentsKey(contentType, contentId));
-  }
+
 }
 
 const SHARED_SERVICE: PreloadService = new PreloadService();
@@ -718,5 +727,19 @@ export function applyPreloadOptimization(mode: string): void {
 /** 切到热榜时调用：pending「生效一次」并重新预取；返回是否新鲜。 */
 export function consumeHotFeedPending(): boolean {
   return hotFeedPending().consumeForDisplay();
+}
+
+/** 缓存预算落地：512MB / 2GB / 4GB 三档，切换后立即按新配额回收。 */
+export function applyPreloadCacheBudget(raw: string): void {
+  const budget: PreloadCacheBudget = decodePreloadCacheBudget(raw);
+  if (budget === PreloadCacheBudget.LARGE) {
+    preloadCache().setQuota(PRELOAD_CACHE_BUDGET_4GB);
+    return;
+  }
+  if (budget === PreloadCacheBudget.MEDIUM) {
+    preloadCache().setQuota(PRELOAD_CACHE_BUDGET_2GB);
+    return;
+  }
+  preloadCache().setQuota(PRELOAD_CACHE_BUDGET_512MB);
 }
 

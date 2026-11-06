@@ -17,10 +17,13 @@ export enum PreloadCacheTier {
   FEED = 4
 }
 
-export const PRELOAD_CACHE_QUOTA_BYTES: number = 512 * 1024 * 1024;
+/** 缓存预算三档：默认 512MB，可在设置里切到 2GB / 4GB。 */
+export const PRELOAD_CACHE_BUDGET_512MB: number = 512 * 1024 * 1024;
+export const PRELOAD_CACHE_BUDGET_2GB: number = 2 * 1024 * 1024 * 1024;
+export const PRELOAD_CACHE_BUDGET_4GB: number = 4 * 1024 * 1024 * 1024;
+export const PRELOAD_CACHE_QUOTA_DEFAULT_BYTES: number = PRELOAD_CACHE_BUDGET_512MB;
 /** 钉住层容量上限：只放当前 ±1，正常远低于这个值，超出按最久未访问回收。 */
 export const PRELOAD_PINNED_CAPACITY_BYTES: number = 64 * 1024 * 1024;
-export const PRELOAD_CACHE_TRIM_THRESHOLD: number = Math.floor(PRELOAD_CACHE_QUOTA_BYTES * 0.85);
 
 interface PreloadEntry {
   readonly payload: string;
@@ -35,6 +38,19 @@ export class PreloadCache {
   private readonly entries: Map<string, PreloadEntry> = new Map<string, PreloadEntry>();
   private totalBytes: number = 0;
   private enabled: boolean = false;
+  private quotaBytes: number = PRELOAD_CACHE_QUOTA_DEFAULT_BYTES;
+
+  /** 切换缓存预算：调小后立即按新配额回收一次。 */
+  setQuota(bytes: number): void {
+    this.quotaBytes = Math.max(PRELOAD_CACHE_BUDGET_512MB, Math.floor(bytes));
+    if (this.totalBytes > this.quotaBytes) {
+      this.trim();
+    }
+  }
+
+  quota(): number {
+    return this.quotaBytes;
+  }
 
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
@@ -80,7 +96,7 @@ export class PreloadCache {
     };
     this.entries.set(key, entry);
     this.totalBytes += entry.size;
-    if (this.totalBytes > PRELOAD_CACHE_TRIM_THRESHOLD) {
+    if (this.totalBytes > Math.floor(this.quotaBytes * 0.85)) {
       this.trim();
     }
   }
@@ -161,7 +177,7 @@ export class PreloadCache {
   private trim(): void {
     // 钉住层不进入普通淘汰：先把钉住层压到自己的容量上限内。
     this.enforcePinnedCap();
-    const target = Math.floor(PRELOAD_CACHE_QUOTA_BYTES * 0.7);
+    const target = Math.floor(this.quotaBytes * 0.7);
     if (this.totalBytes <= target) {
       return;
     }
@@ -200,6 +216,10 @@ export function preloadAnswerKey(id: string): string {
   return `answer:${id}`;
 }
 
+export function preloadArticleKey(id: string): string {
+  return `article:${id}`;
+}
+
 export function preloadCommentsKey(contentType: string, contentId: string): string {
   return `comments:${contentType}:${contentId}`;
 }
@@ -211,10 +231,6 @@ export function preloadCommentsPageKey(contentType: string, contentId: string, c
 
 export function preloadChildCommentsKey(rootId: string): string {
   return `child:${rootId}`;
-}
-
-export function preloadHotCommentsKey(answerId: string): string {
-  return `hot:${answerId}`;
 }
 
 export function preloadSegmentCommentsKey(contentId: string, segmentId: string): string {

@@ -1,6 +1,6 @@
 import { setFeedScrollOwner } from './FeedScrollOwnership';
 import { updateStatusBarAppearance } from '../platform/SystemBars';
-import { applyPreloadOptimization, consumeHotFeedPending } from './PreloadCenter';
+import { applyPreloadCacheBudget, applyPreloadOptimization, consumeHotFeedPending } from './PreloadCenter';
 import { HomeSearchBar } from './components/ReadingWidgets';
 import { QuestionTitleBar } from './QuestionTitleBar';
 import { SearchTitleBar } from './SearchTitleBar';
@@ -276,6 +276,9 @@ export struct AppShell {
   /** 预加载优化开关（off/on）：变更即同步到缓存与调度器，关闭后回到项目原有加载机制。 */
   @StorageProp('preloadOptimization') @Watch('onPreloadOptimizationChanged')
   private preloadOptimization: string = PreloadOptimizationMode.ON;
+  /** 预加载缓存预算（512m/2g/4g）：切换后立即按新配额回收。 */
+  @StorageProp('preloadCacheBudget') @Watch('onPreloadCacheBudgetChanged')
+  private preloadCacheBudget: string = '512m';
   /** 当前生效主题色（启动时广播，深浅色已解析），驱动全壳强调色。 */
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   /** 状态栏时间/电量颜色（SystemBars 按主题广播），供 HdsNavigation.systemBarStyle 使用：
@@ -351,6 +354,7 @@ export struct AppShell {
     this.themeMounted = true;
     // 预加载优化默认开启：先按默认值落地，偏好读回后由 @Watch 纠正。
     this.applyPreloadOptimizationSetting();
+    applyPreloadCacheBudget(this.preloadCacheBudget);
     topLevelScrollRegistry.register(SETTINGS_SCROLL_KEY, this.settingsScroller);
     this.refreshTabScrollerBindings();
     // 主题恢复完成前先按跟随系统广播（EntryAbility.onConfigurationUpdate 依赖该键判断是否联动公式换色）。
@@ -2947,6 +2951,10 @@ export struct AppShell {
     this.applyPreloadOptimizationSetting();
   }
 
+  private onPreloadCacheBudgetChanged(): void {
+    applyPreloadCacheBudget(this.preloadCacheBudget);
+  }
+
   /** 开关落地（全部逻辑在 PreloadBootstrap）：开启即启用缓存与逐级预加载并后台预取热榜。 */
   private applyPreloadOptimizationSetting(): void {
     applyPreloadOptimization(this.preloadOptimization);
@@ -2988,6 +2996,7 @@ export struct AppShell {
     AppStorage.setOrCreate('questionInTitleBar', value.questionInTitleBar);
     AppStorage.setOrCreate('hotCommentPreviewCount', value.hotCommentPreviewCount);
     AppStorage.setOrCreate('preloadOptimization', value.preloadOptimization);
+    AppStorage.setOrCreate('preloadCacheBudget', value.preloadCacheBudget);
     AppStorage.setOrCreate('scrollFeelPreset', value.scrollFeelPreset);
     AppStorage.setOrCreate('homeSearchBarStyle', value.homeSearchBarStyle);
     AppStorage.setOrCreate('answerSwitchStyle', value.answerSwitchStyle);

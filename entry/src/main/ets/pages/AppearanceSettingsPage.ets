@@ -8,10 +8,12 @@ import {
   AnswerSwitchMode,
   AnswerSwitchStyle,
   HomeSearchBarStyle,
+  PreloadCacheBudget,
   PreloadOptimizationMode,
   ScrollFeelPreset,
   decodeAnswerSwitchStyle,
   decodeHomeSearchBarStyle,
+  decodePreloadCacheBudget,
   decodePreloadOptimization,
   decodeScrollFeelPreset,
   HOT_COMMENT_PREVIEW_DEFAULT,
@@ -53,7 +55,12 @@ import {
   hotCommentCountIndex,
   hotCommentCountLabel,
   hotCommentCountOptions,
+  PRELOAD_CACHE_BUDGET_DESCRIPTION,
   PRELOAD_OPTIMIZATION_DESCRIPTION,
+  preloadCacheBudgetFromIndex,
+  preloadCacheBudgetIndex,
+  preloadCacheBudgetLabel,
+  preloadCacheBudgetOptions,
   preloadOptimizationFromIndex,
   preloadOptimizationIndex,
   preloadOptimizationLabel,
@@ -157,6 +164,7 @@ export struct AppearanceSettingsPage {
   @StorageProp('answerSwitchStyle') private answerSwitchStyle: string = AnswerSwitchStyle.SLIDE;
   @StorageProp('hotCommentPreviewCount') private hotCommentPreviewCount: number = HOT_COMMENT_PREVIEW_DEFAULT;
   @StorageProp('preloadOptimization') private preloadOptimization: string = PreloadOptimizationMode.ON;
+  @StorageProp('preloadCacheBudget') private preloadCacheBudget: string = PreloadCacheBudget.SMALL;
   @StorageProp('pinAnswerDate') private pinAnswerDate: boolean = false;
   @StorageProp('answerSwitchMode') private answerSwitchMode: string = AnswerSwitchMode.VERTICAL;
   @StorageProp('answerSwitchSensitivity') private answerSwitchSensitivity: number = 1;
@@ -374,6 +382,12 @@ export struct AppearanceSettingsPage {
               preloadOptimizationLabel(this.preloadOptimization), preloadOptimizationOptions(),
               preloadOptimizationIndex(this.preloadOptimization), 'appearance_preload_optimization',
               (index: number): void => this.updateExperienceString('preloadOptimization', preloadOptimizationFromIndex(index)))
+            Divider().color($r('app.color.divider_color'))
+            this.selectSetting('缓存上限', PRELOAD_CACHE_BUDGET_DESCRIPTION,
+              preloadCacheBudgetLabel(this.preloadCacheBudget), preloadCacheBudgetOptions(),
+              preloadCacheBudgetIndex(this.preloadCacheBudget), 'appearance_preload_cache_budget',
+              (index: number): void => this.updateExperienceString('preloadCacheBudget',
+                preloadCacheBudgetFromIndex(index)))
             Divider().color($r('app.color.divider_color'))
             this.selectSetting('热评条数', HOT_COMMENT_COUNT_DESCRIPTION,
               hotCommentCountLabel(this.hotCommentPreviewCount), hotCommentCountOptions(),
@@ -1296,7 +1310,8 @@ export struct AppearanceSettingsPage {
       homeSearchBarStyle: decodeHomeSearchBarStyle(this.homeSearchBarStyle),
       answerSwitchStyle: decodeAnswerSwitchStyle(this.answerSwitchStyle),
       hotCommentPreviewCount: this.hotCommentPreviewCount,
-      preloadOptimization: decodePreloadOptimization(this.preloadOptimization)
+      preloadOptimization: decodePreloadOptimization(this.preloadOptimization),
+      preloadCacheBudget: decodePreloadCacheBudget(this.preloadCacheBudget)
     });
   }
 
@@ -1339,6 +1354,7 @@ export struct AppearanceSettingsPage {
     else if (key === 'homeSearchBarStyle') next.homeSearchBarStyle = decodeHomeSearchBarStyle(value);
     else if (key === 'answerSwitchStyle') next.answerSwitchStyle = decodeAnswerSwitchStyle(value);
     else if (key === 'preloadOptimization') next.preloadOptimization = decodePreloadOptimization(value);
+    else if (key === 'preloadCacheBudget') next.preloadCacheBudget = decodePreloadCacheBudget(value);
     this.persistExperience(next);
   }
 

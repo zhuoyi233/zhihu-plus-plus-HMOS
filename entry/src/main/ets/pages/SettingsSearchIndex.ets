@@ -709,6 +709,18 @@ const SETTINGS_SEARCH_ENTRIES: Array<SettingsSearchEntry> = [
     fallbackAnchorId: ''
   },
   {
+    id: 'appearance_preload_cache_budget',
+    title: '缓存上限',
+    path: '外观与阅读体验 · 回答页',
+    keywords: '缓存 上限 内存 512MB 2GB 4GB 预加载',
+    visibility: SettingsEntryVisibility.ALWAYS,
+    targetKind: SettingsTargetKind.SETTING_ITEM,
+    paneId: SettingsPaneId.APPEARANCE,
+    anchorId: 'appearance_preload_cache_budget',
+    highlightGroupId: 'appearance_group_answer',
+    fallbackAnchorId: ''
+  },
+  {
     id: 'appearance_answer_switch_style',
     title: '切答动画样式',
     path: '外观与阅读体验 · 回答页',

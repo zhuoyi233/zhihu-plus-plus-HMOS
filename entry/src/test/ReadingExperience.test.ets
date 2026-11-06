@@ -11,8 +11,8 @@ import {
   preloadCache,
   PreloadCacheTier,
   PreloadOptimizationMode,
-  PRELOAD_CACHE_QUOTA_BYTES,
-  PRELOAD_CACHE_TRIM_THRESHOLD,
+  PRELOAD_CACHE_BUDGET_2GB,
+  PRELOAD_CACHE_QUOTA_DEFAULT_BYTES,
   preloadAnswerKey,
   readPreloadJson,
   ScrollFeelPreset,
@@ -199,13 +199,15 @@ export default function readingExperienceTest(): void {
       // 关闭即整体清空。
       cache.setEnabled(false);
       expect(cache.has('answer:3')).assertFalse();
-      expect(PRELOAD_CACHE_TRIM_THRESHOLD).assertLarger(0);
       expect(preloadAnswerKey('abc')).assertEqual('answer:abc');
     });
 
     it('repinsWithoutLosingEntriesAndUsesSmallerQuota', 0, () => {
-      expect(PRELOAD_CACHE_QUOTA_BYTES).assertEqual(512 * 1024 * 1024);
+      expect(PRELOAD_CACHE_QUOTA_DEFAULT_BYTES).assertEqual(512 * 1024 * 1024);
       const cache = preloadCache();
+      cache.setQuota(PRELOAD_CACHE_BUDGET_2GB);
+      expect(cache.quota()).assertEqual(PRELOAD_CACHE_BUDGET_2GB);
+      cache.setQuota(PRELOAD_CACHE_QUOTA_DEFAULT_BYTES);
       cache.setEnabled(true);
       cache.put(preloadAnswerKey('a'), '{"id":"a"}', PreloadCacheTier.ANSWER);
       cache.put('comments:answer:a', '{"items":[]}', PreloadCacheTier.COMMENTS);
