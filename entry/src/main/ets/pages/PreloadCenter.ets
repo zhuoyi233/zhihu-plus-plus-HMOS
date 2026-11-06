@@ -34,6 +34,7 @@ import {
   SegmentCommentTarget,
   SegmentInfoParagraph
 } from 'data';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 
 /** 子评论预热条数上限：根评论首屏里前 N 条有子评论的逐条预热。 */
 const CHILD_COMMENT_PREFETCH_LIMIT: number = 20;
@@ -46,11 +47,15 @@ const BUSY_MAX_RETRIES: number = 3;
 const BUSY_RETRY_BASE_DELAY_MS: number = 800;
 
 /**
- * 任务存活上限：主页预取与「回答页的下一个回答」不设上限（`exempt`）；
- * 评论/子评论/段评/翻页给 15s，其余（热榜）5s。到点没跑完就丢弃/中止。
+ * 任务存活上限：评论类 15s、热榜 5s、主页预取与「回答页的下一答」90s。
+ * 豁免任务也必须有限额——队列串行 await，一个悬挂任务会把整条队列永久堵死。
  */
 const TASK_DEADLINE_MS: number = 5000;
 const COMMENT_TASK_DEADLINE_MS: number = 15000;
+const EXEMPT_TASK_DEADLINE_MS: number = 90000;
+
+/** 队列长度上限：超限时从最低档队尾开始丢弃，避免关闭开关前无限堆积。 */
+const QUEUE_MAX_LENGTH: number = 200;
 
 /**
  * 任务优先级（数值越小越先执行）。
@@ -78,7 +83,7 @@ interface PreloadTask {
   readonly onHotPage?: (page: ChannelFeedPage) => void;
   /** BUSY 重试次数（0 表示首次执行）。 */
   attempt: number;
-  /** 存活截止时刻（ms）；0 表示不限制（主页预取、回答页的下一答）。 */
+  /** 存活截止时刻（ms）：到点仍未结束就放弃等待、继续下一个。 */
   deadlineAt: number;
   /** 超时被中止：不再重试、结果不采纳。 */
   aborted: boolean;
@@ -95,13 +100,10 @@ function isBusyFailure(error: Object): boolean {
 }
 
 /**
- * 预取队列：单线程串行。
- *
- * 四档依次执行：URGENT > NORMAL > HOT_FEED > HOME_PENDING；同档后进先出（批内顺序不变）。
+ * 预取队列：单线程串行，四档 URGENT > NORMAL > HOT_FEED > HOME_PENDING，同档后进先出（批内顺序不变）。
  * 主页双缓冲的正文排 NORMAL 队尾（页面本身由 HomePendingFeed 独立请求，不进队列）；
- * 只有关闭「预加载优化」才清空并取消。
- * 任务存活上限：评论/子评论/段评/评论翻页 15s，其余非豁免（热榜）5s；主页预取与
- * 回答页的下一答不设上限。BUSY（client 单飞被占）退到本档队尾重试，最多 3 次。
+ * 只有关闭「预加载优化」才清空并取消。任务到上限只放弃等待、继续下一个，不 cancel 仓库
+ * （避免误伤页面自己的请求）；BUSY 退到本档队尾重试，最多 3 次；队列超长丢最低档队尾。
  */
 export class PreloadService {
   private answerRepositoryFactory?: () => ContentRepository | undefined;
@@ -115,16 +117,14 @@ export class PreloadService {
   private readonly queue: Array<PreloadTask> = [];
   private readonly queued: Set<string> = new Set<string>();
   private running: boolean = false;
-  /** 正在执行的任务：存活定时器到点时用它判断是否仍是同一个任务。 */
-  private current?: PreloadTask;
   private epoch: number = 0;
   private enabled: boolean = false;
   /** 当前钉住窗口（当前答 ±1 的正文与评论），任务完成后据此补钉住。 */
   private pinnedKeys: Array<string> = [];
-  /** 正在执行任务的存活定时器；-1 表示未在计时。 */
-  private deadlineTimer: number = -1;
-  /** 因超过存活上限被丢弃的任务数（仅累计，暂未对外暴露）。 */
+  /** 因超过存活上限被放弃的任务数（仅累计，暂未对外暴露）。 */
   private droppedExpired: number = 0;
+  /** 因队列超长被丢弃的任务数（仅累计，暂未对外暴露）。 */
+  private droppedOverflow: number = 0;
 
   configure(answerRepositoryFactory: () => ContentRepository | undefined,
     commentRepositoryFactory: () => CommentRepository | undefined,
@@ -266,17 +266,13 @@ export class PreloadService {
     this.queue.splice(0, this.queue.length);
     this.queued.clear();
     this.pinnedKeys = [];
-    this.current = undefined;
-    this.clearDeadline();
     this.answerRepository?.cancel();
     this.commentRepository?.cancel();
     this.segmentRepository?.cancel();
     this.hotFeedRepository?.cancel();
   }
 
-  /**
-   * @param exempt true 表示不设存活上限（主页预取、回答页的下一答）
-   */
+  /** @param exempt 宽松上限（90s）：主页预取、回答页的下一答；不能无上限，否则悬挂任务会堵死串行队列。 */
   private task(kind: string, contentType: string, contentId: string, priority: PreloadPriority,
     exempt: boolean = false): PreloadTask {
     return {
@@ -285,12 +281,12 @@ export class PreloadService {
       contentId: contentId,
       priority: priority,
       attempt: 0,
-      deadlineAt: exempt ? 0 : Date.now() + this.deadlineFor(kind),
+      deadlineAt: Date.now() + (exempt ? EXEMPT_TASK_DEADLINE_MS : this.deadlineFor(kind)),
       aborted: false
     };
   }
 
-  /** 评论/子评论/段评/翻页给 15s，其余非豁免任务 5s。 */
+  /** 评论/子评论/段评/翻页给 15s，其余（热榜）5s；宽松上限在 task() 里按 exempt 覆盖。 */
   private deadlineFor(kind: string): number {
     if (kind === 'comments' || kind === 'child' || kind === 'segment' || kind === 'commentPages') {
       return COMMENT_TASK_DEADLINE_MS;
@@ -298,7 +294,7 @@ export class PreloadService {
     return TASK_DEADLINE_MS;
   }
 
-  /** 主页一页内容：回答与文章都只拆正文任务（不含热评），一律不设存活上限。 */
+  /** 主页一页内容：回答与文章都只拆正文任务（不含热评），一律用宽松上限。 */
   private feedAnswerTasks(items: Array<FeedItem>, priority: PreloadPriority): Array<PreloadTask> {
     const tasks: Array<PreloadTask> = [];
     if (!this.enabled) {
@@ -380,7 +376,21 @@ export class PreloadService {
         this.queue.splice(insertAt + index, 0, accepted[index]);
       }
     }
+    this.trimOverflow();
     this.pump();
+  }
+
+  /** 队列超长：从队尾（最低档、同档最早入队）开始丢弃，同步去重表并累计计数。 */
+  private trimOverflow(): void {
+    while (this.queue.length > QUEUE_MAX_LENGTH) {
+      const dropped: PreloadTask | undefined = this.queue.pop();
+      if (dropped === undefined) {
+        return;
+      }
+      this.queued.delete(taskKey(dropped));
+      this.droppedOverflow += 1;
+      hilog.warn(0xD001, 'Preload', 'queue overflow dropped kind=%{public}s', dropped.kind);
+    }
   }
 
   /** BUSY 重试：退到本档队尾（不抢新请求的位置），延迟后重新入队。 */
@@ -412,36 +422,40 @@ export class PreloadService {
     }, delay);
   }
 
-  /** 给正在执行的任务装上存活定时器：到点仍未结束就中止（取消在途请求，不再重试）。 */
-  private armDeadline(task: PreloadTask): void {
-    this.clearDeadline();
-    if (task.deadlineAt <= 0) {
-      return;
-    }
-    const delay: number = Math.max(0, task.deadlineAt - Date.now());
-    this.deadlineTimer = setTimeout((): void => {
-      this.deadlineTimer = -1;
-      if (this.current !== task || task.aborted) {
-        return;
-      }
-      task.aborted = true;
-      this.droppedExpired += 1;
-      this.cancelInFlight();
-    }, delay);
-  }
-
-  private clearDeadline(): void {
-    if (this.deadlineTimer >= 0) {
-      clearTimeout(this.deadlineTimer);
-      this.deadlineTimer = -1;
-    }
-  }
-
-  private cancelInFlight(): void {
-    this.answerRepository?.cancel();
-    this.commentRepository?.cancel();
-    this.segmentRepository?.cancel();
-    this.hotFeedRepository?.cancel();
+  /**
+   * 执行任务并装上存活上限：到点仍未落地就放弃等待（标记 aborted、累计、继续下一个）。
+   * 只放弃等待、不取消仓库：运输层看门狗会自己回收单飞槽位，cancel 会误伤页面的请求。
+   */
+  private runWithDeadline(task: PreloadTask): Promise<void> {
+    const delay: number = Math.max(1, task.deadlineAt - Date.now());
+    return new Promise<void>((resolve, reject): void => {
+      let settled: boolean = false;
+      const timer: number = setTimeout((): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        task.aborted = true;
+        this.droppedExpired += 1;
+        hilog.warn(0xD001, 'Preload', 'task deadline exceeded kind=%{public}s', task.kind);
+        resolve();
+      }, delay);
+      this.run(task).then((): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        resolve();
+      }).catch((error: Object): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        reject(error);
+      });
+    });
   }
 
   private removeQueued(key: string): void {
@@ -473,24 +487,17 @@ export class PreloadService {
       }
       this.queued.delete(taskKey(task));
       // 排队期间已超时的任务直接丢弃，不再浪费一次请求。
-      if (task.deadlineAt > 0 && Date.now() >= task.deadlineAt) {
+      if (Date.now() >= task.deadlineAt) {
         this.droppedExpired += 1;
         continue;
       }
-      this.current = task;
-      this.armDeadline(task);
       try {
-        await this.run(task);
+        await this.runWithDeadline(task);
       } catch (error) {
-        // 超时被中止的任务不再重试；BUSY 退到本档队尾延迟重试；其他失败静默忽略。
+        // 超时被放弃的任务不再重试；BUSY 退到本档队尾延迟重试；其他失败静默忽略。
         if (!task.aborted && error instanceof Object && isBusyFailure(error as Object)) {
           this.scheduleBusyRetry(task);
         }
-      } finally {
-        this.clearDeadline();
-      }
-      if (this.current === task) {
-        this.current = undefined;
       }
     }
     this.running = false;
@@ -660,22 +667,69 @@ const PENDING_PAGE_TTL_MS: number = 10 * 60 * 1000;
 /** 小页阈值：pending 条目明显少于当前列表时不予提交（避免界面先只剩一条再被替换）。 */
 const PENDING_MIN_ITEMS: number = 3;
 
+/** pending 请求悬挂上限（ms）：超时只放弃这一份结果并释放槽位，不阻塞后续预取。 */
+const PENDING_LOAD_TIMEOUT_MS: number = 30000;
+
+/** 小页退避：连续命中小页保护后暂停预取的时间，到点自动重试一次（不是永久停摆）。 */
+const PENDING_SMALL_PAGE_BACKOFF_MS: number = 60000;
+
+/** 连续小页达到这个次数才退避：第一次仍立刻补取，避免偶发小页把双缓冲打断。 */
+const PENDING_SMALL_PAGE_MAX_STREAK: number = 2;
+
+/** pending 页被丢弃的原因：决定回补是立刻重试还是先退避。 */
+export enum FeedDiscardReason {
+  /** 超过新鲜度上限：时间否掉了这一页，立刻重取。 */
+  STALE = 'stale',
+  /** 小页保护：服务端或过滤后条目过少，连续命中后退避，避免每次下拉都白打一次请求。 */
+  SMALL_PAGE = 'small_page'
+}
+
 /**
  * 首页双缓冲预取页：用独立 FeedRepository（不共享游标与 cancel）提前取下一页，
  * 下拉时直接提交；只写内部字段，不改变当前显示内容。
+ *
+ * 丢弃即回补：过期/小页丢弃后立刻走 `attach` 登记的入口，页面不必在每个分支记挂；
+ * 结果只交给最近一次请求（`generation`），悬挂超时释放槽位，连续小页退避后自动重试。
  */
 export class HomePendingFeed {
   private pending?: FeedPage;
   private pendingAtMs: number = 0;
   private loading: boolean = false;
+  private loadingSinceMs: number = 0;
+  /** 请求代次：超时放弃或重新预取后自增，旧请求回来时据此丢弃结果。 */
+  private generation: number = 0;
   private repository?: FeedRepository;
+  /** 页面登记的补取入口：丢弃后由这里回补，调用方不必在每个分支记挂。 */
+  private refill?: () => void;
+  /** 连续被小页保护丢弃的次数与退避截止时刻。 */
+  private smallPageStreak: number = 0;
+  private refillCooldownUntilMs: number = 0;
+  private cooldownTimer: number = -1;
 
-  /** 预取一页：已有新鲜 pending 或正在请求时跳过。 */
+  /** 由页面登记一次即可：`attach` 之后 pending 被丢弃会自动回补（回补本身幂等）。 */
+  attach(refill: () => void): void {
+    this.refill = refill;
+  }
+
+  /** 预取一页：已有新鲜 pending、正在请求或处于小页退避窗口时跳过。 */
   prefetch(factory: () => FeedRepository | undefined, enabled: boolean,
     onReady: (page: FeedPage) => void = (_page: FeedPage): void => {
     }): void {
-    if (!enabled || this.loading) {
+    if (!enabled) {
       return;
+    }
+    // 退避窗口内不发请求：小页是服务端/过滤后的稳定结果，连着打同一接口没有收益。
+    if (Date.now() < this.refillCooldownUntilMs) {
+      return;
+    }
+    if (this.loading) {
+      if (Date.now() - this.loadingSinceMs <= PENDING_LOAD_TIMEOUT_MS) {
+        return;
+      }
+      // 悬挂请求超时：只放弃它的结果、释放槽位，后续预取照常进行。
+      this.generation += 1;
+      this.loading = false;
+      hilog.warn(0xD001, 'Preload', 'pending request timeout, slot released');
     }
     if (this.pending !== undefined && Date.now() - this.pendingAtMs <= PENDING_PAGE_TTL_MS) {
       return;
@@ -687,27 +741,36 @@ export class HomePendingFeed {
     if (repository === undefined) {
       return;
     }
+    const generation: number = this.generation + 1;
+    this.generation = generation;
     this.loading = true;
+    this.loadingSinceMs = Date.now();
     repository.loadHomePage().then((page: FeedPage): void => {
+      if (generation !== this.generation) {
+        return;
+      }
       this.pending = page;
       this.pendingAtMs = Date.now();
-      // 新一页已在内存里但还没显示：立刻把它包含的回答/文章正文排进预取队列，
+      // 不重置 smallPageStreak：它统计连续被丢弃的次数，小页本身也是一次成功取回。
+      // 新一页已在内存里但还没显示：把它包含的回答/文章正文排进预取队列，
       // 用户下拉提交后点开任意一条都不用等（调用方决定优先级）。
       onReady(page);
     }).catch((_error: Error): void => {
       // 预取失败静默忽略：真正下拉时回落到控制器自身刷新。
     }).finally((): void => {
-      this.loading = false;
+      if (generation === this.generation) {
+        this.loading = false;
+      }
     });
   }
 
-  /** 丢弃 pending（提交后或过期时调用）。 */
+  /** 丢弃 pending（提交后或过期的统一出口）。 */
   clear(): void {
     this.pending = undefined;
     this.pendingAtMs = 0;
   }
 
-  /** 取走可提交的 pending：过期或明显小于当前列表时返回 undefined（走原刷新）。 */
+  /** 取走可提交的 pending：过期或明显小于当前列表时返回 undefined（走原刷新），并立刻回补。 */
   take(currentItemCount: number): FeedPage | undefined {
     const page: FeedPage | undefined = this.pending;
     if (page === undefined) {
@@ -715,14 +778,57 @@ export class HomePendingFeed {
     }
     if (Date.now() - this.pendingAtMs > PENDING_PAGE_TTL_MS) {
       this.clear();
+      this.smallPageStreak = 0;
+      this.requestRefill(FeedDiscardReason.STALE);
       return undefined;
     }
     if (page.items.length < PENDING_MIN_ITEMS && page.items.length < currentItemCount) {
       this.clear();
+      this.smallPageStreak += 1;
+      if (this.smallPageStreak >= PENDING_SMALL_PAGE_MAX_STREAK) {
+        // 连续小页：先退避，到点由 startCooldown 的定时器自动再试一次。
+        this.startCooldown();
+        return undefined;
+      }
+      this.requestRefill(FeedDiscardReason.SMALL_PAGE);
       return undefined;
     }
     this.clear();
+    this.smallPageStreak = 0;
     return page;
+  }
+
+  /** 丢弃后回补：走页面登记的入口；未登记时保持原语义（什么都不做）。 */
+  private requestRefill(reason: FeedDiscardReason): void {
+    const refill = this.refill;
+    if (refill === undefined) {
+      return;
+    }
+    hilog.info(0xD001, 'Preload', 'pending discarded reason=%{public}s refilling', reason);
+    refill();
+  }
+
+  /** 小页退避：到点自动再试一次，保证双缓冲不会因为连续小页永久停摆。 */
+  private startCooldown(): void {
+    this.refillCooldownUntilMs = Date.now() + PENDING_SMALL_PAGE_BACKOFF_MS;
+    if (this.cooldownTimer >= 0) {
+      return;
+    }
+    this.cooldownTimer = setTimeout((): void => {
+      this.cooldownTimer = -1;
+      this.refillCooldownUntilMs = 0;
+      this.smallPageStreak = 0;
+      this.requestRefill(FeedDiscardReason.SMALL_PAGE);
+    }, PENDING_SMALL_PAGE_BACKOFF_MS);
+  }
+
+  /** 页面离开时释放退避计时器（pending 与仓库随页面实例一起回收，回前台/重显会重新预取）。 */
+  dispose(): void {
+    if (this.cooldownTimer >= 0) {
+      clearTimeout(this.cooldownTimer);
+      this.cooldownTimer = -1;
+    }
+    this.refillCooldownUntilMs = 0;
   }
 }
 

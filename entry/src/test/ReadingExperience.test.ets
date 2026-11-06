@@ -61,6 +61,14 @@ function feedPage(count: number): FeedPage {
   return { items: items, cursor: pageCursor() };
 }
 
+/** 冲干净 pending 预取的微任务链：仓库返回已决议的 Promise，落到 then/finally 需要几跳。 */
+function settlePendingFeed(): Promise<void> {
+  return Promise.resolve().then((): void => {
+  }).then((): void => {
+  }).then((): void => {
+  });
+}
+
 class StubFeedRepository implements FeedRepository {
   private readonly page: FeedPage;
   loadCount: number = 0;
@@ -158,6 +166,46 @@ export default function readingExperienceTest(): void {
           // 只有一条且当前列表明显更多：不提交，交回控制器刷新。
           expect(pending.take(8) === undefined).assertTrue();
         });
+      });
+    });
+
+    it('refillsHomePendingRightAfterDiscard', 0, () => {
+      const pending = new HomePendingFeed();
+      let refills: number = 0;
+      pending.attach((): void => {
+        refills += 1;
+      });
+      pending.prefetch((): FeedRepository => new StubFeedRepository(feedPage(1)), true);
+      return settlePendingFeed().then((): void => {
+        // 丢弃（过期/小页）后必须立刻回补：少这一步，双缓冲会永久停在「没有下一页」。
+        expect(pending.take(8) === undefined).assertTrue();
+        expect(refills).assertEqual(1);
+      });
+    });
+
+    it('backsOffWhenSmallPagesRepeat', 0, () => {
+      const pending = new HomePendingFeed();
+      const repository = new StubFeedRepository(feedPage(1));
+      const factory = (): FeedRepository => repository;
+      let refills: number = 0;
+      pending.attach((): void => {
+        refills += 1;
+      });
+      pending.prefetch(factory, true);
+      return settlePendingFeed().then((): Promise<void> => {
+        // 第 1 次小页：仍立刻补取，偶发小页不该把双缓冲打断。
+        expect(pending.take(8) === undefined).assertTrue();
+        expect(refills).assertEqual(1);
+        pending.prefetch(factory, true);
+        return settlePendingFeed();
+      }).then((): void => {
+        // 第 2 次连续小页：进入退避，既不再回补，也不在窗口内白打请求。
+        expect(pending.take(8) === undefined).assertTrue();
+        expect(refills).assertEqual(1);
+        const loadsBeforeCooldown: number = repository.loadCount;
+        pending.prefetch(factory, true);
+        expect(repository.loadCount).assertEqual(loadsBeforeCooldown);
+        pending.dispose();
       });
     });
 

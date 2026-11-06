@@ -1,3 +1,4 @@
+import { ApplicationStateChangeCallback, common } from '@kit.AbilityKit';
 import { FeedThumbnail } from './components/FeedThumbnail';
 import { publishFeedScroll } from './FeedScrollOwnership';
 import {
@@ -63,6 +64,24 @@ import { DraggableRefreshButton } from './components/DraggableRefreshButton';
 
 /** 下拉头回弹/收起后的静默窗口（ms）：期间再往下滑不触发刷新。 */
 const REFRESH_SETTLE_QUIET_MS: number = 500;
+
+/**
+ * 应用前后台回调：回到前台补一次双缓冲预取。
+ * 后台期间 pending 必过期、在途请求也可能被系统丢弃，而页面重显不重建控制器，
+ * 回前台是唯一兜底时机（写法对齐 LoginPage / PrivateMessagePage）。
+ */
+class HomeFeedApplicationStateCallback extends ApplicationStateChangeCallback {
+  private readonly onForeground: () => void;
+
+  constructor(onForeground: () => void) {
+    super();
+    this.onForeground = onForeground;
+  }
+
+  onApplicationForeground(): void {
+    this.onForeground();
+  }
+}
 
 @Component
 export struct HomeFeedPage {
@@ -154,16 +173,24 @@ export struct HomeFeedPage {
   private lastRefreshSettleTime: number = 0;
   /** 双缓冲预取页（独立仓库与新鲜度判断都在类内，不影响当前显示内容）。 */
   private pendingFeed: HomePendingFeed = new HomePendingFeed();
+  /** 应用前后台监听：回前台补一次预取（后台期间 pending 必过期，重显又不会重建控制器）。 */
+  private applicationContext?: common.ApplicationContext = undefined;
+  private applicationStateCallback?: HomeFeedApplicationStateCallback = undefined;
 
   aboutToAppear(): void {
     // 登记给根 HdsNavigation 做 bindToScrollable：驱动标题栏滚动模糊。
     topLevelScrollRegistry.register(HOME_FEED_SCROLL_KEY, this.listScroller);
     // 覆盖式顶栏：Refresh 头部从页面顶端展开，把刷新圆圈绘制偏移到悬浮标题栏下沿
     this.indicator = new FeedPullDownIndicatorHost(this.getUIContext(), floatingTitleBarOffset());
+    // pending 被丢弃（过期/小页）后由它自己回补，页面不必在每个调用点记挂。
+    this.pendingFeed.attach((): void => this.prefetchPendingPage());
+    this.registerApplicationStateCallback();
     // P3-7：返回栈重显（页面实例与状态保留）时 aboutToAppear 可能再次触发；
     // 控制器仍存活时直接复用，避免重建控制器并重载列表导致滚动位置丢失。
     if (this.controller !== undefined) {
       this.controller.activate();
+      // 重显不重建控制器，但预取可能已在后台或提交后断掉，补一次（新鲜时内部直接跳过）。
+      this.prefetchPendingPage();
       return;
     }
     const repository = this.repository;
@@ -201,6 +228,8 @@ export struct HomeFeedPage {
   }
 
   aboutToDisappear(): void {
+    this.unregisterApplicationStateCallback();
+    this.pendingFeed.dispose();
     this.openRequestId += 1;
     this.openRepository?.cancel();
     this.openRepository = undefined;
@@ -267,6 +296,47 @@ export struct HomeFeedPage {
         // 用户下拉提交后点开任意一条都不必等（与冷启动快照直出走同一条路径）。
         preloadService().prefetchPendingFeedAnswers(page.items);
       });
+  }
+
+  /** 注册应用前后台回调：回前台补一次预取。注册失败不影响页面其余功能。 */
+  private registerApplicationStateCallback(): void {
+    if (this.applicationStateCallback !== undefined) {
+      return;
+    }
+    const context = this.getUIContext().getHostContext();
+    if (context === undefined) {
+      return;
+    }
+    const callback: HomeFeedApplicationStateCallback =
+      new HomeFeedApplicationStateCallback((): void => this.onApplicationForeground());
+    try {
+      const applicationContext: common.ApplicationContext = context.getApplicationContext();
+      applicationContext.on('applicationStateChange', callback);
+      this.applicationContext = applicationContext;
+      this.applicationStateCallback = callback;
+    } catch (_error) {
+      this.applicationContext = undefined;
+      this.applicationStateCallback = undefined;
+    }
+  }
+
+  private unregisterApplicationStateCallback(): void {
+    const applicationContext = this.applicationContext;
+    const callback = this.applicationStateCallback;
+    this.applicationContext = undefined;
+    this.applicationStateCallback = undefined;
+    if (applicationContext === undefined || callback === undefined) {
+      return;
+    }
+    try {
+      applicationContext.off('applicationStateChange', callback);
+    } catch (_error) {
+    }
+  }
+
+  /** 回前台：后台期间 pending 必然过期、在途请求也可能被系统丢弃，统一补一次（内部幂等）。 */
+  private onApplicationForeground(): void {
+    this.prefetchPendingPage();
   }
 
   build() {
@@ -350,8 +420,9 @@ export struct HomeFeedPage {
               this.suppressPullRefresh();
               return;
             }
-            // 双缓冲提交：pending 存在且新鲜时直接显示预取页（零等待），随后立刻重新预取；
-            // 无可用 pending 时保持原来的控制器刷新。
+            // 双缓冲提交：pending 新鲜时直接显示（零等待），随后立刻重新预取；
+            // 没有可提交的页（没预取到/已过期/小页丢弃）时走控制器刷新，同时补一次预取，
+            // 否则 pending 被丢弃后再没人回补，双缓冲会永久停在「没有下一页」。
             const prepared: FeedPage | undefined = this.pendingFeed.take(this.items.length);
             if (prepared !== undefined) {
               this.controller?.applyPreparedPage(prepared);
@@ -360,6 +431,7 @@ export struct HomeFeedPage {
               return;
             }
             this.controller?.refresh();
+            this.prefetchPendingPage();
           })
           .onStateChange((status: RefreshStatus): void => {
             this.indicator?.onStateChange(status);
