@@ -214,7 +214,7 @@ export function answerSwitchPaneOpacity(style: AnswerSwitchStyle, visible: boole
  */
 
 export const PRELOAD_OPTIMIZATION_DESCRIPTION: string =
-  '开启后主页/热榜/回答/评论逐级预加载，相邻回答与热评常驻，返回上级不丢缓存；关闭则完全使用原有加载机制';
+  '开启后主页/热榜/回答/评论逐级预加载，当前答 ±1 及其评论常驻，返回上级不丢缓存；关闭则完全使用原有加载机制';
 
 export const PRELOAD_CACHE_BUDGET_DESCRIPTION: string =
   '预加载内存缓存的上限；调小会立即按新配额回收，调大后随浏览逐步填充';

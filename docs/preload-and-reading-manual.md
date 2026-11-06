@@ -172,9 +172,9 @@
   - 只有落在当前钉住窗口里的条目才会 `promote()`，主页预取与段评不再无差别钉住
 
 - **队列模型**（`PreloadPriority`）：单线程串行
-  - 四档：`URGENT`（段评、子评论）> `NORMAL`（回答/评论/主页当前页）> `HOT_FEED`（热榜）> `HOME_PENDING`（主页缓冲）
+  - 四档：`URGENT`（段评、子评论）> `NORMAL`（回答/评论/主页当前页）> `HOT_FEED`（热榜）> `HOME_PENDING`（最低档，当前未使用）
   - 同档**后进先出**（最新入队的批次先跑）；一个批次内部顺序保持不变（回答页那 3 步、信息流条目顺序都不会被倒置）
-  - `HOME_PENDING` 无论何时入队都追加到**整条队列最后**，只有其它档都空了才轮到它
+  - 主页双缓冲的**页面本身**由 `HomePendingFeed` 独立请求、不进队列；它的回答/文章正文排 `NORMAL` 队尾
   - **任务生命周期**：评论/子评论/段评/评论翻页 15s，其余非豁免任务（热榜）5s；到点没跑完就丢弃/中止，
     取消在途请求且不再重试；**主页预取与「回答页的下一答」不设上限**，保证冷启动与切答的兜底
   - 唯一会清空整条队列并取消全部在途请求的是关闭「预加载优化」这个开关
@@ -193,7 +193,7 @@
 
 ## 10. 缓存架构与查找顺序
 
-**你的需求**：1GB 总队列；**后续改** 2GB；相邻回答与热评要**独立内存空间额外重复缓存、更新激进**，拿不到再看队列，再没有才走网络；返回上一级不要销毁这一级的缓存。
+**你的需求**：1GB 总队列；**后续改** 2GB；**再改**为可切 512MB/2GB/4GB（默认 512MB）；相邻回答与热评要**独立内存空间额外重复缓存、更新激进**，拿不到再看队列，再没有才走网络；返回上一级不要销毁这一级的缓存。
 
 **我的方法**：
 
@@ -243,7 +243,6 @@
 | 抢占只取消在途请求 | 已废止 | 现规则是「任务之间互不打断」，抢占与暂停取消都已移除 |
 | 单飞 BUSY | 已处理 | 预取各档尽量使用独立 client（段评已分离）；仍撞上时退到本档队尾重试，最多 3 次 |
 | 前台让带宽 | 已移除 | 改为靠 LIFO 让「用户刚操作的那批」天然排在最前；页面自身请求与预取不再互相取消 |
-| 前台让带宽是时间窗启发式 | 2.5s / 1.2s | 按“进入页面后 N 毫秒”暂停，而不是等前台请求完成的事件；慢网下仍可能有短暂重叠 |
 | 热榜 UI 级种子渲染 | **近似实现** | 切到热榜时靠缓存命中零等待，没有直接把预取页塞进 `ChannelFeedPage` 的状态 |
 | 图片主动预热 | 未做（按约定） | 只预热文字与评论；图片交给系统 Image 缓存 |
 | 冷启动首帧 | 已做 | 仍受 preferences 读取耗时影响，极端慢存储下可能有几十毫秒 |
@@ -253,7 +252,7 @@
 
 ## 14. 变更文件清单（本轮）
 
-**新增（7 个文件，功能各自收敛到一个文件）**
+**新增（8 个文件，功能各自收敛到一个文件）**
 - `data/src/main/ets/cache/PreloadCache.ets`（512MB 主队列 + 64MB 钉住窗口 + JSON 读写；必须在 data 模块，供各仓库直接调用）
 - `entry/src/main/ets/pages/PreloadCenter.ets`（**预加载唯一实现文件**：预取队列 `PreloadService`、
   热榜 `HotFeedPending`、主页双缓冲 `HomePendingFeed`、开关落地 `applyPreloadOptimization` /
@@ -266,36 +265,37 @@
   回答底部独立评论框）
 - `entry/src/main/ets/pages/LoginKeyboardAvoidance.ets`（登录页键盘避让两个函数）
 - `entry/src/test/ReadingExperience.test.ets`（纯策略单测）
+- `docs/preload-and-reading-manual.md`（本手册）
 
 > 合并是为了“预加载 / 冷启动 / 其余”各占一个文件、便于整体搬运；`data` 模块的 `PreloadCache` 因为
 > 仓库层（data 内部）直接读写，无法搬到 entry，单独保留。
 
-**修改（24 个文件；括号内为相对基线的增/删行数，均只做接线）**
-- `data/Index.ets`（+2）：导出缓存模块
-- `data/.../preferences/AppPreferencesStore.ets`（+101/-3）：5 项新偏好（手感/搜索栏/切答动画/热评条数/预加载优化）
+**修改（25 个文件；括号内为相对基线的增/删行数，均只做接线）**
+- `data/Index.ets`（+3）：导出缓存模块
+- `data/.../preferences/AppPreferencesStore.ets`（+125/-3）：5 项新偏好（手感/搜索栏/切答动画/热评条数/预加载优化）
 - `data/.../repository/FeedRepository.ets`（+2）：`refreshAfterStartupCache?()`
 - `data/.../repository/DefaultFeedRepository.ets`（+17/-2）：启动快照优先 + 是否需要补刷新 + 构造参数 `skipStartupCache`
-- `data/.../repository/DefaultContentRepository.ets`（+9/-1）：回答正文缓存
-- `data/.../repository/DefaultCommentRepository.ets`（+29/-2）：根/子评论首屏缓存（仅热度排序）
+- `data/.../repository/DefaultContentRepository.ets`（+17/-2）：回答正文缓存
+- `data/.../repository/DefaultCommentRepository.ets`（+31/-2）：根/子评论首屏缓存（仅热度排序）
 - `data/.../repository/SegmentCommentRepository.ets`（+13/-1）：段评首屏缓存
 - `data/.../repository/DefaultChannelFeedRepository.ets`（+8）：热榜首屏缓存
-- `entry/.../entryability/EntryAbility.ets`（+3/-1）：冷启动预热一行调用
-- `entry/.../pages/AppShell.ets`（+29/-24）：搜索栏替换、预加载开关、热榜切页生效、5 项广播
-- `entry/.../pages/AppearanceSettingsPage.ets`（+82/-1）：5 个新设置行 + 写回分支
-- `entry/.../pages/ContentDetailPages.ets`（+162/-31）：切答动画、评论框、热评条数、逐级预取、遮挡时保留缓存
-- `entry/.../pages/HomeFeedPage.ets`（+53/-5）：首帧直出、双缓冲接线、条目预取
+- `entry/.../entryability/EntryAbility.ets`（+3）：冷启动预热一行调用
+- `entry/.../pages/AppShell.ets`（+38/-24）：搜索栏替换、预加载开关、热榜切页生效、5 项广播
+- `entry/.../pages/AppearanceSettingsPage.ets`（+98/-1）：5 个新设置行 + 写回分支
+- `entry/.../pages/ContentDetailPages.ets`（+165/-36）：切答动画、评论框、热评条数、逐级预取、遮挡时保留缓存
+- `entry/.../pages/HomeFeedPage.ets`（+57/-5）：首帧直出、双缓冲接线、条目预取
 - `entry/.../pages/HomeFeedState.ets`（+41/-7）：静默刷新、提交/还原、空结果保护
 - `entry/.../pages/HotCommentState.ets`（+27/-8）：条数上限、仅 READY 可见
-- `entry/.../pages/CommentLayer.ets`（+4）：子评论预取
+- `entry/.../pages/CommentLayer.ets`（+9）：子评论预取
 - `entry/.../pages/CommentState.ets`（+1/-1）：`commentActionError` 导出
 - `entry/.../pages/AnswerSwitchPrefetch.ets`（+11）：`cancelInFlight`
 - `entry/.../pages/ContinuousAnswerPage.ets`（+16）、`NativeContentDocument.ets`（+16/-1）：滚动手感接入
 - `entry/.../pages/LoginPage.ets`（+7）：键盘避让调用
-- `entry/.../pages/Index.ets`（+13/-4）：双缓冲仓库工厂与预取服务装配
-- `entry/.../pages/SettingsSearchIndex.ets`（+60）：5 个新设置项索引
+- `entry/.../pages/Index.ets`（+23/-3）：双缓冲仓库工厂与预取服务装配
+- `entry/.../pages/SettingsSearchIndex.ets`（+72）：5 个新设置项索引
 - `entry/src/test/List.test.ets`（+2）、`HotCommentState.test.ets`（+2/-2）：注册新用例、更新热评可见性断言
 
-总计：39 个文件、+2517 / -94 行（含手册与单测）。
+总计：33 个文件；代码与文档改动约 +3.1k / −0.1k 行（含手册与单测，注释整理另计）。
 
 ---
 

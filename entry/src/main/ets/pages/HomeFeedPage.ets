@@ -184,7 +184,7 @@ export struct HomeFeedPage {
     if (seeded !== undefined) {
       controller.restoreItems(seeded);
     }
-    // 挂载即并行预取待提交页：不等首屏 loadInitial 完成，用户第一次下拉时大概率已就绪。
+    // 挂载即并行预取待提交页：不等首屏 loadInitial 完成，用户第一次下拉时通常已就绪。
     this.prefetchPendingPage();
     // 冷启动首屏可能来自硬盘快照（已先渲染）：设置允许时静默补一次网络刷新，
     // 刷新期间预取让位，避免启动瞬间两路请求打同一接口。

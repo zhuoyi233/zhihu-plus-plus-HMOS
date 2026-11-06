@@ -1888,7 +1888,7 @@ export struct ContinuousAnswerPage {
         .cachedCount(6)
         .edgeEffect(EdgeEffect.Spring)
         // 滚动手感：摩擦系数决定松手后的滑行距离，onScrollFrameBegin 只换算手指拖动阶段的位移，
-        // 惯性帧原样放行，避免二次放大导致滑行失控（档位含义见 ScrollFeel）。
+        // 惯性帧原样放行，避免二次放大导致滑行失控（档位含义见 ReadingTweaks）。
         .friction(scrollFeelProfile(decodeScrollFeelPreset(this.scrollFeelPreset)).friction)
         .onScrollFrameBegin((offset: number, state: ScrollState) => {
           if (state !== ScrollState.Scroll) {

@@ -58,7 +58,7 @@ const COMMENT_TASK_DEADLINE_MS: number = 15000;
  * - `URGENT`：用户刚点开、马上要看的（段评、评论页子评论）；
  * - `NORMAL`：回答页逐级预取、评论页全部评论、主页当前显示页的回答；
  * - `HOT_FEED`：热榜首屏，切到热榜前备好即可；
- * - `HOME_PENDING`：主页双缓冲那一页（还没显示），永远排在整条队列最后。
+ * - `HOME_PENDING`：最低档；当前无任务使用（主页缓冲的正文改排 NORMAL 队尾）。
  */
 export enum PreloadPriority {
   URGENT = 0,
@@ -97,10 +97,11 @@ function isBusyFailure(error: Object): boolean {
 /**
  * 预取队列：单线程串行。
  *
- * 四档依次执行：URGENT > NORMAL > HOT_FEED > HOME_PENDING；同档后进先出（批内顺序不变）；
- * 主页缓冲永远追加到队尾；只有关闭「预加载优化」才清空并取消。
- * 任务存活上限：非豁免任务入队后 5s 内没跑完就丢弃/中止（避免历史任务长期占队列）；
- * 主页预取与回答页的下一答不设上限。BUSY（client 单飞被占）退到本档队尾重试，最多 3 次。
+ * 四档依次执行：URGENT > NORMAL > HOT_FEED > HOME_PENDING；同档后进先出（批内顺序不变）。
+ * 主页双缓冲的正文排 NORMAL 队尾（页面本身由 HomePendingFeed 独立请求，不进队列）；
+ * 只有关闭「预加载优化」才清空并取消。
+ * 任务存活上限：评论/子评论/段评/评论翻页 15s，其余非豁免（热榜）5s；主页预取与
+ * 回答页的下一答不设上限。BUSY（client 单飞被占）退到本档队尾重试，最多 3 次。
  */
 export class PreloadService {
   private answerRepositoryFactory?: () => ContentRepository | undefined;
@@ -122,7 +123,7 @@ export class PreloadService {
   private pinnedKeys: Array<string> = [];
   /** 正在执行任务的存活定时器；-1 表示未在计时。 */
   private deadlineTimer: number = -1;
-  /** 因超过存活上限被丢弃的任务数（诊断用）。 */
+  /** 因超过存活上限被丢弃的任务数（仅累计，暂未对外暴露）。 */
   private droppedExpired: number = 0;
 
   configure(answerRepositoryFactory: () => ContentRepository | undefined,
@@ -146,7 +147,7 @@ export class PreloadService {
     return this.enabled;
   }
 
-  /** 主页当前显示页：只取回答正文（热评留到进入回答后的最高优先级任务）。 */
+  /** 主页当前显示页：只取回答与文章正文；热评随「进入回答后的评论任务」一起取。 */
   prefetchFeedAnswers(items: Array<FeedItem>): void {
     this.enqueueBlock(this.feedAnswerTasks(items, PreloadPriority.NORMAL));
   }
@@ -334,7 +335,7 @@ export class PreloadService {
     preloadCache().repin(keys);
   }
 
-  /** 入队一个批次：同档 LIFO、HOME_PENDING 追加到队尾；同键任务用新的替换旧的。 */
+  /** 入队一个批次：同档 LIFO；传 toBackOfTier 时插到本档队尾；同键任务用新的替换旧的。 */
   private enqueueBlock(tasks: Array<PreloadTask>, urgent: boolean = false,
     toBackOfTier: boolean = false): void {
     if (tasks.length === 0) {
@@ -690,7 +691,7 @@ export class HomePendingFeed {
     repository.loadHomePage().then((page: FeedPage): void => {
       this.pending = page;
       this.pendingAtMs = Date.now();
-      // 新一页已在内存里但还没显示：立刻把它包含的回答与热评排进预取队列，
+      // 新一页已在内存里但还没显示：立刻把它包含的回答/文章正文排进预取队列，
       // 用户下拉提交后点开任意一条都不用等（调用方决定优先级）。
       onReady(page);
     }).catch((_error: Error): void => {

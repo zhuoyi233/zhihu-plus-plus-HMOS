@@ -3201,7 +3201,7 @@ struct ContentDetailPage {
     return this.answerViewportHeightVp > 0 ? this.answerViewportHeightVp : 800;
   }
 
-  /** 整页预览/冻结页沿切换轴的位移（横向 X、纵向 Y）；位移比例随样式变化，见 AnswerSwitchMotion。 */
+  /** 整页预览/冻结页沿切换轴的位移（横向 X、纵向 Y）；位移比例随样式变化，见 ReadingTweaks。 */
   private answerSwitchPageTranslate(delta: number): TranslateOptions {
     const horizontal: boolean = this.answerSwitchMode === 'horizontal';
     return answerSwitchTranslate(answerSwitchStyleValue(this.answerSwitchStyle), horizontal, delta);
