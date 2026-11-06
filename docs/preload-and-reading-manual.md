@@ -144,8 +144,8 @@
    - `prefetch(factory, enabled)` 用**独立 FeedRepository**（`skipStartupCache=true`）提前取下一页
    - 下拉**松手过阈值**：`take(items.length)` 直接提交（零等待）→ 清空并立刻重新预取
    - 拖拽过程**不做任何提前预判**；小页保护：pending 条目 < 3 且少于当前列表时不提交
-   - **预取页一取回就预热它的回答**：`HomePendingFeed.prefetch(..., onReady)` 回调里立刻
-     `prefetchFeedAnswers(page.items)`（正文 + 热评），所以下拉提交后点开任意一条都不用等；
+   - **预取页一取回就连同它的正文一起预热**：`HomePendingFeed.prefetch(..., onReady)` 回调里立刻
+     `prefetchPendingFeedAnswers(page.items)`（回答/文章正文，排在 NORMAL 队尾），所以下拉提交后点开任意一条都不用等；
      冷启动从快照直出走的是同一条路径（`restoreItems → applyState → prefetchFeedAnswers`）
 5. **空结果保护**：`HomeFeedState.loadFirstPage()`
    - 本轮拿到空结果但列表已有内容时，**保留原内容并维持 READY**，不再退化成"暂时没有可显示的内容"
@@ -161,7 +161,7 @@
 
 - 新增 `entry/src/main/ets/pages/PreloadCenter.ets`
   - `prefetchFeedAnswers(items)`：主页当前显示页，只取**回答与文章**的正文，排进 `NORMAL`
-  - `prefetchPendingFeedAnswers(items)`：主页双缓冲那一页（还没显示），只取回答/文章正文，排进 `HOME_PENDING`（整队最后）
+  - `prefetchPendingFeedAnswers(items)`：主页双缓冲那一页（还没显示），**连它的回答/文章正文一起预热**，排在 `NORMAL` 档队尾（当前页正文优先，但不能垫到整队最后）
   - `prefetchOnAnswerOpened(previousId, answerId, nextId)`：固定 3 步（批内顺序不变）
     ① 下一个回答正文（最高优先级、不设寿命）→ ② 当前回答评论（首屏即热评）→ ③ 下一个回答评论；
     热评不再单独排队，把「当前答 ±1」设为缓存钉住窗口

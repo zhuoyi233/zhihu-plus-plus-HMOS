@@ -151,9 +151,13 @@ export class PreloadService {
     this.enqueueBlock(this.feedAnswerTasks(items, PreloadPriority.NORMAL));
   }
 
-  /** 主页双缓冲那一页：只取回答正文，排进 HOME_PENDING（整队最后）。 */
+  /**
+   * 主页双缓冲那一页：**连同它的回答/文章正文一起预热**。
+   * 排在 NORMAL 档队尾（当前页正文优先），保证用户下次下拉前能跑完；
+   * 只有「页面本身」可以最低优先级，正文不能跟着垫底，否则永远抢不到执行权。
+   */
   prefetchPendingFeedAnswers(items: Array<FeedItem>): void {
-    this.enqueueBlock(this.feedAnswerTasks(items, PreloadPriority.HOME_PENDING));
+    this.enqueueBlock(this.feedAnswerTasks(items, PreloadPriority.NORMAL), false, true);
   }
 
   /**
@@ -331,7 +335,8 @@ export class PreloadService {
   }
 
   /** 入队一个批次：同档 LIFO、HOME_PENDING 追加到队尾；同键任务用新的替换旧的。 */
-  private enqueueBlock(tasks: Array<PreloadTask>): void {
+  private enqueueBlock(tasks: Array<PreloadTask>, urgent: boolean = false,
+    toBackOfTier: boolean = false): void {
     if (tasks.length === 0) {
       return;
     }
@@ -352,9 +357,18 @@ export class PreloadService {
       return;
     }
     const priority: PreloadPriority = accepted[0].priority;
-    if (priority === PreloadPriority.HOME_PENDING) {
+    if (urgent) {
+      for (let index = accepted.length - 1; index >= 0; index -= 1) {
+        this.queue.unshift(accepted[index]);
+      }
+    } else if (toBackOfTier) {
+      // 插到本档（含更高档）之后：当前页任务先跑，这批随后跟上，但不会被后续批次永久压住。
+      let insertAt = 0;
+      while (insertAt < this.queue.length && this.queue[insertAt].priority <= priority) {
+        insertAt += 1;
+      }
       for (let index = 0; index < accepted.length; index += 1) {
-        this.queue.push(accepted[index]);
+        this.queue.splice(insertAt + index, 0, accepted[index]);
       }
     } else {
       let insertAt = 0;
