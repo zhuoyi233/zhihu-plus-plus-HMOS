@@ -1,13 +1,14 @@
 /**
  * 「预加载优化」统一内存缓存。
  *
- * 全局一份，按配额与分级 LRU 渐进回收；配额 2GB（字符串按 UTF-16 折算），
- * 到 85% 批量淘汰，顺序：子评论 → 评论 → 回答正文 → 热评 → 信息流（越靠前越先回收）；
+ * 全局一份，按配额与分级 LRU 渐进回收；配额 512MB（字符串按 UTF-16 折算），
+ * 到 85% 批量淘汰，顺序：子评论 → 评论 → 回答正文 → 热评 → 信息流（越靠前越先回收）。
+ * 钉住层只放当前回答 ±1（正文与评论），有独立上限并单独回收，不参与普通淘汰。
  * 关闭开关时整体 no-op。
  */
 
 export enum PreloadCacheTier {
-  /** 钉住：相邻回答与其热评，永不参与 LRU 淘汰（进程内常驻，保证上下切答不掉缓存）。 */
+  /** 钉住：当前回答 ±1 的正文与评论，不参与普通 LRU 淘汰。 */
   PINNED = -1,
   CHILD_COMMENTS = 0,
   COMMENTS = 1,
@@ -16,15 +17,17 @@ export enum PreloadCacheTier {
   FEED = 4
 }
 
-export const PRELOAD_CACHE_QUOTA_BYTES: number = 2 * 1024 * 1024 * 1024;
-/** 钉住层的容量上限：占 1GB 配额的一部分，超出后按最久未访问淘汰钉住层。 */
-export const PRELOAD_PINNED_CAPACITY_BYTES: number = 256 * 1024 * 1024;
+export const PRELOAD_CACHE_QUOTA_BYTES: number = 512 * 1024 * 1024;
+/** 钉住层容量上限：只放当前 ±1，正常远低于这个值，超出按最久未访问回收。 */
+export const PRELOAD_PINNED_CAPACITY_BYTES: number = 64 * 1024 * 1024;
 export const PRELOAD_CACHE_TRIM_THRESHOLD: number = Math.floor(PRELOAD_CACHE_QUOTA_BYTES * 0.85);
 
 interface PreloadEntry {
   readonly payload: string;
   readonly size: number;
   tier: PreloadCacheTier;
+  /** 写入时的层级：取消钉住时回到这里，不再一律落回 ANSWER。 */
+  readonly baseTier: PreloadCacheTier;
   lastAccessMs: number;
 }
 
@@ -72,6 +75,7 @@ export class PreloadCache {
       payload: payload,
       size: payload.length * 2,
       tier: tier,
+      baseTier: tier,
       lastAccessMs: Date.now()
     };
     this.entries.set(key, entry);
@@ -81,14 +85,35 @@ export class PreloadCache {
     }
   }
 
-  /** 把已缓存条目提升为钉住（相邻回答/热评），不改变 payload。 */
-  promote(key: string, tier: PreloadCacheTier): void {
+  /** 钉住单个键（回答页用它把窗口内条目补钉住；窗口换血由 `repin` 整体处理）。 */
+  promote(key: string): void {
     const entry = this.entries.get(key);
     if (entry === undefined) {
       return;
     }
-    entry.tier = tier;
+    entry.tier = PreloadCacheTier.PINNED;
     entry.lastAccessMs = Date.now();
+  }
+
+  /**
+   * 重设钉住窗口：先把所有钉住项放回各自原始层级，再钉住给定键。
+   * 回答页切换时调用，保证钉住集合只有「当前答 ±1」，不会越用越大。
+   */
+  repin(keys: Array<string>): void {
+    this.entries.forEach((entry: PreloadEntry): void => {
+      if (entry.tier === PreloadCacheTier.PINNED) {
+        entry.tier = entry.baseTier;
+      }
+    });
+    const now: number = Date.now();
+    for (let index = 0; index < keys.length; index += 1) {
+      const entry = this.entries.get(keys[index]);
+      if (entry !== undefined) {
+        entry.tier = PreloadCacheTier.PINNED;
+        entry.lastAccessMs = now;
+      }
+    }
+    this.enforcePinnedCap();
   }
 
   invalidate(key: string): void {
@@ -99,7 +124,8 @@ export class PreloadCache {
     }
   }
 
-  private trimPinned(): void {
+  /** 钉住层独立回收：超出 `PRELOAD_PINNED_CAPACITY_BYTES` 时按最久未访问淘汰。 */
+  enforcePinnedCap(): void {
     const pinned: Array<string> = [];
     let pinnedBytes = 0;
     this.entries.forEach((entry: PreloadEntry, key: string): void => {
@@ -133,6 +159,12 @@ export class PreloadCache {
 
   /** 分级 + LRU 淘汰，直到回到配额的 70% 以下（一次回收到位，避免频繁抖动）。 */
   private trim(): void {
+    // 钉住层不进入普通淘汰：先把钉住层压到自己的容量上限内。
+    this.enforcePinnedCap();
+    const target = Math.floor(PRELOAD_CACHE_QUOTA_BYTES * 0.7);
+    if (this.totalBytes <= target) {
+      return;
+    }
     const keys: Array<string> = Array.from(this.entries.keys());
     keys.sort((left: string, right: string): number => {
       const leftEntry = this.entries.get(left);
@@ -144,9 +176,6 @@ export class PreloadCache {
       }
       return (leftEntry?.lastAccessMs ?? 0) - (rightEntry?.lastAccessMs ?? 0);
     });
-    // 钉住层不进入普通淘汰：先把钉住层压到自己的容量上限内（同样按最久未访问）。
-    this.trimPinned();
-    const target = Math.floor(PRELOAD_CACHE_QUOTA_BYTES * 0.7);
     for (let index = 0; index < keys.length && this.totalBytes > target; index += 1) {
       const entry = this.entries.get(keys[index]);
       if (entry !== undefined && entry.tier === PreloadCacheTier.PINNED) {
@@ -198,7 +227,7 @@ export function preloadFeedKey(name: string): string {
 
 /**
  * 缓存读取的共享实现：解析失败、或解析结果不是对象时立刻作废该键并返回 undefined，
- * 调用方只需 `as` 成目标结构使用。仓库层因此各只需 2~3 行，不必各写一份 try/catch。
+ * 调用方只需 `as` 成目标结构使用。
  */
 export function readPreloadJson(key: string): Object | undefined {
   const payload: string | undefined = preloadCache().get(key);
@@ -222,4 +251,3 @@ export function readPreloadJson(key: string): Object | undefined {
 export function writePreloadJson(key: string, value: Object, tier: PreloadCacheTier): void {
   preloadCache().put(key, JSON.stringify(value), tier);
 }
-

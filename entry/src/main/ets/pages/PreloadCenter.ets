@@ -25,7 +25,6 @@ import {
   preloadCommentsKey,
   preloadFeedKey,
   PreloadOptimizationMode,
-  preloadSegmentCommentsKey,
   SegmentCommentTarget,
   SegmentInfoParagraph
 } from 'data';
@@ -39,6 +38,12 @@ const COMMENT_PAGES_PREFETCH_LIMIT: number = 3;
 /** BUSY（同一 client 单飞占位被占）时的重试：退到本档队尾延迟重试，最多 3 次。 */
 const BUSY_MAX_RETRIES: number = 3;
 const BUSY_RETRY_BASE_DELAY_MS: number = 800;
+
+/**
+ * 非豁免任务的存活上限：入队后 5s 内没跑完（还在排队或正在跑）就丢弃/中止。
+ * 主页预取与「回答页的下一个回答」不设上限（`exempt`）。
+ */
+const TASK_DEADLINE_MS: number = 5000;
 
 /**
  * 任务优先级（数值越小越先执行）。
@@ -66,6 +71,10 @@ interface PreloadTask {
   readonly onHotPage?: (page: ChannelFeedPage) => void;
   /** BUSY 重试次数（0 表示首次执行）。 */
   attempt: number;
+  /** 存活截止时刻（ms）；0 表示不限制（主页预取、回答页的下一答）。 */
+  deadlineAt: number;
+  /** 超时被中止：不再重试、结果不采纳。 */
+  aborted: boolean;
 }
 
 function taskKey(task: PreloadTask): string {
@@ -79,11 +88,12 @@ function isBusyFailure(error: Object): boolean {
 }
 
 /**
- * 预取队列：单线程串行，任务之间互不打断。
+ * 预取队列：单线程串行。
  *
  * 四档依次执行：URGENT > NORMAL > HOT_FEED > HOME_PENDING；同档后进先出（批内顺序不变）；
  * 主页缓冲永远追加到队尾；只有关闭「预加载优化」才清空并取消。
- * BUSY（client 单飞被占）不算失败，退到本档队尾延迟重试，最多 3 次。
+ * 任务存活上限：非豁免任务入队后 5s 内没跑完就丢弃/中止（避免历史任务长期占队列）；
+ * 主页预取与回答页的下一答不设上限。BUSY（client 单飞被占）退到本档队尾重试，最多 3 次。
  */
 export class PreloadService {
   private answerRepositoryFactory?: () => ContentRepository | undefined;
@@ -97,8 +107,16 @@ export class PreloadService {
   private readonly queue: Array<PreloadTask> = [];
   private readonly queued: Set<string> = new Set<string>();
   private running: boolean = false;
+  /** 正在执行的任务：存活定时器到点时用它判断是否仍是同一个任务。 */
+  private current?: PreloadTask;
   private epoch: number = 0;
   private enabled: boolean = false;
+  /** 当前钉住窗口（当前答 ±1 的正文与评论），任务完成后据此补钉住。 */
+  private pinnedKeys: Array<string> = [];
+  /** 正在执行任务的存活定时器；-1 表示未在计时。 */
+  private deadlineTimer: number = -1;
+  /** 因超过存活上限被丢弃的任务数（诊断用）。 */
+  private droppedExpired: number = 0;
 
   configure(answerRepositoryFactory: () => ContentRepository | undefined,
     commentRepositoryFactory: () => CommentRepository | undefined,
@@ -121,21 +139,23 @@ export class PreloadService {
     return this.enabled;
   }
 
-  /** 主页当前显示页：回答正文 + 热评排进 NORMAL（最新一批最优先）。 */
+  /** 主页当前显示页：只取回答正文（热评留到进入回答后的最高优先级任务）。 */
   prefetchFeedAnswers(items: Array<FeedItem>): void {
     this.enqueueBlock(this.feedAnswerTasks(items, PreloadPriority.NORMAL));
   }
 
-  /** 主页双缓冲那一页：回答正文 + 热评排进 HOME_PENDING（整队最后）。 */
+  /** 主页双缓冲那一页：只取回答正文，排进 HOME_PENDING（整队最后）。 */
   prefetchPendingFeedAnswers(items: Array<FeedItem>): void {
     this.enqueueBlock(this.feedAnswerTasks(items, PreloadPriority.HOME_PENDING));
   }
 
   /**
-   * 打开回答后按批次顺序预取：热评 → 下一个回答 → 当前回答评论 → 下一个回答评论。
+   * 打开回答后按批次顺序预取：热评 → 下一个回答 → 下一个回答评论。
    * 不预取上一个回答与所属问题（上一个回答靠缓存回溯，未命中时按需加载）。
+   * 同时把「当前答 ±1」设为缓存钉住窗口。
    */
-  prefetchOnAnswerOpened(answerId: string, nextAnswerId: string | undefined): void {
+  prefetchOnAnswerOpened(previousAnswerId: string | undefined, answerId: string,
+    nextAnswerId: string | undefined): void {
     if (!this.enabled || answerId.length === 0) {
       return;
     }
@@ -144,12 +164,10 @@ export class PreloadService {
       this.task('hot', 'answer', answerId, PreloadPriority.NORMAL)
     ];
     if (hasNext) {
-      tasks.push(this.task('answerOnly', 'answer', nextAnswerId as string, PreloadPriority.NORMAL));
-    }
-    tasks.push(this.task('comments', 'answer', answerId, PreloadPriority.NORMAL));
-    if (hasNext) {
+      tasks.push(this.task('answerOnly', 'answer', nextAnswerId as string, PreloadPriority.NORMAL, true));
       tasks.push(this.task('comments', 'answer', nextAnswerId as string, PreloadPriority.NORMAL));
     }
+    this.pinAnswerWindow(previousAnswerId, answerId, nextAnswerId);
     this.enqueueBlock(tasks);
   }
 
@@ -204,7 +222,9 @@ export class PreloadService {
       contentId: contentId,
       priority: PreloadPriority.URGENT,
       segment: target,
-      attempt: 0
+      attempt: 0,
+      deadlineAt: Date.now() + TASK_DEADLINE_MS,
+      aborted: false
     };
     this.enqueueBlock([task]);
   }
@@ -220,7 +240,9 @@ export class PreloadService {
       contentId: 'hot',
       priority: PreloadPriority.HOT_FEED,
       onHotPage: onPage,
-      attempt: 0
+      attempt: 0,
+      deadlineAt: Date.now() + TASK_DEADLINE_MS,
+      aborted: false
     };
     this.enqueueBlock([task]);
   }
@@ -230,17 +252,32 @@ export class PreloadService {
     this.epoch += 1;
     this.queue.splice(0, this.queue.length);
     this.queued.clear();
+    this.pinnedKeys = [];
+    this.current = undefined;
+    this.clearDeadline();
     this.answerRepository?.cancel();
     this.commentRepository?.cancel();
     this.segmentRepository?.cancel();
     this.hotFeedRepository?.cancel();
   }
 
-  private task(kind: string, contentType: string, contentId: string, priority: PreloadPriority): PreloadTask {
-    return { kind: kind, contentType: contentType, contentId: contentId, priority: priority, attempt: 0 };
+  /**
+   * @param exempt true 表示不设存活上限（主页预取、回答页的下一答）
+   */
+  private task(kind: string, contentType: string, contentId: string, priority: PreloadPriority,
+    exempt: boolean = false): PreloadTask {
+    return {
+      kind: kind,
+      contentType: contentType,
+      contentId: contentId,
+      priority: priority,
+      attempt: 0,
+      deadlineAt: exempt ? 0 : Date.now() + TASK_DEADLINE_MS,
+      aborted: false
+    };
   }
 
-  /** 把一页回答拆成任务：正文 + 热评一起（冷启动也可以只取正文，由调用方决定）。 */
+  /** 主页一页回答：只拆正文任务（不含热评），一律不设存活上限。 */
   private feedAnswerTasks(items: Array<FeedItem>, priority: PreloadPriority): Array<PreloadTask> {
     const tasks: Array<PreloadTask> = [];
     if (!this.enabled) {
@@ -251,9 +288,29 @@ export class PreloadService {
       if (target.kind !== FeedTargetKind.ANSWER) {
         continue;
       }
-      tasks.push(this.task('answer', 'answer', target.id, priority));
+      tasks.push(this.task('answerOnly', 'answer', target.id, priority, true));
     }
     return tasks;
+  }
+
+  /** 钉住窗口：当前答 ±1 的正文与评论；切换回答时整体换窗口，避免钉住集合越用越大。 */
+  private pinAnswerWindow(previousId: string | undefined, answerId: string,
+    nextId: string | undefined): void {
+    const keys: Array<string> = [];
+    const ids: Array<string> = [];
+    if (previousId !== undefined) {
+      ids.push(previousId);
+    }
+    ids.push(answerId);
+    if (nextId !== undefined) {
+      ids.push(nextId);
+    }
+    for (let index = 0; index < ids.length; index += 1) {
+      keys.push(preloadAnswerKey(ids[index]));
+      keys.push(preloadCommentsKey('answer', ids[index]));
+    }
+    this.pinnedKeys = keys;
+    preloadCache().repin(keys);
   }
 
   /** 入队一个批次：同档 LIFO、HOME_PENDING 追加到队尾；同键任务用新的替换旧的。 */
@@ -296,13 +353,17 @@ export class PreloadService {
 
   /** BUSY 重试：退到本档队尾（不抢新请求的位置），延迟后重新入队。 */
   private scheduleBusyRetry(task: PreloadTask): void {
-    if (task.attempt >= BUSY_MAX_RETRIES) {
+    if (task.aborted || task.attempt >= BUSY_MAX_RETRIES) {
+      return;
+    }
+    if (task.deadlineAt > 0 && Date.now() >= task.deadlineAt) {
+      this.droppedExpired += 1;
       return;
     }
     task.attempt += 1;
     const delay: number = BUSY_RETRY_BASE_DELAY_MS * task.attempt;
     setTimeout((): void => {
-      if (!this.enabled) {
+      if (!this.enabled || task.aborted) {
         return;
       }
       const key: string = taskKey(task);
@@ -317,6 +378,38 @@ export class PreloadService {
       this.queue.splice(insertAt, 0, task);
       this.pump();
     }, delay);
+  }
+
+  /** 给正在执行的任务装上存活定时器：到点仍未结束就中止（取消在途请求，不再重试）。 */
+  private armDeadline(task: PreloadTask): void {
+    this.clearDeadline();
+    if (task.deadlineAt <= 0) {
+      return;
+    }
+    const delay: number = Math.max(0, task.deadlineAt - Date.now());
+    this.deadlineTimer = setTimeout((): void => {
+      this.deadlineTimer = -1;
+      if (this.current !== task || task.aborted) {
+        return;
+      }
+      task.aborted = true;
+      this.droppedExpired += 1;
+      this.cancelInFlight();
+    }, delay);
+  }
+
+  private clearDeadline(): void {
+    if (this.deadlineTimer >= 0) {
+      clearTimeout(this.deadlineTimer);
+      this.deadlineTimer = -1;
+    }
+  }
+
+  private cancelInFlight(): void {
+    this.answerRepository?.cancel();
+    this.commentRepository?.cancel();
+    this.segmentRepository?.cancel();
+    this.hotFeedRepository?.cancel();
   }
 
   private removeQueued(key: string): void {
@@ -347,13 +440,25 @@ export class PreloadService {
         break;
       }
       this.queued.delete(taskKey(task));
+      // 排队期间已超时的任务直接丢弃，不再浪费一次请求。
+      if (task.deadlineAt > 0 && Date.now() >= task.deadlineAt) {
+        this.droppedExpired += 1;
+        continue;
+      }
+      this.current = task;
+      this.armDeadline(task);
       try {
         await this.run(task);
       } catch (error) {
-        // BUSY 是“另一个请求正占着同一个 client”，退到本档队尾延迟重试；其他失败静默忽略。
-        if (error instanceof Object && isBusyFailure(error as Object)) {
+        // 超时被中止的任务不再重试；BUSY 退到本档队尾延迟重试；其他失败静默忽略。
+        if (!task.aborted && error instanceof Object && isBusyFailure(error as Object)) {
           this.scheduleBusyRetry(task);
         }
+      } finally {
+        this.clearDeadline();
+      }
+      if (this.current === task) {
+        this.current = undefined;
       }
     }
     this.running = false;
@@ -380,18 +485,14 @@ export class PreloadService {
       await this.loadCommentPages(repository, task.contentType, task.contentId);
       return;
     }
-    if (task.kind === 'answer' || task.kind === 'answerOnly') {
+    if (task.kind === 'answerOnly') {
       const answers = this.answerRepository ?? this.answerRepositoryFactory?.();
-      if (answers !== undefined) {
-        this.answerRepository = answers;
-        await answers.getAnswer(task.contentId);
-      }
-      // 正文钉住：上下切答、返回后仍常驻，不被主队列 LRU 挤掉。
-      preloadCache().promote(preloadAnswerKey(task.contentId), PreloadCacheTier.PINNED);
-      if (task.kind === 'answerOnly') {
+      if (answers === undefined) {
         return;
       }
-      await this.loadHotComments(task.contentType, task.contentId);
+      this.answerRepository = answers;
+      await answers.getAnswer(task.contentId);
+      this.pinIfInWindow(preloadAnswerKey(task.contentId));
       return;
     }
     if (task.kind === 'hot') {
@@ -405,7 +506,7 @@ export class PreloadService {
     this.commentRepository = comments;
     if (task.kind === 'comments') {
       await comments.getRootCommentsPage(task.contentType, task.contentId, CommentSortOrder.SCORE);
-      preloadCache().promote(preloadCommentsKey(task.contentType, task.contentId), PreloadCacheTier.PINNED);
+      this.pinIfInWindow(preloadCommentsKey(task.contentType, task.contentId));
       return;
     }
     if (task.kind === 'child') {
@@ -413,7 +514,17 @@ export class PreloadService {
     }
   }
 
-  /** 段评：按划线段元信息现建仓库（带登录态），取一次热度排序首屏并钉住。 */
+  /** 只有落在当前钉住窗口里的条目才升级为 PINNED（home 预取等不再无差别钉住）。 */
+  private pinIfInWindow(key: string): void {
+    for (let index = 0; index < this.pinnedKeys.length; index += 1) {
+      if (this.pinnedKeys[index] === key) {
+        preloadCache().promote(key);
+        return;
+      }
+    }
+  }
+
+  /** 段评：按划线段元信息现建仓库（带登录态），取一次热度排序首屏。 */
   private async runSegment(task: PreloadTask): Promise<void> {
     const target: SegmentCommentTarget | undefined = task.segment;
     const factory = this.segmentRepositoryFactory;
@@ -426,8 +537,6 @@ export class PreloadService {
       return;
     }
     await repository.getRootCommentsPage(task.contentType, task.contentId, CommentSortOrder.SCORE);
-    preloadCache().promote(preloadSegmentCommentsKey(target.contentId, target.segmentId),
-      PreloadCacheTier.PINNED);
   }
 
   /** 热榜首屏：取回后写 feed:hot 缓存并交给 HotFeedPending（是否生效由它判断）。 */
@@ -458,7 +567,7 @@ export class PreloadService {
     }
   }
 
-  /** 取一次热度排序的根评论首屏（热评区与评论页首屏共用同一份缓存）并钉住。 */
+  /** 取一次热度排序的根评论首屏（热评区与评论页首屏共用同一份缓存）。 */
   private async loadHotComments(contentType: string, contentId: string): Promise<void> {
     const comments = this.commentRepository ?? this.commentRepositoryFactory?.();
     if (comments === undefined) {
@@ -466,7 +575,7 @@ export class PreloadService {
     }
     this.commentRepository = comments;
     await comments.getRootCommentsPage(contentType, contentId, CommentSortOrder.SCORE);
-    preloadCache().promote(preloadCommentsKey(contentType, contentId), PreloadCacheTier.PINNED);
+    this.pinIfInWindow(preloadCommentsKey(contentType, contentId));
   }
 }
 

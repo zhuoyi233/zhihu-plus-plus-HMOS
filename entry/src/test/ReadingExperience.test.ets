@@ -11,6 +11,7 @@ import {
   preloadCache,
   PreloadCacheTier,
   PreloadOptimizationMode,
+  PRELOAD_CACHE_QUOTA_BYTES,
   PRELOAD_CACHE_TRIM_THRESHOLD,
   preloadAnswerKey,
   readPreloadJson,
@@ -200,6 +201,20 @@ export default function readingExperienceTest(): void {
       expect(cache.has('answer:3')).assertFalse();
       expect(PRELOAD_CACHE_TRIM_THRESHOLD).assertLarger(0);
       expect(preloadAnswerKey('abc')).assertEqual('answer:abc');
+    });
+
+    it('repinsWithoutLosingEntriesAndUsesSmallerQuota', 0, () => {
+      expect(PRELOAD_CACHE_QUOTA_BYTES).assertEqual(512 * 1024 * 1024);
+      const cache = preloadCache();
+      cache.setEnabled(true);
+      cache.put(preloadAnswerKey('a'), '{"id":"a"}', PreloadCacheTier.ANSWER);
+      cache.put('comments:answer:a', '{"items":[]}', PreloadCacheTier.COMMENTS);
+      // 换钉住窗口只会改变层级，不会删数据。
+      cache.repin([preloadAnswerKey('a')]);
+      expect(cache.get(preloadAnswerKey('a'))).assertEqual('{"id":"a"}');
+      cache.repin([]);
+      expect(cache.get(preloadAnswerKey('a')) !== undefined).assertTrue();
+      cache.setEnabled(false);
     });
 
     it('roundTripsCachedCommentPage', 0, () => {

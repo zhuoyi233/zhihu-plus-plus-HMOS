@@ -155,27 +155,31 @@
 ## 9. 逐级预加载（回答/评论/子评论/段评/相邻）
 
 **你的需求**：主页从第一条开始预加载回答+图文+热评；进入回答预加载评论；进评论预加载子评论；回答里立刻缓存下一个回答及热评；点段评时也要预加载；「主页优先预加载前五条、搜索只预加载前五条与可视区」这类策略要能在设置里调。
-**后续收窄**：进入回答后预加载负担过重，改为固定顺序「热评 → 下一个回答 → 当前回答评论 → 下一个回答评论」，**不预取上一个回答与所属问题**（上一个回答靠缓存回溯，未命中就正常加载）；段评改为面板出现后才预热当前段。
+**后续收窄**：进入回答后预加载负担过重，改为固定顺序「热评 → 下一个回答 → 下一个回答评论」，**不预取上一个回答与所属问题**（上一个回答靠缓存回溯，未命中就正常加载）；段评改为面板出现后才预热当前段。主页预取只取正文，热评交给进入回答后的最高优先级任务。
 
 **我的方法**：所有预取收敛到一个串行调度器，调用方只报「该预热什么」，去重与排队由调度器负责。
 
 - 新增 `entry/src/main/ets/pages/PreloadCenter.ets`
-  - `prefetchFeedAnswers(items)`：主页当前显示页，回答正文 + 热评排进 `NORMAL`
-  - `prefetchPendingFeedAnswers(items)`：主页双缓冲那一页（还没显示），排进 `HOME_PENDING`（整队最后）
-  - `prefetchOnAnswerOpened(answerId, nextAnswerId)`：固定 4 步（批内顺序不变）
-    ① 当前回答热评 → ② 下一个回答正文 → ③ 当前回答评论（已命中缓存，实际零请求）→ ④ 下一个回答评论首屏
+  - `prefetchFeedAnswers(items)`：主页当前显示页，**只取回答正文**，排进 `NORMAL`
+  - `prefetchPendingFeedAnswers(items)`：主页双缓冲那一页（还没显示），只取正文，排进 `HOME_PENDING`（整队最后）
+  - `prefetchOnAnswerOpened(previousId, answerId, nextId)`：固定 3 步（批内顺序不变）
+    ① 当前回答热评 → ② 下一个回答正文 → ③ 下一个回答评论首屏（省掉了与①同键的冗余任务）；
+    同时把「当前答 ±1」设为缓存钉住窗口
   - `prefetchChildCommentsFor(items)`（前 20 条有子评论的根评论）与
     `prefetchSegmentComments(paragraph, markIndex, …)`（只热当前划线）走 `URGENT`
   - `prefetchCommentPages(contentType, contentId)`：进入评论页后继续翻 3 页评论（`NORMAL`，排在子评论之后）
   - `prefetchHotFeed(onPage)`：热榜首屏，`HOT_FEED` 档；取回后写 `feed:hot` 并交给 `HotFeedPending`
-  - 取回正文、评论首屏、段评后 `promote(PINNED)`，不被 LRU 挤掉
-- **队列模型**（`PreloadPriority`）：单线程串行、**任务之间互不打断**
+  - 只有落在当前钉住窗口里的条目才会 `promote()`，主页预取与段评不再无差别钉住
+
+- **队列模型**（`PreloadPriority`）：单线程串行
   - 四档：`URGENT`（段评、子评论）> `NORMAL`（回答/评论/主页当前页）> `HOT_FEED`（热榜）> `HOME_PENDING`（主页缓冲）
-  - 同档**后进先出**（最新入队的批次先跑）；一个批次内部顺序保持不变（回答页那 4 步、信息流条目顺序都不会被倒置）
+  - 同档**后进先出**（最新入队的批次先跑）；一个批次内部顺序保持不变（回答页那 3 步、信息流条目顺序都不会被倒置）
   - `HOME_PENDING` 无论何时入队都追加到**整条队列最后**，只有其它档都空了才轮到它
-  - 已在跑的任务不打断、不取消；唯一会清空并取消的是关闭「预加载优化」这个开关
+  - **任务生命周期**：非豁免任务入队后 5s 内没跑完（还在排队或正在跑）就丢弃/中止，取消在途请求且不再重试；
+    **主页预取与「回答页的下一答」不设上限**，保证冷启动与切答的兜底
+  - 唯一会清空整条队列并取消全部在途请求的是关闭「预加载优化」这个开关
   - 同一内容重复入队时用新任务替换旧任务（“以你最后一次操作为准”）
-  - `BUSY`（同一 client 单飞被占）不算失败：退到本档队尾延迟重试，最多 3 次（0.8s / 1.6s / 2.4s）
+  - `BUSY`（同一 client 单飞被占）不算失败：退到本档队尾延迟重试，最多 3 次（0.8s / 1.6s / 2.4s），过期后同样丢弃
 - **两个导致段评/评论预取形同虚设的真 bug（已修）**
   1. `Index` 里 `preloadService().configure(...)` 在 `hotCommentRepositoryFactory` 赋值**之前**调用，
      存进去的是默认的 `() => undefined` → 评论/热评预取一直空转。改为赋值之后再用闭包装配。
@@ -194,12 +198,12 @@
 **我的方法**：
 
 - 新增 `data/src/main/ets/cache/PreloadCache.ets`（唯一一份内存缓存）
-  - **2GB** 配额（字符串按 UTF-16 每字符 2 字节折算）；到 85% 才批量回收到 70%，避免抖动
+  - **512MB** 配额（字符串按 UTF-16 每字符 2 字节折算）；到 85% 才批量回收到 70%，避免抖动
   - 分级淘汰：子评论 < 评论 < 回答正文 < 热评 < 信息流
-  - **PINNED 层（上限 256MB）**：相邻回答与其热评被钉住，普通淘汰跳过；钉住层自身超额时按最久未访问回收
+  - **PINNED 层（上限 64MB，独立回收）**：只钉「当前答 ±1」的正文与评论；换窗口时先全部降级再重钉，超额按最久未访问回收
   - `readPreloadJson()` / `writePreloadJson()`：解析失败即作废该键，仓库层各只需 2~3 行
 - 查找顺序（仓库层统一实现）：`PreloadCache`（命中即返回）→ 网络 → 取回后回填
-  - 相邻回答的"不掉缓存"由 PINNED 层保证。曾实现的 64MB `AdjacentAnswerCache` 是**写而从不读**的死代码（两份内存副本语义重复），本分支已删除。
+  - 相邻回答的"不掉缓存"由 PINNED 窗口保证（只钉当前答 ±1）。曾实现的 64MB `AdjacentAnswerCache` 是**写而从不读**的死代码（两份内存副本语义重复），本分支已删除。
 - 键函数：`preloadAnswerKey` / `preloadCommentsKey` / `preloadChildCommentsKey` / `preloadHotCommentsKey` / `preloadSegmentCommentsKey` / `preloadFeedKey`
 
 ---
@@ -249,7 +253,7 @@
 ## 14. 变更文件清单（本轮）
 
 **新增（7 个文件，功能各自收敛到一个文件）**
-- `data/src/main/ets/cache/PreloadCache.ets`（2GB 主队列 + 钉住层 + JSON 读写；必须在 data 模块，供各仓库直接调用）
+- `data/src/main/ets/cache/PreloadCache.ets`（512MB 主队列 + 64MB 钉住窗口 + JSON 读写；必须在 data 模块，供各仓库直接调用）
 - `entry/src/main/ets/pages/PreloadCenter.ets`（**预加载唯一实现文件**：预取队列 `PreloadService`、
   热榜 `HotFeedPending`、主页双缓冲 `HomePendingFeed`、开关落地 `applyPreloadOptimization` /
   切热榜生效 `consumeHotFeedPending`）

@@ -3961,9 +3961,10 @@ struct ContentDetailPage {
     if (state.phase === ContentDetailPhase.READY && state.content !== undefined) {
       this.refreshContentFavoriteState();
       this.refreshHotComments(state.content);
-      // 回答正文就绪：热评 → 下一个回答 → 当前回答评论 → 下一个回答评论；上一个回答与问题不预取。
+      // 回答正文就绪：热评 → 下一个回答 → 下一个回答评论；不预取上一个回答与问题，并把「当前答 ±1」设为钉住窗口。
       if (state.content.kind === ContentDetailKind.ANSWER) {
-        preloadService().prefetchOnAnswerOpened(this.activeContentId, this.answerNavigator?.peekId(1));
+        preloadService().prefetchOnAnswerOpened(this.answerNavigator?.peekId(-1), this.activeContentId,
+          this.answerNavigator?.peekId(1));
       }
       this.activateInteraction(state.content);
       if (state.content.kind === ContentDetailKind.QUESTION) {
