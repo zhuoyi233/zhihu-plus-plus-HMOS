@@ -210,6 +210,27 @@ export default function collectionRepositoryTest(): void {
       expect(pin?.excerpt).assertEqual('想法正文 & 与 <b>实体');
     });
 
+    it('decodesCollectionImageFieldsWithGracefulFallback', 0, () => {
+      const page = decodeCollectionItemsPage(COLLECTION_IMAGE_FIELDS_ITEMS_JSON);
+      expect(page.items.length).assertEqual(5);
+      const answer = page.items.find((item): boolean => item.id === '9007199254740993');
+      expect(answer?.authorAvatarUrl).assertEqual('https://pic1.zhimg.com/v2-answer-avatar_l.jpg?source=0df5f383');
+      expect(answer?.thumbnailUrl).assertEqual('https://picx.zhimg.com/v2-answer-cover.jpg?source=7e7ef6e2');
+      const article = page.items.find((item): boolean => item.kind === CollectionContentKind.ARTICLE);
+      expect(article?.authorAvatarUrl).assertEqual('https://pic1.zhimg.com/v2-article-avatar_l.jpg');
+      expect(article?.thumbnailUrl).assertEqual('https://picx.zhimg.com/v2-article-cover_r.jpg');
+      // 问题/想法没有已核验的封面字段；作者头像缺失/null/空串一律降级为 undefined。
+      const question = page.items.find((item): boolean => item.kind === CollectionContentKind.QUESTION);
+      expect(question?.authorName).assertEqual('王五');
+      expect(question?.authorAvatarUrl).assertEqual(undefined);
+      expect(question?.thumbnailUrl).assertEqual(undefined);
+      const pin = page.items.find((item): boolean => item.kind === CollectionContentKind.PIN);
+      expect(pin?.authorAvatarUrl).assertEqual(undefined);
+      const plainAnswer = page.items.find((item): boolean => item.id === '9007199254740994');
+      expect(plainAnswer?.authorAvatarUrl).assertEqual(undefined);
+      expect(plainAnswer?.thumbnailUrl).assertEqual(undefined);
+    });
+
     it('decodesContentCollectionsWithFavoritedFlags', 0, () => {
       const collections = decodeContentCollections(CONTENT_COLLECTIONS_JSON);
       expect(collections.length).assertEqual(2);
@@ -337,6 +358,32 @@ const COLLECTION_HTML_EXCERPT_ITEMS_JSON =
   '"type":"pin","id":"40000000000000004",' +
   '"content":"<p>想法正文 &amp; 与 &lt;b&gt;实体</p>","like_count":8,"comment_count":1,' +
   '"author":{"name":"王五"},"created":1500000000}}' +
+  '],"paging":{"is_end":true,"next":null,"previous":""}}';
+
+// 头像/封面字段按真实响应核验：answer→content.thumbnail，article→content.image_url，
+// 作者头像→author.avatar_url；问题/想法暂无已核验封面字段，缺省/null/空串降级 undefined。
+const COLLECTION_IMAGE_FIELDS_ITEMS_JSON =
+  '{"data":[' +
+  '{"created":"2026-01-01T00:00:00.000Z","content":{' +
+  '"type":"answer","id":"9007199254740993","question":{"id":"10000000000000001","title":"完整问题标题"},' +
+  '"excerpt":"回答摘要","voteup_count":27,"comment_count":3,' +
+  '"author":{"name":"张三","avatar_url":"https://pic1.zhimg.com/v2-answer-avatar_l.jpg?source=0df5f383"},' +
+  '"thumbnail":"https://picx.zhimg.com/v2-answer-cover.jpg?source=7e7ef6e2","created_time":1700000000}},' +
+  '{"created":"2026-01-02T00:00:00.000Z","content":{' +
+  '"type":"article","id":"30000000000000003","title":"完整文章标题","excerpt":"文章摘要",' +
+  '"voteup_count":10,"comment_count":2,' +
+  '"author":{"name":"李四","avatar_url":"https://pic1.zhimg.com/v2-article-avatar_l.jpg"},' +
+  '"image_url":"https://picx.zhimg.com/v2-article-cover_r.jpg","created":1600000000}},' +
+  '{"created":"2026-01-03T00:00:00.000Z","content":{' +
+  '"type":"question","id":"20000000000000002","title":"完整问题标题","detail":"问题说明",' +
+  '"answer_count":5,"comment_count":6,"author":{"name":"王五"},"created":1500000000}},' +
+  '{"created":"2026-01-04T00:00:00.000Z","content":{' +
+  '"type":"pin","id":"40000000000000004","content":"想法正文","like_count":8,"comment_count":1,' +
+  '"author":{"name":"赵六","avatar_url":null},"created":1400000000}},' +
+  '{"created":"2026-01-05T00:00:00.000Z","content":{' +
+  '"type":"answer","id":"9007199254740994","question":{"id":"10000000000000002","title":"第二个问题"},' +
+  '"excerpt":"无图回答","voteup_count":1,"comment_count":0,' +
+  '"author":{"name":"钱七","avatar_url":""},"thumbnail":"","created_time":1300000000}}' +
   '],"paging":{"is_end":true,"next":null,"previous":""}}';
 
 const CONTENT_COLLECTIONS_JSON =  '{"data":[' +

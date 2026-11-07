@@ -8,6 +8,7 @@ import {
   TOP_BAR_HDS_BACK_RESERVE_VP,
   TOP_BAR_HORIZONTAL_PADDING_VP,
   topBarActionsWidthVp,
+  topBarHdsBackReserveVp,
   topBarFeedStartOffsetVp,
   topBarStartOffsetVp
 } from '../main/ets/common/style/TopBarMaterial';
@@ -38,7 +39,7 @@ export default function topBarMaterialTest(): void {
     });
 
     it('alignsCustomContentWithNativeTitleGeometry', 0, () => {
-      // 自定义内容与原生标题对齐：16vp 页边距 + 40vp 返回键 + 8vp 间距。
+      // 窄窗及宽度尚未测量时：16vp 页边距 + 40vp 返回键 + 8vp 间距。
       expect(TOP_BAR_BUTTON_DIAMETER_VP).assertEqual(40);
       expect(TOP_BAR_ACTION_SPACING_VP).assertEqual(10);
       expect(TOP_BAR_HORIZONTAL_PADDING_VP).assertEqual(12);
@@ -51,6 +52,20 @@ export default function topBarMaterialTest(): void {
       expect(topBarActionsWidthVp(1)).assertEqual(40);
       expect(topBarActionsWidthVp(2)).assertEqual(90);
       expect(topBarActionsWidthVp(3)).assertEqual(140);
+    });
+
+    it('keepsNativeBackGapAcrossHdsWindowBreakpoints', 0, () => {
+      expect(topBarHdsBackReserveVp(440)).assertEqual(64);
+      expect(topBarHdsBackReserveVp(599)).assertEqual(64);
+      expect(topBarHdsBackReserveVp(600)).assertEqual(72);
+      expect(topBarHdsBackReserveVp(711)).assertEqual(72);
+      expect(topBarHdsBackReserveVp(839)).assertEqual(72);
+      expect(topBarHdsBackReserveVp(840)).assertEqual(80);
+      expect(topBarHdsBackReserveVp(1138)).assertEqual(80);
+      expect(topBarHdsBackReserveVp(0)).assertEqual(64);
+      expect(topBarHdsBackReserveVp(-1)).assertEqual(64);
+      expect(topBarHdsBackReserveVp(Number.NaN)).assertEqual(64);
+      expect(topBarHdsBackReserveVp(Number.POSITIVE_INFINITY)).assertEqual(64);
     });
 
     it('keepsStartOffsetAtLeast94UntilStatusBarGrows', 0, () => {

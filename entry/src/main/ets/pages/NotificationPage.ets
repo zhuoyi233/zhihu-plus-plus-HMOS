@@ -1,5 +1,19 @@
 import { notificationItemRenderKey } from './NotificationItemRenderKey';
+import {
+  buildFlowListSections,
+  flowListCard,
+  flowListChrome,
+  FlowListItem,
+  FlowListSource
+} from './FlowListSource';
+import {
+  FEED_COLUMN_GAP_VP,
+  feedMinCardWidthVp,
+  resolveWideColumnSpec,
+  WideColumnSpec
+} from './FeedWaterfallLayout';
 import { AppDestination, AppDestinationName } from 'core';
+import { destinationScrollKey, destinationScrollRegistry } from './DestinationScrollRegistry';
 import {
   onThemeColor,
   DEFAULT_THEME_COLOR,
@@ -87,7 +101,54 @@ export struct NotificationPage {
   @StorageProp(NOTIFICATION_HUB_MARK_READ_TICK_KEY) @Watch('onMarkReadTick') markReadTick: number = 0;
   @StorageProp(NOTIFICATION_HUB_REFRESH_TICK_KEY) @Watch('onRefreshTick') refreshTick: number = 0;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  @StorageProp('systemFontSizeScale') @Watch('onLayoutDriverChanged') private systemFontSizeScale: number = 1;
+  @State @Watch('onLayoutDriverChanged') private pageWidthVp: number = 0;
+  private readonly flowSource: FlowListSource = new FlowListSource();
+  @State private flowSections: WaterFlowSections = new WaterFlowSections();
+  private readonly flowScroller: Scroller = new Scroller();
   private controller?: NotificationController;
+
+  /** 宽屏多列规格：内容 1120vp 居中，会话行按信息流断点分列（多列时行内容卡片化）。 */
+  private wideSpec(): WideColumnSpec {
+    return resolveWideColumnSpec(this.pageWidthVp, feedMinCardWidthVp(this.systemFontSizeScale));
+  }
+
+  private onLayoutDriverChanged(): void {
+    this.rebuildFlowLayout();
+  }
+
+  /**
+   * 瀑布流布局快照：分类宫格/邀请行/分割线/加载尾/错误行通栏，会话行进内容列
+   * section（多列时卡片化）。单列保持原行样式，间距沿用原列表 space=0（多列加列距）。
+   */
+  private rebuildFlowLayout(): void {
+    const entries: FlowListItem[] = [];
+    entries.push(flowListChrome('notifications_categories', 'categories'));
+    if (this.invitation !== undefined) {
+      entries.push(flowListChrome('notifications_invitation_divider', 'divider'));
+      entries.push({ key: 'notifications_invitation', fullWidth: true, label: 'invitation',
+        sourceIndex: -1, payload: this.invitation });
+    }
+    entries.push(flowListChrome('notifications_top_divider', 'divider'));
+    if (this.items.length === 0) {
+      entries.push(flowListChrome('notifications_empty', 'empty'));
+    }
+    for (let index = 0; index < this.items.length; index += 1) {
+      const item: MobileNotificationTimelineItem = this.items[index];
+      entries.push(flowListCard(notificationItemRenderKey(item), index, item));
+    }
+    if (this.loadingMore) {
+      entries.push(flowListChrome('notifications_load_more', 'loading'));
+    }
+    if (this.errorMessage.length > 0 && this.phase === NotificationPhase.READY) {
+      entries.push(flowListChrome('notifications_error', 'error'));
+    }
+    this.flowSource.replace(entries);
+    const gap = this.wideSpec().columns > 1 ? FEED_COLUMN_GAP_VP : 0;
+    // 段间距 0：原列表 space=0，行间距由各行自带 padding 承担。
+    this.flowSections.splice(0, this.flowSections.length(),
+      buildFlowListSections(entries, this.wideSpec().columns, gap, 0));
+  }
 
   private indicator?: FeedPullDownIndicatorHost;
   private refreshInFlight: boolean = false;
@@ -114,6 +175,7 @@ export struct NotificationPage {
   }
 
   aboutToDisappear(): void {
+    destinationScrollRegistry.unregister(destinationScrollKey(AppDestinationName.NOTIFICATION), this.flowScroller);
     this.controller?.deactivate();
     this.controller = undefined;
     this.refreshInFlight = false;
@@ -171,84 +233,79 @@ export struct NotificationPage {
           builder: pullDownRefreshPlaceholder,
           refreshingContent: this.indicator?.view()
         }) {
-          List({ space: 0 }) {
-            ListItem() {
-              this.categoryRow()
-            }
-
-            if (this.invitation !== undefined) {
-              ListItem() {
-                Divider()
-                  .color($r('app.color.surface_background'))
-                  .strokeWidth(1)
-              }
-
-              ListItem() {
-                this.invitationRow(this.invitation)
-              }
-            }
-
-            ListItem() {
-              Divider()
-                .color($r('app.color.surface_background'))
-                .strokeWidth(8)
-            }
-
-            if (this.items.length === 0) {
-              ListItem() {
-                Text('暂无消息')
-                  .id('notifications_empty')
-                  .fontSize($r('app.float.body_font_size'))
-                  .fontColor($r('app.color.secondary_text'))
-                  .textAlign(TextAlign.Center)
-                  .width('100%')
-                  .padding(24)
-              }
-            }
-
-            ForEach(this.items, (item: MobileNotificationTimelineItem) => {
-              ListItem() {
-                this.conversationRow(item)
-              }
-            }, (item: MobileNotificationTimelineItem): string =>
-              notificationItemRenderKey(item))
-
-            if (this.loadingMore) {
-              ListItem() {
-                Row() {
-                  LoadingProgress()
-                    .width(20)
-                    .height(20)
-                    .color(this.resolvedThemeColor)
-                  Text('正在加载更多…')
-                    .fontSize($r('app.float.secondary_font_size'))
+          WaterFlow({ scroller: this.flowScroller, sections: this.flowSections,
+            layoutMode: WaterFlowLayoutMode.SLIDING_WINDOW }) {
+            LazyForEach(this.flowSource, (entry: FlowListItem) => {
+              FlowItem() {
+                if (entry.label === 'categories') {
+                  this.categoryRow()
+                } else if (entry.label === 'invitation') {
+                  this.invitationRow(entry.payload as MobileNotificationColumnHead)
+                } else if (entry.label === 'divider') {
+                  Divider()
+                    .color($r('app.color.surface_background'))
+                    .strokeWidth(entry.key === 'notifications_top_divider' ? 8 : 1)
+                } else if (entry.label === 'empty') {
+                  Text('暂无消息')
+                    .id('notifications_empty')
+                    .fontSize($r('app.float.body_font_size'))
                     .fontColor($r('app.color.secondary_text'))
-                    .margin({ left: 8 })
-                }
-                .id('notifications_load_more')
-                .justifyContent(FlexAlign.Center)
-                .width('100%')
-                .padding(12)
-              }
-            }
-
-            if (this.errorMessage.length > 0 && this.phase === NotificationPhase.READY) {
-              ListItem() {
-                Text(this.errorMessage)
-                  .fontSize($r('app.float.secondary_font_size'))
-                  .fontColor($r('app.color.secondary_text'))
+                    .textAlign(TextAlign.Center)
+                    .width('100%')
+                    .padding(24)
+                } else if (entry.label === 'loading') {
+                  Row() {
+                    LoadingProgress()
+                      .width(20)
+                      .height(20)
+                      .color(this.resolvedThemeColor)
+                    Text('正在加载更多…')
+                      .fontSize($r('app.float.secondary_font_size'))
+                      .fontColor($r('app.color.secondary_text'))
+                      .margin({ left: 8 })
+                  }
+                  .id('notifications_load_more')
+                  .justifyContent(FlexAlign.Center)
                   .width('100%')
                   .padding(12)
-                  .textAlign(TextAlign.Center)
+                } else if (entry.label === 'error') {
+                  Text(this.errorMessage)
+                    .fontSize($r('app.float.secondary_font_size'))
+                    .fontColor($r('app.color.secondary_text'))
+                    .width('100%')
+                    .padding(12)
+                    .textAlign(TextAlign.Center)
+                } else if (this.wideSpec().columns <= 1) {
+                  this.conversationRow(entry.payload as MobileNotificationTimelineItem)
+                } else {
+                  Column() {
+                    this.conversationRow(entry.payload as MobileNotificationTimelineItem)
+                  }
+                  .width('100%')
+                  // 多列时行内容卡片化（表面 + 圆角），单列保持现有通栏行样式。
+                  .backgroundColor($r('app.color.card_background'))
+                  .borderRadius($r('app.float.card_radius'))
+                  .clip(true)
+                }
               }
-            }
+              .width('100%')
+            }, (entry: FlowListItem): string => entry.key)
           }
           .id('notifications_list')
+          .onAppear((): void => {
+            destinationScrollRegistry.register(destinationScrollKey(AppDestinationName.NOTIFICATION), this.flowScroller);
+          })
           .width('100%')
+          // 行自带 16vp 内缩；宽屏居中限宽时由列表补足差值，窄屏保持现状（差值≤0 不加）。
+          .padding({
+            left: Math.max(0, this.wideSpec().paddingVp - 16),
+            right: Math.max(0, this.wideSpec().paddingVp - 16)
+          })
           // 顶栏让位：内缩滚动内容起点，未滚动时首屏内容仍从标题栏下沿开始
           .contentStartOffset(FLOATING_TITLE_BAR_OFFSET)
           .height('100%')
           .scrollBar(BarState.Off)
+          .cachedCount(Math.max(6, this.wideSpec().columns * 2))
           .edgeEffect(EdgeEffect.Spring)
           .onReachEnd(() => this.controller?.loadMore())
         }
@@ -267,6 +324,12 @@ export struct NotificationPage {
     // 覆盖式顶栏：容器不设 top padding，滚动视口延伸到屏幕顶；
     // 首屏起始位置由列表的 contentStartOffset 内缩（见 AppPageChrome 约定）
     .backgroundColor($r('app.color.page_background'))
+    .onAreaChange((_oldArea: Area, area: Area): void => {
+      const width: number = Number(area.width);
+      if (width > 0 && Math.abs(width - this.pageWidthVp) > 0.5) {
+        this.pageWidthVp = width;
+      }
+    })
   }
 
   /** 四分类宫格（图标 36 + 未读角标 + 标题，均匀分布，圆角 12 点击区）。 */
@@ -527,5 +590,6 @@ export struct NotificationPage {
     this.errorMessage = state.errorMessage ?? '';
     AppStorage.setOrCreate(NOTIFICATION_HUB_UNREAD_TOTAL_KEY, this.unreadTotal);
     AppStorage.setOrCreate(NOTIFICATION_HUB_BUSY_KEY, this.busy);
+    this.rebuildFlowLayout();
   }
 }

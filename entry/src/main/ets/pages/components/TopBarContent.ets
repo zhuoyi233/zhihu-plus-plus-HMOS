@@ -1,6 +1,6 @@
 import {
   TOP_BAR_CONTENT_ROW_HEIGHT_VP,
-  TOP_BAR_HDS_BACK_RESERVE_VP,
+  topBarHdsBackReserveVp,
   TOP_BAR_HORIZONTAL_PADDING_VP,
   TOP_BAR_SEARCH_PILL_HEIGHT_VP
 } from '../../common/style/TopBarMaterial';
@@ -15,7 +15,7 @@ import { TOP_BAR_GLASS_MATERIAL } from '../../common/style/TopBarGlass';
 export enum TopBarBackMode {
   /** 一级页：没有返回键，标题从 12vp 基础留白起排。 */
   NONE = 'none',
-  /** HDS 自带返回键：自定义内容对齐原生标题的 64vp 起点。 */
+  /** HDS 自带返回键：自定义内容随容器宽度对齐原生标题起点。 */
   HDS = 'hds'
 }
 
@@ -32,6 +32,7 @@ export enum TopBarBackMode {
  */
 @Component
 export struct TopBarContent {
+  @State private contentWidthVp: number = 0;
   @Prop backMode: TopBarBackMode = TopBarBackMode.HDS;
   @Prop title: string = '';
   @Prop subtitle: string = '';
@@ -53,7 +54,7 @@ export struct TopBarContent {
 
   private horizontalPadding(): Padding {
     const left: number = this.backMode === TopBarBackMode.HDS
-      ? TOP_BAR_HDS_BACK_RESERVE_VP : TOP_BAR_HORIZONTAL_PADDING_VP;
+      ? topBarHdsBackReserveVp(this.contentWidthVp) : TOP_BAR_HORIZONTAL_PADDING_VP;
     return { left: left, right: TOP_BAR_HORIZONTAL_PADDING_VP };
   }
 
@@ -131,6 +132,12 @@ export struct TopBarContent {
     .alignItems(VerticalAlign.Center)
     // 背景装饰与空白不截获点击，按下与禁用由真实控件承担。
     .hitTestBehavior(HitTestMode.Transparent)
+    .onAreaChange((_oldArea: Area, area: Area): void => {
+      const width: number = Number(area.width);
+      if (Number.isFinite(width) && width > 0 && Math.abs(width - this.contentWidthVp) > 0.5) {
+        this.contentWidthVp = width;
+      }
+    })
   }
 }
 

@@ -230,6 +230,8 @@ function contentItem(value: JsonValue): CollectionContentItem | undefined {
       voteupCount: number(content.get('voteup_count'), 'collection.content.voteup_count'),
       commentCount: number(content.get('comment_count'), 'collection.content.comment_count'),
       authorName: authorName(content.get('author')),
+      authorAvatarUrl: authorAvatar(content.get('author')),
+      thumbnailUrl: optionalText(content.get('thumbnail')),
       createdAt: number(content.get('created_time'), 'collection.content.created_time')
     };
   }
@@ -244,6 +246,8 @@ function contentItem(value: JsonValue): CollectionContentItem | undefined {
       voteupCount: number(content.get('voteup_count'), 'collection.content.voteup_count'),
       commentCount: number(content.get('comment_count'), 'collection.content.comment_count'),
       authorName: authorName(content.get('author')),
+      authorAvatarUrl: authorAvatar(content.get('author')),
+      thumbnailUrl: optionalText(content.get('image_url')),
       createdAt: number(content.get('created') ?? content.get('created_time'), 'collection.content.created')
     };
   }
@@ -258,6 +262,7 @@ function contentItem(value: JsonValue): CollectionContentItem | undefined {
       voteupCount: number(content.get('answer_count'), 'collection.content.answer_count'),
       commentCount: number(content.get('comment_count'), 'collection.content.comment_count'),
       authorName: authorName(content.get('author')),
+      authorAvatarUrl: authorAvatar(content.get('author')),
       createdAt: number(content.get('created') ?? content.get('created_time'), 'collection.content.created')
     };
   }
@@ -272,6 +277,7 @@ function contentItem(value: JsonValue): CollectionContentItem | undefined {
       voteupCount: number(content.get('like_count'), 'collection.content.like_count'),
       commentCount: number(content.get('comment_count'), 'collection.content.comment_count'),
       authorName: authorName(content.get('author')),
+      authorAvatarUrl: authorAvatar(content.get('author')),
       createdAt: number(content.get('created') ?? content.get('created_time'), 'collection.content.created')
     };
   }
@@ -288,6 +294,33 @@ function authorName(value: JsonValue | undefined): string | undefined {
   }
   const name = text(object.get('name'), 'collection.content.author.name');
   return name.trim().length === 0 ? undefined : name;
+}
+
+/**
+ * 作者头像（author.avatar_url）：可选展示字段，缺失/null/类型异常一律 undefined，
+ * 不让可选图片信息破坏整页解析。
+ */
+function authorAvatar(value: JsonValue | undefined): string | undefined {
+  if (value === undefined || value instanceof JsonNullValue) {
+    return undefined;
+  }
+  const object = jsonObject(value);
+  if (object === undefined) {
+    return undefined;
+  }
+  return optionalText(object.get('avatar_url'));
+}
+
+/** 可选展示文字：非字符串或空白视为缺失；与必需字段的严格校验分开处理。 */
+function optionalText(value: JsonValue | undefined): string | undefined {
+  if (value === undefined || value instanceof JsonNullValue) {
+    return undefined;
+  }
+  const result = jsonString(value);
+  if (result === undefined || result.trim().length === 0) {
+    return undefined;
+  }
+  return result;
 }
 
 export function decodeCollectionItemsPage(json: string): CollectionContentPage {

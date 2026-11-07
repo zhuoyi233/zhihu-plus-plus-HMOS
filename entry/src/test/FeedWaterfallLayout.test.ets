@@ -1,15 +1,27 @@
 import { describe, expect, it } from '@ohos/hypium';
 import {
   buildFeedFlowLayout,
+  cardWidthForColumns,
+  contentCenteredPaddingVp,
   feedAnchorFlowIndex,
   feedColumnCandidates,
   feedMinCardWidthVp,
   FeedFlowLayout,
   feedSectionSignature,
   feedFlowItemIndex,
+  fitColumnsForContentWidth,
   homeFeedInitialItemTarget,
-  resolveFeedColumnSpec
+  resolveFeedColumnSpec,
+  resolveWideColumnSpec,
+  READER_TEXT_MAX_WIDTH_VP,
+  WIDE_CONTENT_MAX_WIDTH_VP
 } from '../main/ets/pages/FeedWaterfallLayout';
+import {
+  buildFlowListSections,
+  flowListCard,
+  flowListChrome,
+  FlowListItem
+} from '../main/ets/pages/FlowListSource';
 
 export default function feedWaterfallLayoutTest(): void {
   describe('feedWaterfallLayoutTest', () => {
@@ -142,6 +154,95 @@ export default function feedWaterfallLayoutTest(): void {
       expect(feedAnchorFlowIndex(wide, 9)).assertEqual(3);
       expect(feedAnchorFlowIndex(wide, -1)).assertEqual(-1);
       expect(feedAnchorFlowIndex(buildFeedFlowLayout([], [], 2, 0, false, 14), 0)).assertEqual(-1);
+    });
+    it('centersContentPaddingOnlyBeyondWideContentCap', 0, () => {
+      // 未超上限/入参非法时保持常规页边距 12vp；超出后按 (视口宽 − 上限)/2 居中
+      expect(contentCenteredPaddingVp(800, WIDE_CONTENT_MAX_WIDTH_VP)).assertEqual(12);
+      expect(contentCenteredPaddingVp(1144, WIDE_CONTENT_MAX_WIDTH_VP)).assertEqual(12);
+      expect(contentCenteredPaddingVp(1400, WIDE_CONTENT_MAX_WIDTH_VP)).assertEqual(140);
+      expect(contentCenteredPaddingVp(0, WIDE_CONTENT_MAX_WIDTH_VP)).assertEqual(12);
+      expect(contentCenteredPaddingVp(800, 0)).assertEqual(12);
+      expect(contentCenteredPaddingVp(Number.NaN, WIDE_CONTENT_MAX_WIDTH_VP)).assertEqual(12);
+    });
+    it('fitsColumnsFromContentWidthWithMinCardProtection', 0, () => {
+      // 内容宽口径与 resolveFeedColumnSpec 同一公式：600/840/1440 断点扣边距后等价验证
+      expect(fitColumnsForContentWidth(resolveFeedColumnSpec(600).contentWidth, 280)).assertEqual(2);
+      expect(fitColumnsForContentWidth(resolveFeedColumnSpec(900).contentWidth, 280)).assertEqual(3);
+      expect(fitColumnsForContentWidth(resolveFeedColumnSpec(940).contentWidth, 280)).assertEqual(3);
+      expect(fitColumnsForContentWidth(resolveFeedColumnSpec(1440).contentWidth, 280)).assertEqual(4);
+      // 容不下最小卡宽回退单列；非法最小卡宽走默认 280；列数受 4 列上限钳制
+      expect(fitColumnsForContentWidth(300, 400)).assertEqual(1);
+      expect(fitColumnsForContentWidth(1000, 0)).assertEqual(3);
+      expect(fitColumnsForContentWidth(4000, 280)).assertEqual(4);
+    });
+    it('splitsCardWidthEvenlyAcrossColumns', 0, () => {
+      expect(cardWidthForColumns(566, 1)).assertEqual(566);
+      expect(cardWidthForColumns(1166, 2)).assertEqual(576);
+      expect(Math.round(cardWidthForColumns(1166, 3) * 100)).assertEqual(37933);
+      // 非法输入钳制：列数向下取整且 ≥1，负内容宽不产生负卡宽
+      expect(cardWidthForColumns(1166, 2.9)).assertEqual(576);
+      expect(cardWidthForColumns(1166, 0)).assertEqual(1166);
+      expect(cardWidthForColumns(-10, 2)).assertEqual(0);
+    });
+    it('keepsReaderTextCapNarrowerThanWideContentCap', 0, () => {
+      // 问题页双层限宽口径：内容上限 1120，长文 720
+      expect(WIDE_CONTENT_MAX_WIDTH_VP).assertEqual(1120);
+      expect(READER_TEXT_MAX_WIDTH_VP).assertEqual(720);
+    });
+    it('resolvesWideColumnSpecForManagementPages', 0, () => {
+      // 未测量（0）时按常规页边距单列；窄窗单列；宽窗居中并按内容宽求列数
+      const unmeasured = resolveWideColumnSpec(0, 280);
+      expect(unmeasured.columns).assertEqual(1);
+      expect(unmeasured.paddingVp).assertEqual(12);
+      const narrow = resolveWideColumnSpec(500, 280);
+      expect(narrow.columns).assertEqual(1);
+      expect(narrow.paddingVp).assertEqual(12);
+      expect(narrow.contentWidth).assertEqual(476);
+      const wide = resolveWideColumnSpec(1400, 280);
+      expect(wide.paddingVp).assertEqual(140);
+      expect(wide.contentWidth).assertEqual(1120);
+      expect(wide.columns).assertEqual(3);
+      expect(Math.round(wide.cardWidth)).assertEqual(364);
+      // 字号放大抬高最小卡宽自动减列（对齐信息流口径）：560 最小卡宽下 1120 只容 1 列
+      expect(resolveWideColumnSpec(1400, feedMinCardWidthVp(2.0)).columns).assertEqual(1);
+    });
+    it('buildsFlowSectionsMergingCardRunsAndSplittingAtChrome', 0, () => {
+      const entries: FlowListItem[] = [
+        flowListChrome('header', 'header'),
+        flowListCard('a', 0, 'p'),
+        flowListCard('b', 1, 'p'),
+        flowListChrome('banner', 'banner'),
+        flowListCard('c', 2, 'p'),
+        flowListCard('d', 3, 'p'),
+        flowListCard('e', 4, 'p')
+      ];
+      // 通栏项独占单列 section 并打断卡片分组；连续卡片合并为 crossCount=2 的 section
+      const sections = buildFlowListSections(entries, 2, 10);
+      expect(sections.length).assertEqual(4);
+      expect(sections[0].itemsCount).assertEqual(1);
+      expect(sections[0].crossCount).assertEqual(1);
+      expect(JSON.stringify(sections[0].margin)).assertEqual('{"top":0}');
+      expect(sections[1].itemsCount).assertEqual(2);
+      expect(sections[1].crossCount).assertEqual(2);
+      expect(sections[1].columnsGap).assertEqual(10);
+      expect(sections[1].rowsGap).assertEqual(10);
+      expect(JSON.stringify(sections[1].margin)).assertEqual('{"top":10}');
+      expect(sections[2].itemsCount).assertEqual(1);
+      expect(sections[2].crossCount).assertEqual(1);
+      expect(JSON.stringify(sections[2].margin)).assertEqual('{"top":10}');
+      expect(sections[3].itemsCount).assertEqual(3);
+      expect(sections[3].crossCount).assertEqual(2);
+      // 段间距可与行间距解耦（个人主页：槽位间无间距、卡片间 10vp）
+      const decoupled = buildFlowListSections(entries, 2, 10, 0);
+      expect(JSON.stringify(decoupled[1].margin)).assertEqual('{"top":0}');
+      expect(decoupled[1].rowsGap).assertEqual(10);
+      // 单列与非法列数按 1 处理；空列表无 section
+      const single = buildFlowListSections([flowListCard('a', 0, 'p')], 1, 12);
+      expect(single.length).assertEqual(1);
+      expect(single[0].crossCount).assertEqual(1);
+      expect(single[0].rowsGap).assertEqual(12);
+      expect(buildFlowListSections([flowListCard('a', 0, 'p')], 0, 12).length).assertEqual(1);
+      expect(buildFlowListSections([], 3, 12).length).assertEqual(0);
     });
   });
 }
