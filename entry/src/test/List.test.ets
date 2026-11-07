@@ -65,6 +65,7 @@ import collectionRepositoryTest from './CollectionRepository.test';
 import collectionStateTest from './CollectionState.test';
 import collectionContentStateTest from './CollectionContentState.test';
 import collectionFavoriteStateTest from './CollectionFavoriteState.test';
+import feedCardPresentationTest from './FeedCardPresentation.test';
 import commentRepositoryTest from './CommentRepository.test';
 import commentStateTest from './CommentState.test';
 import mobileNotificationRepositoryTest from './NotificationRepository.test';
@@ -190,6 +191,7 @@ export default function testsuite(): void {
   collectionStateTest();
   collectionContentStateTest();
   collectionFavoriteStateTest();
+  feedCardPresentationTest();
   commentRepositoryTest();
   commentStateTest();
   mobileNotificationRepositoryTest();

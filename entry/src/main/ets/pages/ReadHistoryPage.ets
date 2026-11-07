@@ -10,10 +10,15 @@ import {
   FlowListSource
 } from './FlowListSource';
 import {
+  FEED_COLUMN_GAP_VP,
   feedMinCardWidthVp,
   resolveWideColumnSpec,
   WideColumnSpec
 } from './FeedWaterfallLayout';
+import { FeedAnchorRestorer } from './FeedColumnAnchorRestore';
+import { LengthMetrics } from '@kit.ArkUI';
+import { FeedContentCard, feedCardMoreButtonContent } from './components/FeedContentCard';
+import { readHistoryCardPresentation } from './FeedCardPresentation';
 import {
   onThemeColor,
   DEFAULT_THEME_COLOR,
@@ -32,12 +37,13 @@ import {
 import {
   ReadHistoryController,
   ReadHistoryItem,
-  readHistoryKindLabel,
   ReadHistoryOpenTarget,
   ReadHistoryPhase,
-  readHistoryTimeLabel,
   ReadHistoryViewState
 } from './ReadHistoryState';
+
+/** 通栏 section（登录横幅/加载圈/到底提示）的段间距：维持本页面既有 10vp 口径。 */
+const CHROME_SECTION_GAP_VP: number = 10;
 
 export type OpenReadHistoryItem = (target: ReadHistoryOpenTarget) => void;
 
@@ -69,22 +75,121 @@ export struct ReadHistoryPage {
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
   @StorageProp('systemFontSizeScale') @Watch('onLayoutDriverChanged') private systemFontSizeScale: number = 1;
   @State @Watch('onLayoutDriverChanged') private pageWidthVp: number = 0;
+  // 卡片外观与缩略图偏好与主页/收藏内容共用同一 AppStorage 键：设置变更即时生效，
+  // 不重新拉取历史接口、不清空已有记录、不主动回顶。
+  @StorageProp('feedCardStyle') @Watch('onAppearanceChanged') private feedCardStyle: string = 'divider';
+  @StorageProp('showFeedThumbnail') @Watch('onAppearanceChanged') private showFeedThumbnail: boolean = true;
   private readonly flowSource: FlowListSource = new FlowListSource();
   private readonly flowScroller: Scroller = new Scroller();
   @State private flowSections: WaterFlowSections = new WaterFlowSections();
   private controller?: ReadHistoryController;
+  private readonly anchorRestorer: FeedAnchorRestorer = new FeedAnchorRestorer();
+  // 首个可见条目的 flow 索引（onScrollIndex 采集），供样式/图片开关重排后恢复阅读位置。
+  private firstVisibleFlowIndex: number = 0;
+  private lastEntries: FlowListItem[] = [];
+  private lastColumns: number = 0;
+  // 样式/图片开关只能经外观设置页触发，本页必然被覆盖在返回栈里：挂起锚点身份，
+  // 回到页面（aboutToAppear）且布局稳定后再恢复，避免对隐藏窗口做无效滚动。
+  private pendingAnchorIdentity: string = '';
 
-  /** 宽屏多列规格：内容 1120vp 居中，历史卡按信息流断点分列（最小卡宽随字号缩放）。 */
+  /** 宽屏多列规格：内容 1120vp 居中，历史卡按信息流断点分列（列数按 14vp 列间距求取）。 */
   private wideSpec(): WideColumnSpec {
-    return resolveWideColumnSpec(this.pageWidthVp, feedMinCardWidthVp(this.systemFontSizeScale));
+    return resolveWideColumnSpec(this.pageWidthVp, feedMinCardWidthVp(this.systemFontSizeScale),
+      FEED_COLUMN_GAP_VP);
+  }
+
+  private usesCardSurface(): boolean {
+    return this.feedCardStyle === 'card';
+  }
+
+  /** 内容条目间距：多列或卡片表面 14vp（与列数计算同口径），单列分割线 0（由底线分隔）。 */
+  private contentGap(): number {
+    return this.wideSpec().columns > 1 || this.usesCardSurface() ? FEED_COLUMN_GAP_VP : 0;
   }
 
   private onLayoutDriverChanged(): void {
-    this.rebuildFlowLayout();
+    this.rebuildFlowLayout(true);
   }
 
-  /** 瀑布流布局快照：历史卡进内容列 section，加载圈/到底提示通栏。 */
-  private rebuildFlowLayout(): void {
+  private onAppearanceChanged(): void {
+    this.rebuildFlowLayout(true);
+  }
+
+  /** 换列/换样式保位仅在静止的 READY 态、非刷新中、且已滚动离开顶部时启动，避免与手势竞争。 */
+  private canPreserveAnchor(): boolean {
+    return this.viewState.phase === ReadHistoryPhase.READY && !this.viewState.busy && !this.refreshing &&
+      this.firstVisibleFlowIndex > 0 && this.viewState.items.length > 0;
+  }
+
+  /** 首个可见内容条目的身份：可见窗口起点落在通栏 chrome（横幅/加载圈）上时向后跳过。 */
+  private firstVisibleContentIdentity(): string {
+    for (let index = this.firstVisibleFlowIndex; index < this.lastEntries.length; index += 1) {
+      const entry: FlowListItem = this.lastEntries[index];
+      if (entry.label === 'card') {
+        return entry.key;
+      }
+    }
+    return '';
+  }
+
+  private flowIndexOf(identity: string): number {
+    for (let index = 0; index < this.lastEntries.length; index += 1) {
+      if (this.lastEntries[index].key === identity) {
+        return index;
+      }
+    }
+    return -1;
+  }
+
+  /**
+   * 按身份恢复锚点。列数变化时 FeedAnchorRestorer 的宽度哨兵能识别新布局；
+   * 同宽重排（样式/图片开关）无宽度差异可判，由 pendingAnchorIdentity 走页面重显恢复。
+   */
+  private scheduleAnchorRestore(identity: string, delayed: boolean): void {
+    if (identity.length === 0) {
+      return;
+    }
+    const flowIndex: number = this.flowIndexOf(identity);
+    if (flowIndex < 0) {
+      return;
+    }
+    if (delayed) {
+      this.pendingAnchorIdentity = identity;
+      return;
+    }
+    const spec: WideColumnSpec = this.wideSpec();
+    this.anchorRestorer.schedule({
+      flowIndex: flowIndex,
+      expectedItemWidth: spec.cardWidth,
+      extraOffsetVp: floatingTitleBarOffset()
+    }, this.flowScroller);
+  }
+
+  /** 页面重显后消费挂起的锚点身份：等 WaterFlow 高度重排稳定再按索引对齐视口顶。 */
+  private flushPendingAnchorRestore(): void {
+    const identity: string = this.pendingAnchorIdentity;
+    this.pendingAnchorIdentity = '';
+    if (identity.length === 0) {
+      return;
+    }
+    setTimeout((): void => {
+      const flowIndex: number = this.flowIndexOf(identity);
+      if (flowIndex < 0) {
+        return;
+      }
+      this.flowScroller.scrollToIndex(flowIndex, false, ScrollAlign.START,
+        { extraOffset: LengthMetrics.vp(-floatingTitleBarOffset()) });
+    }, 300);
+  }
+
+  /** 瀑布流布局快照：历史卡进内容列 section，登录横幅/加载圈/到底提示通栏；同份快照供数据源与 sections 使用。 */
+  private rebuildFlowLayout(preserveAnchor: boolean): void {
+    const columns: number = this.wideSpec().columns;
+    const columnsChanged: boolean = columns !== this.lastColumns;
+    this.lastColumns = columns;
+    // 变化前记录首个可见内容身份；重排后按身份映射回新索引，不用旧偏移直接恢复。
+    const anchorIdentity: string = preserveAnchor && this.canPreserveAnchor()
+      ? this.firstVisibleContentIdentity() : '';
     const entries: FlowListItem[] = [];
     if (this.viewState.requiresLogin) {
       entries.push(flowListChrome('read_history_login_banner', 'login'));
@@ -98,10 +203,14 @@ export struct ReadHistoryPage {
     } else if (!this.viewState.canLoadMore) {
       entries.push(flowListChrome('read_history_end', 'end'));
     }
-    this.flowSource.replace(entries);
-    const gap = 12;
+    this.lastEntries = entries;
     this.flowSections.splice(0, this.flowSections.length(),
-      buildFlowListSections(entries, this.wideSpec().columns, gap));
+      buildFlowListSections(entries, columns, this.contentGap(), CHROME_SECTION_GAP_VP));
+    // applyLayout 增量通知：分页/样式切换不再整表重载，已有卡片保留。
+    this.flowSource.applyLayout(entries);
+    if (anchorIdentity.length > 0) {
+      this.scheduleAnchorRestore(anchorIdentity, !columnsChanged);
+    }
   }
   // 下拉刷新自定义加载圆圈（refreshingContent 需 ComponentContent，随页面销毁释放）
   private indicator?: FeedPullDownIndicatorHost = undefined;
@@ -128,6 +237,7 @@ export struct ReadHistoryPage {
     // 控制器仍存活时直接复用，避免重建控制器并重载记录导致滚动位置丢失。
     if (this.controller !== undefined) {
       this.controller.activate();
+      this.flushPendingAnchorRestore();
       return;
     }
     const history = this.history;
@@ -153,7 +263,7 @@ export struct ReadHistoryPage {
         // Refresh 必须用 $$ 双向绑定：手势触发的 refreshing=true 会回写到本状态，
         // 单向绑定时手势不回写、这里的赋值因值未变化而不生效，刷新圈会永远卡住。
         this.refreshing = state.busy && state.phase === ReadHistoryPhase.LOADING;
-        this.rebuildFlowLayout();
+        this.rebuildFlowLayout(false);
       });
     this.indicator = new FeedPullDownIndicatorHost(this.getUIContext(), floatingTitleBarOffset());
     this.controller.activate();
@@ -165,6 +275,7 @@ export struct ReadHistoryPage {
     } else {
       destinationScrollRegistry.unregister(destinationScrollKey(AppDestinationName.READ_HISTORY), this.flowScroller);
     }
+    this.anchorRestorer.cancel();
     this.controller?.deactivate();
     this.controller = undefined;
     this.indicator?.dispose();
@@ -277,6 +388,9 @@ export struct ReadHistoryPage {
             .scrollBar(BarState.Off)
             .cachedCount(Math.max(6, this.wideSpec().columns * 2))
             .edgeEffect(EdgeEffect.Spring)
+            .onScrollIndex((start: number, _end: number): void => {
+              this.firstVisibleFlowIndex = start;
+            })
             .onReachEnd((): void => {
               void this.controller?.loadMore();
             })
@@ -312,70 +426,39 @@ export struct ReadHistoryPage {
     .backgroundColor($r('app.color.page_background'))
   }
 
-  /** 对齐上游 FeedCard：标题 2 行、作者 1 行、摘要 3 行 + 元信息行与右上角“更多”菜单。 */
+  /**
+   * 单条历史与主页信息流共用 FeedContentCard：排版/表面/页脚同源，信息顺序与主页一致
+   * （标题→作者→摘要→页脚），原顶栏“类型 · 时间”元信息由适配器移入页脚。
+   */
   @Builder
   private historyCard(item: ReadHistoryItem) {
-    Button({ type: ButtonType.Normal, stateEffect: true }) {
-      Column({ space: $r('app.float.spacing_small') }) {
-        Row({ space: $r('app.float.spacing_xsmall') }) {
-          Text(`${readHistoryKindLabel(item.kind)} · ${readHistoryTimeLabel(item.openedAt)}`)
-            .fontSize($r('app.float.secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .layoutWeight(1)
-          Button({ type: ButtonType.Normal, stateEffect: true }) {
-            SymbolGlyph($r('sys.symbol.ellipsis_circle'))
-              .fontSize(18)
-              .fontColor([$r('app.color.secondary_text')])
-          }
-          .id(`read_history_item_menu_${item.contentKey}`)
-          .width(32)
-          .height(32)
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .enabled(!this.viewState.busy)
-          .bindMenu(this.itemMenu(item))
-          .accessibilityText('该条历史记录操作')
-        }
-        .width('100%')
-
-        Text(this.itemTitle(item))
-          .fontSize($r('app.float.heading_font_size'))
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.primary_text'))
-          .maxLines(2)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .width('100%')
-
-        if (item.authorName !== undefined && item.authorName.length > 0) {
-          Text(item.authorName)
-            .fontSize($r('app.float.secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-        }
-
-        if (item.summary.trim().length > 0) {
-          Text(item.summary)
-            .fontSize($r('app.float.body_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .maxLines(3)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-        }
+    FeedContentCard({
+      presentation: readHistoryCardPresentation(item),
+      columns: this.wideSpec().columns,
+      cardStyle: this.feedCardStyle,
+      showThumbnail: this.showFeedThumbnail,
+      cardTestId: `read_history_card_${item.contentKey}`,
+      footerTestId: `read_history_footer_${item.contentKey}`,
+      onOpen: (): void => this.onOpen({ kind: item.kind, id: item.id }),
+      moreSlot: (): void => {
+        this.historyMenuButton(item)
       }
-      .alignItems(HorizontalAlign.Start)
-      .width('100%')
+    })
+  }
+
+  @Builder
+  private historyMenuButton(item: ReadHistoryItem) {
+    Button({ type: ButtonType.Normal, stateEffect: true }) {
+      feedCardMoreButtonContent()
     }
-    .id(`read_history_card_${item.contentKey}`)
-    .width('100%')
-    .padding($r('app.float.card_padding'))
-    .borderRadius($r('app.float.card_radius'))
-    .backgroundColor($r('app.color.surface_background'))
-    .accessibilityText(`打开${readHistoryKindLabel(item.kind)}：${this.itemTitle(item)}`)
-    .onClick((): void => this.onOpen({ kind: item.kind, id: item.id }))
+    .id(`read_history_item_menu_${item.contentKey}`)
+    .width(32)
+    .height(32)
+    .padding(0)
+    .backgroundColor(Color.Transparent)
+    .enabled(!this.viewState.busy)
+    .bindMenu(this.itemMenu(item))
+    .accessibilityText('该条历史记录操作')
   }
 
   private itemMenu(item: ReadHistoryItem): Array<MenuElement> {
@@ -444,10 +527,5 @@ export struct ReadHistoryPage {
     }
     .width('100%')
     .padding($r('app.float.spacing_medium'))
-  }
-
-  private itemTitle(item: ReadHistoryItem): string {
-    const title = item.title.trim();
-    return title.length > 0 ? title : `${readHistoryKindLabel(item.kind)} #${item.id}`;
   }
 }
