@@ -11,6 +11,8 @@ import {
   WideColumnSpec
 } from './FeedWaterfallLayout';
 import { AppDestination, AppDestinationName } from 'core';
+import { floatingTitleBarOffset } from './AppPageChrome';
+import { destinationScrollKey, destinationScrollRegistry } from './DestinationScrollRegistry';
 import {
   onThemeColor,
   CollectionContentItem,
@@ -45,6 +47,7 @@ export struct CollectionContentPage {
   @StorageProp('systemFontSizeScale') @Watch('onLayoutDriverChanged') private systemFontSizeScale: number = 1;
   @State @Watch('onLayoutDriverChanged') private pageWidthVp: number = 0;
   private readonly flowSource: FlowListSource = new FlowListSource();
+  private readonly flowScroller: Scroller = new Scroller();
   @State private flowSections: WaterFlowSections = new WaterFlowSections();
   private controller?: CollectionContentController;
 
@@ -60,6 +63,9 @@ export struct CollectionContentPage {
   /** 瀑布流布局快照：内容卡进内容列 section，加载尾通栏。 */
   private rebuildFlowLayout(): void {
     const entries: FlowListItem[] = [];
+    if (this.errorMessage.length > 0) {
+      entries.push(flowListChrome('collection_content_error_banner', 'error'));
+    }
     for (let index = 0; index < this.items.length; index += 1) {
       const item: CollectionContentItem = this.items[index];
       entries.push(flowListCard(`collection_content_${item.kind}_${item.id}`, index, item));
@@ -98,6 +104,8 @@ export struct CollectionContentPage {
   }
 
   aboutToDisappear(): void {
+    destinationScrollRegistry.unregister(destinationScrollKey(AppDestinationName.COLLECTION, this.collectionId),
+      this.flowScroller);
     this.controller?.deactivate();
     this.controller = undefined;
   }
@@ -111,36 +119,13 @@ export struct CollectionContentPage {
       } else if (this.phase === CollectionContentPhase.EMPTY) {
         this.statusPanel('这个收藏夹还没有内容', true, 'collection_content_empty')
       } else {
-        if (this.errorMessage.length > 0) {
-          Row({ space: $r('app.float.spacing_small') }) {
-            Text(this.errorMessage)
-              .fontSize($r('app.float.secondary_font_size'))
-              .fontColor($r('app.color.secondary_text'))
-              .layoutWeight(1)
-            if (this.requiresLogin) {
-              Button('去登录')
-                .backgroundColor(this.resolvedThemeColor)
-                .fontColor(onThemeColor(this.resolvedThemeColor))
-                .id('collection_content_login')
-                .onClick((): void => this.navigate({ name: AppDestinationName.LOGIN }))
-            } else {
-              Button('重试')
-                .backgroundColor(this.resolvedThemeColor)
-                .fontColor(onThemeColor(this.resolvedThemeColor))
-                .id('collection_content_retry_more')
-                .onClick(() => this.controller?.retry())
-            }
-          }
-          .width('100%')
-          .padding($r('app.float.spacing_small'))
-          .borderRadius($r('app.float.card_radius'))
-          .backgroundColor($r('app.color.surface_background'))
-        }
-
-        WaterFlow({ sections: this.flowSections, layoutMode: WaterFlowLayoutMode.SLIDING_WINDOW }) {
+        WaterFlow({ scroller: this.flowScroller, sections: this.flowSections,
+          layoutMode: WaterFlowLayoutMode.SLIDING_WINDOW }) {
           LazyForEach(this.flowSource, (entry: FlowListItem) => {
             FlowItem() {
-              if (entry.label === 'footer') {
+              if (entry.label === 'error') {
+                this.recoverableErrorBanner()
+              } else if (entry.label === 'footer') {
                 Button(this.loadingMore ? '正在加载更多…' : '加载更多')
                   .backgroundColor(this.resolvedThemeColor)
                   .fontColor(onThemeColor(this.resolvedThemeColor))
@@ -157,7 +142,13 @@ export struct CollectionContentPage {
           }, (entry: FlowListItem): string => entry.key)
         }
         .id('collection_content_list')
+        .onAppear((): void => {
+          destinationScrollRegistry.register(destinationScrollKey(AppDestinationName.COLLECTION, this.collectionId),
+            this.flowScroller);
+        })
         .width('100%')
+        // 只给首屏内容让位，滚动视口延伸到原生顶栏之后，供沉浸材质采样。
+        .contentStartOffset(floatingTitleBarOffset())
         .scrollBar(BarState.Off)
         .layoutWeight(1)
         .cachedCount(Math.max(6, this.wideSpec().columns * 2))
@@ -172,7 +163,6 @@ export struct CollectionContentPage {
     .padding({
       left: this.wideSpec().paddingVp,
       right: this.wideSpec().paddingVp,
-      top: 94,
       bottom: $r('app.float.page_padding')
     })
     .backgroundColor($r('app.color.page_background'))
@@ -182,6 +172,33 @@ export struct CollectionContentPage {
         this.pageWidthVp = width;
       }
     })
+  }
+
+  @Builder
+  private recoverableErrorBanner() {
+    Row({ space: $r('app.float.spacing_small') }) {
+      Text(this.errorMessage)
+        .fontSize($r('app.float.secondary_font_size'))
+        .fontColor($r('app.color.secondary_text'))
+        .layoutWeight(1)
+      if (this.requiresLogin) {
+        Button('去登录')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
+          .id('collection_content_login')
+          .onClick((): void => this.navigate({ name: AppDestinationName.LOGIN }))
+      } else {
+        Button('重试')
+          .backgroundColor(this.resolvedThemeColor)
+          .fontColor(onThemeColor(this.resolvedThemeColor))
+          .id('collection_content_retry_more')
+          .onClick(() => this.controller?.retry())
+      }
+    }
+    .width('100%')
+    .padding($r('app.float.spacing_small'))
+    .borderRadius($r('app.float.card_radius'))
+    .backgroundColor($r('app.color.surface_background'))
   }
 
   @Builder
@@ -290,6 +307,7 @@ export struct CollectionContentPage {
       }
     }
     .id(testId)
+    .padding({ top: floatingTitleBarOffset() })
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
     .width('100%')
