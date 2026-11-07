@@ -74,6 +74,7 @@ import {
 import { AppNavigationRow, floatingTitleBarOffset } from './AppPageChrome';
 import {
   HOME_FEED_SCROLL_KEY,
+  READ_HISTORY_SCROLL_KEY,
   SETTINGS_SCROLL_KEY,
   topLevelScrollRegistry
 } from './TopLevelScrollRegistry';
@@ -184,7 +185,8 @@ export struct AppShell {
     registerActions: (handler: () => void) => void, releaseActions: () => void) => void = this.emptyEmbeddedPage;
   @BuilderParam blockedFeedHistoryContent: (onBack: () => void, embedded: boolean,
     registerActions: (handler: () => void) => void, releaseActions: () => void) => void = this.emptyEmbeddedPage;
-  @BuilderParam readHistoryContent: (navigate: (destination: AppDestination) => void, onBack: () => void) => void =
+  @BuilderParam readHistoryContent: (navigate: (destination: AppDestination) => void, onBack: () => void,
+    topLevel: boolean) => void =
     this.emptyHome;
   @BuilderParam localHistoryContent: (navigate: (destination: AppDestination) => void, onBack: () => void) => void =
     this.emptyHome;
@@ -319,6 +321,9 @@ export struct AppShell {
     }
     if (tab === TopLevelTab.DAILY) {
       return [ChannelFeedSource.DAILY];
+    }
+    if (tab === TopLevelTab.HISTORY) {
+      return [READ_HISTORY_SCROLL_KEY];
     }
     if (tab === TopLevelTab.ACCOUNT) {
       return [SETTINGS_SCROLL_KEY];
@@ -714,7 +719,7 @@ export struct AppShell {
       HdsNavDestination() {
         this.readHistoryContent((nextDestination: AppDestination): void => this.navigate(nextDestination), (): void => {
           this.pathStack.pop();
-        });
+        }, false);
       }
       .titleBar({
         style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()),
@@ -726,6 +731,7 @@ export struct AppShell {
           divider: { showType: DividerShowType.OFF }
         }
       })
+      .bindToScrollable(this.destinationScrollerBinding(destination.name, ''))
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.LOCAL_HISTORY) {
@@ -736,6 +742,7 @@ export struct AppShell {
           });
       }
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '本地历史记录' }, divider: { showType: DividerShowType.OFF } } })
+      .bindToScrollable(this.destinationScrollerBinding(destination.name, ''))
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.TECHNICAL_LAB) {
@@ -1491,7 +1498,7 @@ export struct AppShell {
       this.dailyContent(this.dailyReloadToken, this.dailyDateCursor,
         (destination: AppDestination): void => this.navigate(destination))
     } else if (tab === TopLevelTab.HISTORY) {
-      this.readHistoryContent((destination: AppDestination): void => this.navigate(destination), (): void => {})
+      this.readHistoryContent((destination: AppDestination): void => this.navigate(destination), (): void => {}, true)
     } else if (tab === TopLevelTab.COLLECTIONS) {
       this.topLevelCollectionsPage()
     } else {

@@ -1,4 +1,7 @@
 import { CenteredOverlayDialog } from './CenteredOverlayDialog';
+import { AppDestinationName } from 'core';
+import { destinationScrollKey, destinationScrollRegistry } from './DestinationScrollRegistry';
+import { READ_HISTORY_SCROLL_KEY, topLevelScrollRegistry } from './TopLevelScrollRegistry';
 import {
   buildFlowListSections,
   flowListCard,
@@ -20,7 +23,7 @@ import {
   SessionStatus
 } from 'data';
 import {
-  FLOATING_TITLE_BAR_OFFSET,
+  floatingTitleBarOffset,
   FeedPullDownIndicatorHost,
   PULL_REFRESH_PULL_DOWN_RATIO,
   PULL_REFRESH_TRIGGER_OFFSET_VP,
@@ -41,6 +44,7 @@ export type OpenReadHistoryItem = (target: ReadHistoryOpenTarget) => void;
 /** 在线历史记录页：对齐上游 OnlineHistoryScreen 的卡片信息流。 */
 @Component
 export struct ReadHistoryPage {
+  topLevel: boolean = false;
   history: ReadHistoryGateway | undefined = undefined;
   onlineHistory: OnlineHistoryRepository | undefined = undefined;
   session: LoginSessionGateway | undefined = undefined;
@@ -66,6 +70,7 @@ export struct ReadHistoryPage {
   @StorageProp('systemFontSizeScale') @Watch('onLayoutDriverChanged') private systemFontSizeScale: number = 1;
   @State @Watch('onLayoutDriverChanged') private pageWidthVp: number = 0;
   private readonly flowSource: FlowListSource = new FlowListSource();
+  private readonly flowScroller: Scroller = new Scroller();
   @State private flowSections: WaterFlowSections = new WaterFlowSections();
   private controller?: ReadHistoryController;
 
@@ -81,6 +86,9 @@ export struct ReadHistoryPage {
   /** 瀑布流布局快照：历史卡进内容列 section，加载圈/到底提示通栏。 */
   private rebuildFlowLayout(): void {
     const entries: FlowListItem[] = [];
+    if (this.viewState.requiresLogin) {
+      entries.push(flowListChrome('read_history_login_banner', 'login'));
+    }
     for (let index = 0; index < this.viewState.items.length; index += 1) {
       const item: ReadHistoryItem = this.viewState.items[index];
       entries.push(flowListCard(`read_history_${item.contentKey}`, index, item));
@@ -147,11 +155,16 @@ export struct ReadHistoryPage {
         this.refreshing = state.busy && state.phase === ReadHistoryPhase.LOADING;
         this.rebuildFlowLayout();
       });
-    this.indicator = new FeedPullDownIndicatorHost(this.getUIContext(), 0);
+    this.indicator = new FeedPullDownIndicatorHost(this.getUIContext(), floatingTitleBarOffset());
     this.controller.activate();
   }
 
   aboutToDisappear(): void {
+    if (this.topLevel) {
+      topLevelScrollRegistry.unregister(READ_HISTORY_SCROLL_KEY, this.flowScroller);
+    } else {
+      destinationScrollRegistry.unregister(destinationScrollKey(AppDestinationName.READ_HISTORY), this.flowScroller);
+    }
     this.controller?.deactivate();
     this.controller = undefined;
     this.indicator?.dispose();
@@ -180,8 +193,12 @@ export struct ReadHistoryPage {
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       Column({ space: $r('app.float.spacing_medium') }) {
-        if (this.viewState.requiresLogin) {
-          this.loginBanner()
+        if (this.viewState.requiresLogin && this.viewState.items.length === 0) {
+          Column() {
+            this.loginBanner()
+          }
+          .width('100%')
+          .padding({ top: floatingTitleBarOffset() })
         }
         if (this.viewState.phase === ReadHistoryPhase.LOADING && this.viewState.items.length === 0) {
           LoadingProgress()
@@ -189,6 +206,7 @@ export struct ReadHistoryPage {
             .width(40)
             .height(40)
             .color(this.resolvedThemeColor)
+            .margin({ top: this.viewState.requiresLogin ? 0 : floatingTitleBarOffset() })
         } else if (this.viewState.items.length === 0) {
           Column({ space: $r('app.float.spacing_medium') }) {
             Text(this.viewState.message)
@@ -209,6 +227,7 @@ export struct ReadHistoryPage {
             }
           }
           .justifyContent(FlexAlign.Center)
+          .padding({ top: this.viewState.requiresLogin ? 0 : floatingTitleBarOffset() })
           .layoutWeight(1)
           .width('100%')
         } else {
@@ -217,10 +236,13 @@ export struct ReadHistoryPage {
             builder: pullDownRefreshPlaceholder,
             refreshingContent: this.indicator?.view()
           }) {
-            WaterFlow({ sections: this.flowSections, layoutMode: WaterFlowLayoutMode.SLIDING_WINDOW }) {
+            WaterFlow({ scroller: this.flowScroller, sections: this.flowSections,
+              layoutMode: WaterFlowLayoutMode.SLIDING_WINDOW }) {
               LazyForEach(this.flowSource, (entry: FlowListItem) => {
                 FlowItem() {
-                  if (entry.label === 'loading') {
+                  if (entry.label === 'login') {
+                    this.loginBanner()
+                  } else if (entry.label === 'loading') {
                     LoadingProgress()
                       .id('read_history_load_more')
                       .width(40)
@@ -242,7 +264,16 @@ export struct ReadHistoryPage {
               }, (entry: FlowListItem): string => entry.key)
             }
             .id('read_history_list')
+            .onAppear((): void => {
+              if (this.topLevel) {
+                topLevelScrollRegistry.register(READ_HISTORY_SCROLL_KEY, this.flowScroller);
+              } else {
+                destinationScrollRegistry.register(destinationScrollKey(AppDestinationName.READ_HISTORY),
+                  this.flowScroller);
+              }
+            })
             .width('100%')
+            .contentStartOffset(floatingTitleBarOffset())
             .scrollBar(BarState.Off)
             .cachedCount(Math.max(6, this.wideSpec().columns * 2))
             .edgeEffect(EdgeEffect.Spring)
@@ -263,10 +294,9 @@ export struct ReadHistoryPage {
       }
       .width('100%')
       .height('100%')
-      // 让位统一约定：内容容器 padding top = FLOATING_TITLE_BAR_OFFSET，刷新指示区域
-      // 从悬浮标题栏下沿开始（对齐上游 FeedPullToRefresh 的 indicator padding）
+      // 视口延伸至顶栏后方，首屏让位由 WaterFlow 的 contentStartOffset 承担。
       .padding({ left: this.wideSpec().paddingVp, right: this.wideSpec().paddingVp,
-        top: FLOATING_TITLE_BAR_OFFSET, bottom: $r('app.float.page_padding') })
+        bottom: $r('app.float.page_padding') })
       .backgroundColor($r('app.color.page_background'))
       .onAreaChange((_oldArea: Area, area: Area): void => {
         const width: number = Number(area.width);

@@ -1,7 +1,10 @@
 import { onThemeColor, DEFAULT_THEME_COLOR, ReadHistoryGateway } from 'data';
+import { AppDestinationName } from 'core';
+import { destinationScrollKey, destinationScrollRegistry } from './DestinationScrollRegistry';
 import {
   buildFlowListSections,
   flowListCard,
+  flowListChrome,
   FlowListItem,
   FlowListSource
 } from './FlowListSource';
@@ -11,7 +14,7 @@ import {
   WideColumnSpec
 } from './FeedWaterfallLayout';
 import {
-  FLOATING_TITLE_BAR_OFFSET,
+  floatingTitleBarOffset,
   FeedPullDownIndicatorHost,
   PULL_REFRESH_PULL_DOWN_RATIO,
   PULL_REFRESH_TRIGGER_OFFSET_VP,
@@ -46,6 +49,7 @@ export struct LocalHistoryPage {
   @StorageProp('systemFontSizeScale') @Watch('onLayoutDriverChanged') private systemFontSizeScale: number = 1;
   @State @Watch('onLayoutDriverChanged') private pageWidthVp: number = 0;
   private readonly flowSource: FlowListSource = new FlowListSource();
+  private readonly flowScroller: Scroller = new Scroller();
   @State private flowSections: WaterFlowSections = new WaterFlowSections();
   private controller?: LocalHistoryController;
 
@@ -60,7 +64,7 @@ export struct LocalHistoryPage {
 
   /** 瀑布流布局快照：本地历史卡进内容列 section（无分页尾）。 */
   private rebuildFlowLayout(): void {
-    const entries: FlowListItem[] = [];
+    const entries: FlowListItem[] = [flowListChrome('local_history_privacy', 'privacy')];
     for (let index = 0; index < this.viewState.items.length; index += 1) {
       const item: ReadHistoryItem = this.viewState.items[index];
       entries.push(flowListCard(`local_history_${item.contentKey}`, index, item));
@@ -98,11 +102,12 @@ export struct LocalHistoryPage {
       this.refreshing = state.busy && state.phase === ReadHistoryPhase.LOADING;
       this.rebuildFlowLayout();
     });
-    this.indicator = new FeedPullDownIndicatorHost(this.getUIContext(), 0);
+    this.indicator = new FeedPullDownIndicatorHost(this.getUIContext(), floatingTitleBarOffset());
     this.controller.activate();
   }
 
   aboutToDisappear(): void {
+    destinationScrollRegistry.unregister(destinationScrollKey(AppDestinationName.LOCAL_HISTORY), this.flowScroller);
     this.controller?.deactivate();
     this.controller = undefined;
     this.indicator?.dispose();
@@ -117,11 +122,13 @@ export struct LocalHistoryPage {
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       Column({ space: $r('app.float.spacing_medium') }) {
-        Text('只保存在本机；不保存正文、Cookie、搜索词或账号信息。')
-          .id('read_history_privacy')
-          .fontSize($r('app.float.caption_font_size'))
-          .fontColor($r('app.color.secondary_text'))
+        if (this.viewState.items.length === 0) {
+          Column() {
+            this.privacyNotice()
+          }
           .width('100%')
+          .padding({ top: floatingTitleBarOffset() })
+        }
         if (this.viewState.phase === ReadHistoryPhase.LOADING && this.viewState.items.length === 0) {
           LoadingProgress()
             .id('local_history_loading')
@@ -156,16 +163,26 @@ export struct LocalHistoryPage {
             builder: pullDownRefreshPlaceholder,
             refreshingContent: this.indicator?.view()
           }) {
-            WaterFlow({ sections: this.flowSections, layoutMode: WaterFlowLayoutMode.SLIDING_WINDOW }) {
+            WaterFlow({ scroller: this.flowScroller, sections: this.flowSections,
+              layoutMode: WaterFlowLayoutMode.SLIDING_WINDOW }) {
               LazyForEach(this.flowSource, (entry: FlowListItem) => {
                 FlowItem() {
-                  this.localHistoryCard(entry.payload as ReadHistoryItem)
+                  if (entry.label === 'privacy') {
+                    this.privacyNotice()
+                  } else {
+                    this.localHistoryCard(entry.payload as ReadHistoryItem)
+                  }
                 }
                 .width('100%')
               }, (entry: FlowListItem): string => entry.key)
             }
             .id('local_history_list')
+            .onAppear((): void => {
+              destinationScrollRegistry.register(destinationScrollKey(AppDestinationName.LOCAL_HISTORY),
+                this.flowScroller);
+            })
             .width('100%')
+            .contentStartOffset(floatingTitleBarOffset())
             .scrollBar(BarState.Off)
             .cachedCount(Math.max(6, this.wideSpec().columns * 2))
             .edgeEffect(EdgeEffect.Spring)
@@ -183,10 +200,9 @@ export struct LocalHistoryPage {
       }
       .width('100%')
       .height('100%')
-      // 让位统一约定：内容容器 padding top = FLOATING_TITLE_BAR_OFFSET，刷新指示区域
-      // 从悬浮标题栏下沿开始（对齐上游 FeedPullToRefresh 的 indicator padding）
+      // 隐私说明与卡片一起进入材质采样区；空态单独避让悬浮顶栏。
       .padding({ left: this.wideSpec().paddingVp, right: this.wideSpec().paddingVp,
-        top: FLOATING_TITLE_BAR_OFFSET, bottom: $r('app.float.page_padding') })
+        bottom: $r('app.float.page_padding') })
       .backgroundColor($r('app.color.page_background'))
       .onAreaChange((_oldArea: Area, area: Area): void => {
         const width: number = Number(area.width);
@@ -199,6 +215,15 @@ export struct LocalHistoryPage {
     .width('100%')
     .height('100%')
     .backgroundColor($r('app.color.page_background'))
+  }
+
+  @Builder
+  private privacyNotice() {
+    Text('只保存在本机；不保存正文、Cookie、搜索词或账号信息。')
+      .id('read_history_privacy')
+      .fontSize($r('app.float.caption_font_size'))
+      .fontColor($r('app.color.secondary_text'))
+      .width('100%')
   }
 
   @Builder

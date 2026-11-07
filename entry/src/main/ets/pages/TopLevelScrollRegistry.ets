@@ -10,6 +10,7 @@
  * 标题栏会继续保持模糊，出现“别的页什么都没滚，顶栏却糊着”的问题。
  */
 export const HOME_FEED_SCROLL_KEY: string = 'home';
+export const READ_HISTORY_SCROLL_KEY: string = 'readHistory';
 export const SETTINGS_SCROLL_KEY: string = 'settings';
 
 export class TopLevelScrollRegistry {
@@ -20,6 +21,13 @@ export class TopLevelScrollRegistry {
     this.scrollers.set(key, scroller);
     // 每次登记都广播：页面挂载完成后会再登记一次（aboutToAppear 时容器还没挂到组件上，
     // 那时绑定会丢失订阅），AppShell 需按新状态重算绑定。
+    AppStorage.setOrCreate('topLevelScrollableTick', (AppStorage.get<number>('topLevelScrollableTick') ?? 0) + 1);
+  }
+
+  /** 仅释放当前实例，避免旧组件销毁时移除同 key 的新容器。 */
+  unregister(key: string, scroller: Scroller): void {
+    if (this.scrollers.get(key) !== scroller) { return; }
+    this.scrollers.delete(key);
     AppStorage.setOrCreate('topLevelScrollableTick', (AppStorage.get<number>('topLevelScrollableTick') ?? 0) + 1);
   }
 
