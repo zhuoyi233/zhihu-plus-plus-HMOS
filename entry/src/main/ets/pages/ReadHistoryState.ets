@@ -33,6 +33,8 @@ export interface ReadHistoryItem {
   title: string;
   summary: string;
   authorName?: string;
+  /** 封面图（在线响应 content.cover_image）；本地记录无此信息为 undefined，卡片按无图降级。 */
+  thumbnailUrl?: string;
 }
 
 export interface ReadHistoryOpenTarget {
@@ -100,7 +102,8 @@ export function onlineHistoryEntryToReadItem(entry: OnlineHistoryEntry): ReadHis
     openedAt: entry.readTime,
     title: entry.title,
     summary: entry.summary,
-    authorName: entry.authorName
+    authorName: entry.authorName,
+    thumbnailUrl: entry.coverImageUrl
   };
 }
 

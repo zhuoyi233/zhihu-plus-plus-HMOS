@@ -1,5 +1,19 @@
 import { notificationItemRenderKey } from './NotificationItemRenderKey';
+import {
+  buildFlowListSections,
+  flowListCard,
+  flowListChrome,
+  FlowListItem,
+  FlowListSource
+} from './FlowListSource';
+import {
+  FEED_COLUMN_GAP_VP,
+  feedMinCardWidthVp,
+  resolveWideColumnSpec,
+  WideColumnSpec
+} from './FeedWaterfallLayout';
 import { isSafeDecimalContentId, AppDestination, AppDestinationName } from 'core';
+import { destinationScrollKey, destinationScrollRegistry } from './DestinationScrollRegistry';
 import {
   onThemeColor,
   DEFAULT_THEME_COLOR,
@@ -84,7 +98,58 @@ export struct NotificationTimelinePage {
   @State private preferences?: NotificationPreferences = undefined;
   @StorageProp(NOTIFICATION_TIMELINE_REFRESH_TICK_KEY) @Watch('onRefreshTick') refreshTick: number = 0;
   @StorageProp('resolvedThemeColor') private resolvedThemeColor: string = DEFAULT_THEME_COLOR;
+  @StorageProp('systemFontSizeScale') @Watch('onLayoutDriverChanged') private systemFontSizeScale: number = 1;
+  @State @Watch('onLayoutDriverChanged') private pageWidthVp: number = 0;
+  private readonly flowSource: FlowListSource = new FlowListSource();
+  @State private flowSections: WaterFlowSections = new WaterFlowSections();
+  private readonly flowScroller: Scroller = new Scroller();
   private controller?: NotificationTimelineController;
+
+  /** 宽屏多列规格：内容 1120vp 居中；邀请回答页保持单列通栏行（行结构不适合分列）。 */
+  private wideSpec(): WideColumnSpec {
+    return resolveWideColumnSpec(this.pageWidthVp, feedMinCardWidthVp(this.systemFontSizeScale));
+  }
+
+  private timelineColumns(): number {
+    return this.entryName === 'invite' ? 1 : this.wideSpec().columns;
+  }
+
+  private onLayoutDriverChanged(): void {
+    this.rebuildFlowLayout();
+  }
+
+  /**
+   * 瀑布流布局快照：empty 提示行通栏打断分组；时间线行进内容列 section（多列卡片化），
+   * 邀请回答页所有行通栏单列；加载尾通栏。单列间距沿用原列表 space=0。
+   */
+  private rebuildFlowLayout(): void {
+    const entries: FlowListItem[] = [];
+    const invite = this.entryName === 'invite';
+    if (this.items.length === 0) {
+      entries.push(flowListChrome('notification_timeline_empty', 'list_empty'));
+    }
+    for (let index = 0; index < this.items.length; index += 1) {
+      const item: MobileNotificationTimelineItem = this.items[index];
+      const fullWidth = item.type === 'empty' || invite;
+      const label = item.type === 'empty' ? 'empty'
+        : invite ? 'invitation' : 'card';
+      entries.push({
+        key: notificationItemRenderKey(item),
+        fullWidth: fullWidth,
+        label: label,
+        sourceIndex: index,
+        payload: item
+      });
+    }
+    if (this.loadingMore) {
+      entries.push(flowListChrome('notification_timeline_load_more', 'loading'));
+    }
+    this.flowSource.replace(entries);
+    const gap = this.timelineColumns() > 1 ? FEED_COLUMN_GAP_VP : 0;
+    // 段间距 0：原列表 space=0，行间距由各行自带 padding 承担。
+    this.flowSections.splice(0, this.flowSections.length(),
+      buildFlowListSections(entries, this.timelineColumns(), gap, 0));
+  }
 
   private indicator?: FeedPullDownIndicatorHost;
   private refreshInFlight: boolean = false;
@@ -116,6 +181,8 @@ export struct NotificationTimelinePage {
   }
 
   aboutToDisappear(): void {
+    destinationScrollRegistry.unregister(destinationScrollKey(AppDestinationName.NOTIFICATION_ENTRY, this.entryName),
+      this.flowScroller);
     this.controller?.deactivate();
     this.controller = undefined;
     this.refreshInFlight = false;
@@ -162,59 +229,68 @@ export struct NotificationTimelinePage {
           builder: pullDownRefreshPlaceholder,
           refreshingContent: this.indicator?.view()
         }) {
-          List({ space: 0 }) {
-            if (this.items.length === 0) {
-              ListItem() {
-                Text('这里还什么都没有')
-                  .id('notification_timeline_empty')
-                  .fontSize($r('app.float.body_font_size'))
-                  .fontColor($r('app.color.secondary_text'))
-                  .textAlign(TextAlign.Center)
-                  .width('100%')
-                  .padding(24)
-              }
-            }
-
-            ForEach(this.items, (item: MobileNotificationTimelineItem) => {
-              ListItem() {
-                if (item.type === 'empty') {
-                  this.emptyRow(item)
-                } else if (this.entryName === 'invite') {
-                  this.invitationAnswerItem(item)
-                } else {
-                  this.timelineItemRow(item)
-                }
-              }
-            }, (item: MobileNotificationTimelineItem): string =>
-              notificationItemRenderKey(item))
-
-            if (this.loadingMore) {
-              ListItem() {
-                Row() {
-                  LoadingProgress()
-                    .width(20)
-                    .height(20)
-                    .color(this.resolvedThemeColor)
-                  Text('正在加载更多…')
-                    .fontSize($r('app.float.secondary_font_size'))
+          WaterFlow({ scroller: this.flowScroller, sections: this.flowSections,
+            layoutMode: WaterFlowLayoutMode.SLIDING_WINDOW }) {
+            LazyForEach(this.flowSource, (entry: FlowListItem) => {
+              FlowItem() {
+                if (entry.label === 'list_empty') {
+                  Text('这里还什么都没有')
+                    .id('notification_timeline_empty')
+                    .fontSize($r('app.float.body_font_size'))
                     .fontColor($r('app.color.secondary_text'))
-                    .margin({ left: 8 })
+                    .textAlign(TextAlign.Center)
+                    .width('100%')
+                    .padding(24)
+                } else if (entry.label === 'empty') {
+                  this.emptyRow(entry.payload as MobileNotificationTimelineItem)
+                } else if (entry.label === 'invitation') {
+                  this.invitationAnswerItem(entry.payload as MobileNotificationTimelineItem)
+                } else if (entry.label === 'loading') {
+                  Row() {
+                    LoadingProgress().width(20).height(20).color(this.resolvedThemeColor)
+                    Text('正在加载更多…')
+                      .fontSize($r('app.float.secondary_font_size'))
+                      .fontColor($r('app.color.secondary_text'))
+                      .margin({ left: 8 })
+                  }
+                  .id('notification_timeline_load_more')
+                  .justifyContent(FlexAlign.Center)
+                  .width('100%')
+                  .padding(12)
+                } else if (this.timelineColumns() <= 1) {
+                  this.timelineItemRow(entry.payload as MobileNotificationTimelineItem)
+                } else {
+                  Column() {
+                    this.timelineItemRow(entry.payload as MobileNotificationTimelineItem)
+                  }
+                  .width('100%')
+                  // 多列时行内容卡片化（表面 + 圆角）；未读高亮仍由行自身底色承担。
+                  .backgroundColor($r('app.color.card_background'))
+                  .borderRadius($r('app.float.card_radius'))
+                  .clip(true)
                 }
-                .id('notification_timeline_load_more')
-                .justifyContent(FlexAlign.Center)
-                .width('100%')
-                .padding(12)
               }
-            }
+              .width('100%')
+            }, (entry: FlowListItem): string => entry.key)
           }
           .id('notification_timeline_list')
-          .width('100%')
-          // 顶栏让位：内缩滚动内容起点，未滚动时首屏内容仍从标题栏下沿开始
-          .contentStartOffset(FLOATING_TITLE_BAR_OFFSET)
-          .height('100%')
-          .scrollBar(BarState.Off)
-          .edgeEffect(EdgeEffect.Spring)
-          .onReachEnd(() => this.controller?.loadMore())
+            .onAppear((): void => {
+              destinationScrollRegistry.register(destinationScrollKey(AppDestinationName.NOTIFICATION_ENTRY,
+                this.entryName), this.flowScroller);
+            })
+            .width('100%')
+            // 行自带 16vp 内缩；宽屏居中限宽时由列表补足差值，窄屏保持现状（差值≤0 不加）。
+            .padding({
+              left: Math.max(0, this.wideSpec().paddingVp - 16),
+              right: Math.max(0, this.wideSpec().paddingVp - 16)
+            })
+            // 顶栏让位：内缩滚动内容起点，未滚动时首屏内容仍从标题栏下沿开始
+            .contentStartOffset(FLOATING_TITLE_BAR_OFFSET)
+            .height('100%')
+            .scrollBar(BarState.Off)
+            .cachedCount(Math.max(6, this.timelineColumns() * 2))
+            .edgeEffect(EdgeEffect.Spring)
+            .onReachEnd(() => this.controller?.loadMore())
         }
         .id('notification_timeline_pull_refresh')
         .width('100%')
@@ -231,6 +307,12 @@ export struct NotificationTimelinePage {
     // 覆盖式顶栏：容器不设 top padding，滚动视口延伸到屏幕顶；
     // 首屏起始位置由列表的 contentStartOffset 内缩（见 AppPageChrome 约定）
     .backgroundColor($r('app.color.page_background'))
+    .onAreaChange((_oldArea: Area, area: Area): void => {
+      const width: number = Number(area.width);
+      if (width > 0 && Math.abs(width - this.pageWidthVp) > 0.5) {
+        this.pageWidthVp = width;
+      }
+    })
   }
 
   /** 时间线卡片（未读点 + 头像 + 标题/副标题/正文 + 相对时间 + 来源框）。 */
@@ -618,5 +700,6 @@ export struct NotificationTimelinePage {
     this.canLoadMore = state.canLoadMore;
     this.requiresLogin = state.requiresLogin;
     this.errorMessage = state.errorMessage ?? '';
+    this.rebuildFlowLayout();
   }
 }

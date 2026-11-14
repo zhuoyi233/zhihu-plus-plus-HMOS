@@ -17,6 +17,13 @@ export const FEED_PAGE_HORIZONTAL_PADDING_VP: number = 12;
 export const FEED_COLUMN_GAP_VP: number = 14;
 /** 常规字号下的最小卡片宽度起点；字号放大按 feedMinCardWidthVp 比例提高。 */
 export const FEED_BASE_MIN_CARD_WIDTH_VP: number = 280;
+/**
+ * 宽屏内容上限（vp）：问题页/管理类列表等内容宽超过该值后整体居中，
+ * 对齐规范"我的"分组 1120vp 上限先例；正文长文仍按 READER_TEXT_MAX_WIDTH_VP 再限。
+ */
+export const WIDE_CONTENT_MAX_WIDTH_VP: number = 1120;
+/** 长文内容上限（vp）：问题信息区/正文块等长文本列宽，与阅读布局 720vp 口径一致。 */
+export const READER_TEXT_MAX_WIDTH_VP: number = 720;
 /** 日报 4×1 实验布局的目标列数与专属最小卡宽（竖排小卡可比信息流卡更窄）。 */
 export const FEED_DAILY_COLUMN_TARGET: number = 4;
 export const FEED_DAILY_BASE_MIN_CARD_WIDTH_VP: number = 240;
@@ -52,6 +59,64 @@ export function feedDailyMinCardWidthVp(fontScale: number): number {
   return Math.round(FEED_DAILY_BASE_MIN_CARD_WIDTH_VP * scale);
 }
 
+/**
+ * 宽屏居中限宽的横向 padding（vp）：视口超过内容上限后返回居中所需边距，
+ * 否则返回常规页边距（12vp）。入参非法或未启用限宽（≤0）时按常规页边距处理。
+ */
+export function contentCenteredPaddingVp(viewportWidthVp: number, contentMaxWidthVp: number): number {
+  if (!(viewportWidthVp > 0) || !Number.isFinite(viewportWidthVp) || !(contentMaxWidthVp > 0)) {
+    return FEED_PAGE_HORIZONTAL_PADDING_VP;
+  }
+  return Math.max(FEED_PAGE_HORIZONTAL_PADDING_VP, (viewportWidthVp - contentMaxWidthVp) / 2);
+}
+
+/**
+ * 按已扣边距的内容宽求可容纳列数（1～4）：容不下最小卡宽时回退单列。
+ * `resolveFeedColumnSpec` 的内容宽口径变体，供已知内容宽的容器直接复用。
+ */
+export function fitColumnsForContentWidth(contentWidthVp: number, minCardWidthVp: number,
+  columnGapVp?: number): number {
+  const gap: number = columnGapVp !== undefined && columnGapVp >= 0 ? columnGapVp : FEED_COLUMN_GAP_VP;
+  const minCard: number = minCardWidthVp > 0 ? minCardWidthVp : FEED_BASE_MIN_CARD_WIDTH_VP;
+  const fit: number = Math.floor((contentWidthVp + gap) / (minCard + gap));
+  return fit >= 1 ? Math.min(FEED_MAX_COLUMNS, fit) : 1;
+}
+
+/** 按内容宽与列数求等宽卡宽：单列占满内容宽（允许不足最小卡宽），多列扣除列间距后均分。 */
+export function cardWidthForColumns(contentWidthVp: number, columns: number, columnGapVp?: number): number {
+  const gap: number = columnGapVp !== undefined && columnGapVp >= 0 ? columnGapVp : FEED_COLUMN_GAP_VP;
+  const cols: number = Math.max(1, Math.floor(columns));
+  if (cols <= 1) {
+    return contentWidthVp;
+  }
+  return Math.max(0, (contentWidthVp - (cols - 1) * gap) / cols);
+}
+
+/** 宽屏内容列规格：居中限宽后的横向 padding、内容宽、列数与等宽卡宽一次求齐。 */
+export interface WideColumnSpec {
+  columns: number;
+  cardWidth: number;
+  contentWidth: number;
+  paddingVp: number;
+}
+
+/**
+ * 管理类列表页（收藏/历史/消息/个人主页）的宽屏列规格：视口超 1120vp 后内容居中，
+ * 列数按内容宽与最小卡宽（含字号缩放）钳制；未测量（0）时按常规页边距单列。
+ */
+export function resolveWideColumnSpec(viewportWidthVp: number, minCardWidthVp: number,
+  columnGapVp?: number): WideColumnSpec {
+  const paddingVp: number = contentCenteredPaddingVp(viewportWidthVp, WIDE_CONTENT_MAX_WIDTH_VP);
+  const contentWidth: number = Math.max(0, viewportWidthVp - paddingVp * 2);
+  const columns: number = fitColumnsForContentWidth(contentWidth, minCardWidthVp, columnGapVp);
+  return {
+    columns: columns,
+    cardWidth: cardWidthForColumns(contentWidth, columns, columnGapVp),
+    contentWidth: contentWidth,
+    paddingVp: paddingVp
+  };
+}
+
 export interface FeedColumnSpec {
   /** 最终列数（1～4）：断点候选、用户期望与最小卡宽保护共同决定。 */
   columns: number;
@@ -84,11 +149,10 @@ export function resolveFeedColumnSpec(pageWidthVp: number, options?: FeedColumnS
   const wanted: number = requested > 0
     ? Math.min(FEED_MAX_COLUMNS, Math.floor(requested))
     : feedColumnCandidates(pageWidthVp);
-  let columns: number = Math.max(1, Math.min(FEED_MAX_COLUMNS, wanted));
-  // 可容纳列数 = floor((内容宽度 + 列间距) / (最小卡宽 + 列间距))；容不下最小卡宽时保持单列占满。
-  const fit: number = Math.floor((contentWidth + gap) / (minCard + gap));
-  columns = fit >= 1 ? Math.min(columns, fit) : 1;
-  const cardWidth: number = columns > 1 ? (contentWidth - (columns - 1) * gap) / columns : contentWidth;
+  // 可容纳列数由 fitColumnsForContentWidth 统一钳制：容不下最小卡宽时保持单列占满。
+  const fit: number = fitColumnsForContentWidth(contentWidth, minCard, gap);
+  const columns: number = Math.max(1, Math.min(wanted, fit));
+  const cardWidth: number = cardWidthForColumns(contentWidth, columns, gap);
   return { columns: columns, cardWidth: Math.max(0, cardWidth), contentWidth: contentWidth };
 }
 

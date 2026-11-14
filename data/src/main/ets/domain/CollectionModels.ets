@@ -36,6 +36,10 @@ export interface CollectionContentItem {
   readonly voteupCount: number;
   readonly commentCount: number;
   readonly authorName?: string;
+  /** 作者头像（响应 author.avatar_url）；缺失/异常时为 undefined，卡片按无头像降级。 */
+  readonly authorAvatarUrl?: string;
+  /** 封面缩略图（回答 content.thumbnail / 文章 content.image_url）；缺失时按无图降级。 */
+  readonly thumbnailUrl?: string;
   readonly createdAt: number;
 }
 

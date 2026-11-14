@@ -33,11 +33,20 @@ export const TOP_BAR_ACTION_SPACING_VP: number = 10;
 export const TOP_BAR_SEARCH_PILL_HEIGHT_VP: number = 40;
 
 /**
- * 自定义顶栏内容对齐 HDS 原生标题的起点（vp）：16vp 页边距 + 40vp 返回键 + 8vp 间距。
- * 返回由 HDS 承载，stackBuilder 中的身份摘要、输入胶囊与编辑器统一使用此值。
+ * 窄窗及宽度尚未测量时的自定义标题起点（vp）：16vp 页边距 + 40vp 返回键 + 8vp 间距。
+ * 返回由 HDS 承载，实际起点由 topBarHdsBackReserveVp 按容器宽度计算。
  * 普通文字标题使用 HDS title/menu 原生测量，不使用此占位值。
  */
 export const TOP_BAR_HDS_BACK_RESERVE_VP: number = 64;
+
+/** 跟随 HDS PaddingOptions.start 的默认断点，始终在原生返回键后保留 8vp。 */
+export function topBarHdsBackReserveVp(viewportWidthVp: number): number {
+  if (!Number.isFinite(viewportWidthVp) || viewportWidthVp < 600) {
+    return TOP_BAR_HDS_BACK_RESERVE_VP;
+  }
+  // HDS：600–839vp 为 24vp 起始边距，840vp 起为 32vp（窄窗为 16vp）。
+  return (viewportWidthVp < 840 ? 24 : 32) + TOP_BAR_BUTTON_DIAMETER_VP + 8;
+}
 
 /** 顶部圆按钮的渲染路径：系统材质 / 普通模糊兜底，两者互斥。 */
 export enum TopBarMaterialPath {

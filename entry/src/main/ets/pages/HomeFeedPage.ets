@@ -1,4 +1,3 @@
-import { FeedThumbnail } from './components/FeedThumbnail';
 import { publishFeedScroll } from './FeedScrollOwnership';
 import {
   buildFeedFlowLayout,
@@ -46,13 +45,14 @@ import {
   AppPageStatusPanel,
   FeedLoadMoreIndicator,
   FeedPullDownIndicatorHost,
-  FEED_DIVIDER_ITEM_HORIZONTAL_PADDING_VP,
   feedTopContentInset,
   floatingTitleBarOffset,
   PULL_REFRESH_PULL_DOWN_RATIO,
   PULL_REFRESH_TRIGGER_OFFSET_VP,
   pullDownRefreshPlaceholder
 } from './AppPageChrome';
+import { FeedContentCard, feedCardMoreButtonContent } from './components/FeedContentCard';
+import { homeFeedCardPresentation } from './FeedCardPresentation';
 import { HomeFeedController, HomeFeedPhase, HomeFeedViewState } from './HomeFeedState';
 import { HomeFeedMenuAction, HomeFeedMenuItem, homeFeedMenuItems, resolveHomeFeedBlockUser, resolveHomeFeedTopics } from './HomeFeedMenuState';
 import { HOME_FEED_SCROLL_KEY, topLevelScrollRegistry } from './TopLevelScrollRegistry';
@@ -491,73 +491,30 @@ export struct HomeFeedPage {
 
   @Builder
   private feedCard(item: FeedItem) {
-    Button({ type: ButtonType.Normal, stateEffect: true }) {
-      Column({ space: $r('app.float.spacing_xsmall') }) {
-        if ((item.target.qualityFilterReason ?? '').length > 0) {
-          // 对齐上游 FeedDisplayItem（isFiltered）：标题显示“已屏蔽”，原因放摘要位置，
-          // 标题/摘要/作者/来源与图片均不展示，页脚与菜单行保留。
-          Text('已屏蔽')
-            .id(`home_quality_blocked_${item.target.kind}_${item.target.id}`)
-            .fontSize($r('app.float.heading_font_size'))
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.primary_text'))
-            .width('100%')
-          Text(item.target.qualityFilterReason ?? '')
-            .id(`home_quality_rule_${item.target.kind}_${item.target.id}`)
-            .fontSize($r('app.float.body_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .width('100%')
-        } else {
-          this.feedCardContent(item)
-        }
-        // 对齐上游 FeedCardContent：页脚（details）行与右下角“更多”菜单同排。
-        Row({ space: $r('app.float.spacing_small') }) {
-          Text(homeFeedDetailsLabel(item))
-            .id(`home_feed_footer_${item.target.kind}_${item.target.id}`)
-            .fontSize($r('app.float.secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .maxLines(2)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .layoutWeight(1)
-          this.feedCardMenuButton(item)
-        }
-        .width('100%')
-        .alignItems(VerticalAlign.Center)
+    // 卡片排版抽到共享 FeedContentCard（与收藏内容页同源）；本页只保留业务：
+    // 展示模型适配、测试 ID、点击打开与“更多”菜单槽位。
+    FeedContentCard({
+      presentation: homeFeedCardPresentation(item),
+      columns: this.feedColumns,
+      cardStyle: this.feedCardStyle,
+      showThumbnail: this.showFeedThumbnail,
+      cardTestId: `home_feed_card_${item.target.kind}_${item.target.id}`,
+      footerTestId: `home_feed_footer_${item.target.kind}_${item.target.id}`,
+      blockedTestId: `home_quality_blocked_${item.target.kind}_${item.target.id}`,
+      blockedRuleTestId: `home_quality_rule_${item.target.kind}_${item.target.id}`,
+      onOpen: (): void => {
+        void this.openFeedItem(item);
+      },
+      moreSlot: (): void => {
+        this.feedCardMenuButton(item)
       }
-      .alignItems(HorizontalAlign.Start)
-      .width('100%')
-    }
-    .id(`home_feed_card_${item.target.kind}_${item.target.id}`)
-    .width('100%')
-    // 分割线样式与正文页两侧留白对齐（容器 page_padding + 这里的 8vp = 20vp）；
-    // 卡片样式保留 card_padding，卡面内需要内缩。
-    .padding({
-      left: this.usesCardSurface() ? $r('app.float.card_padding') : FEED_DIVIDER_ITEM_HORIZONTAL_PADDING_VP,
-      right: this.usesCardSurface() ? $r('app.float.card_padding') : FEED_DIVIDER_ITEM_HORIZONTAL_PADDING_VP,
-      top: $r('app.float.card_padding'),
-      bottom: $r('app.float.card_padding')
     })
-    .borderRadius(this.usesCardSurface() ? $r('app.float.card_radius') : 0)
-    .backgroundColor(this.usesCardSurface() ? $r('app.color.surface_background') : Color.Transparent)
-    // border 的 radius 优先级高于 borderRadius 属性（未指定时按 0 处理），
-    // 卡片模式必须把圆角同步写进 border，否则背景圆角被重置成直角。
-    .border({
-      width: { bottom: !this.usesCardSurface() ? 1 : 0 },
-      color: $r('app.color.divider_color'),
-      radius: this.usesCardSurface() ? $r('app.float.card_radius') : 0
-    })
-    .accessibilityText((item.target.qualityFilterReason ?? '').length > 0
-      ? `已屏蔽：${item.target.qualityFilterReason}`
-      : `打开${feedKindLabel(item.target.kind)}：${item.target.title}`)
-    .onClick((): void => { void this.openFeedItem(item); })
   }
 
   @Builder
   private feedCardMenuButton(item: FeedItem) {
     Button({ type: ButtonType.Normal, stateEffect: true }) {
-      SymbolGlyph($r('sys.symbol.ellipsis_circle'))
-        .fontSize(18)
-        .fontColor([$r('app.color.secondary_text')])
+      feedCardMoreButtonContent()
     }
     .id(`home_feed_block_${item.target.kind}_${item.target.id}`)
     .width(32)
@@ -574,82 +531,6 @@ export struct HomeFeedPage {
       }
     })
     .accessibilityText('更多选项')
-  }
-
-  /** 卡片是否带图片/视频封面（受“显示信息流缩略图”开关控制）。 */
-  private hasFeedThumbnail(item: FeedItem): boolean {
-    return this.showFeedThumbnail && (item.target.thumbnailUrl ?? '').length > 0;
-  }
-
-  /** 摘要行数：带图时让右侧文字按左侧大图高度铺满，避免文字只占一小块留下大片空白。 */
-  private feedExcerptMaxLines(hasThumbnail: boolean): number {
-    if (hasThumbnail) {
-      return this.feedColumns > 2 ? 4 : 6;
-    }
-    return this.feedColumns > 1 ? 2 : 3;
-  }
-
-  @Builder
-  private feedCardContent(item: FeedItem) {
-    // 标题完整展示：不截断、不限行数，长问题换行后卡片高度自然增长（瀑布流不强行对齐行）。
-    Text(item.target.title)
-      .fontSize($r('app.float.heading_font_size'))
-      .fontWeight(FontWeight.Medium)
-      .fontColor($r('app.color.primary_text'))
-      .width('100%')
-
-    if (item.target.author !== undefined) {
-      Row({ space: $r('app.float.spacing_xsmall') }) {
-        if ((item.target.author.avatarUrl ?? '').length > 0) {
-          Image(item.target.author.avatarUrl)
-            .width(20)
-            .height(20)
-            .borderRadius(10)
-            .alt('用户头像')
-        }
-        Text(item.target.author.name)
-          .fontSize($r('app.float.secondary_font_size'))
-          .fontColor($r('app.color.secondary_text'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-      }
-      .alignItems(VerticalAlign.Center)
-    }
-
-    // 图片/视频封面改为左侧大图，摘要与推荐语排在右侧（对齐需求示意）。
-    Row({ space: $r('app.float.spacing_small') }) {
-      if (this.hasFeedThumbnail(item)) {
-        FeedThumbnail({ url: item.target.thumbnailUrl ?? '' })
-          .width('42%')
-          .aspectRatio(1)
-          .constraintSize({ maxHeight: 150 })
-          .borderRadius($r('app.float.spacing_small'))
-      }
-      Column({ space: $r('app.float.spacing_xsmall') }) {
-        if (item.target.excerpt.trim().length > 0) {
-          Text(item.target.excerpt)
-            .fontSize($r('app.float.body_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            // 多列卡宽收窄，摘要由三行收至两行；带图时按左侧大图高度铺满。
-            .maxLines(this.feedExcerptMaxLines(this.hasFeedThumbnail(item)))
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-        }
-        if ((item.recommendationReason?.trim() ?? '').length > 0 ||
-          (item.target.mobileFooterText === undefined && (item.actionText?.trim() ?? '').length > 0)) {
-          Text(homeFeedActionLabel(item))
-            .fontSize($r('app.float.secondary_font_size'))
-            .fontColor($r('app.color.secondary_text'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%')
-        }
-      }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-    }
-    .width('100%')
-    .alignItems(VerticalAlign.Top)
   }
 
   private async openFeedItem(item: FeedItem): Promise<void> {
@@ -1109,47 +990,4 @@ export function homeFeedDestination(item: FeedItem): AppDestination {
     case FeedTargetKind.VIDEO:
       return { name: AppDestinationName.VIDEO, id: item.target.id };
   }
-}
-
-export function feedKindLabel(kind: FeedTargetKind): string {
-  switch (kind) {
-    case FeedTargetKind.QUESTION:
-      return '问题';
-    case FeedTargetKind.ANSWER:
-      return '回答';
-    case FeedTargetKind.ARTICLE:
-      return '文章';
-    case FeedTargetKind.VIDEO:
-      return '视频';
-  }
-}
-
-export function homeFeedActionLabel(item: FeedItem): string {
-  // 对齐上游：LOCAL 模式显示本地推荐理由（reasonDisplay），其余模式显示来源标注
-  // （移动端卡「手机版推荐」/ Web 卡 action_text），均缺失时兜底「推荐内容」。
-  const reason = item.recommendationReason?.trim() ?? '';
-  if (reason.length > 0) {
-    return reason;
-  }
-  const actionText = item.actionText?.trim() ?? '';
-  return actionText.length > 0 ? actionText : '推荐内容';
-}
-
-/** 对齐上游 details：类型标注（回答/文章等）与统计拼成页脚文字。 */
-export function homeFeedDetailsLabel(item: FeedItem): string {
-  if (item.target.mobileFooterText !== undefined) {
-    // 移动卡片保留服务端页脚原文（已含“手机版推荐”来源标注），不重复拼接。
-    return homeFeedFooterLabel(item);
-  }
-  // Web 卡对齐上游 detailsText：`回答 · N 赞同 · N 评论`。
-  const stats = `${item.target.voteupCount ?? '—'} 赞同 · ${item.target.commentCount ?? '—'} 评论`;
-  return `${feedKindLabel(item.target.kind)} · ${stats}`;
-}
-
-export function homeFeedFooterLabel(item: FeedItem): string {
-  const mobileFooter = item.target.mobileFooterText;
-  if (mobileFooter !== undefined) {
-    return mobileFooter.trim().length > 0 ? `${mobileFooter} · 手机版推荐` : '手机版推荐';
-  }
-  return `${item.target.voteupCount ?? '—'} 赞同 · ${item.target.commentCount ?? '—'} 评论`;
 }

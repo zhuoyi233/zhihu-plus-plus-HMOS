@@ -2,7 +2,8 @@ import { Want } from '@kit.AbilityKit';
 import { getAbilityContext } from '../entryability/AbilityContextHolder';
 import { createSystemShareService } from '../platform/SystemShareService';
 import { ShareOutcome, SharePayloadKind, ShareTextPayload } from '../platform/ShareContracts';
-import { AppDestination } from 'core';
+import { AppDestination, AppDestinationName } from 'core';
+import { destinationScrollKey } from './DestinationScrollRegistry';
 import {
   DailyStoryRepository,
   DEFAULT_THEME_COLOR,
@@ -169,6 +170,7 @@ export struct DailyStoryDetailPage {
       contentNotice: this.partialNotice(),
       emptyMessage: '这篇日报没有可原生展示的正文',
       readingLayout: true,
+      scrollBindingKey: destinationScrollKey(AppDestinationName.DAILY_STORY, this.storyId),
       topInsetVp: floatingTitleBarOffset(),
       bottomInsetVp: 100,
       onLinkClick: (url: string): void => this.openLink(url),

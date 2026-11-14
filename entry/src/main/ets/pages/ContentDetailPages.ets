@@ -2,6 +2,14 @@ import { AnswerPanePreparation } from './AnswerPanePreparation';
 import { AnswerPaneLayout } from './AnswerPaneLayout';
 import { AnswerDetailPrefetcher } from './AnswerSwitchPrefetch';
 import { QuestionAnswerDataSource } from './QuestionAnswerDataSource';
+import { destinationScrollKey } from './DestinationScrollRegistry';
+import {
+  WIDE_CONTENT_MAX_WIDTH_VP,
+  READER_TEXT_MAX_WIDTH_VP,
+  contentCenteredPaddingVp,
+  feedMinCardWidthVp,
+  fitColumnsForContentWidth
+} from './FeedWaterfallLayout';
 import { QuestionAnswerNavigator, stageQuestionAnswerNavigator, takeQuestionAnswerNavigator } from './QuestionAnswerNavigator';
 import { ContentImagePreview } from './NativeContentDocument';
 import { publishQuestionTitle } from './QuestionTitleBar';
@@ -143,7 +151,7 @@ struct ContentDetailPage {
   /** 回答页过滑切换：纵向模式沿 Y 轴、横向模式沿 X 轴平移。 */
   @State private answerOverscrollOffset: number = 0;
   /** 回答页可视宽度（vp）：横向相邻回答从左右整页之外随手势滑入。 */
-  @State private answerViewportWidthVp: number = 0;
+  @State @Watch('onAnswerViewportWidthChanged') private answerViewportWidthVp: number = 0;
   /** 回答页可视高度（vp）：纵向相邻回答从上下整页之外随手势滑入。 */
   @State private answerViewportHeightVp: number = 0;
   /** 正文是否贴在列表底边（NativeContentDocument 回推）。 */
@@ -196,7 +204,7 @@ struct ContentDetailPage {
   private bottomActionLeftArea: Area | undefined = undefined;
   private bottomActionRightArea: Area | undefined = undefined;
   @State private bottomActionBarHeightVp: number = 0;
-  @StorageProp('systemFontSizeScale') @Watch('syncAnswerTitle') private systemFontSizeScale: number = 1;
+  @StorageProp('systemFontSizeScale') @Watch('onSystemFontSizeScaleChanged') private systemFontSizeScale: number = 1;
   @StorageProp('readerActiveRouteKey') @Watch('onReaderOwnerChanged') private readerVisibleOwner: string = '';
   @StorageProp('loginFeedReloadTick') @Watch('onLoginChanged') private loginTick: number = 0;
   /** 全屏图片查看器：正文/评论图点击后经 AppStorage 广播，在页面根 Stack 叠层渲染
@@ -211,6 +219,8 @@ struct ContentDetailPage {
   private sessionReloadPending: boolean = false;
   private answerQuestionId: string = '';
   private readonly answerDataSource: QuestionAnswerDataSource = new QuestionAnswerDataSource();
+  /** 问题页回答瀑布流列数（宽屏）：由页宽/字号驱动，呈现层经阅读器 documentFlow 段消费。 */
+  @State private answerColumns: number = 1;
   private indicator?: FeedPullDownIndicatorHost = undefined;
   private questionScrolled: boolean = false;
   /** 回答页顶栏折叠：问题标题已滚出视口（经 AppStorage 驱动 HDS 标题栏折叠态）。 */
@@ -416,6 +426,7 @@ struct ContentDetailPage {
         (state: QuestionAnswersViewState): void => {
           this.answersState = state;
           this.answerDataSource.replace(state.items);
+          this.syncAnswerRowLayout();
         });
     }
     this.answersController.activate();
@@ -1119,6 +1130,8 @@ struct ContentDetailPage {
           linkCardMetaRepository: this.linkCardMetaRepository,
           disableEdgeSpring: this.kind === ContentDetailKind.ANSWER,
           readingLayout: true,
+          scrollBindingKey: content.kind === ContentDetailKind.ARTICLE
+            ? destinationScrollKey(AppDestinationName.ARTICLE, content.value.id) : '',
           positionKey: readerPositionKey(content.kind, content.value.id),
           positionOwnerKey: readerPositionKey(this.kind, this.contentId),
           answerDocumentKey: content.kind === ContentDetailKind.ANSWER ? this.answerDocumentKey(content) : '',
@@ -1653,6 +1666,9 @@ struct ContentDetailPage {
       }
       .alignItems(HorizontalAlign.Start)
       .width('100%')
+      // 问题页宽屏限宽：信息头（标题/统计浅底带）收窄到长文口径并随列表居中。
+      .constraintSize({ maxWidth: content.kind === ContentDetailKind.QUESTION
+        ? READER_TEXT_MAX_WIDTH_VP : '100%' })
       .padding({
         // 回答/文章页信息头在列表内滚动：左右与顶部留白由 List 统一提供，避免双重内边距。
         left: content.kind === ContentDetailKind.ANSWER || content.kind === ContentDetailKind.ARTICLE
@@ -1942,7 +1958,12 @@ struct ContentDetailPage {
     }) {
       NativeContentDocument({
         html: contentHtml(content), emptyMessage: contentEmptyMessage(content), collapsible: true,
+        scrollBindingKey: destinationScrollKey(AppDestinationName.QUESTION, content.value.id),
         linkCardMetaRepository: this.linkCardMetaRepository,
+        // 宽屏：整页内容 1120vp 居中，长文（信息头/正文块/尾部操作）再限 720，
+        // 回答列表经 documentFlow 段进 WaterFlow（高度不齐的多列瀑布流，与首页一致）。
+        contentMaxWidthVp: WIDE_CONTENT_MAX_WIDTH_VP,
+        bodyMaxWidthVp: READER_TEXT_MAX_WIDTH_VP,
         topInsetVp: this.contentTopInsetVp(),
         bottomInsetVp: readerBottomInsetVp(this.bottomActionBarHeightVp, this.immersiveReading),
         onVideoOpen: (videoId: string): void => this.openVideo(videoId),
@@ -1950,7 +1971,13 @@ struct ContentDetailPage {
         documentHeader: (): void => { this.contentHeader(content) },
         onBodyDoubleTap: (): void => this.onContentDoubleTap(),
         documentBodyFooter: (): void => { this.questionBodyFooter(content) },
-        documentItems: (): void => { this.questionAnswerItems() },
+        documentFlowSource: this.answerDataSource,
+        documentFlowColumns: this.answerColumns,
+        documentFlowKey: (item: Object): string =>
+          feedItemIdentity((item as ChannelContentItem).feedItem),
+        documentFlowItem: (item: Object): void => {
+          this.answerFeedCard(item as ChannelContentItem);
+        },
         documentFooter: (): void => { this.questionAnswersFooter() },
         onListReachEnd: (): void => { this.answersController?.loadMore(); },
         onScrollOffset: (offset: number): void => {
@@ -2001,6 +2028,33 @@ struct ContentDetailPage {
     });
   }
 
+  /** 页宽变化（窗口/旋转）与字号缩放共同驱动问题页回答多列重排。 */
+  private onAnswerViewportWidthChanged(): void {
+    this.syncAnswerRowLayout();
+  }
+
+  private onSystemFontSizeScaleChanged(): void {
+    this.syncAnswerTitle();
+    this.syncAnswerRowLayout();
+  }
+
+  /**
+   * 问题页回答瀑布流列数：按页宽（1120vp 居中限宽后的内容宽）与字号缩放求列数；
+   * 列数经 documentFlowColumns 传给阅读器，回答逐条由 WaterFlow 按最短列放置。
+   */
+  private syncAnswerRowLayout(): void {
+    if (this.kind !== ContentDetailKind.QUESTION) {
+      return;
+    }
+    const viewport = this.answerViewportWidthVp;
+    if (viewport <= 0) {
+      return;
+    }
+    const contentWidth: number = Math.max(0, viewport -
+      contentCenteredPaddingVp(viewport, WIDE_CONTENT_MAX_WIDTH_VP) * 2);
+    this.answerColumns = fitColumnsForContentWidth(contentWidth, feedMinCardWidthVp(this.systemFontSizeScale));
+  }
+
   @Builder
   private questionBodyFooter(content: LoadedContentDetail) {
     Column({ space: 12 }) {
@@ -2038,13 +2092,8 @@ struct ContentDetailPage {
           .id('question_sort').width(168).height(36)
       }.width('100%')
     }.width('100%')
-  }
-
-  @Builder
-  private questionAnswerItems() {
-    LazyForEach(this.answerDataSource, (item: ChannelContentItem) => {
-      ListItem() { this.answerFeedCard(item) }
-    }, (item: ChannelContentItem): string => feedItemIdentity(item.feedItem))
+      // 话题/写回答/排序行随长文口径限宽居中（问题页专属尾部）。
+      .constraintSize({ maxWidth: READER_TEXT_MAX_WIDTH_VP })
   }
 
   @Builder
@@ -2529,6 +2578,8 @@ struct ContentDetailPage {
           Text('已显示全部回答').fontColor($r('app.color.secondary_text'))
         }
       }.width('100%').padding({ top: 12, bottom: 12 })
+        // 回答分页状态/操作随长文口径限宽居中，与回答卡片网格保持同一阅读轴。
+        .constraintSize({ maxWidth: READER_TEXT_MAX_WIDTH_VP })
     }
   }
 

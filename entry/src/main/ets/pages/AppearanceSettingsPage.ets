@@ -277,7 +277,7 @@ export struct AppearanceSettingsPage {
                 this.updateAppearance(this.fabOpacity, this.showFeedThumbnail, value, this.feedCardStyleValue(), this.feedColumnModeValue());
               })
             Divider().color($r('app.color.divider_color'))
-            this.selectSetting('列表样式', '应用于信息流、“我的”与设置列表；卡片使用圆角表面，分割线使用细线分隔条目。',
+            this.selectSetting('列表样式', '应用于信息流、收藏内容、历史记录、“我的”与设置列表；卡片使用圆角表面，分割线使用细线分隔条目。',
               this.feedCardStyleLabel(), this.feedCardStyleOptions(), this.feedCardStyleIndex(),
               'appearance_feed_style', (index: number): void => this.updateFeedCardStyle(index))
             Divider().color($r('app.color.divider_color'))

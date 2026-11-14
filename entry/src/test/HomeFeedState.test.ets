@@ -6,7 +6,8 @@ import {
   HomeFeedViewState,
   mergeUniqueFeedItems
 } from '../main/ets/pages/HomeFeedState';
-import { homeFeedActionLabel, homeFeedDestination, homeFeedDetailsLabel, homeFeedFooterLabel, resolveHomeFeedDestination } from '../main/ets/pages/HomeFeedPage';
+import { homeFeedDestination, resolveHomeFeedDestination } from '../main/ets/pages/HomeFeedPage';
+import { homeFeedActionLabel, homeFeedDetailsLabel, homeFeedFooterLabel } from '../main/ets/pages/FeedCardPresentation';
 
 interface PendingRequest {
   resolve: (page: FeedPage) => void;

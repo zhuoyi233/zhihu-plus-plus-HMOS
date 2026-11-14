@@ -102,8 +102,24 @@ function decodeEntry(value: JsonValue): OnlineHistoryEntry | undefined {
       'read_history.item.data.content.summary'),
     authorName: content === undefined ? undefined : optionalText(content.get('author_name'),
       'read_history.item.data.content.author_name'),
+    coverImageUrl: content === undefined ? undefined : optionalImageUrl(content.get('cover_image')),
     readTime: normalizeReadTime(extra === undefined ? undefined : jsonNumber(extra.get('read_time')))
   };
+}
+
+/**
+ * 可选封面图（content.cover_image）：缺失/null/非字符串/空串一律 undefined，
+ * 可选图片信息异常不让整页历史解析失败。
+ */
+function optionalImageUrl(value: JsonValue | undefined): string | undefined {
+  if (value === undefined || value instanceof JsonNullValue) {
+    return undefined;
+  }
+  const text = jsonString(value);
+  if (text === undefined || text.trim().length === 0) {
+    return undefined;
+  }
+  return text;
 }
 
 function historyKind(type: DeepLinkType): OnlineHistoryKind | undefined {

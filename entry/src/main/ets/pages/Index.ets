@@ -334,8 +334,8 @@ struct Index {
           blockedFeedHistoryContent: (onBack: () => void, embedded: boolean,
             registerActions: (handler: () => void) => void, releaseActions: () => void): void =>
             this.blockedFeedHistoryContent(onBack, embedded, registerActions, releaseActions),
-          readHistoryContent: (navigate: (destination: AppDestination) => void, onBack: () => void): void =>
-            this.readHistoryContent(navigate, onBack),
+          readHistoryContent: (navigate: (destination: AppDestination) => void, onBack: () => void,
+            topLevel: boolean): void => this.readHistoryContent(navigate, onBack, topLevel),
           localHistoryContent: (navigate: (destination: AppDestination) => void, onBack: () => void): void =>
             this.localHistoryContent(navigate, onBack),
           loginContent: (onBack: () => void, onAuthenticated: () => void, onScanDesktopLogin: () => void): void =>
@@ -712,8 +712,9 @@ struct Index {
   }
 
   @Builder
-  readHistoryContent(navigate: (destination: AppDestination) => void, _onBack: () => void) {
+  readHistoryContent(navigate: (destination: AppDestination) => void, _onBack: () => void, topLevel: boolean) {
     ReadHistoryPage({
+      topLevel: topLevel,
       history: this.openedContentStore,
       onlineHistory: this.onlineHistoryRepository,
       session: this.session,

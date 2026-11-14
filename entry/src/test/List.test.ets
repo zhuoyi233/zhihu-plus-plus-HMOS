@@ -5,6 +5,7 @@ import answerPanePreparationTest from './AnswerPanePreparation.test';
 import answerPaneLayoutTest from './AnswerPaneLayout.test';
 import answerSwitchPrefetchTest from './AnswerSwitchPrefetch.test';
 import feedWaterfallLayoutTest from './FeedWaterfallLayout.test';
+import flowListSourceTest from './FlowListSource.test';
 import feedFlowDataSourceTest from './FeedFlowDataSource.test';
 import continuousAnswerLifecycleTest from './ContinuousAnswerLifecycle.test';
 import continuousReferenceNavigatorTest from './ContinuousReferenceNavigator.test';
@@ -64,6 +65,7 @@ import collectionRepositoryTest from './CollectionRepository.test';
 import collectionStateTest from './CollectionState.test';
 import collectionContentStateTest from './CollectionContentState.test';
 import collectionFavoriteStateTest from './CollectionFavoriteState.test';
+import feedCardPresentationTest from './FeedCardPresentation.test';
 import commentRepositoryTest from './CommentRepository.test';
 import commentStateTest from './CommentState.test';
 import mobileNotificationRepositoryTest from './NotificationRepository.test';
@@ -126,6 +128,7 @@ import pinMetaTextTest from './PinMetaText.test';
 
 export default function testsuite(): void {
   feedWaterfallLayoutTest();
+  flowListSourceTest();
   feedFlowDataSourceTest();
   apiLevelTest();
   backgroundWorkPolicyTest();
@@ -188,6 +191,7 @@ export default function testsuite(): void {
   collectionStateTest();
   collectionContentStateTest();
   collectionFavoriteStateTest();
+  feedCardPresentationTest();
   commentRepositoryTest();
   commentStateTest();
   mobileNotificationRepositoryTest();

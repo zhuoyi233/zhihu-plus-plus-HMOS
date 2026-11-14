@@ -25,6 +25,8 @@ import {
 } from '../main/ets/pages/PeoplePinDetailState';
 import { PeopleContentController, PeopleContentPhase } from '../main/ets/pages/PeopleContentState';
 import { peopleTitleText, PeopleTitleState } from '../main/ets/pages/PeopleTitleBar';
+import { PeopleSectionRequest, PeopleTabsState, peopleTabsInTitleBar, requestedPeopleSection,
+  resolvePeopleTabsLayout } from '../main/ets/pages/PeopleContentTabsState';
 import { parseZhihuHtml, ReaderInlineKind } from 'reader';
 
 class UnusedLoginOperation implements SessionLoginOperation {
@@ -298,6 +300,45 @@ export default function peoplePinDetailStateTest(): void {
       expect(controller.snapshot().canLoadMore).assertFalse();
     });
 
+    it('coalescesAutomaticPaginationTriggersAndStopsAtTheLastPage', 0, async () => {
+      const repository = new FixedPeopleContentRepository();
+      repository.pages = [
+        peopleContentPage([peopleAnswer('101')], false, 'next'),
+        peopleContentPage([peopleAnswer('102')], true)
+      ];
+      const controller = new PeopleContentController('alice-token', PeopleContentSection.ARTICLES, repository);
+      controller.activate();
+      await controller.loadInitial();
+      const pending = controller.loadMore();
+      expect(controller.snapshot().loadingMore).assertTrue();
+      await controller.loadMore();
+      await pending;
+      await controller.loadMore();
+      expect(repository.requestCount).assertEqual(2);
+      expect(controller.snapshot().items.length).assertEqual(2);
+      expect(controller.snapshot().loadingMore).assertFalse();
+      expect(controller.snapshot().canLoadMore).assertFalse();
+    });
+
+    it('blocksAutomaticPaginationAfterFailureUntilExplicitRetry', 0, async () => {
+      const repository = new FixedPeopleContentRepository();
+      repository.pages = [peopleContentPage([peopleAnswer('101')], false, 'next')];
+      const controller = new PeopleContentController('alice-token', PeopleContentSection.ACTIVITIES, repository);
+      controller.activate();
+      await controller.loadInitial();
+      await controller.loadMore();
+      expect(controller.snapshot().loadingMore).assertFalse();
+      expect(controller.snapshot().canLoadMore).assertFalse();
+      expect(controller.snapshot().items.length).assertEqual(1);
+      await controller.loadMore();
+      expect(repository.requestCount).assertEqual(2);
+      repository.pages = [peopleContentPage([peopleAnswer('102')], true)];
+      await controller.retry();
+      expect(repository.requestCount).assertEqual(3);
+      expect(controller.snapshot().items.length).assertEqual(2);
+      expect(controller.snapshot().errorMessage).assertUndefined();
+    });
+
     it('cancelsPeopleContentWhenLeavingPage', 0, async () => {
       const repository = new FixedPeopleContentRepository();
       repository.pages = [peopleContentPage([peopleAnswer('101')], true)];
@@ -319,6 +360,37 @@ export default function peoplePinDetailStateTest(): void {
       // 昵称为空白时不顶替占位标题
       expect(peopleTitleText([{ id: 'alice-token', name: '  ', scrolled: true }], 'alice-token'))
         .assertEqual('用户主页');
+    });
+
+    it('placesCompactTabsInWideTitleBarButKeepsNarrowAndLargeTextBelowIt', 0, () => {
+      const wide = resolvePeopleTabsLayout(1138, 1);
+      expect(wide.inTitleBar).assertTrue();
+      expect(wide.height <= 48).assertTrue();
+      expect((1138 - wide.width) / 2 >= 240).assertTrue();
+      expect(resolvePeopleTabsLayout(390, 1).inTitleBar).assertFalse();
+      const largeText = resolvePeopleTabsLayout(1138, 2);
+      expect(largeText.inTitleBar).assertFalse();
+      expect(largeText.buttonHeight >= 48).assertTrue();
+      const constrained = resolvePeopleTabsLayout(300, 3);
+      expect(constrained.width <= 276).assertTrue();
+      expect(constrained.buttonWidth * 3 > constrained.width).assertTrue();
+      expect(resolvePeopleTabsLayout(Number.NaN, Number.NaN).inTitleBar).assertFalse();
+    });
+
+    it('integratesOnlyThePinnedWideProfileAndRoutesTabRequestsToItsOwner', 0, () => {
+      const states: PeopleTabsState[] = [
+        { id: 'alice', selected: PeopleContentSection.ARTICLES, pinned: true, inTitleBar: true },
+        { id: 'bob', selected: PeopleContentSection.ANSWERS, pinned: false, inTitleBar: true },
+        { id: 'carol', selected: PeopleContentSection.ACTIVITIES, pinned: true, inTitleBar: false }
+      ];
+      expect(peopleTabsInTitleBar(states, 'alice')).assertTrue();
+      expect(peopleTabsInTitleBar(states, 'bob')).assertFalse();
+      expect(peopleTabsInTitleBar(states, 'carol')).assertFalse();
+      expect(peopleTabsInTitleBar(states, 'missing')).assertFalse();
+      const request: PeopleSectionRequest = { id: 'alice', section: PeopleContentSection.ACTIVITIES };
+      expect(requestedPeopleSection(request, 'alice')).assertEqual(PeopleContentSection.ACTIVITIES);
+      expect(requestedPeopleSection(request, 'bob')).assertUndefined();
+      expect(requestedPeopleSection(undefined, 'alice')).assertUndefined();
     });
   });
 }

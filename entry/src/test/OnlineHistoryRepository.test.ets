@@ -29,37 +29,41 @@ import {
 const ONLINE_BASE = 'https://www.zhihu.com/api/v4/unify-consumption/read_history';
 const NEXT_CURSOR = `${ONLINE_BASE}?offset=10&limit=10`;
 
+// 字段结构按真机采样实证：card_type 实为 "single_card"；header.icon 为固定类型图标（非头像）；
+// content.cover_image 多为空/缺失，文章类条目可能非空——夹具分别覆盖透传与空串降级。
 const FIRST_PAGE = '{"data":[' +
-  '{"card_type":"read_history","data":{"header":{"icon":"i","title":"ArkTS 如何入门？"},' +
+  '{"card_type":"single_card","data":{"header":{"icon":"i","title":"ArkTS 如何入门？"},' +
   '"content":{"author_name":"作者甲","summary":"问题摘要"},' +
   '"action":{"type":"open_url","url":"https://www.zhihu.com/question/100001"},' +
   '"extra":{"content_token":"100001","content_type":"question","read_time":1716120000,' +
   '"question_token":"100001"}}},' +
-  '{"card_type":"read_history","data":{"header":{"title":"回答标题"},' +
+  '{"card_type":"single_card","data":{"header":{"title":"回答标题"},' +
   '"action":{"type":"open_url","url":"zhihu://answers/200001"},' +
   '"extra":{"content_token":"200001","content_type":"answer","read_time":1716120100,' +
   '"question_token":"100001"}}},' +
-  '{"card_type":"read_history","data":{"header":{"title":"专栏文章标题"},' +
-  '"content":{"summary":"文章摘要"},"action":{"type":"open_url","url":"https://zhuanlan.zhihu.com/p/300001"},' +
+  '{"card_type":"single_card","data":{"header":{"title":"专栏文章标题"},' +
+  '"content":{"summary":"文章摘要","cover_image":"https://picx.zhimg.com/v2-history-cover_r.jpg"},' +
+  '"action":{"type":"open_url","url":"https://zhuanlan.zhihu.com/p/300001"},' +
   '"extra":{"content_token":"300001","content_type":"article","read_time":1716120200,' +
   '"question_token":""}}},' +
-  '{"card_type":"read_history","data":{"header":{"title":"一条想法"},' +
+  '{"card_type":"single_card","data":{"header":{"title":"一条想法"},' +
+  '"content":{"cover_image":""},' +
   '"action":{"type":"open_url","url":"https://www.zhihu.com/pin/400001"},' +
   '"extra":{"content_token":"400001","content_type":"pin","read_time":1716120300,' +
   '"question_token":""}}},' +
-  '{"card_type":"read_history","data":{"header":{"title":"用户主页"},' +
+  '{"card_type":"single_card","data":{"header":{"title":"用户主页"},' +
   '"action":{"type":"open_url","url":"https://www.zhihu.com/people/xiaoming"}}},' +
-  '{"card_type":"read_history","data":{"header":{"title":"无法解析"}}},' +
-  '{"card_type":"read_history","data":{"header":{"title":"视频内容"},' +
+  '{"card_type":"single_card","data":{"header":{"title":"无法解析"}}},' +
+  '{"card_type":"single_card","data":{"header":{"title":"视频内容"},' +
   '"action":{"type":"open_url","url":"https://www.zhihu.com/video/500001"}}}],' +
   '"paging":{"is_end":false,"is_start":true,"page":1,"totals":100}}';
 
 const SECOND_PAGE = '{"data":[' +
-  '{"card_type":"read_history","data":{"header":{"title":"第二页文章"},' +
+  '{"card_type":"single_card","data":{"header":{"title":"第二页文章"},' +
   '"action":{"type":"open_url","url":"https://zhuanlan.zhihu.com/p/600001"},' +
   '"extra":{"content_token":"600001","content_type":"article","read_time":1716120400,' +
   '"question_token":""}}},' +
-  '{"card_type":"read_history","data":{"header":{"title":"重复的问题"},' +
+  '{"card_type":"single_card","data":{"header":{"title":"重复的问题"},' +
   '"action":{"type":"open_url","url":"https://www.zhihu.com/question/100001"},' +
   '"extra":{"content_token":"100001","content_type":"question","read_time":1716120500,' +
   '"question_token":"100001"}}}],' +
@@ -187,13 +191,19 @@ export default function onlineHistoryRepositoryTest(): void {
       expect(page.items[0].summary).assertEqual('问题摘要');
       expect(page.items[0].authorName).assertEqual('作者甲');
       expect(page.items[0].readTime).assertEqual(1716120000000);
+      // 无 cover_image 键：降级 undefined。
+      expect(page.items[0].coverImageUrl).assertUndefined();
       expect(page.items[1].kind).assertEqual(OnlineHistoryKind.ANSWER);
       expect(page.items[1].id).assertEqual('200001');
       expect(page.items[1].readTime).assertEqual(1716120100000);
       expect(page.items[2].kind).assertEqual(OnlineHistoryKind.ARTICLE);
       expect(page.items[2].id).assertEqual('300001');
+      // 封面透传：非空字符串原样保留。
+      expect(page.items[2].coverImageUrl).assertEqual('https://picx.zhimg.com/v2-history-cover_r.jpg');
       expect(page.items[3].kind).assertEqual(OnlineHistoryKind.PIN);
       expect(page.items[3].id).assertEqual('400001');
+      // 空串封面：降级 undefined。
+      expect(page.items[3].coverImageUrl).assertUndefined();
       expect(page.cursor.isEnd).assertFalse();
       expect(page.cursor.isStart).assertTrue();
       expect(page.cursor.page).assertEqual(1);

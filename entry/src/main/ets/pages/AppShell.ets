@@ -1,11 +1,14 @@
 import { setFeedScrollOwner } from './FeedScrollOwnership';
 import { updateStatusBarAppearance } from '../platform/SystemBars';
 import { QuestionTitleBar } from './QuestionTitleBar';
+import { destinationScrollKey, destinationScrollRegistry } from './DestinationScrollRegistry';
 import { SearchTitleBar } from './SearchTitleBar';
 import { publishReadHistoryOpenLocal, publishReadHistoryClear } from './HistoryTitleActions';
 import { AnswerTitleBar, AnswerTitleState } from './AnswerTitleBar';
 import { ArticleTitleBar } from './ArticleTitleBar';
 import { peopleTitleText, PeopleTitleState } from './PeopleTitleBar';
+import { PeopleTitleTabs } from './PeopleContentTabs';
+import { PeopleTabsState, peopleTabsInTitleBar } from './PeopleContentTabsState';
 import { CommentTitleState, commentTitleStateId } from './CommentTitleState';
 import { NOTIFICATION_HUB_REFRESH_TICK_KEY, NOTIFICATION_HUB_UNREAD_TOTAL_KEY,
   NOTIFICATION_HUB_BUSY_KEY, NOTIFICATION_HUB_MARK_READ_TICK_KEY,
@@ -71,6 +74,7 @@ import {
 import { AppNavigationRow, floatingTitleBarOffset } from './AppPageChrome';
 import {
   HOME_FEED_SCROLL_KEY,
+  READ_HISTORY_SCROLL_KEY,
   SETTINGS_SCROLL_KEY,
   topLevelScrollRegistry
 } from './TopLevelScrollRegistry';
@@ -181,7 +185,8 @@ export struct AppShell {
     registerActions: (handler: () => void) => void, releaseActions: () => void) => void = this.emptyEmbeddedPage;
   @BuilderParam blockedFeedHistoryContent: (onBack: () => void, embedded: boolean,
     registerActions: (handler: () => void) => void, releaseActions: () => void) => void = this.emptyEmbeddedPage;
-  @BuilderParam readHistoryContent: (navigate: (destination: AppDestination) => void, onBack: () => void) => void =
+  @BuilderParam readHistoryContent: (navigate: (destination: AppDestination) => void, onBack: () => void,
+    topLevel: boolean) => void =
     this.emptyHome;
   @BuilderParam localHistoryContent: (navigate: (destination: AppDestination) => void, onBack: () => void) => void =
     this.emptyHome;
@@ -216,6 +221,7 @@ export struct AppShell {
   /** 连续阅读页问题标题（页面加载后广播；空串显示占位标题）。 */
   @StorageProp('continuousAnswerTitles') private continuousAnswerTitles: Array<ContinuousAnswerTitleState> = [];
   @StorageProp('peopleTitleStates') private peopleTitleStates: PeopleTitleState[] = [];
+  @StorageProp('peopleContentTabsStates') private peopleTabsStates: PeopleTabsState[] = [];
   @StorageProp('commentTitleStates') private commentTitleStates: CommentTitleState[] = [];
   /** 全屏图片查看器打开中（详情页广播）：同样隐藏顶栏，使查看器真全屏。 */
   @StorageProp('imagePreviewUrl') private imagePreviewUrl: string = '';
@@ -261,6 +267,9 @@ export struct AppShell {
   @StorageProp('topLevelScrollableTick') @Watch('refreshTabScrollerBindings')
   private topLevelScrollableTick: number = 0;
   @State private tabScrollerBindings: Map<number, Array<Scroller>> = new Map<number, Array<Scroller>>();
+  @StorageProp('destinationScrollableTick') @Watch('refreshDestinationScrollerBindings')
+  private destinationScrollableTick: number = 0;
+  @State private destinationScrollerBindings: Map<string, Scroller> = new Map<string, Scroller>();
   @State private dailyDateCursor: string = '';
   @Provide('channelFeedInteractionBridge') private channelFeedInteractionBridge: ChannelFeedInteractionBridge =
     new ChannelFeedInteractionBridge();
@@ -313,6 +322,9 @@ export struct AppShell {
     if (tab === TopLevelTab.DAILY) {
       return [ChannelFeedSource.DAILY];
     }
+    if (tab === TopLevelTab.HISTORY) {
+      return [READ_HISTORY_SCROLL_KEY];
+    }
     if (tab === TopLevelTab.ACCOUNT) {
       return [SETTINGS_SCROLL_KEY];
     }
@@ -339,6 +351,15 @@ export struct AppShell {
   private tabScrollerBinding(tab: number): Array<Scroller> {
     const binding: Array<Scroller> | undefined = this.tabScrollerBindings.get(tab);
     return binding === undefined ? [] : binding;
+  }
+
+  private refreshDestinationScrollerBindings(): void {
+    this.destinationScrollerBindings = destinationScrollRegistry.snapshot();
+  }
+
+  private destinationScrollerBinding(name: string, id: string): Array<Scroller> {
+    const scroller = this.destinationScrollerBindings.get(destinationScrollKey(name, id));
+    return scroller === undefined ? [] : [scroller];
   }
 
   aboutToAppear(): void {
@@ -698,7 +719,7 @@ export struct AppShell {
       HdsNavDestination() {
         this.readHistoryContent((nextDestination: AppDestination): void => this.navigate(nextDestination), (): void => {
           this.pathStack.pop();
-        });
+        }, false);
       }
       .titleBar({
         style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()),
@@ -710,6 +731,7 @@ export struct AppShell {
           divider: { showType: DividerShowType.OFF }
         }
       })
+      .bindToScrollable(this.destinationScrollerBinding(destination.name, ''))
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.LOCAL_HISTORY) {
@@ -720,6 +742,7 @@ export struct AppShell {
           });
       }
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '本地历史记录' }, divider: { showType: DividerShowType.OFF } } })
+      .bindToScrollable(this.destinationScrollerBinding(destination.name, ''))
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.TECHNICAL_LAB) {
@@ -825,6 +848,7 @@ export struct AppShell {
       }
       // 同问题/文章页：沉浸顶栏（静止透明、滚动出模糊），内容延伸到顶栏之后。
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '知乎日报' }, divider: { showType: DividerShowType.OFF } } })
+      .bindToScrollable(this.destinationScrollerBinding(destination.name, destination.id))
       .hideTitleBar(this.imagePreviewUrl.length > 0)
       .onBackPressed((): boolean => {
         if (this.imagePreviewUrl.length > 0) {
@@ -848,6 +872,7 @@ export struct AppShell {
       // 与首页/我的/设置等信息流页同一套沉浸顶栏：静止透明、滚动出渐变模糊，
       // 避免详情页用常驻半透明底时在顶栏下沿形成一条"挡"住正文的实边。
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.questionTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
+      .bindToScrollable(this.destinationScrollerBinding(destination.name, destination.id))
       // 问题页正文图片同样可打开全屏查看器：隐藏顶栏，返回键优先关查看器。
       .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll || this.imagePreviewUrl.length > 0)
       .onBackPressed((): boolean => {
@@ -911,6 +936,7 @@ export struct AppShell {
       .onHidden((): void => this.setReaderRouteVisible('article', destination.id, false))
       // 同问题/回答页：走与设置/首页一致的沉浸顶栏。
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { stackBuilder: (): void => this.articleTitleBar(destination.id), divider: { showType: DividerShowType.OFF } } })
+      .bindToScrollable(this.destinationScrollerBinding(destination.name, destination.id))
       // 与回答页一致：沉浸式/图片查看器中隐藏顶栏，返回键优先关查看器。
       .hideTitleBar(this.detailImmersiveActive || this.detailTitleHiddenByScroll || this.imagePreviewUrl.length > 0)
       .onBackPressed((): boolean => {
@@ -1025,11 +1051,15 @@ export struct AppShell {
       }
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: {
-          title: { mainTitle: peopleTitleText(this.peopleTitleStates, destination.id),
-            mainTitleId: 'people_detail_page_title' },
+          title: { mainTitle: peopleTabsInTitleBar(this.peopleTabsStates, destination.id)
+            ? '' : peopleTitleText(this.peopleTitleStates, destination.id),
+            mainTitleId: peopleTabsInTitleBar(this.peopleTabsStates, destination.id)
+              ? 'people_detail_native_title' : 'people_detail_page_title' },
+          stackBuilder: (): void => this.peopleTitleTabs(destination.id),
           menu: this.registeredTitleMenu(PEOPLE_DETAIL_TOP_BAR_ID, '用户主页操作'),
           divider: { showType: DividerShowType.OFF }
         } })
+      .bindToScrollable(this.destinationScrollerBinding(destination.name, destination.id))
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.PIN) {
@@ -1043,6 +1073,7 @@ export struct AppShell {
         );
       }
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '想法' }, divider: { showType: DividerShowType.OFF } } })
+      .bindToScrollable(this.destinationScrollerBinding(destination.name, destination.id))
       // 想法正文图片可打开全屏查看器：查看时隐藏顶栏，返回键优先关查看器再退出想法。
       .hideTitleBar(this.imagePreviewUrl.length > 0)
       .onBackPressed((): boolean => {
@@ -1078,6 +1109,7 @@ export struct AppShell {
         );
       }
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true, content: { title: { mainTitle: '收藏夹内容' }, divider: { showType: DividerShowType.OFF } } })
+      .bindToScrollable(this.destinationScrollerBinding(destination.name, destination.id))
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.NOTIFICATION) {
@@ -1101,6 +1133,7 @@ export struct AppShell {
           divider: { showType: DividerShowType.OFF }
         }
       })
+      .bindToScrollable(this.destinationScrollerBinding(destination.name, ''))
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.NOTIFICATION_ENTRY) {
@@ -1120,6 +1153,8 @@ export struct AppShell {
       .titleBar({ style: getImmersiveTitleBarStyle(this.immersiveMaterialMode(), this.immersiveMaterialSupportState()), avoidLayoutSafeArea: true,
         content: { title: { mainTitle: (destination as NotificationEntryDestination).title },
           divider: { showType: DividerShowType.OFF } } })
+      .bindToScrollable(this.destinationScrollerBinding(destination.name,
+        (destination as NotificationEntryDestination).entryName))
       .ignoreLayoutSafeArea([LayoutSafeAreaType.SYSTEM], [LayoutSafeAreaEdge.BOTTOM])
       .backgroundColor($r('app.color.page_background'))
     } else if (destination.name === AppDestinationName.PRIVATE_MESSAGE) {
@@ -1463,7 +1498,7 @@ export struct AppShell {
       this.dailyContent(this.dailyReloadToken, this.dailyDateCursor,
         (destination: AppDestination): void => this.navigate(destination))
     } else if (tab === TopLevelTab.HISTORY) {
-      this.readHistoryContent((destination: AppDestination): void => this.navigate(destination), (): void => {})
+      this.readHistoryContent((destination: AppDestination): void => this.navigate(destination), (): void => {}, true)
     } else if (tab === TopLevelTab.COLLECTIONS) {
       this.topLevelCollectionsPage()
     } else {
@@ -1816,6 +1851,12 @@ export struct AppShell {
         this.navigate({ name: AppDestinationName.NOTIFICATION });
       }
     })
+  }
+
+  /** 用户主页的宽屏栏目复用 HDS 原生返回与更多，中间只叠加分段控件。 */
+  @Builder
+  private peopleTitleTabs(id: string) {
+    PeopleTitleTabs({ personId: id })
   }
 
   /** 关注页签切换：一个材质胶囊承载整组，不给每个标签分别叠材质。 */
