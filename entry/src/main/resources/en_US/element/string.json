@@ -2,15 +2,15 @@
   "string": [
     {
       "name": "module_desc",
-      "value": "知乎Plus HarmonyOS module"
+      "value": "ZhihuPlus HarmonyOS module"
     },
     {
       "name": "EntryAbility_desc",
-      "value": "知乎Plus HarmonyOS ability"
+      "value": "ZhihuPlus HarmonyOS ability"
     },
     {
       "name": "EntryAbility_label",
-      "value": "知乎Plus"
+      "value": "ZhihuPlus"
     },
     {
       "name": "pasteboard_read_reason",
