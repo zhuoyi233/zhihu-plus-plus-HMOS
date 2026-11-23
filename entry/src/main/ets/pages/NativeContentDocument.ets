@@ -382,7 +382,7 @@ export struct ContentImagePreview {
     const payload: ShareImagePayload = {
       kind: SharePayloadKind.IMAGE,
       title: '知乎图片',
-      summary: '来自知乎++的受信图片链接',
+      summary: '来自知乎Plus的受信图片链接',
       sourceKind: ShareImageSourceKind.TRUSTED_URL,
       trustedImageUrl: this.url
     };
