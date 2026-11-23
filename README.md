@@ -1,4 +1,4 @@
-# Zhihu++鸿蒙版：注重隐私、互联网个人权利和无广告的知乎客户端
+# 知乎Plus：注重隐私、互联网个人权利和无广告的知乎客户端
 
 [![GitHub release](https://img.shields.io/github/v/release/zhuoyi233/zhihu-plus-plus-HMOS?style=flat-square&amp;color=0066FF)](https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/releases/latest)
 [![GitHub license](https://img.shields.io/github/license/zhuoyi233/zhihu-plus-plus-HMOS?style=flat-square)](https://github.com/zhuoyi233/zhihu-plus-plus-HMOS/blob/main/LICENSE)

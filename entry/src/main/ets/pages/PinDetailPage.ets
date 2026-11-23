@@ -582,7 +582,7 @@ export struct PinDetailPage {
     const payload: ShareTextPayload = {
       kind: SharePayloadKind.TEXT,
       title: '想法',
-      summary: '来自知乎++的受信想法链接',
+      summary: '来自知乎Plus的受信想法链接',
       contentUrl: pin.url,
       thumbnailUrl: /^https:\/\/(?:pic|pica|picx|pic[0-9]+)\.zhimg\.com\//.test(avatarUrl) ? avatarUrl : undefined
     };

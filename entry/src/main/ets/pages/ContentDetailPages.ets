@@ -4176,7 +4176,7 @@ export function contentShareSummary(content: LoadedContentDetail): string {
       return excerpt;
     }
   }
-  return '来自知乎++的受信内容链接';
+  return '来自知乎Plus的受信内容链接';
 }
 
 /** 分享卡片缩略图：仅接受受信 zhimg 头像 URL，其余返回 undefined（卡片退回默认图标）。 */
